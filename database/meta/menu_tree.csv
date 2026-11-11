@@ -1,0 +1,155 @@
+section_no,section,item_no,screen,route,roles,forms,rules,new_or_in_design
+0,Top bar (every screen),0.1,Search everything,overlay on every page (key /),all (results filtered by rights),,"R-G_CORE-56, R-G_CORE-99, R-G_CORE-100, PHASE_08 §8.4",IN DESIGN
+0,Top bar (every screen),0.2,+ Create,modal on every page (key n),all (items filtered by rights),,"R-G_CORE-124 (new), PHASE_08 §8.3, D3",IN DESIGN
+0,Top bar (every screen),0.3,Import,button → #/import,users with any import right,,"E13, PHASE_04",IN DESIGN
+0,Top bar (every screen),0.4,Bell (tasks and messages),dropdown,all,,R-G_CORE-43,IN DESIGN
+0,Top bar (every screen),0.5,Help,"button, ""?"" overlay, #/help",all,,"R-G_CORE-42, R-G_CORE-101, PHASE_08 §8.7",IN DESIGN
+0,Top bar (every screen),0.6,Company switch,select in the top bar,users with more than one company,,"R-G_CORE-102, IC-0",IN DESIGN
+0,Top bar (every screen),0.7,User menu,avatar dropdown,all,,"R-G_CORE-60, R-C-49",IN DESIGN
+0,Top bar (every screen),0.8,Back / Forward / Recent / Refresh / What happened,top bar buttons + side panel,all,,"R-G_CORE-101, E10","NEW (Back/Forward/Recent); IN DESIGN (Refresh, What happened)"
+1,Home,1.1,"Owner Home (""Command Center"")",#/home (role OWNER),OWNER,,"PHASE_08 §8.2, R-FIN-65, R-G_CORE-102, R-G_CORE-103, E20",IN DESIGN
+1,Home,1.2,Partner Home (= My Partner Account),#/home (role PARTNER),PARTNER,,"R-FIN-2, R-FIN-19",IN DESIGN
+1,Home,1.3,Manager Home,#/home (role MANAGER),MANAGER,,"PHASE_08 §8.2 (Sourcing Home), R-F_SETUP-15…34",NEW
+1,Home,1.4,VA / TL Home,"#/home (role VA, TL)","VA, TL",,"PHASE_08 §8.2, R-A_SALES-88",IN DESIGN
+1,Home,1.5,Warehouse Home,"#/home (role WAREHOUSE, STOCK)","WAREHOUSE, STOCK",,"R-H-51, R-H-24",NEW
+1,Home,1.6,Finance Home,#/home (role FINANCE),FINANCE,,"R-FIN-65, R-FIN-66",NEW
+1,Home,1.7,Accountant Home,#/home (role ACCOUNTANT),ACCOUNTANT,,"PHASE_08 §8.2, R-ACC-13",IN DESIGN
+2,Research,2.1,Research board,#/research,"MANAGER, PARTNER, OWNER, researcher (rights)",src_research(C),"R-B_SOURCING-67, R-B_SOURCING-70",NEW
+2,Research,2.2,Research record,#/research/view/{id},as 2.1,research_competitor(K) research_supplier(K),R-B_SOURCING-67…70,NEW
+3,Buying,3.1,Buying dashboard,#/part/2/buying,"MANAGER, PARTNER, OWNER, SOURCING",t_src_dashboard(T),R-F_SETUP-15…34,IN DESIGN
+3,Buying,3.2,Sourcing cycles,#/part/2/cycles,"MANAGER, SOURCING, PARTNER, OWNER",src_cycle(Q) t_src_cycles(C) cycle_product(K),"R-B_SOURCING-1, 4, 50, R-F_SETUP-12",IN DESIGN
+3,Buying,3.3,"Cycle workspace (one cycle, step bar)",#/cycle/{id},as 3.2,t_src_products(M) t_src_documents(M),"R-B_SOURCING-15…26, 28, 29, 41, 42, 47, 48, 64, E12",IN DESIGN
+3,Buying,3.4,Quick buy (local purchase),#/create/quick_buy,"SOURCING, MANAGER, PARTNER, OWNER",quick_buy(Q),"R-B_SOURCING-1, IC-1, IC-5",IN DESIGN
+3,Buying,3.5,Old purchase entry (back-dated),#/create/old_entry,"SOURCING, PARTNER, OWNER",old_entry(Q) t_src_historical(C) old_entry_line(K) old_entry_payment(K) old_entry_receiving(K),"R-B_SOURCING-5, 7…13",IN DESIGN
+3,Buying,3.6,Direct PO — repeat order,#/create/t_src_direct,"SOURCING, MANAGER",t_src_direct(C) direct_po_line(K),"R-B_SOURCING-2, 3",NEW
+3,Buying,3.7,RFQ & quotations,#/part/2/rfq,"SOURCING, MANAGER",src_rfq(Q) t_src_rfq(C),"R-B_SOURCING-66, IC-2",IN DESIGN
+3,Buying,3.8,Samples,#/cycle/{id}?tab=samples (+ list),SOURCING,t_src_samples(C),"R-B_SOURCING-58, IC-4",NEW
+3,Buying,3.9,Purchase orders,#/part/2/po,"SOURCING, MANAGER, FINANCE (view)",t_src_po(C) t_src_po_lines(M) t_src_cartons(M) t_src_cartons_v1(Q) t_src_cartons_v2(Q),"R-B_SOURCING-6, 27, 33, 34, 35, 47, R-F_SETUP-9, 11",IN DESIGN
+3,Buying,3.10,Payments & terms,#/part/2/payments,"FINANCE, SOURCING (request), OWNER / approver",src_payment(Q) t_src_payments(C) t_src_payment_terms(M),"R-B_SOURCING-27, 30, 31, 32, 57, 59, IC-10, R-FIN-61","IN DESIGN (was ""Supplier payments"" → Approvals)"
+3,Buying,3.11,Production,#/cycle/{id}?tab=production,SOURCING,t_src_production(C),"R-B_SOURCING-15, 64",NEW
+3,Buying,3.12,QC,#/cycle/{id}?tab=qc,"SOURCING, QC person",t_src_qc(C) qc_check(K),R-B_SOURCING-65,NEW
+3,Buying,3.13,Allocation & platform plan,#/cycle/{id}?tab=allocation,"MANAGER, SOURCING",t_src_allocations(C) t_src_platform_alloc(C),"R-F_SETUP-47, R-B_SOURCING-39",NEW
+3,Buying,3.14,Shipments,#/part/2/shipments,"SOURCING, WAREHOUSE (arrivals)",t_src_shipments(C) shipment_po_link(K),"R-B_SOURCING-29, 38, R-F_SETUP-6",IN DESIGN
+3,Buying,3.15,Freight,#/cycle/{id}?tab=freight,"SOURCING, FINANCE",t_src_freight(C) t_src_freight_costs(C),"R-B_SOURCING-36, 59",NEW
+3,Buying,3.16,Customs,#/cycle/{id}?tab=customs,"SOURCING, FINANCE",t_src_customs(C),"R-B_SOURCING-59, R-F_SETUP-14",NEW
+3,Buying,3.17,Landed cost,#/part/2/landed,"SOURCING, FINANCE, PARTNER",t_src_landed_cost(X),"R-B_SOURCING-43…46, 60, IC-4",IN DESIGN
+3,Buying,3.18,Suppliers & forwarders,#/list/suppliers,"SOURCING, FINANCE (banks)",supplier(Q) t_src_suppliers(C) cat_vendors(Q) t_vendor(Q) t_src_forwarders(C) supplier_bank(K),"R-B_SOURCING-53, 66, R-C-13, R-F_SETUP-7, E8",IN DESIGN
+4,Receiving & Warehouse,4.1,Stock & warehouse dashboard,#/part/2/stockdash,"STOCK, WAREHOUSE, MANAGER, OWNER",,"R-H-54, R-H-55, R-D-46",IN DESIGN
+4,Receiving & Warehouse,4.2,Inbound & GRN,#/part/2/grn,"WAREHOUSE, STOCK, SOURCING",t_src_grn(C) grn_line(K) t_src_inventory_receipts(X),"R-B_SOURCING-37, 40, 56, 61, R-H-21, R-H-22, IC-1, IC-3, IC-5",IN DESIGN (was under Buying)
+4,Receiving & Warehouse,4.3,Work screen (phone) – Receive · Putaway · Pick · Pack · Handover · Count · Returns · Move,#/work,"WAREHOUSE, STOCK",,"R-H-21, R-H-23, R-H-42, R-H-51, R-H-52, R-H-53",NEW
+4,Receiving & Warehouse,4.4,Locations & bins,#/list/locations,"STOCK, MANAGER",location(C) warehouse(Q) warehouse_zone(Q) inventory_setup(Q) cat_warehouses(M) location_generator(T),"R-H-2…8, R-D-44, R-D-45, R-D-87",IN DESIGN
+4,Receiving & Warehouse,4.5,SKU homes,#/list/sku-homes,"STOCK, MANAGER",sku_home(Q),"R-H-9, R-H-10, R-H-11, R-H-43, R-H-50",NEW
+4,Receiving & Warehouse,4.6,Stock on hand (Central inventory),#/list/inventory,"STOCK, WAREHOUSE, MANAGER, VA (own shops, no cost)",,"R-D-19, R-D-37, R-D-38, R-H-15, IC-1",IN DESIGN
+4,Receiving & Warehouse,4.7,Stock ledger & adjustments,#/list/ledger,"STOCK, MANAGER, FINANCE (value)",stock_adjust(C),"R-D-40, R-D-47, R-H-12, R-H-13, R-H-48, E9",IN DESIGN
+4,Receiving & Warehouse,4.8,Lots & owners,#/list/lots,"STOCK, FINANCE, PARTNER (own lots)",fin_lot(X),"IC-5, R-B_SOURCING-40, 61, R-FIN-42",IN DESIGN
+4,Receiving & Warehouse,4.9,Pool,#/part/2/pool,"STOCK, OWNER",,"PHASE_03, R-H-58 (reservation override)",IN DESIGN
+4,Receiving & Warehouse,4.10,Transfers,#/list/transfers,"STOCK, WAREHOUSE",stock_transfer(C) t_src_transfers(C),"R-D-48, R-H-42",IN DESIGN
+4,Receiving & Warehouse,4.11,Ownership transfers,#/list/ownership,"OWNER, PARTNER",ownership_transfer(Q) t_src_ownership_transfers(C),"IC-5, E8, R-H-58",IN DESIGN
+4,Receiving & Warehouse,4.12,Stock counts,#/part/2/counts,"STOCK, WAREHOUSE (count), MANAGER (approve)",stock_count(C) stock_count_line(K) count_session(T),"R-H-45…47, R-D-50",IN DESIGN
+4,Receiving & Warehouse,4.13,"Held stock (returns, quarantine, damaged, missing)",#/list/held,STOCK,,"R-H-3, R-H-27, R-H-41",NEW
+4,Receiving & Warehouse,4.14,Replenishment & ICC reorder,#/icc,"MANAGER, STOCK, PARTNER",icc(C) icc_holiday(C) icc_freight_rate(C),"07_ICC, E19, IC-18, R-H-44",IN DESIGN (Stock alerts + ICC)
+4,Receiving & Warehouse,4.15,Packaging & box sizes,#/list/packaging,"STOCK, MANAGER",product_packaging(C) wh_box_size(C),"R-D-89, R-H-29",NEW
+5,Products & Listings,5.1,Products,#/list/products,"MANAGER, TL, VA (visible products), STOCK",product(Q) t_product_vendor(C) t_products_main(M) t_product(Q),"R-D-1…18, R-D-35…39",IN DESIGN
+5,Products & Listings,5.2,Product record,#/product/{id},as 5.1 (cost tabs: rights),product_variation(K) product_mp_price(K) product_mp_shipping(K) product_mp_value(K) product_visibility(K) product_visibility_shop(K) product_investor(K) product_location(K) variation_mp_price(K) variation_mp_shipping(K) product_image(K),"R-D-1…25, R-D-30, R-D-93, IC-2","IN DESIGN (form) / NEW (tabs Pack, ICC)"
+5,Products & Listings,5.3,Product pack (artwork),#/product/{id}/pack,"MANAGER, TL",product_artwork_file(K),R-D-90,NEW
+5,Products & Listings,5.4,Certificates,#/list/certificates,"MANAGER, TL",product_certificate(K),"R-D-91, E16",NEW
+5,Products & Listings,5.5,Legal label texts,#/list/legal-texts,"MANAGER, OWNER",label_legal_text(K),"R-D-92, 18_Labels",NEW
+5,Products & Listings,5.6,Listings (per marketplace profile),#/list/listings,"TL, VA, MANAGER",listing(C) sku_channel_map(Q) listing_component(K) t_products_branch(X),"R-D-58…60, R-H-19, R-H-20, R-D-30, IC-0",IN DESIGN
+5,Products & Listings,5.7,Prices & price log,#/list/price-log,"MANAGER, PARTNER (secure page)",,"R-D-22, R-D-30, R-D-31, R-G_CORE-59 (secure)",NEW
+5,Products & Listings,5.8,Products not listed,#/list/notlisted,"TL, MANAGER",t_products_shop_not_listed(Q) t_products_shop_not_listed_summary(Q),R-D-58,IN DESIGN
+5,Products & Listings,5.9,Brands,#/list/brands,"MANAGER, OWNER",brand(Q) cat_brands(C) cat_brand_registration(K),"R-D-69, R-D-99",NEW
+6,Selling,6.1,Selling dashboard,#/part/3/selling,"TL, MANAGER, OWNER",,"R-F_SETUP-26, R-A_SALES-88",IN DESIGN
+6,Selling,6.2,Orders / sales lines,#/list/sales,"VA, TL (own shops), MANAGER, FINANCE",sale_line(X) sale_refund(Q) sale_manual(C) sale_charge(X) t_sale_order(X),"R-A_SALES-27…49, R-A_SALES-19…26",IN DESIGN
+6,Selling,6.3,Daily order intake (fulfilment),#/list/daily-orders,"VA, WAREHOUSE",daily_order_entry(C),"R-A_SALES-75, R-A_SALES-84, IC-13, R-H-16",NEW
+6,Selling,6.4,Marketplace operations hubs,#/ops/{profile},"VA, TL, MANAGER",,"R-G_CORE-58 (rows 20–25), IC-0",NEW (views)
+6,Selling,6.5,Sales month confirm (batch page),#/importbatch/{id},"TL, FINANCE, MANAGER",sale_batch(X),"R-A_SALES-1, 18, 32…35, R-H-37, R-H-38, IC-1",IN DESIGN
+6,Selling,6.6,Refunds & refund proposals,#/list/refunds,"VA, TL, FINANCE",sale_refund_proposal(X),"R-A_SALES-86, IC-12",NEW
+6,Selling,6.7,Dropshipping,#/part/3/dropship,"VA, TL",drp_inventory(T) drp_platform(C) drp_platform_mapping(K),"R-D-73…79, R-D-85, R-D-86, R-A_SALES-91, IC-0.7",IN DESIGN
+6,Selling,6.8,Account health & shop reminders,#/part/3/health,"VA, TL, MANAGER",t_shop_feedback(C) t_branch_reminders(C),"R-A_SALES-72…74, R-G_CORE-83",IN DESIGN
+6,Selling,6.9,Marketplace calculator,#/tools/marketplace-calc,"VA, TL, MANAGER",,"R-G_CORE-58 row 27, K6",NEW
+7,Dispatch,7.1,Orders to dispatch,#/dispatch,"WAREHOUSE, STOCK",stock_reservation(X),"R-H-15…18, R-H-24, R-H-25",NEW
+7,Dispatch,7.2,Pick lists,#/list/pick,"WAREHOUSE, STOCK",pick_task(X) pick_task_line(K),R-H-25…28,NEW
+7,Dispatch,7.3,Pack,#/work?tab=pack,WAREHOUSE,pack_check(T) parcel(X) parcel_line(K),R-H-29…33,NEW
+7,Dispatch,7.4,Labels & print queue,#/labels,"WAREHOUSE, VA (carrier labels), STOCK",print_queue(X) label_print_log(X),"18_Labels §5, §9, §11, §13, R-H-56, R-G_CORE-96, R-A_SALES-85",NEW
+7,Dispatch,7.5,Courier handover,#/list/handover,WAREHOUSE,handover_session(X) handover_scan(K),R-H-34…36,NEW
+7,Dispatch,7.6,Tracking upload,#/labels?tab=tracking,"VA, WAREHOUSE",,"18_Labels §8, R-H-33",NEW (view)
+7,Dispatch,7.7,FC / 3PL inbound shipments,#/list/inbound-fc,"STOCK, WAREHOUSE",fba_shipment(C) fba_carton(K) fba_carton_item(K),"18_Labels §6, R-H-49, R-D-48",NEW
+8,Returns & Customers,8.1,Returns,#/part/3/returns,"WAREHOUSE (scan), VA, TL",return(C) return_intake(X),"R-H-39…41, R-D-88",IN DESIGN
+8,Returns & Customers,8.2,Customer service cases,#/part/3/cs,"VA, TL",customer_case(Q) t_sale_order_reminders(C),"R-A_SALES-71, 90",IN DESIGN
+8,Returns & Customers,8.3,Customers,#/list/customers,"VA, TL (own shops)",crm_customer(X),"R-A_SALES-89, IC-13 (privacy)",NEW
+9,Money,9.1,Money dashboard,#/part/3/money,"FINANCE, OWNER",,"R-FIN-60, 63, 65, 66, E20",IN DESIGN
+9,Money,9.2,Bank & cash,#/list/bank,"FINANCE, ACCOUNTANT",fin_bank_line(X) fin_bank_line_split(K) fin_bank_account(C),"R-FIN-7, 29, 64, 70, IC-15",IN DESIGN
+9,Money,9.3,Payouts & settlements,#/list/payouts,FINANCE,,"R-FIN-22…25, R-FIN-69, R-A_SALES-83, IC-6, IC-12",NEW
+9,Money,9.4,Reconciliation,#/recon,FINANCE,,"R-FIN-27, 28, 30, IC-15",IN DESIGN
+9,Money,9.5,Expenses,#/part/3/expenses,"FINANCE, MANAGER",expense(Q) fin_expenses(C),"R-FIN-29, R-FIN-30",IN DESIGN
+9,Money,9.6,Approvals – money (view),#/approvals?area=money,approvers,,"E8, R-FIN-17",IN DESIGN
+9,Money,9.7,Capital calls,#/part/3/capital,"OWNER, PARTNER",capital_call(Q) fin_capital_call(C) fin_capital_call_response(X),R-FIN-14,IN DESIGN
+9,Money,9.8,Withdrawals,#/list/withdrawals,"PARTNER (request), OWNER (approve), FINANCE",withdrawal(Q) fin_withdrawal(C),"R-FIN-17, 18, 73",IN DESIGN
+9,Money,9.9,FX rates,#/part/3/fx,FINANCE,fin_fx_rate(C),"R-FIN-26, E14",IN DESIGN
+9,Money,9.10,Payables & cash forecast,#/list/commitments,"FINANCE, OWNER",fin_commitment(C),"R-FIN-60, R-FIN-61, E20, E23",NEW
+9,Money,9.11,Loans,#/list/loans,"FINANCE, OWNER",fin_loan(C),R-FIN-62,NEW
+9,Money,9.12,Budgets,#/list/budgets,"OWNER, FINANCE",fin_budget(C),R-FIN-65,NEW
+9,Money,9.13,Finance alerts,#/list/fin-alerts,OWNER,fin_alert_rule(C),"R-FIN-66, R-FIN-67",NEW
+9,Money,9.14,Ledger (accountant view),#/list/ledger-fin,"ACCOUNTANT, FINANCE",,"R-FIN-31, R-FIN-33",NEW (view)
+10,Month Close & Audit,10.1,Audit dashboard,#/part/3/auditdash,"FINANCE, OWNER, ACCOUNTANT",,"IC-6, IC-7",IN DESIGN
+10,Month Close & Audit,10.2,Month close (shop × month),#/audit/{shop}/{month},"FINANCE, OWNER (lock / unlock)",fin_period_close(X) aud_run(X) aud_check_waivers(K) t_branch_profit_routes(C),"R-FIN-40…50, IC-7, IC-20, E15",IN DESIGN
+10,Month Close & Audit,10.3,Profit views,#/audit/profit,"OWNER, PARTNER (own), FINANCE",,"R-FIN-74, R-FIN-44, R-B_SOURCING-70",NEW
+10,Month Close & Audit,10.4,Audit runs (orders and purchase audits),#/list/audit,"FINANCE, TL",t_audit_main(X) orders_audit(T) supplier_order_history(T) t_sale_buy_main(X) t_sale(T) t_buy(T),"R-A_SALES-54…64, 80, R-G_CORE-80…82",IN DESIGN
+10,Month Close & Audit,10.5,Shared expense rules,#/list/expense-rules,"FINANCE, OWNER",aud_expense_rule(C),"R-FIN-40, E15",NEW
+10,Month Close & Audit,10.6,VA statements,#/list/va-statements,"FINANCE, OWNER, VA (own)",va_statement(X),"R-A_SALES-65, IC-11, R-C-40",NEW
+10,Month Close & Audit,10.7,Invoices & credit notes,#/list/invoices,FINANCE,invoice_document(C) invoice_line(K) invoice_settlement(K) invoice_payment(X),"R-D-83, R-D-84, R-INV-7…12, IC-16",NEW
+10,Month Close & Audit,10.8,Tax & filings (compliance calendar),#/part/3/tax,"ACCOUNTANT, OWNER",acc_obligation(C) acc_obligation_type(C) acc_company_settings(M) acc_person_settings(M) acc_document(C) acc_settings(T) acc_access(C),"R-ACC-1…22, IC-17",IN DESIGN
+10,Month Close & Audit,10.9,"Taxation (accounts worksheet, Corporation Tax)",#/tax,"ACCOUNTANT, OWNER",tax_period(C) tax_entry(C) tax_line_item(C) tax_category(C) tax_rate(C) tax_dashboard(T),R-TAX-1…6,IN DESIGN
+10,Month Close & Audit,10.10,Opening balances,#/finance/opening,"OWNER, FINANCE",fin_opening_balance(C) fin_opening_lock(X),"R-FIN-20, R-FIN-21",NEW
+11,Partners & Investors,11.1,Partners dashboard,#/part/3/partners,OWNER,,R-FIN-16,IN DESIGN
+11,Partners & Investors,11.2,Agreements (with stacking rule),#/list/agreements,OWNER,fin_investor_agreement(C),"R-FIN-8, 13, 15, 75",IN DESIGN (inside Partners)
+11,Partners & Investors,11.3,Profit split rules,#/part/3/splits,"OWNER, FINANCE",t_inv_settings(C) inv_profit_split(C),"R-INV-5, R-D-95",IN DESIGN
+11,Partners & Investors,11.4,Statements,#/part/3/statements,"OWNER, PARTNER (own)",fin_statement_query(X),"R-FIN-48, 49",IN DESIGN
+11,Partners & Investors,11.5,My Partner Account,#/home?as=PARTNER,PARTNER,t_inv_portal(T) fin_partner_user(C),"R-FIN-2, 3, R-INV-15, 16",IN DESIGN
+11,Partners & Investors,11.6,Partner ledger,#/list/partner-ledger,"OWNER, FINANCE, PARTNER (own)",fin_ledger_entry(X),"R-FIN-16, R-G_CORE-88",NEW
+11,Partners & Investors,11.7,Investor invoicing (settle a month),#/m/t_invoices/settle,"FINANCE, OWNER",invoice_period_pick(T) invoice_calculation(X),"R-D-80…84, R-INV-1…17, IC-20",NEW
+11,Partners & Investors,11.8,Sourcing investments (legacy investors),#/list/src-investments,OWNER,t_src_investments(M) t_src_investors(M),"R-FIN-21, R-G_CORE-88",NEW
+12,People & Accounts,12.1,Accounts dashboard,#/part/4/accounts,"OWNER, MANAGER",,R-C-18,IN DESIGN
+12,People & Accounts,12.2,People & companies (person record),#/list/parties,"OWNER, MANAGER, HR; secure tabs by right",party(Q) t_account(C) external_contact(Q) t_account_in_type(M) t_account_addresses_entity(M) t_account_address(K) t_account_bank(K) t_account_credit_card(K) t_account_company_house(K) t_account_doc(K) t_account_email(K) t_account_ipburger(K) t_account_marketplace(K) t_account_mobile(K) t_account_paypal(K) t_account_pc(K) t_account_photo_id(K) t_account_social_media(K) t_account_branch(K),"R-C-1…38, R-C-41, 42, 48, R-G_CORE-59",IN DESIGN
+12,People & Accounts,12.3,Staff & employment,#/list/staff,"OWNER, HR",t_account_job_history(K) t_account_employment(K) t_account_prev_employment(K),"R-C-39, R-C-40, R-C-52, IC-11",NEW
+12,People & Accounts,12.4,Companies,#/list/companies,"OWNER, ACCOUNTANT",company(Q) cat_company_house(C) t_enterprise(Q) t_ent_param(M),"R-F_SETUP-35…38, 50, R-ACC-21",IN DESIGN
+12,People & Accounts,12.5,Shops & seller accounts,#/list/shops,"OWNER, MANAGER",shop(Q) t_branch(C) t_branch_param(M),"R-G_CORE-76, R-C-41, R-A_SALES-81, 91",NEW
+12,People & Accounts,12.6,Account kit,#/part/4/kit,OWNER (secure),t_mobile_device(C) subscription(Q) t_account_subscription(K),"R-C-26, R-C-33, R-C-46",IN DESIGN
+12,People & Accounts,12.7,Subscriptions,#/list/subscriptions,"OWNER, FINANCE",,"R-C-33, R-G_CORE-58 row 12",NEW (view)
+12,People & Accounts,12.8,Due dates,#/list/due,"all (own), OWNER (all)",sys_due_source(C),"R-C-46, E16, R-G_CORE-104",IN DESIGN
+12,People & Accounts,12.9,Merge duplicates,#/part/4/merge,OWNER,,"R-C-8, MERGE_PLAN",IN DESIGN
+13,Work,13.1,Tasks dashboard,#/part/4/taskdash,"OWNER, MANAGER, TL (bosses)",,"R-G_CORE-38, 39, 40, 104",IN DESIGN
+13,Work,13.2,Needs action (all tasks),#/list/tasks,all (rights decide which),task(Q) task_edit(C) task_checklist_item(K) task_watcher(K) task_comment(X) task_evidence(X) task_bulk_action(T) task_import(T),"R-G_CORE-1…37, 41, 97, IC-9, 06C",IN DESIGN
+13,Work,13.3,My tasks,#/list/tasks?mine=1,all,,"R-G_CORE-10, 36",IN DESIGN
+13,Work,13.4,Approvals queue,#/approvals,approvers by sys_approval_limits (never the maker),,"E8, R-FIN-17, R-G_CORE-7, R-G_CORE-17",IN DESIGN
+13,Work,13.5,Team & settings (task rules),#/tasks/team,"OWNER, MANAGER",task_category(C) task_template(C) task_template_item(X) task_absence(C) task_delegation(C) sys_rule(M),"R-G_CORE-16, 17, 18, 23, 24, 40, R-G_CORE-94",NEW
+13,Work,13.6,Messages & WhatsApp,#/part/4/messages,"OWNER (rules), all (own)",wa_template(C) task_alerts(Q),R-G_CORE-46…54,IN DESIGN
+13,Work,13.7,Playbooks,#/list/playbooks,"OWNER, MANAGER",playbook_step(C),R-G_CORE-107,NEW
+14,Documents,14.1,Documents,#/list/documents,all (by rights),document(C) document_link(K),"R-B_SOURCING-47…49, E18, PHASE_08 §8.6",IN DESIGN
+14,Documents,14.2,Drive folders,#/part/4/drive,"OWNER, ADMIN",,"E18, working rule 2",IN DESIGN
+15,Import Center,15.1,Import a file,#/import,users with import_<type> right,csv_reader(T) csv_generator(T) sale_import(T),"E13, R-A_SALES-1…18, R-D-50…55, R-G_CORE-73…75, R-FIN-24",IN DESIGN
+15,Import Center,15.2,Import history,#/list/imports,"import users, FINANCE",,"E13, R-FIN-25",IN DESIGN
+15,Import Center,15.3,Watched Drive folders,#/importfolders,"OWNER, ADMIN",imp_drive_folder(C),"E13, working rule 2",IN DESIGN
+15,Import Center,15.4,Mappings & report types,#/import/mappings,"ADMIN, OWNER",imp_report_type(C) imp_mapping(C),"E13, R-A_SALES-4, R-D-54, R-FIN-69",NEW
+15,Import Center,15.5,API connections,#/import/api,OWNER,api_connection(C),"E24, 08_APIs",NEW
+16,Reports,16.1,All reports (grouped),#/part/4/reports,by rights,t_src_reports(T),"R-F_SETUP-1…13, R-H-59, R-A_SALES-50, 51, R-FIN-33, 36, R-INV-3, R-G_CORE-44",IN DESIGN
+17,Setup,17.1,First-time setup wizard,#/setup/start,OWNER,,"09_Migration, R-F_SETUP-48, R-FIN-20, R-H-7",NEW
+17,Setup,17.2,Company & finance settings,#/settings/finance,OWNER,fin_company_setting(M) fin_marketplace_setting(M),"R-FIN-4, 5, 6",NEW
+17,Setup,17.3,Marketplace profiles,#/setup/marketplaces,"OWNER, ADMIN",mp_profile(C) mp_profile_report_type(K) mp_profile_fee_bucket(K) mp_profile_refund_kind(K) mp_profile_health_metric(K) marketplace(Q) cat_marketplace(C) marketplace_field(K),"IC-0, R-A_SALES-66…68, 87, R-FIN-69",NEW
+17,Setup,17.4,Carrier profiles & presets,#/setup/carriers,"OWNER, ADMIN, TL",carrier(Q) t_carriers(C) t_carrier_services(C) t_carrier_packages(C) t_carrier_pkg_svc(C) car_preset(C) car_preset_group_item(K) car_preset_group_scope(K) t_packings(C) carrier_service_map(C) carrier_service_rule(C),"IC-0.3, R-A_SALES-69, 70, R-D-62…66, R-D-98, R-H-30",NEW
+17,Setup,17.5,Bank statement profiles,#/setup/bank-profiles,"OWNER, FINANCE",bank_statement_profile(C),"IC-0, R-FIN-70, IC-15",NEW
+17,Setup,17.6,Payment-provider profiles,#/setup/provider-profiles,"OWNER, FINANCE",payment_provider_profile(C) payment_provider_fee_bucket(K),"IC-0.5, R-FIN-72",NEW
+17,Setup,17.7,3PL profiles,#/setup/3pl-profiles,"OWNER, STOCK",threepl_profile(C) threepl_fee_bucket(K),"IC-0.6, R-D-96",NEW
+17,Setup,17.8,Dropship-supplier profiles,#/setup/dropship-profiles,"OWNER, TL",dropship_supplier_profile(C),"IC-0.7, R-D-97",NEW
+17,Setup,17.9,"Printers, media, routes, test page",#/settings/printer,"OWNER, ADMIN, STOCK",printer_profile(C) label_media(C) printer_calibration(X) print_route(C) printer_default(M),"R-G_CORE-111…116, 18_Labels §2, §13, R-H-56",NEW
+17,Setup,17.10,Label templates & sheet layouts,#/setup/labels,"OWNER, ADMIN",label_template(C) label_sheet_layout(C),"18_Labels §3, §12, R-G_CORE-112",NEW
+17,Setup,17.11,Label regulation profiles,#/setup/label-regulation,OWNER,label_regulation_profile(C),R-D-92,NEW
+17,Setup,17.12,Reference Register,#/refs,"OWNER, ADMIN (+ Add from any picker: ANY / PENDING / ADMIN)",reference_value(C) cat_reference(C) cat_src_lov(M),"R-F_SETUP-43, 45, R-B_SOURCING-52, E6",IN DESIGN
+17,Setup,17.13,Catalog masters,#/setup/catalogs,"OWNER, ADMIN",cat_country(C) cat_currency(C) cat_ports(C) cat_incoterm(C) cat_payment_terms(C) cat_payment_term_lines(K) cat_banks(C) card_categories(C) card_providers(C) card_types(C) cat_paypal_questions(C) cat_social_media(C) cat_mobile_network(C) cat_ip_burgers(C) cat_pc(C) cat_photo_id(C) cat_doc_type(C) cat_subscription_items(C) cat_product_condition(C) cat_product_type(C) cat_product_trends(C) cat_tags(C) price_change_reason(C) sys_security_question(C),"R-F_SETUP-39…42, R-D-68…70, R-C-22",NEW (screen) – lists existed
+17,Setup,17.14,Field Registry,#/fields,"OWNER, ADMIN",,"IC-14, E2, R-G_CORE-124",IN DESIGN
+17,Setup,17.15,Permissions & roles,#/perms,OWNER,cat_account_type(C) cat_account_role(M) sys_approval_rule(C) sys_approval_limit(C),"R-C-43, R-G_CORE-55, 59, 61…63, R-H-58, E7, E8",IN DESIGN
+17,Setup,17.16,Sessions & IP allow-list,#/settings/sessions,"OWNER, ADMIN",ip_allowlist(C),"R-C-49, R-G_CORE-98",NEW
+17,Setup,17.17,Audit log,#/settings/audit-log,OWNER,,"R-G_CORE-106, R-G_CORE-122",NEW
+17,Setup,17.18,Settings,#/part/4/settings,OWNER,warehouse_settings(T) non_working_day(C) search_synonym(C) menu_builder(M) cat_module(M) cat_module_entity(M) cat_module_param(M) cat_module_params_lov(M) cat_module_type(M),"R-H-57, R-B_SOURCING-51, R-F_SETUP-44, R-G_CORE-57, 85, 89, 99",IN DESIGN
+17,Setup,17.19,Migration switch,#/settings/cutover,OWNER,cutover_run(X) wh_migration_map(M),"R-F_SETUP-48, R-FIN-71, R-H-14, 09_Migration §8",NEW
+17,Setup,17.20,System health & jobs,#/events,"OWNER, ADMIN",,"E10, R-G_CORE-110, R-H-54, SYS_* tasks",IN DESIGN (System events)
