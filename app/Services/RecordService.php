@@ -88,7 +88,8 @@ class RecordService
             if (! $given && $id) continue;                        // edit: untouched fields stay as they are
             if (! $given && ! $id) $v = Registry::defaultValue($f, ['ent' => Context::ent(), 'user' => Context::userId()]);
             $v = self::clean($f, $v);
-            $must = $f['required'] && (! $quick || $f['in_quick']);
+            $numbered = str_starts_with((string) $f['default_rule'], 'numbering:');
+            $must = $f['required'] && (! $quick || $f['in_quick']) && ! $numbered;
             if (! $must && $f['required_if']) $must = self::cond($f['required_if'], $input + $old);
             if ($must && ($v === null || $v === '')) { $errors[$f['field_name']] = $f['label'] . ' is required.'; continue; }
             if ($v !== null && $v !== '') {
@@ -99,6 +100,18 @@ class RecordService
         }
         if ($errors) throw ValidationException::withMessages($errors);
 
+        try {
+            return self::write($table, $pk, $id, $data, $old, $formKey, $opt);
+        } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+            throw ValidationException::withMessages(['_form' => 'A record with the same code or name already exists. Change it and save again.']);
+        } catch (\Illuminate\Database\QueryException $e) {
+            report($e);
+            throw ValidationException::withMessages(['_form' => 'This could not be saved because a value does not fit its field. Check the marked values and try again.']);
+        }
+    }
+
+    private static function write(string $table, string $pk, ?int $id, array $data, array $old, string $formKey, array $opt): array
+    {
         return DB::transaction(function () use ($table, $pk, $id, $data, $old, $formKey, $opt) {
             $ent = Context::ent();
             if ($id) {
@@ -115,6 +128,11 @@ class RecordService
                 if (Registry::hasColumn($table, 'fk_id_ent') && ! isset($data['fk_id_ent'])) $data['fk_id_ent'] = $ent ?? 0;
                 if (Registry::hasColumn($table, 'created_at') && ! isset($data['created_at'])) $data['created_at'] = now();
                 if (Registry::hasColumn($table, 'created_by') && ! isset($data['created_by'])) $data['created_by'] = Context::userId();
+                foreach (Registry::fields($formKey) as $f) {     // own codes: PO-…, RES-…, taken when the record is first saved
+                    if ($f['column_name'] && str_starts_with((string) $f['default_rule'], 'numbering:') && empty($data[$f['column_name']]) && Registry::hasColumn($table, $f['column_name'])) {
+                        $data[$f['column_name']] = Numbering::next(substr($f['default_rule'], 10), (int) ($data['fk_id_ent'] ?? $ent ?? 0));
+                    }
+                }
                 $data = self::fillNotNull($table, $data);
                 $id = (int) DB::table($table)->insertGetId($data, $pk);
                 Audit::log($table, $id, 'INSERT', $data, null, $ent);

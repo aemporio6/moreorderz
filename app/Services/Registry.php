@@ -82,12 +82,13 @@ class Registry
             $sections[$f['section_no']] ??= ['no' => $f['section_no'], 'title' => $f['section'] ?: 'Details', 'fields' => []];
             $stored = $f['column_name'] && self::baseTable($f['table_name']) === $table && self::hasColumn($table, $f['column_name']);
             $sections[$f['section_no']]['fields'][] = [
-                'name' => $f['field_name'], 'label' => $f['label'], 'type' => $f['type'], 'source' => $f['source'],
-                'required' => (bool) $f['required'], 'quick' => (bool) $f['in_quick'], 'readonly' => (bool) $f['readonly'] || ! $stored,
+                'name' => $f['field_name'], 'col' => $f['column_name'], 'label' => $f['label'], 'type' => $f['type'], 'source' => $f['source'],
+                'required' => (bool) $f['required'] && ! str_starts_with((string) $f['default_rule'], 'numbering:'), 'quick' => (bool) $f['in_quick'], 'readonly' => (bool) $f['readonly'] || ! $stored,
                 'stored' => $stored, 'help' => $f['help'], 'step' => $f['step'], 'min' => $f['min'], 'max' => $f['max'],
                 'cascades_from' => $f['cascades_from'], 'show_if' => $f['show_if'], 'required_if' => $f['required_if'],
                 'add_form' => $f['add_form'], 'secret' => (bool) $f['secret'], 'auto_correct' => $f['auto_correct'],
                 'has_options' => in_array($f['type'], ['select', 'multiselect'], true),
+                'numbered' => str_starts_with((string) $f['default_rule'], 'numbering:'),
             ];
         }
         ksort($sections);

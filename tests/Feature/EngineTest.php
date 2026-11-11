@@ -117,6 +117,24 @@ class EngineTest extends TestCase
         $this->assertSame(1, $list['total']);
     }
 
+    public function test_own_codes_are_numbered_by_the_system_and_two_quick_saves_never_clash(): void
+    {
+        $vals = self::requiredDefaults('src_research'); unset($vals['research_code']);
+        $a = RecordService::save('src_research', $vals);
+        $b = RecordService::save('src_research', $vals);
+        $codes = DB::table('src_research')->whereIn('id', [$a['id'], $b['id']])->orderBy('id')->pluck('research_code')->all();
+        $this->assertMatchesRegularExpression('/^RES-TST-\d{4}-0001$/', $codes[0]);
+        $this->assertMatchesRegularExpression('/^RES-TST-\d{4}-0002$/', $codes[1]);
+    }
+
+    public function test_database_errors_reach_the_user_as_plain_words(): void
+    {
+        $vals = self::requiredDefaults('src_research'); $vals['research_code'] = 'RES-FIXED-1';
+        RecordService::save('src_research', $vals);
+        try { RecordService::save('src_research', $vals); $this->fail('Duplicate was saved'); }
+        catch (ValidationException $e) { $this->assertStringContainsString('already exists', $e->errors()['_form'][0]); $this->assertStringNotContainsString('SQLSTATE', $e->errors()['_form'][0]); }
+    }
+
     private static function requiredDefaults(string $form): array
     {
         $out = [];
