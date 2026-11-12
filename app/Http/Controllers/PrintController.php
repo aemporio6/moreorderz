@@ -27,6 +27,7 @@ class PrintController extends Controller
     private function run(callable $fn)
     {
         try { return $fn(); }
+        catch (\Illuminate\Database\QueryException $e) { report($e); return response()->json(['message' => 'Something went wrong on our side. Nothing was saved. The details are in the system log.'], 500); }   // never show database text to a user
         catch (\InvalidArgumentException|\RuntimeException $e) { return response()->json(['message' => $e->getMessage(), 'need' => [21 => 'reason', 22 => 'test'][$e->getCode()] ?? null, 'errors' => ['_form' => [$e->getMessage()]]], 422); }
     }
 

@@ -127,6 +127,8 @@ class SalesService
         }
         return DB::transaction(function () use ($ent, $branchId, $month, $shop) {
             $shipped = StockService::systemLocation($ent, 'SHIPPED'); $end = date('Y-m-t', strtotime($month . '-01'));
+            // a late line of a locked month is booked forward, dated today; the locked month itself never changes (R-FIN-47)
+            $postDate = Ledger::periodLocked($ent, $month) ? date('Y-m-d') : min($end, date('Y-m-d'));
             $n = 0; $units = 0; $cogs = 0.0; $revenue = 0.0; $backfilled = 0;
             foreach (self::monthLines($ent, $branchId, $month)->lockForUpdate()->get() as $s) {
                 $upd = ['f_locked' => 1, 'd_confirmed' => now(), 'confirmed_by' => Context::userId(), 'updated_at' => now()];
@@ -144,7 +146,7 @@ class SalesService
                             foreach (self::shelfBins((int) $s->fk_product_id, $ent, $miss) as [$loc, $q]) StockService::transfer($ent, (int) $s->fk_product_id, $q, $loc, $shipped, 'Backfill at Month Confirm', $rule + ['source_type' => 'SHIP', 'source_id' => $s->id]);
                             $upd['f_ship_backfill'] = 1; $upd['qty_shipped'] = (int) $s->qty_shipped + $miss; $backfilled++;
                         }
-                        $c = StockService::consumeForSale($ent, (int) $s->id, (int) $s->fk_product_id, (int) $s->qty, $shipped, $rule['owner'], ['date' => min($end, date('Y-m-d'))]);
+                        $c = StockService::consumeForSale($ent, (int) $s->id, (int) $s->fk_product_id, (int) $s->qty, $shipped, $rule['owner'], ['date' => $postDate]);
                         $upd += ['f_stock_deducted' => 1, 'cost_gbp' => $c['cost'], 'buy_amount' => $c['cost'], 'buy_rate' => $s->qty > 0 ? round($c['cost'] / $s->qty, 2) : 0, 'cost_source' => 'lots', 'profit' => round((float) $s->total_amount_gbp - $c['cost'], 2), 'wh_status' => 'CONFIRMED'];
                         $units += (int) $s->qty; $cogs += $c['cost'];
                     } else {
@@ -154,7 +156,7 @@ class SalesService
                 DB::table('t_sales')->where('id', $s->id)->update($upd);
             }
             $revenue = round($revenue, 2);
-            if ($revenue > 0) Ledger::post($ent, min($end, date('Y-m-d')), 'SALE_CONFIRM', $branchId, [['account' => '1100', 'debit' => $revenue, 'ref_id' => $branchId], ['account' => '4000', 'credit' => $revenue, 'ref_id' => $branchId]], ['memo' => "Sales {$shop->shop_name} $month"]);
+            if ($revenue > 0) Ledger::post($ent, $postDate, 'SALE_CONFIRM', $branchId, [['account' => '1100', 'debit' => $revenue, 'ref_id' => $branchId], ['account' => '4000', 'credit' => $revenue, 'ref_id' => $branchId]], ['memo' => "Sales {$shop->shop_name} $month"]);
             Audit::log('t_branches', $branchId, 'LOCK', ['month' => $month, 'lines' => $n, 'units' => $units, 'sales' => $revenue, 'cost' => round($cogs, 2)], 'Sales Month Confirm', $ent);
             TaskEngine::close('WH_UNSHIPPED_LINES', [$branchId . '-' . $month], 'Confirmed');
             EventBus::fire('SALE_MONTH_CONFIRMED', 't_branches', $branchId, ['month' => $month, 'lines' => $n, 'units' => $units, 'sales' => $revenue, 'cost' => round($cogs, 2)], $ent);

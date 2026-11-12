@@ -70,6 +70,7 @@ class AppController extends Controller
         if ($no === '4.12') return '#/stock/counts';
         if ($no === '4.13') return '#/stock/held';
         if ($no === '4.10') return '#/stock/ledger?act=transfer';
+        if ($no === '10.2') return '#/close';
         if ($no === '9.1') return '#/money';
         if ($no === '10.3') return '#/profit';
         if ($no === '6.6') return '#/refunds';
