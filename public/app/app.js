@@ -91,6 +91,8 @@
       if (r.startsWith('#/work')) return await pageWork((r.match(/tab=(\w+)/) || [])[1]);
       if (r.startsWith('#/confirm')) return await pageConfirm();
       if (r === '#/returns') return await pageReturns();
+      if ((mt = r.match(/^#\/reports\/([a-z_]+)/))) return await pageReport(mt[1], { from: (r.match(/from=([\d-]+)/) || [])[1], to: (r.match(/to=([\d-]+)/) || [])[1] });
+      if (r === '#/reports') return await pageReports();
       if ((mt = r.match(/^#\/partners\/(\d+)/))) return await pagePartner(+mt[1]);
       if (r === '#/partners') return await pagePartners();
       if (r.startsWith('#/close')) { const sh = (r.match(/shop=(\d+)/) || [])[1], mo = (r.match(/month=(\d{4}-\d{2})/) || [])[1]; return sh && mo ? await pageCloseMonth(+sh, mo) : await pageClose(); }
@@ -244,6 +246,30 @@
   const mChip = s => `<span class="chip ${({ UNMATCHED: 'warn', AUTO: 'done', MANUAL: 'done', IGNORED: 'lock', LOADED: 'pend', POSTED: 'prog', PAID: 'done', BOOKED: 'done', ON_BANK: 'done', WAITING: 'warn', REJECTED: 'err', CANCELLED: 'lock', PENDING: 'warn', APPROVED: 'done', OK: 'done', INCOMPLETE: 'warn', DIFF: 'err' })[s] || 'pend'}">${esc(({ UNMATCHED: 'Not matched', AUTO: 'Matched by the tool', MANUAL: 'Matched by hand', IGNORED: 'Set aside', LOADED: 'Loaded', POSTED: 'Booked', PAID: 'Paid to bank', BOOKED: 'Booked', ON_BANK: 'Seen on bank', WAITING: 'Waiting for approval', REJECTED: 'Rejected', CANCELLED: 'Cancelled', PENDING: 'Waiting', APPROVED: 'Approved', OK: 'Adds up', INCOMPLETE: 'Statements missing', DIFF: 'Does not add up' })[s] || s)}</span>`;
 
 
+
+
+  // ---------- reports ----------
+  async function pageReports() {
+    busy(true); let d; try { d = await api('reports'); } finally { busy(false); }
+    const groups = {}; d.reports.forEach(r => (groups[r.group] = groups[r.group] || []).push(r));
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Reports</h1><div class="sub">Each report is a table with totals for the dates you choose, and can be downloaded as a spreadsheet file. The totals are the same figures the working screens and the books show.</div></div></div>
+      ${Object.entries(groups).map(([g, rs]) => `<div class="card" style="margin-bottom:12px"><div class="card-h"><h3>${esc(g)}</h3></div><div class="card-b" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px">${rs.map(r => `<a href="#/reports/${r.key}" class="card kpi" style="display:block;text-decoration:none;color:inherit"><div style="font-weight:650">${esc(r.title)}</div><div class="foot">${esc(r.what)}</div></a>`).join('')}</div></div>`).join('')
+        || `<div class="card"><div class="empty">${ic('file')}<div>Your role has no reports. Ask the Owner if you need one.</div></div></div>`}`;
+  }
+  async function pageReport(key, st = {}) {
+    const q = new URLSearchParams(); ['from', 'to'].forEach(k => st[k] && q.set(k, st[k]));
+    busy(true); let d; try { d = await api(`reports/${key}?` + q); } catch (e) { busy(false); $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/reports">Reports</a> ›</div><h1>Report</h1></div></div><div class="card"><div class="empty">${ic('alert')}<div>${esc(e.message)}</div></div></div>`; return; } busy(false);
+    const fmt = (v, t) => v === null || v === undefined || v === '' ? '' : t === 'money' ? amt(v) : t === 'int' ? (+v).toLocaleString('en-GB') : esc(v), num = t => t === 'money' || t === 'int';
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/reports">Reports</a> ›</div><h1>${esc(d.title)}</h1><div class="sub">${esc(d.what)}${d.columns.some(c => c.type === 'money') ? ` Money in ${esc(d.base)}.` : ''}</div></div>
+        <div class="actions">${d.dates ? `<input class="q" type="date" id="rpFrom" value="${esc(d.from)}" style="min-width:0" aria-label="From"><input class="q" type="date" id="rpTo" value="${esc(d.to)}" style="min-width:0" aria-label="To">` : ''}<a class="btn" href="/api/reports/${key}/csv?from=${esc(d.from)}&to=${esc(d.to)}" title="Download this report as a spreadsheet file">${ic('ext')} Export</a></div></div>
+      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr>${d.columns.map(c => `<th class="${num(c.type) ? 'num' : ''}">${esc(c.label)}</th>`).join('')}</tr></thead><tbody>
+        ${d.rows.map(r => `<tr>${d.columns.map(c => `<td class="${num(c.type) ? 'num' : ''}" ${c.type === 'date' ? 'style="white-space:nowrap"' : ''}>${c.key === 'state' && r[c.key] ? `<span class="chip err">${esc(r[c.key])}</span>` : fmt(r[c.key], c.type)}</td>`).join('')}</tr>`).join('')}
+        ${d.rows.length && Object.keys(d.totals).length ? `<tr style="font-weight:700;border-top:2px solid var(--line)">${d.columns.map((c, i) => `<td class="${num(c.type) ? 'num' : ''}">${i === 0 ? 'Total' : c.key in d.totals ? fmt(d.totals[c.key], c.type) : ''}</td>`).join('')}</tr>` : ''}</tbody></table>
+        ${d.rows.length ? '' : `<div class="empty">${ic('check')}<div>Nothing to show${d.dates ? ' between these dates' : ''}.</div></div>`}</div></div>
+      <div class="small muted" style="margin-top:10px">${esc(d.note || '')} ${d.rows.length} row(s).</div>`;
+    const go2 = () => pageReport(key, { from: $('#rpFrom').value, to: $('#rpTo').value });
+    if ($('#rpFrom')) { $('#rpFrom').onchange = go2; $('#rpTo').onchange = go2; }
+  }
 
   // ---------- partners and investors ----------
   const lgType = { CAPITAL_IN: 'Capital in', PROFIT: 'Profit share', MANAGEMENT_FEE: 'Management fee', WITHDRAWAL: 'Withdrawal', REINVEST: 'Reinvested', ADJUSTMENT: 'Adjustment', LOAN: 'Loan' };

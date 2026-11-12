@@ -10,7 +10,7 @@ public repo (code only, never data or secrets) · old data = export of 18 Sep 20
 | 3 | Buying (Research → PO → GRN) | DONE (12 Nov) |
 | 4 | Sales and Dispatch (orders, labels, printing) | DONE (12 Nov) – carrier label PDF import carried, see below |
 | 5 | Money (bank, settlements, TikTok, profit views) | DONE (12 Nov) – carried items listed below |
-| 6 | Month close, Partners, Reports | IN PROGRESS – month close and partners done (12 Nov); reports next |
+| 6 | Month close, Partners, Reports | DONE (12 Nov) – parts of the profit waterfall not built, listed below |
 | 7 | Import old data + reconciliation report + full test | – |
 
 ## Log
@@ -79,6 +79,15 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
   - Screens: Partners (#/partners: share totals today, list, new agreement) and the partner page (account, agreements, statements, account lines, withdrawals); partner shares card on the Month close page. Menu 11.1 / 11.2 / 11.4 / 11.5 / 11.6.
   - **112 tests pass (965 assertions).** Browser desktop + phone: agreement, 110 % warning, end agreement, capital in, refused withdrawal through the screens; 0 errors; 129 menu routes, 17 placeholders.
   - **Honest limits – parts of the spec's waterfall (PHASE_06 §6.3) that are NOT built:** VA share and salary, handler share, investors earning on their own lots (lot-owner split, "no stacking" – the spec itself marks this "owner to confirm"), owner modes, loss carried forward, the INVESTOR_INVOICING route, tax-reserve ledger. Not built either: statement as PDF with versions, accept / query by the partner, WhatsApp / e-mail, reinvest, the "adjustment to a locked month" form. The profit that is shared is the **shop's profit before overheads** (expenses without a shop are not deducted) – owner to confirm whether overheads should be shared out first. Pay-out to partners was tested with one shop per month; with a Pool agreement every shop-month pays on its own distributable.
+
+- 12 Nov – **Step 6, part 3: reports.** `ReportService` + screens Reports (#/reports, menu 16.1) and one report (#/reports/<key>): date range, table, totals row, Export as a spreadsheet file (logged in the audit; cells that could run as a formula are made safe). Ten reports: Sales by shop / by product / by day; Stock on hand with days of cover; Stock by location; Purchase orders (ordered, received, paid, open); Supplier balances; Cash in and out by kind per month; Partner summary; Month close status. Each role sees only its reports; Warehouse sees stock units without money columns.
+  - The totals are tested against the other screens and the books: confirmed sales and cost = Profit views; stock value = StockService = ledger 1200; cash net = ledger 1000; supplier advances = ledger 1300; partner and locked-month figures = their own screens.
+  - **114 tests pass (996 assertions).** Browser desktop + phone: all ten reports open, date change, export; 0 errors, no sideways overflow; 129 menu routes, 16 placeholders.
+  - **Honest limits:** ten reports, not the full report catalogue of the spec (R-FIN / R-A report lists: refund rates, slow / dead stock ageing, VA performance, tax worksheets and others are not built); no charts; no saved or scheduled reports; export is CSV (opens in Excel), not .xlsx or PDF.
+
+## Step 6 – carried forward
+- Profit waterfall parts (PHASE_06 §6.3): VA share / salary, handler share, lot-owner investor earnings and the stacking rule, owner modes, loss carried forward, INVESTOR_INVOICING route, tax-reserve ledger · partner statement PDF with versions, accept / query, WhatsApp / e-mail · adjustment form for a locked month · close checks PURCHASE_VS_SUPPLIER and EXPENSES (shared-expense rules) · the rest of the report catalogue.
+- **Owner decisions open:** (1) share the shop's profit before or after overheads; (2) FILES_PRESENT when the first money file starts mid-month; (3) lot-owner "no stacking" rule (the spec marks it "owner to confirm").
 
 ## Step 5 – carried forward
 - Payables & cash forecast screen (the dashboard lists payments to make; no forecast yet) · loans, budgets, capital calls, withdrawals (lists and forms work; no engines) · bank line split · bank file in Excel format · FIN_PAYOUT_DIFF · VAT return logic · money files of other marketplaces (Import Center) · partial refunds.
