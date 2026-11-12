@@ -119,7 +119,11 @@ class StockService
                 EventBus::fire('STOCK_CONSUMED', 'fin_lots', $pk['lot'], ['sale' => $saleId, 'qty' => $pk['qty'], 'left' => (int) DB::table('fin_lots')->where('id', $pk['lot'])->value('qty_left')], $ent);
             }
             self::refreshCache($productId);
-            return ['cost' => round($total, 2), 'rows' => $rows];
+            $total = round($total, 2);
+            if ($total > 0 && ($opt['post'] ?? true)) {      // cost of goods sold leaves the stock account in the same transaction
+                Ledger::post($ent, $date, 'SALE_CONFIRM', $saleId, [['account' => '5000', 'debit' => $total], ['account' => '1200', 'credit' => $total]], ['memo' => "Cost of sale #$saleId ({$p->SKU_VENDOR})"]);
+            }
+            return ['cost' => $total, 'rows' => $rows];
         });
     }
 
@@ -155,7 +159,9 @@ class StockService
                 $left -= $take;
             }
             if ($productId) self::refreshCache($productId);
-            return ['cost_back' => round($cost, 2)];
+            $cost = round($cost, 2);
+            if ($cost > 0) Ledger::post($ent, date('Y-m-d'), 'RETURN', $saleId, [['account' => '1200', 'debit' => $cost], ['account' => '5000', 'credit' => $cost]], ['memo' => "Return of sale #$saleId back into stock"]);
+            return ['cost_back' => $cost];
         });
     }
 
@@ -172,7 +178,7 @@ class StockService
                 foreach (self::pick($productId, $locId, -$qty, $opt['owner'] ?? null, null) as $pk) {
                     self::addBalance($pk['lot'], $locId, -$pk['qty']);
                     DB::table('fin_lots')->where('id', $pk['lot'])->decrement('qty_left', $pk['qty']);
-                    self::move($ent, $productId, 'adjustment', -$pk['qty'], $locId, $pk['lot'], $pk['owner'], $pk['cost'], 'ADJUST', $opt['source_id'] ?? null, $reason);
+                    self::move($ent, $productId, $opt['type'] ?? 'adjustment', -$pk['qty'], $locId, $pk['lot'], $pk['owner'], $pk['cost'], $opt['source_type'] ?? 'ADJUST', $opt['source_id'] ?? null, $reason);
                     $value -= $pk['qty'] * $pk['cost'];
                 }
             } else {
@@ -186,7 +192,7 @@ class StockService
                 }
                 self::addBalance($lot->id, $locId, $qty);
                 DB::table('fin_lots')->where('id', $lot->id)->increment('qty_left', $qty);
-                self::move($ent, $productId, 'adjustment', $qty, $locId, $lot->id, $lot->fk_id_owner, (float) $lot->unit_cost_gbp, 'ADJUST', $opt['source_id'] ?? null, $reason);
+                self::move($ent, $productId, $opt['type'] ?? 'adjustment', $qty, $locId, $lot->id, $lot->fk_id_owner, (float) $lot->unit_cost_gbp, $opt['source_type'] ?? 'ADJUST', $opt['source_id'] ?? null, $reason);
                 $value += $qty * (float) $lot->unit_cost_gbp;
             }
             $value = round($value, 2);
@@ -271,7 +277,7 @@ class StockService
     public static function productStock(int $productId): array
     {
         $by = DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->join('cat_inventory_locations as c', 'c.id', '=', 'b.fk_id_location')->leftJoin('t_account as a', 'a.id', '=', 'l.fk_id_owner')
-            ->where('l.fk_id_product', $productId)->where('b.qty', '<>', 0)->orderBy('l.received_date')->orderBy('l.id')
+            ->where('l.fk_id_product', $productId)->where('b.qty', '<>', 0)->orderBy('l.received_date')->orderBy('l.id')->orderBy('c.location_name')
             ->get(['c.location_name as location', 'c.kind', 'l.id as lot_id', 'l.lot_code', 'l.received_date', 'l.unit_cost_gbp', 'l.visibility', 'l.landed_status', 'b.qty', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as owner")]);
         return ['units' => self::balance($productId), 'available' => self::available($productId), 'rows' => $by];
     }
@@ -286,6 +292,23 @@ class StockService
         $neg = DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->where('l.company_id', $ent)->where('b.qty', '<', 0)->count();
         $gl = Ledger::balance($ent, '1200');
         return ['mismatch' => $bad->count(), 'negative_balances' => $neg, 'stock_value' => self::value($ent), 'ledger_1200' => $gl, 'value_matches_ledger' => abs(self::value($ent) - $gl) < 0.005] + $r;
+    }
+
+    /** Pool view: per product, units and value per owner, pool and private. */
+    public static function pool(int $ent): array
+    {
+        return DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->join('t_product_vendors as p', 'p.id', '=', 'l.fk_id_product')->leftJoin('t_account as a', 'a.id', '=', 'l.fk_id_owner')
+            ->where('l.company_id', $ent)->where('b.qty', '>', 0)->groupBy('p.id', 'p.SKU_VENDOR', 'p.product_name_vendor', 'l.fk_id_owner', 'a.first_name', 'a.sur_name', 'l.visibility')->orderBy('p.SKU_VENDOR')->orderBy('l.visibility')
+            ->get(['p.id as product_id', 'p.SKU_VENDOR as sku', 'p.product_name_vendor as name', 'l.visibility', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as owner"), DB::raw('SUM(b.qty) as units'), DB::raw('ROUND(SUM(b.qty * l.unit_cost_gbp), 2) as value')])->all();
+    }
+
+    /** Held stock: units that are in stock but cannot be sold (returns, quarantine, damaged, missing), with how long they have been there. */
+    public static function held(int $ent): array
+    {
+        return DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->join('t_product_vendors as p', 'p.id', '=', 'l.fk_id_product')->join('cat_inventory_locations as c', 'c.id', '=', 'b.fk_id_location')
+            ->where('l.company_id', $ent)->where('b.qty', '>', 0)->where(fn ($w) => $w->whereIn('c.kind', ['DAMAGED', 'RETURNS', 'QUARANTINE', 'MISSING'])->orWhere('c.f_sellable', 0))
+            ->orderBy('b.updated_at')->get(['p.id as product_id', 'p.SKU_VENDOR as sku', 'p.product_name_vendor as name', 'c.id as location_id', 'c.location_name as location', 'c.kind', 'l.lot_code', 'b.qty', 'b.updated_at',
+                DB::raw('ROUND(b.qty * l.unit_cost_gbp, 2) as value'), DB::raw('DATEDIFF(NOW(), b.updated_at) as days')])->all();
     }
 
     /** STK_LOW: a task per product at or under its minimum level (when the alert is switched on); closes when stock is back above it. */
@@ -304,7 +327,7 @@ class StockService
         $rows = DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')
             ->where('l.fk_id_product', $productId)->where('b.fk_id_location', $locId)->where('b.qty', '>', 0)
             ->when($rule === 'PRIVATE', fn ($q) => $q->where('l.fk_id_owner', $owner))
-            ->when($rule === 'POOL', fn ($q) => $q->where('l.visibility', 'POOL'))
+            ->when($rule === 'POOL', fn ($q) => $q->where(fn ($w) => $w->where('l.visibility', 'POOL')->orWhereNull('l.fk_id_owner')))   // pool lots and the company's own lots; never a partner's private lot
             ->when($rule === null && $owner, fn ($q) => $q->where('l.fk_id_owner', $owner))
             ->orderBy('l.received_date')->orderBy('l.id')->lockForUpdate()
             ->get(['b.id as bid', 'b.qty', 'l.id as lot', 'l.unit_cost_gbp as cost', 'l.fk_id_owner as owner']);

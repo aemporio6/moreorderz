@@ -70,6 +70,8 @@ class StockTest extends TestCase
         $this->assertSame(5, Stock::balance($this->p));
         $this->assertSame(3, DB::table('fin_lot_consumption')->where('fk_id_sale', 9001)->count());
         $this->assertSame(5, (int) DB::table('fin_lots')->where('id', $c)->value('qty_left'));
+        $this->assertSame(120.00, Ledger::balance(1, '5000'), 'cost of goods sold is posted with the sale');
+        $this->assertSame(Stock::value(1), Ledger::balance(1, '1200'), 'what is left in stock = the stock account');
     }
 
     public function test_same_received_date_takes_the_lower_lot_id_first(): void
@@ -129,6 +131,8 @@ class StockTest extends TestCase
         $this->assertSame(1, (int) DB::table('fin_lot_consumption')->where('fk_id_sale', 9007)->sum('qty'), 'net consumption = 4 sold − 3 returned');
         Stock::returnIn(1, 9007, 1, 'DAMAGED');
         $this->assertSame(1, Stock::balance($this->p, Stock::systemLocation(1, 'DAMAGED')));
+        $this->assertSame(Stock::value(1), Ledger::balance(1, '1200'), 'returns put their cost back into the stock account');
+        $this->assertSame(0.00, Ledger::balance(1, '5000'), '4 sold, 4 came back: no cost of sale left');
         $this->assertSame(9, Stock::available($this->p), 'damaged units are in stock but not sellable');
         $this->expectExceptionMessage('Only 0 unit(s) of this sale can still come back');
         Stock::returnIn(1, 9007, 1);
@@ -220,7 +224,9 @@ class StockTest extends TestCase
             DB::table('t_stock_movements')->where('fk_id_product', $p)->delete(); DB::table('fin_lots')->whereIn('id', $lots)->delete();
             DB::table('sys_events')->where('entity', 'fin_lots')->whereIn('entity_id', $lots)->delete(); DB::table('sys_events')->where('entity', 't_src_grn')->delete();
             DB::table('t_product_vendors')->where('id', $p)->delete(); DB::table('cat_inventory_locations')->where('id', $wh)->delete();
-            DB::table('sys_sequences')->where('doc_type', 'LOT')->delete();
+            $j = DB::table('gl_journals')->where('source_type', 'SALE_CONFIRM')->whereBetween('source_id', [7000, 7005])->pluck('id');
+            DB::table('gl_lines')->whereIn('journal_id', $j)->delete(); DB::table('gl_journals')->whereIn('id', $j)->delete();
+            DB::table('sys_sequences')->whereIn('doc_type', ['LOT', 'JNL'])->delete();
             DB::table('t_users')->where('login_id', 'owner@test')->delete(); DB::table('t_enterprise')->where('id', 1)->where('iso_ent', 'TST')->delete();
             DB::beginTransaction();                       // so the normal tearDown has a transaction to roll back
         }

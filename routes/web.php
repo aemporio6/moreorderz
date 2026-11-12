@@ -52,6 +52,16 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('stock/transfer', [StockController::class, 'transfer']);
         Route::post('stock/adjust', [StockController::class, 'adjust']);
         Route::post('stock/ownership', [StockController::class, 'ownership']);
+        Route::get('stock/pool', [StockController::class, 'pool']);
+        Route::get('stock/held', [StockController::class, 'held']);
+        Route::get('stock/counts', [StockController::class, 'counts']);
+        Route::post('stock/counts', [StockController::class, 'countOpen']);
+        Route::get('stock/counts/{id}', [StockController::class, 'count'])->whereNumber('id');
+        Route::post('stock/counts/{id}/lines', [StockController::class, 'countEnter'])->whereNumber('id');
+        Route::post('stock/counts/{id}/{step}', [StockController::class, 'countStep'])->whereNumber('id')->whereIn('step', ['submit', 'approve', 'post', 'cancel']);
+        Route::get('prices/{productId}', [StockController::class, 'prices'])->whereNumber('productId');
+        Route::post('prices/{productId}', [StockController::class, 'setPrice'])->whereNumber('productId');
+        Route::post('stock/bins', [StockController::class, 'bins']);
         Route::get('tasks', [WorkController::class, 'tasks']);
         Route::post('tasks/{id}/status', [WorkController::class, 'taskStatus'])->whereNumber('id');
     });

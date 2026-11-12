@@ -3,6 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Services\Context;
+use App\Services\CountService;
+use App\Services\LocationGenerator;
+use App\Services\PriceService;
+use App\Services\Settings;
 use App\Services\StockService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -115,5 +119,91 @@ class StockController extends Controller
     {
         $this->can($r, ['OWNER', 'MANAGER']);
         return StockService::selfCheck((int) Context::ent());
+    }
+
+    // ---- pool, held stock ----
+    public function pool(Request $r)
+    {
+        $this->can($r, self::MONEY);
+        return ['rows' => StockService::pool((int) Context::ent())];
+    }
+
+    public function held(Request $r)
+    {
+        $this->can($r, self::SEE);
+        $rows = StockService::held((int) Context::ent());
+        if (! in_array($r->user()->role_code, self::MONEY, true)) foreach ($rows as $x) unset($x->value);
+        return ['rows' => $rows, 'can_change' => in_array($r->user()->role_code, self::CHANGE, true)];
+    }
+
+    // ---- stock counts ----
+    public function counts(Request $r)
+    {
+        $this->can($r, self::SEE);
+        return ['rows' => DB::table('t_stock_counts as c')->leftJoin('cat_inventory_locations as l', 'l.id', '=', 'c.fk_id_location')->leftJoin('t_users as u', 'u.id', '=', 'c.counted_by')->where('c.fk_id_ent', Context::ent())
+            ->orderByDesc('c.id')->limit(200)->get(['c.id', 'c.count_code', 'c.d_count', 'c.status', 'c.variance_value', 'l.location_name as location', 'u.display_name as counted_by']), 'can_change' => in_array($r->user()->role_code, self::CHANGE, true)];
+    }
+
+    public function count(Request $r, int $id)
+    {
+        $this->can($r, self::SEE);
+        $c = DB::table('t_stock_counts as c')->leftJoin('cat_inventory_locations as l', 'l.id', '=', 'c.fk_id_location')->where('c.id', $id)->where('c.fk_id_ent', Context::ent())->first(['c.*', 'l.location_name as location']) ?? abort(404);
+        $blind = $c->f_blind && $c->status === 'OPEN';        // blind count: the counter does not see the system number until he submits
+        $lines = DB::table('t_stock_count_lines as l')->join('t_product_vendors as p', 'p.id', '=', 'l.fk_id_product')->where('l.fk_id_count', $id)->orderBy('p.SKU_VENDOR')
+            ->get(['l.fk_id_product as product_id', 'p.SKU_VENDOR as sku', 'p.product_name_vendor as name', 'l.qty_system', 'l.qty_counted', 'l.note']);
+        if ($blind) foreach ($lines as $l) $l->qty_system = null;
+        return ['count' => ['id' => $c->id, 'code' => $c->count_code, 'status' => $c->status, 'location' => $c->location, 'date' => $c->d_count, 'variance_value' => $c->variance_value, 'blind' => (bool) $blind, 'mine' => (int) $c->counted_by === $r->user()->id], 'lines' => $lines];
+    }
+
+    public function countOpen(Request $r)
+    {
+        $this->can($r, self::CHANGE);
+        $d = $r->validate(['location' => 'required|integer']);
+        return $this->run(fn () => ['id' => CountService::open((int) Context::ent(), $d['location'], null, Settings::get('WH_COUNT_BLIND', Context::ent(), 'Y') === 'Y'), 'message' => 'Count opened']);
+    }
+
+    public function countEnter(Request $r, int $id)
+    {
+        $this->can($r, self::CHANGE);
+        $d = $r->validate(['lines' => 'required|array', 'lines.*.product' => 'required|integer', 'lines.*.qty' => 'required|integer|min:0', 'lines.*.note' => 'nullable|string|max:255']);
+        return $this->run(function () use ($d, $id) { foreach ($d['lines'] as $l) CountService::enter($id, $l['product'], $l['qty'], $l['note'] ?? null); return ['message' => 'Count saved']; });
+    }
+
+    public function countStep(Request $r, int $id, string $step)
+    {
+        $this->can($r, in_array($step, ['approve', 'post'], true) ? ['OWNER', 'MANAGER'] : self::CHANGE);
+        return $this->run(fn () => match ($step) {
+            'submit' => CountService::submit($id) + ['message' => 'Count submitted for approval'],
+            'approve' => (function () use ($id) { CountService::approve($id); return ['message' => 'Count approved']; })(),
+            'post' => CountService::post($id) + ['message' => 'Differences posted to stock'],
+            'cancel' => (function () use ($id) { CountService::cancel($id); return ['message' => 'Count cancelled']; })(),
+            default => abort(404),
+        });
+    }
+
+    // ---- prices ----
+    public function prices(Request $r, int $productId)
+    {
+        $this->can($r, ['OWNER', 'MANAGER', 'FINANCE', 'ACCOUNTANT', 'VA', 'TL']);
+        abort_unless(DB::table('t_product_vendors')->where('id', $productId)->where('fk_id_ent', Context::ent())->exists(), 404);
+        $lc = \App\Services\Registry::labelColumn('cat_marketplaces');
+        return ['timeline' => PriceService::timeline($productId), 'marketplaces' => DB::table('cat_marketplaces')->limit(100)->get(['id', "$lc as name"]),
+            'reasons' => DB::table('cat_price_change_reasons')->where('f_active', 1)->get(['id', 'reason_name as name'])];
+    }
+
+    public function setPrice(Request $r, int $productId)
+    {
+        $this->can($r, ['OWNER', 'MANAGER', 'TL']);
+        abort_unless(DB::table('t_product_vendors')->where('id', $productId)->where('fk_id_ent', Context::ent())->exists(), 404);
+        $d = $r->validate(['marketplace' => 'required|integer', 'raw_price' => 'required|numeric|min:0', 'sale_price' => 'required|numeric|min:0', 'from_date' => 'required|date', 'reason' => 'nullable|integer']);
+        return $this->run(fn () => ['id' => PriceService::set($productId, $d['marketplace'], (float) $d['raw_price'], (float) $d['sale_price'], $d['from_date'], $d['reason'] ?? null), 'message' => 'Price saved from ' . $d['from_date']]);
+    }
+
+    // ---- bins ----
+    public function bins(Request $r)
+    {
+        $this->can($r, ['OWNER', 'MANAGER']);
+        $d = $r->validate(['parent' => 'required|integer', 'zone' => 'required|string|max:6', 'levels' => 'required|integer|min:1', 'positions' => 'required|integer|min:1', 'create' => 'boolean']);
+        return $this->run(fn () => LocationGenerator::run((int) Context::ent(), $d, (bool) ($d['create'] ?? false)) + ['message' => ! empty($d['create']) ? 'Bins created' : 'Preview']);
     }
 }

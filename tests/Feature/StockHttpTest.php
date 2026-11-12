@@ -74,4 +74,35 @@ class StockHttpTest extends TestCase
         $this->artisan('mo:nightly')->assertExitCode(0);
         $this->assertFalse(TaskEngine::isOpen('STK_LOW', [$p]));
     }
+
+    public function test_count_flow_prices_bins_pool_and_held_over_http(): void
+    {
+        [$p, $a, $b] = $this->seedStock();
+        Stock::receive(1, [['product' => $p, 'qty' => 10, 'location' => $a, 'unit_cost' => 2]], 'OPENING', null, ['lot_source' => 'OPENING']);
+        $wh = $this->makeUser('WAREHOUSE'); $mgr = $this->makeUser('MANAGER');
+        $id = $this->actingAs($wh)->postJson('/api/stock/counts', ['location' => $a])->assertOk()->json('id');
+        $c = $this->getJson("/api/stock/counts/$id")->assertOk()->json();
+        $this->assertTrue($c['count']['blind']);
+        $this->assertNull($c['lines'][0]['qty_system'], 'blind count hides the system number');
+        $this->postJson("/api/stock/counts/$id/lines", ['lines' => [['product' => $p, 'qty' => 9, 'note' => 'one missing']]])->assertOk();
+        $this->postJson("/api/stock/counts/$id/submit")->assertOk();
+        $this->postJson("/api/stock/counts/$id/approve")->assertStatus(403);                       // warehouse cannot approve
+        $this->assertSame(10, $this->getJson("/api/stock/counts/$id")->json('lines.0.qty_system'), 'after submit the system number shows');
+        $this->actingAs($mgr)->postJson("/api/stock/counts/$id/post")->assertStatus(422);          // not approved yet
+        $this->postJson("/api/stock/counts/$id/approve")->assertOk();
+        $this->postJson("/api/stock/counts/$id/post")->assertOk()->assertJsonPath('lines_posted', 1);
+        $this->assertSame(9, Stock::balance($p));
+
+        $mp = DB::table('cat_marketplaces')->insertGetId($this->fill('cat_marketplaces', ['fk_id_ent' => 1]));
+        $this->postJson("/api/prices/$p", ['marketplace' => $mp, 'raw_price' => 5, 'sale_price' => 9.99, 'from_date' => '2026-08-01'])->assertOk();
+        $this->postJson("/api/prices/$p", ['marketplace' => $mp, 'raw_price' => 5, 'sale_price' => 9.99, 'from_date' => '2026-08-01'])->assertStatus(422);
+        $this->assertCount(1, $this->getJson("/api/prices/$p")->assertOk()->json('timeline'));
+        $this->actingAs($wh)->postJson("/api/prices/$p", ['marketplace' => $mp, 'raw_price' => 5, 'sale_price' => 1, 'from_date' => '2026-09-01'])->assertStatus(403);
+
+        $this->actingAs($mgr)->postJson('/api/stock/bins', ['parent' => $a, 'zone' => 'B', 'levels' => 2, 'positions' => 2, 'create' => true])->assertOk()->assertJsonPath('created', 4);
+        $this->actingAs($wh)->postJson('/api/stock/bins', ['parent' => $a, 'zone' => 'C', 'levels' => 1, 'positions' => 1, 'create' => true])->assertStatus(403);
+        $this->actingAs($wh)->getJson('/api/stock/pool')->assertStatus(403);                       // pool shows money
+        $this->assertCount(1, $this->actingAs($mgr)->getJson('/api/stock/pool')->assertOk()->json('rows'));
+        $this->assertSame([], $this->getJson('/api/stock/held')->assertOk()->json('rows'));
+    }
 }

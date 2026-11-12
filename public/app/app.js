@@ -75,6 +75,11 @@
       if ((mt = r.match(/^#\/stock\/product\/(\d+)/))) return await pageStockProduct(+mt[1]);
       if (r.startsWith('#/stock/ledger')) return await pageStockLedger({ act: (r.match(/act=(\w+)/) || [])[1], product: (r.match(/product=(\d+)/) || [])[1] });
       if (r.startsWith('#/stock/lots')) return await pageLots();
+      if (r === '#/stock/pool') return await pagePool();
+      if (r === '#/stock/held') return await pageHeld();
+      if ((mt = r.match(/^#\/stock\/counts\/(\d+)/))) return await pageCount(+mt[1]);
+      if (r === '#/stock/counts') return await pageCounts();
+      if ((mt = r.match(/^#\/prices\/(\d+)/))) return await pagePrices(+mt[1]);
       if (r.startsWith('#/stock')) return await pageStock({ low: r.includes('low=1') });
       if (r === '#/users') return await pageUsers();
       if (r === '#/settings') return await pageSettings();
@@ -117,7 +122,7 @@
     const [, it] = findItem(i => i.route === '#/list/' + key);
     const pages = Math.max(1, Math.ceil(d.total / d.per_page));
     $('#main').innerHTML = `<div class="page-head"><div><h1>${esc(it ? it.name : key)}</h1><div class="sub">${d.total.toLocaleString('en-GB')} record${d.total === 1 ? '' : 's'}</div></div>
-        <div class="actions"><button class="btn" id="lFilt">${ic('filter')} Filters${Object.values(st.filter || {}).filter(v => v !== '').length ? ' · ' + Object.values(st.filter).filter(v => v !== '').length : ''}</button><a class="btn" id="lExp" href="/api/export/${key}?${qs}" title="Download this list (with its filters) as a spreadsheet file">${ic('ext')} Export</a><button class="btn primary" id="lNew">${ic('plus')} New</button></div></div>
+        <div class="actions"><button class="btn" id="lFilt">${ic('filter')} Filters${Object.values(st.filter || {}).filter(v => v !== '').length ? ' · ' + Object.values(st.filter).filter(v => v !== '').length : ''}</button><a class="btn" id="lExp" href="/api/export/${key}?${qs}" title="Download this list (with its filters) as a spreadsheet file">${ic('ext')} Export</a>${d.table === 'cat_inventory_locations' && ['OWNER', 'MANAGER'].includes(S.boot.user.role) ? `<button class="btn" id="lBins">Make bins</button>` : ''}<button class="btn primary" id="lNew">${ic('plus')} New</button></div></div>
       <div class="card"><div class="list-bar"><input class="q" id="lQ" placeholder="Search this list…" value="${esc(st.q || '')}">${Object.entries(st.filter || {}).filter(([, v]) => v !== '').map(([k, v]) => `<span class="chip accent plain">${esc((d.columns.find(c => c.name === k) || {}).label || k)}: ${esc(v)} <a href="#" data-unf="${esc(k)}" title="Remove this filter">✕</a></span>`).join('')}</div>
       <div class="list-bar" id="lFiltRow" ${st.showF ? '' : 'hidden'}>${d.columns.map(c => `<input class="q" style="min-width:130px;flex:1" data-fc="${esc(c.name)}" placeholder="${esc(c.label)}" value="${esc((st.filter || {})[c.name] || '')}">`).join('')}<button class="btn sm primary" id="lFiltGo">Apply</button><button class="btn sm" id="lFiltClr">Clear</button></div>
       <div class="tbl-wrap"><table class="t"><thead><tr>${d.columns.map(c => `<th data-sort="${esc(c.name)}" class="${['number', 'money'].includes(c.type) ? 'num' : ''}">${esc(c.label)}${st.sort === c.name ? (st.dir === 'asc' ? ' ↑' : ' ↓') : ''}</th>`).join('')}</tr></thead>
@@ -130,6 +135,7 @@
     $('#pPrev').onclick = () => again({ page: d.page - 1 }); $('#pNext').onclick = () => again({ page: d.page + 1 });
     $$('#main th[data-sort]').forEach(th => th.onclick = () => again({ sort: th.dataset.sort, dir: st.sort === th.dataset.sort && st.dir === 'asc' ? 'desc' : 'asc', page: 1 }));
     $$('#main tr[data-id]').forEach(tr => tr.onclick = () => go(`#/rec/${key}/${tr.dataset.id}`));
+    if ($('#lBins')) $('#lBins').onclick = () => binGenerator(() => again({}));
     $('#lFilt').onclick = () => again({ showF: !st.showF });
     const applyF = () => { const f = {}; $$('#lFiltRow [data-fc]').forEach(i => { if (i.value.trim() !== '') f[i.dataset.fc] = i.value.trim(); }); again({ filter: f, page: 1, showF: true }); };
     $('#lFiltGo').onclick = applyF; $$('#lFiltRow [data-fc]').forEach(i => i.onkeydown = e => { if (e.key === 'Enter') applyF(); });
@@ -151,7 +157,7 @@
       : tab === 'tasks' ? `<div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>Task</th><th>Status</th><th>Priority</th><th>Due</th></tr></thead><tbody>${d.tasks.map(t => `<tr><td>${esc(t.title)}${t.rule_code ? ` <span class="small muted">${esc(t.rule_code)}</span>` : ''}</td><td><span class="chip ${chipFor(t.status)}">${esc(t.status)}</span></td><td>${esc(t.priority)}</td><td>${esc(t.due_at)}</td></tr>`).join('')}</tbody></table>${d.tasks.length ? '' : '<div class="empty">No tasks on this record.</div>'}</div></div>`
       : `<div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>When</th><th>Who</th><th>What</th><th>Change</th></tr></thead><tbody>${d.history.map(h => `<tr><td>${esc(h.at)}</td><td>${esc(h.by)}</td><td>${esc({ INSERT: 'Created', UPDATE: 'Changed', EXPORT: 'Exported' }[h.action] || h.action)}</td><td>${h.changes ? Object.entries(h.changes).map(([k, v]) => `<div><b>${esc(k)}</b>: ${esc(v[0] ?? '—')} → ${esc(v[1] ?? '—')}</div>`).join('') : ''}${h.reason ? `<div class="small muted">${esc(h.reason)}</div>` : ''}</td></tr>`).join('')}</tbody></table></div></div>`;
     $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/list/${key}">${esc(d.form_title)}</a> ›</div><h1>${esc(d.title)}</h1></div>
-      <div class="actions"><button class="btn primary" id="rEdit">${ic('wand')} Edit</button></div></div>
+      <div class="actions">${key === S.boot.product_form ? `<a class="btn" href="#/stock/product/${id}">Stock</a><a class="btn" href="#/prices/${id}">Prices</a>` : ''}<button class="btn primary" id="rEdit">${ic('wand')} Edit</button></div></div>
       <div class="seg" style="margin-bottom:14px">${tabs.map(([k, l]) => `<button type="button" class="${k === tab ? 'on' : ''}" data-tab="${k}">${esc(l)}</button>`).join('')}</div>${body}`;
     $('#rEdit').onclick = () => openForm(key, id, { onSaved: () => pageRecord(key, id) });
     $$('#main [data-tab]').forEach(b => b.onclick = () => { S.recTab = b.dataset.tab; pageRecord(key, id); });
@@ -352,6 +358,61 @@
     $$('#main [data-all]').forEach(b => b.onclick = () => pageLots({ ...st, all: b.dataset.all === '1' }));
     $('#lq').onkeydown = e => { if (e.key === 'Enter') pageLots({ ...st, q: e.target.value }); };
     $$('#main [data-own]').forEach(b => b.onclick = () => stockAction('ownership', { lot: b.dataset.own, lot_code: b.dataset.code }, () => pageLots(st)));
+  }
+
+  // ---------- pool, held stock, counts, prices, bins ----------
+  async function pagePool() {
+    busy(true); let d; try { d = await api('stock/pool'); } finally { busy(false); }
+    const tot = d.rows.reduce((a, r) => a + +r.value, 0);
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Pool</h1><div class="sub">Who owns the units in stock, per product: pool and private. Total value ${money(tot)}.</div></div></div>
+      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>SKU</th><th>Product</th><th>Owner</th><th>Pool / private</th><th class="num">Units</th><th class="num">Value</th></tr></thead><tbody>
+      ${d.rows.map(r => `<tr class="click" data-id="${r.product_id}"><td>${esc(r.sku)}</td><td>${esc(r.name)}</td><td>${esc(r.owner || 'Company')}</td><td><span class="chip ${r.visibility === 'POOL' ? 'accent' : 'pend'} plain">${esc(r.visibility || '')}</span></td><td class="num">${r.units}</td><td class="num">${money(r.value)}</td></tr>`).join('')}</tbody></table>${d.rows.length ? '' : '<div class="empty">No stock yet.</div>'}</div></div>`;
+    $$('#main tr[data-id]').forEach(tr => tr.onclick = () => go('#/stock/product/' + tr.dataset.id));
+  }
+  async function pageHeld() {
+    busy(true); let d; try { d = await api('stock/held'); } finally { busy(false); }
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Held stock</h1><div class="sub">Units that are in stock but cannot be sold: returns, quarantine, damaged, missing. Decide: move back to a shelf, or write off.</div></div></div>
+      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>SKU</th><th>Product</th><th>Where</th><th>Lot</th><th class="num">Units</th>${d.rows.length && d.rows[0].value !== undefined ? '<th class="num">Value</th>' : ''}<th class="num">Days</th><th></th></tr></thead><tbody>
+      ${d.rows.map(r => `<tr><td><a href="#/stock/product/${r.product_id}">${esc(r.sku)}</a></td><td>${esc(r.name)}</td><td>${esc(r.location)} <span class="small muted">${esc((r.kind || '').toLowerCase())}</span></td><td>${esc(r.lot_code)}</td><td class="num">${r.qty}</td>${r.value !== undefined ? `<td class="num">${money(r.value)}</td>` : ''}<td class="num" style="${r.days > 14 ? 'color:var(--err);font-weight:600' : ''}">${r.days}</td>
+        <td style="white-space:nowrap">${d.can_change ? `<button class="btn sm" data-mv="${r.product_id}" data-from="${r.location_id}">Move</button> <button class="btn sm" data-wo="${r.product_id}" data-loc="${r.location_id}">Write off</button>` : ''}</td></tr>`).join('')}</tbody></table>${d.rows.length ? '' : `<div class="empty">${ic('check')}<div>Nothing is held.</div></div>`}</div></div>`;
+    $$('#main [data-mv]').forEach(b => b.onclick = () => stockAction('transfer', { product: b.dataset.mv, from: b.dataset.from }, pageHeld));
+    $$('#main [data-wo]').forEach(b => b.onclick = () => stockAction('adjust', { product: b.dataset.wo, location: b.dataset.loc }, pageHeld));
+  }
+  const cChip = s => ({ OPEN: 'prog', SUBMITTED: 'warn', APPROVED: 'accent', POSTED: 'done', CANCELLED: 'lock' }[s] || 'pend');
+  async function pageCounts() {
+    busy(true); let d; try { d = await api('stock/counts'); } finally { busy(false); }
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Stock counts</h1><div class="sub">Count → submit → someone else approves → only the differences are posted. A count never overwrites stock.</div></div><div class="actions">${d.can_change ? `<button class="btn primary" id="cNew">${ic('plus')} New count</button>` : ''}</div></div>
+      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>Count</th><th>Date</th><th>Location</th><th>Counted by</th><th class="num">Difference value</th><th>Status</th></tr></thead><tbody>
+      ${d.rows.map(c => `<tr class="click" data-id="${c.id}"><td>${esc(c.count_code)}</td><td>${esc(c.d_count)}</td><td>${esc(c.location || '')}</td><td>${esc(c.counted_by || '')}</td><td class="num">${c.variance_value === null ? '' : money(c.variance_value)}</td><td><span class="chip ${cChip(c.status)}">${esc(c.status)}</span></td></tr>`).join('')}</tbody></table>${d.rows.length ? '' : '<div class="empty">No counts yet.</div>'}</div></div>`;
+    $$('#main tr[data-id]').forEach(tr => tr.onclick = () => go('#/stock/counts/' + tr.dataset.id));
+    if (d.can_change) $('#cNew').onclick = async () => { const p = await pickData(); miniForm('New stock count', 'Every product that has stock at this location gets a line.', [{ name: 'location', label: 'Location', required: true, options: opt(p.locations, x => [x.id, x.name]) }],
+      async v => { const r = await api('stock/counts', { method: 'POST', body: v }); go('#/stock/counts/' + r.id); return r; }, 'Open count'); };
+  }
+  async function pageCount(id) {
+    busy(true); let d; try { d = await api('stock/counts/' + id); } finally { busy(false); }
+    const c = d.count, open = c.status === 'OPEN', boss = ['OWNER', 'MANAGER'].includes(S.boot.user.role);
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/stock/counts">Stock counts</a> ›</div><h1>${esc(c.code)} <span class="chip ${cChip(c.status)}">${esc(c.status)}</span></h1><div class="sub">${esc(c.location || '')} · ${esc(c.date)}${c.blind ? ' · blind count: the system number is hidden until you submit' : ''}</div></div>
+      <div class="actions">${open ? `<button class="btn" id="kSave">${ic('save')} Save</button><button class="btn primary" id="kSubmit">Submit</button>` : ''}${c.status === 'SUBMITTED' && boss ? `<button class="btn primary" data-step="approve" ${c.mine ? 'disabled title="You counted this yourself. Somebody else has to approve it."' : ''}>Approve</button>` : ''}${c.status === 'APPROVED' && boss ? `<button class="btn primary" data-step="post">Post differences</button>` : ''}${['OPEN', 'SUBMITTED', 'APPROVED'].includes(c.status) ? `<button class="btn" data-step="cancel">Cancel count</button>` : ''}</div></div>
+      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>SKU</th><th>Product</th>${c.blind ? '' : '<th class="num">System</th>'}<th class="num">Counted</th>${c.blind ? '' : '<th class="num">Difference</th>'}<th>Note</th></tr></thead><tbody>
+      ${d.lines.map(l => { const diff = l.qty_counted === null || l.qty_system === null ? null : l.qty_counted - l.qty_system; return `<tr data-p="${l.product_id}"><td>${esc(l.sku)}</td><td>${esc(l.name)}</td>${c.blind ? '' : `<td class="num">${l.qty_system}</td>`}<td class="num">${open ? `<input class="q" style="min-width:80px;width:90px;text-align:right" type="number" min="0" data-q value="${l.qty_counted ?? ''}">` : (l.qty_counted ?? '')}</td>${c.blind ? '' : `<td class="num" style="font-weight:600;color:${diff ? 'var(--err)' : 'inherit'}">${diff === null ? '' : (diff > 0 ? '+' : '') + diff}</td>`}<td>${open ? `<input class="q" data-n value="${esc(l.note || '')}" placeholder="Note">` : esc(l.note || '')}</td></tr>`; }).join('')}</tbody></table>${d.lines.length ? '' : '<div class="empty">No stock at this location to count.</div>'}</div></div>`;
+    const save = async () => { const lines = $$('#main tr[data-p]').filter(tr => $('[data-q]', tr).value !== '').map(tr => ({ product: +tr.dataset.p, qty: +$('[data-q]', tr).value, note: $('[data-n]', tr).value || null })); if (lines.length) await api(`stock/counts/${id}/lines`, { method: 'POST', body: { lines } }); };
+    const step = async s => { try { const r = await api(`stock/counts/${id}/${s}`, { method: 'POST' }); toast(r.message); pageCount(id); } catch (e) { toast(e.message, 'err'); } };
+    if (open) { $('#kSave').onclick = async () => { try { await save(); toast('Count saved'); } catch (e) { toast(e.message, 'err'); } }; $('#kSubmit').onclick = async () => { try { await save(); await step('submit'); } catch (e) { toast(e.message, 'err'); } }; }
+    $$('#main [data-step]').forEach(b => b.onclick = () => step(b.dataset.step));
+  }
+  async function pagePrices(pid) {
+    busy(true); let d, o; try { d = await api('prices/' + pid); o = (await api('stock/on-hand')).rows.find(r => r.id === pid) || {}; } finally { busy(false); }
+    const can = ['OWNER', 'MANAGER', 'TL'].includes(S.boot.user.role);
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/rec/${esc(S.boot.product_form)}/${pid}">Product</a> ›</div><h1>Prices · ${esc(o.sku || '')}</h1><div class="sub">A price holds from its start date until the next one. Each sale is matched to the price of its own date.</div></div><div class="actions">${can ? `<button class="btn primary" id="prNew">${ic('plus')} New price</button>` : ''}</div></div>
+      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>Marketplace</th><th>From</th><th>To</th><th class="num">Raw</th><th class="num">Sale</th><th>Reason</th></tr></thead><tbody>${d.timeline.map(p => `<tr><td>${esc(p.marketplace)}</td><td>${esc(p.from_date)}</td><td>${p.to_date ? esc(p.to_date) : '<span class="chip done">now</span>'}</td><td class="num">${money(p.raw_price)}</td><td class="num">${money(p.sale_price)}</td><td>${esc(p.reason || '')}</td></tr>`).join('')}</tbody></table>${d.timeline.length ? '' : '<div class="empty">No price yet.</div>'}</div></div>`;
+    if (can) $('#prNew').onclick = () => miniForm('New price', 'The price before it ends the day before the start date.', [{ name: 'marketplace', label: 'Marketplace', required: true, options: opt(d.marketplaces, x => [x.id, x.name]) }, { name: 'raw_price', label: 'Raw price', type: 'number', required: true }, { name: 'sale_price', label: 'Sale price', type: 'number', required: true },
+      { name: 'from_date', label: 'From', type: 'date', required: true, value: S.boot.today }, { name: 'reason', label: 'Reason', options: opt(d.reasons, x => [x.id, x.name]) }], async v => { const r = await api('prices/' + pid, { method: 'POST', body: v }); pagePrices(pid); return r; });
+  }
+  async function binGenerator(done) {
+    const p = await pickData();
+    miniForm('Make bins', 'Creates one bin per level and position, coded by your location format. Bins that already exist are skipped.', [{ name: 'parent', label: 'Inside (warehouse or zone)', required: true, options: opt(p.locations.filter(l => l.kind !== 'BIN'), x => [x.id, x.name]) }, { name: 'zone', label: 'Zone code', required: true, help: 'Example: A' },
+      { name: 'levels', label: 'Levels', type: 'number', required: true, value: 4 }, { name: 'positions', label: 'Positions per level', type: 'number', required: true, value: 10 }],
+      async v => { const pre = await api('stock/bins', { method: 'POST', body: { ...v, create: false } }); const r = await api('stock/bins', { method: 'POST', body: { ...v, create: true } }); PICK = null; done && done(); return { message: `${r.created} bins created (${pre.codes[0]} … ${pre.codes[pre.codes.length - 1]}), ${r.skipped} already there` }; }, 'Create bins');
   }
 
   // ---------- modal ----------
