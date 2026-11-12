@@ -250,7 +250,7 @@ class SettlementService
         return DB::table('mo_settlements')->where('fk_id_ent', $ent)->where('status', 'POSTED')->whereNull('fk_id_bank_line')->where('currency', $currency)
             ->groupBy('fk_id_branch', DB::raw('COALESCE(payout_id, statement_id)'))->havingRaw('ROUND(SUM(payable),2) = ?', [round($amount, 2)])
             ->havingRaw('MAX(COALESCE(payout_date, statement_date)) BETWEEN ? AND ?', [date('Y-m-d', strtotime("$date -$days day")), date('Y-m-d', strtotime("$date +$days day"))])
-            ->selectRaw('fk_id_branch, COALESCE(payout_id, statement_id) pay_key, MIN(id) first_id, COUNT(*) n')->get()->all();
+            ->selectRaw('fk_id_branch, COALESCE(payout_id, statement_id) pay_key, MIN(id) first_id, COUNT(*) n, MAX(COALESCE(payout_date, statement_date)) pay_date')->get()->all();
     }
 
     /** The payout arrived on the bank: Dr bank / Cr payout on the way, for all statements of that payment. Called by the bank matching. Returns the first statement id. */

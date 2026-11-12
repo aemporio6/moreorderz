@@ -143,6 +143,8 @@ class MoneyTest extends TestCase
         Money::addExpense(1, ['bank' => $this->bank, 'category' => 'OFFICE', 'amount' => 25, 'date' => '2026-08-13']);
         $r = Money::importStatement(1, $this->bank, $this->profile, $this->csv([['12/08/2026', 'SHOP', '', '-25.00', '', 'E1']]));
         $this->assertSame(0, $r['matched'], 'two expenses fit: the tool does not guess');
+        $b = $this->bankRow();
+        $this->assertSame([-50.0, 25.0, 0.0, true], [$b['not_on_bank_yet'], $b['difference'], $b['unexplained'], $b['explained']], 'bank − books = the unmatched line (−25) less the two expenses not on the bank yet (−50)');
         $this->assertSame(1, Money::unmatchedTasks(1));
         $line = (int) DB::table('fin_bank_transactions')->where('bank_txn_id', 'E1')->value('id');
         $this->assertTrue(TaskEngine::isOpen('FIN_BANK_UNMATCHED', [$line]));

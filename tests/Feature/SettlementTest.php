@@ -99,6 +99,12 @@ class SettlementTest extends TestCase
         try { Settle::unpost(1, (int) $st->id); $this->fail('paid'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('matched to a bank line', $e->getMessage()); }
         Money::unmatch(1, (int) DB::table('fin_bank_transactions')->value('id'));
         $this->assertSame([0.0, 14.49, 2], [Ledger::balance(1, '1000', null, $bank), Ledger::balance(1, '1110', null, $this->shop), DB::table('mo_settlements')->where('status', 'POSTED')->count()]);
+        // by hand: a person picks the payout for the line
+        $line = (int) DB::table('fin_bank_transactions')->value('id');
+        try { Money::matchPayout(1, $line, $this->shop, 'NOPE'); $this->fail('wrong payout'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('not the same amount', $e->getMessage()); }
+        Money::matchPayout(1, $line, $this->shop, 'PAY1');
+        $this->assertSame([14.49, 0.0], [Ledger::balance(1, '1000', null, $bank), Ledger::balance(1, '1110', null, $this->shop)]);
+        Money::unmatch(1, $line);
         Settle::unpost(1, (int) $st->id);
         $this->assertSame('LOADED', DB::table('mo_settlements')->where('id', $st->id)->value('status'));
         $tb = Ledger::trialBalance(1); $this->assertSame($tb['debit'], $tb['credit']);

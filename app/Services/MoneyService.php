@@ -53,12 +53,19 @@ class MoneyService
     public static function banks(int $ent): array
     {
         return DB::table('fin_bank_accounts')->where('company_id', $ent)->orderBy('id')->get()->map(function ($b) use ($ent) {
-            $t = DB::table('fin_bank_transactions')->where('bank_account_id', $b->id)->selectRaw("COALESCE(SUM(amount),0) s, COALESCE(SUM(amount_gbp),0) g, COUNT(*) n, SUM(match_status = 'UNMATCHED') u, COALESCE(SUM(IF(match_status = 'UNMATCHED', amount_gbp, 0)),0) ug, MAX(txn_date) last")->first();
+            // lines set aside are not counted: they are money that is already inside the opening balance
+            $t = DB::table('fin_bank_transactions')->where('bank_account_id', $b->id)->where('match_status', '<>', 'IGNORED')->selectRaw("COALESCE(SUM(amount),0) s, COALESCE(SUM(amount_gbp),0) g, COUNT(*) n, COALESCE(SUM(match_status = 'UNMATCHED'),0) u, COALESCE(SUM(IF(match_status = 'UNMATCHED', amount_gbp, 0)),0) ug, MAX(txn_date) last")->first();
             $openBase = round((float) $b->opening_balance * ((float) $b->opening_balance != 0.0 ? Fx::rate($b->currency ?: Fx::base($ent), $b->opening_date ?: date('Y-m-d'), $ent) : 1), 2);
             $books = Ledger::balance($ent, '1000', null, (int) $b->id); $stmt = round($openBase + (float) $t->g, 2);
+            // booked in the tool but not seen on a bank line yet: supplier payments and hand-entered expenses without a bank line
+            $pending = (float) DB::table('gl_lines as l')->join('gl_journals as j', 'j.id', '=', 'l.journal_id')->join('gl_accounts as a', 'a.id', '=', 'l.account_id')->where('j.fk_id_ent', $ent)->where('a.code', '1000')->where('l.ref_id', $b->id)
+                ->where(fn ($w) => $w->where(fn ($x) => $x->where('j.source_type', 'PAYMENT')->whereIn('j.source_id', DB::table('t_src_payments')->where('fk_id_ent', $ent)->whereNull('fk_id_bank_line')->select('id')))
+                    ->orWhere(fn ($x) => $x->where('j.source_type', 'EXPENSE')->whereIn('j.source_id', DB::table('fin_expenses')->where('fk_id_ent', $ent)->whereNull('fk_id_bank_line')->select('id'))))
+                ->selectRaw('COALESCE(SUM(l.debit - l.credit),0) v')->value('v');
+            $diff = round($stmt - $books, 2);
             return ['id' => $b->id, 'bank_name' => $b->bank_name, 'label' => $b->account_label, 'currency' => $b->currency, 'active' => (int) $b->is_active, 'statement_balance' => round((float) $b->opening_balance + (float) $t->s, 2),
-                'statement_base' => $stmt, 'books_base' => $books, 'difference' => round($stmt - $books, 2), 'unmatched' => (int) $t->u, 'unmatched_base' => round((float) $t->ug, 2), 'lines' => (int) $t->n, 'last_line' => $t->last,
-                'explained' => abs(round($stmt - $books - (float) $t->ug, 2)) < 0.005];   // the whole difference is the unmatched lines
+                'statement_base' => $stmt, 'books_base' => $books, 'difference' => $diff, 'unmatched' => (int) $t->u, 'unmatched_base' => round((float) $t->ug, 2), 'not_on_bank_yet' => round($pending, 2), 'lines' => (int) $t->n, 'last_line' => $t->last,
+                'unexplained' => round($diff - (float) $t->ug + $pending, 2), 'explained' => abs(round($diff - (float) $t->ug + $pending, 2)) < 0.005];   // bank − books = lines not matched − things booked but not on the bank yet
         })->all();
     }
 
@@ -137,6 +144,7 @@ class MoneyService
                 if ($exp->count() === 1) { DB::table('fin_expenses')->where('id', $exp[0])->update(['fk_id_bank_line' => $l->id]); self::link($l, 'EXPENSE', (int) $exp[0], 'AMOUNT_DATE_ACCOUNT'); $n++; continue; }
             } else {
                 $c = SettlementService::payoutCandidates($ent, $amt, (string) $l->currency, $l->txn_date, $dPay);
+                if (count($c) > 1) { $same = array_values(array_filter($c, fn ($x) => $x->pay_date === $l->txn_date)); if (count($same) === 1) $c = $same; }   // several payouts of the same amount: the one dated the same day
                 if (count($c) === 1) { $first = SettlementService::paid($ent, (int) $c[0]->fk_id_branch, (string) $c[0]->pay_key, $l); self::link($l, 'PAYOUT', $first, 'PAYOUT_AMOUNT_DATE'); $n++; continue; }
             }
         }
@@ -172,6 +180,18 @@ class MoneyService
             DB::table('fin_bank_transactions')->where('id', $l->id)->update(['category_code' => $cat->code, 'branch_id' => $d['branch'] ?? null]);
             self::link($l, $isCost ? 'EXPENSE' : 'CATEGORY', $isCost ? $expId : (int) $l->id, 'BY_HAND', 'MANUAL');
             return ['line' => (int) $l->id, 'account' => $acc, 'expense' => $expId];
+        });
+    }
+
+    /** A person picks which booked marketplace payout this money-in line is (when the tool could not be sure). */
+    public static function matchPayout(int $ent, int $lineId, int $branchId, string $payKey): void
+    {
+        DB::transaction(function () use ($ent, $lineId, $branchId, $payKey) {
+            $l = DB::table('fin_bank_transactions')->where('id', $lineId)->where('company_id', $ent)->lockForUpdate()->first() ?? throw new \InvalidArgumentException('Bank line not found.');
+            if ($l->match_status !== 'UNMATCHED') throw new \InvalidArgumentException('This line is already matched.');
+            $ok = array_filter(SettlementService::payoutCandidates($ent, (float) $l->amount, (string) $l->currency, $l->txn_date, 3650), fn ($c) => (int) $c->fk_id_branch === $branchId && (string) $c->pay_key === $payKey);
+            if (! $ok) throw new \InvalidArgumentException('That payout is not the same amount as this line, or it is not booked yet.');
+            self::link($l, 'PAYOUT', SettlementService::paid($ent, $branchId, $payKey, $l), 'BY_HAND', 'MANUAL');
         });
     }
 
