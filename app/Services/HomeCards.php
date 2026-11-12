@@ -54,6 +54,15 @@ class HomeCards
             $n = DB::table('sys_events')->where('status', 'FAILED')->count();
             return ['label' => 'System health', 'value' => $n ? "$n failed" : 'OK', 'foot' => $n ? 'events waiting for a retry' : 'all events processed', 'tone' => $n ? 'err' : 'done', 'go' => '#/health'];
         });
+        self::register(['OWNER', 'MANAGER', 'FINANCE', 'PARTNER'], function ($ent) {
+            $v = StockService::value($ent);
+            $units = (int) DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->where('l.company_id', $ent)->sum('b.qty');
+            return ['label' => 'Stock value (at cost)', 'value' => number_format($v, 2), 'foot' => number_format($units) . ' units in stock', 'tone' => '', 'go' => '#/stock'];
+        });
+        self::register(['OWNER', 'MANAGER', 'WAREHOUSE', 'SOURCING'], function ($ent) {
+            $n = DB::table('t_product_vendors')->where('fk_id_ent', $ent)->where('f_active', 1)->where('f_alert_min_level', 1)->where('min_level', '>', 0)->whereColumn('stock', '<=', 'min_level')->count();
+            return ['label' => 'Low stock', 'value' => $n, 'foot' => $n ? 'products at or under their minimum' : 'every product above its minimum', 'tone' => $n ? 'warn' : 'done', 'go' => '#/stock?low=1'];
+        });
         self::register(['OWNER', 'FINANCE', 'ACCOUNTANT'], function ($ent) {
             $tb = Ledger::trialBalance($ent);
             return ['label' => 'Ledger', 'value' => $tb['balanced'] ? 'Balanced' : 'NOT balanced', 'foot' => 'debits ' . number_format($tb['debit'], 2) . ' = credits ' . number_format($tb['credit'], 2), 'tone' => $tb['balanced'] ? 'done' : 'err', 'go' => '#/ledger'];

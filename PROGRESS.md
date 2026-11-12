@@ -6,7 +6,7 @@ public repo (code only, never data or secrets) · old data = export of 18 Sep 20
 | Step | What | Status |
 |---|---|---|
 | 1 | Foundation: install, registry, generic records, events, tasks, numbering, audit, double-entry ledger, login, 2-step, rights, shell, search, record page, admin screens | DONE (12 Nov) |
-| 2 | Products and Stock | – |
+| 2 | Products and Stock | IN PROGRESS |
 | 3 | Buying (Research → PO → GRN) | – |
 | 4 | Sales and Dispatch (orders, labels, printing) | – |
 | 5 | Money (bank, settlements, TikTok, profit views) | – |
@@ -22,6 +22,11 @@ public repo (code only, never data or secrets) · old data = export of 18 Sep 20
 - 12 Nov 06:30 PKT – Added: search everything (index refreshed on every save, company-safe, `mo:reindex`), record page (Details · Linked records both ways · Tasks · History), Tasks screen (mine / everyone, late and urgent counts, rule tasks cannot be ticked by hand), list filters per column, CSV export (allowed roles only, logged, formula-safe), "+ Add" inside dropdowns (saves to the list and selects it). **31 tests pass.** Browser: all 140 menu routes open on desktop and phone with 0 errors; 108 show real lists / pages, 32 are special screens still to build in their steps.
 
 - 12 Nov 07:10 PKT – **Step 1 done.** Added: rights per role (a role can only open, add and edit the forms of its own screens; export and delete kept to named roles), role home cards from live data (HomeCards: modules register cards), users and roles screen (Owner only; hashed passwords; cannot demote self), My account (change password, 2-step sign-in with authenticator app, secret stored encrypted), Settings (global / company value), Audit log, System health (failed events + retry), Ledger view (trial balance, profit and loss, journals). **37 tests pass** on a fresh database. Browser on desktop and phone: all 140 menu routes open, 0 errors; 110 real screens, 30 special screens still placeholders (built in steps 2–6).
+
+- 12 Nov 08:20 PKT – **Step 2, part 1: stock engine + screens.** `StockService` is the only writer of stock: receive (lot per line, damaged kept apart + claim task), transfer (lot and cost travel), consumeForSale (FIFO by received date then lot id; private owner never takes pool and the reverse; refuses when short), returnIn (back into the same lot; damaged / missing to their own place), adjust (reason needed; loss or gain posted to the ledger), transferOwnership (lot split, FIFO date kept), balance / available (sellable places minus reserved) / value, selfCheck (product number = lots = ledger; stock value = ledger account 1200). Screens: Stock on hand (KPIs, low filter, Opening stock / Move / Adjust / Check), product stock page (where the units are, by lot), Stock ledger, Lots and owners (give units to another owner). Roles: Warehouse can move and adjust but sees no cost or value. Nightly job `mo:nightly` (self-check, STK_LOW tasks, event retry) + scheduler. Home cards: stock value, low stock. Schema fixes: zero-date defaults of old tables → NULL; lot source key no longer unique (owner split needs several lots per GRN line). **54 tests pass**, including a real race: 6 separate processes pick 3 units each from 10 – exactly 3 succeed, never negative. Browser (desktop + phone): opening stock → move (too many refused in plain words) → adjust → check passed → product page → ledger → lots → accounts balanced, stock value on Home = 35.75.
+
+## Step 2 – still to do
+- Stock counts (count → differences → post), Pool view, Held stock view, product page with Stock / Listings / Prices tabs, listings and price periods, locations & bins generator, SKU homes, reorder (ICC) basics.
 
 ## Carried to later steps (not forgotten)
 - Approvals queue engine and screen (with Money, step 5) · saved list views · sessions & IP allow-list screen · first-time setup wizard (after the modules exist) · role-specific KPI cards (each module registers its own in its step).

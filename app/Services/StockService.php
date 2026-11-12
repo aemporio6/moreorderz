@@ -288,6 +288,14 @@ class StockService
         return ['mismatch' => $bad->count(), 'negative_balances' => $neg, 'stock_value' => self::value($ent), 'ledger_1200' => $gl, 'value_matches_ledger' => abs(self::value($ent) - $gl) < 0.005] + $r;
     }
 
+    /** STK_LOW: a task per product at or under its minimum level (when the alert is switched on); closes when stock is back above it. */
+    public static function lowStockTasks(int $ent): array
+    {
+        $low = DB::table('t_product_vendors')->where('fk_id_ent', $ent)->where('f_active', 1)->where('f_alert_min_level', 1)->where('min_level', '>', 0)->whereColumn('stock', '<=', 'min_level')->get(['id', 'SKU_VENDOR as sku', 'stock', 'min_level']);
+        $r = TaskEngine::sync('STK_LOW', $low->map(fn ($p) => ['key' => [$p->id], 'title' => "Stock low: {$p->sku} has {$p->stock} (minimum {$p->min_level})", 'opt' => ['module' => 't_product_vendors', 'record_id' => $p->id]])->all(), null, $ent);
+        return $r + ['open' => $low->count()];
+    }
+
     // ---------- internals ----------
 
     /** Choose lots FIFO at a location and lock their balance rows. $rule: POOL / PRIVATE / null (any). Refuses when short. */

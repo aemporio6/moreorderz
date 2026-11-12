@@ -29,7 +29,7 @@ class AppController extends Controller
             'user' => ['id' => $u->id, 'name' => $u->display_name ?: $u->login_id, 'role' => $role],
             'ent' => Context::ent(), 'companies' => $companies, 'menu' => self::menu($role), 'create' => self::createCatalogue($role),
             'tasks_open' => DB::table('tasks')->where('owner_user_id', $u->id)->whereNotIn('status', ['DONE', 'APPROVED', 'CANCELLED'])->count(),
-            'base_currency' => Settings::get('BASE_CURRENCY', Context::ent(), 'GBP'), 'today' => date('Y-m-d'),
+            'product_form' => RecordService::formOfTable('t_product_vendors'), 'base_currency' => Settings::get('BASE_CURRENCY', Context::ent(), 'GBP'), 'today' => date('Y-m-d'),
         ];
     }
 
@@ -58,6 +58,10 @@ class AppController extends Controller
         if (str_starts_with($no, '1.')) return '#/home';
         if ($no === '13.2') return '#/tasks?scope=all';
         if ($no === '13.3') return '#/tasks';
+        if ($no === '4.6') return '#/stock';
+        if ($no === '4.7') return '#/stock/ledger';
+        if ($no === '4.8') return '#/stock/lots';
+        if ($no === '4.10') return '#/stock/ledger?act=transfer';
         if ($no === '17.15') return '#/users';
         if ($no === '17.17') return '#/audit';
         if ($no === '17.18') return '#/settings';

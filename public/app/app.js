@@ -72,6 +72,10 @@
       if ((mt = r.match(/^#\/list\/([\w-]+)(?:\?(.*))?/))) { const f = {}; new URLSearchParams(mt[2] || '').forEach((v, k) => { const m2 = k.match(/^f\[(\w+)\]$/); if (m2) f[m2[1]] = v; }); return await pageList(mt[1], { filter: f }); }
       if ((mt = r.match(/^#\/rec\/([\w-]+)\/(\d+)/))) return await pageRecord(mt[1], +mt[2]);
       if (r.startsWith('#/tasks')) return await pageTasks(r.includes('scope=all') ? 'all' : 'mine');
+      if ((mt = r.match(/^#\/stock\/product\/(\d+)/))) return await pageStockProduct(+mt[1]);
+      if (r.startsWith('#/stock/ledger')) return await pageStockLedger({ act: (r.match(/act=(\w+)/) || [])[1], product: (r.match(/product=(\d+)/) || [])[1] });
+      if (r.startsWith('#/stock/lots')) return await pageLots();
+      if (r.startsWith('#/stock')) return await pageStock({ low: r.includes('low=1') });
       if (r === '#/users') return await pageUsers();
       if (r === '#/settings') return await pageSettings();
       if (r.startsWith('#/audit')) return await pageAudit();
@@ -188,7 +192,7 @@
     const { ov, close } = modal(title, sub, `<div class="form">${fields.map(f => `<div class="fld ${f.required ? 'is-req' : ''}" data-w="${f.name}"><label for="mf_${f.name}"><span>${esc(f.label)}</span>${f.required ? ' <span class="req">*</span>' : ''}</label>
       ${f.options ? `<select id="mf_${f.name}" data-f="${f.name}">${f.options.map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(f.value ?? '') ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`
         : f.type === 'check' ? `<label class="chk"><input id="mf_${f.name}" data-f="${f.name}" type="checkbox" ${f.value ? 'checked' : ''}> Yes</label>`
-        : `<input id="mf_${f.name}" data-f="${f.name}" type="${f.type || 'text'}" value="${esc(f.value ?? '')}" autocomplete="${f.type === 'password' ? 'new-password' : 'off'}">`}${f.help ? `<div class="helptext" style="display:block">${esc(f.help)}</div>` : ''}</div>`).join('')}</div>${sub && sub.html ? sub.html : ''}`,
+        : `<input id="mf_${f.name}" data-f="${f.name}" type="${f.type || 'text'}" ${f.type === 'number' ? 'step="any"' : ''} value="${esc(f.value ?? '')}" autocomplete="${f.type === 'password' ? 'new-password' : 'off'}">`}${f.help ? `<div class="helptext" style="display:block">${esc(f.help)}</div>` : ''}</div>`).join('')}</div>${sub && sub.html ? sub.html : ''}`,
       `<span class="left small muted" id="mfMsg"></span><button class="btn" id="mfCancel">Cancel</button><button class="btn primary" id="mfSave">${esc(saveLabel)}</button>`, false);
     $('#mfCancel', ov).onclick = close;
     $('#mfSave', ov).onclick = async () => { const v = {}; $$('[data-f]', ov).forEach(el => { v[el.dataset.f] = el.type === 'checkbox' ? el.checked : el.value; });
@@ -276,6 +280,78 @@
         <div class="card kpi"><div class="bar"></div><div class="lbl">Income · ${esc(d.from)} to ${esc(d.to)}</div><div class="val">${money(d.pl.income)}</div></div><div class="card kpi"><div class="bar"></div><div class="lbl">Costs</div><div class="val">${money(d.pl.expense)}</div></div><div class="card kpi ${d.pl.profit < 0 ? 'err' : 'done'}"><div class="bar"></div><div class="lbl">Profit</div><div class="val">${money(d.pl.profit)}</div></div></div>
       <div class="card" style="margin-top:14px"><div class="card-h"><h3>Balances by account</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Code</th><th>Account</th><th>Kind</th><th class="num">Debit</th><th class="num">Credit</th></tr></thead><tbody>${d.trial.rows.map(r => `<tr><td>${esc(r.code)}</td><td>${esc(r.name)}</td><td>${esc(r.kind)}</td><td class="num">${r.debit ? money(r.debit) : ''}</td><td class="num">${r.credit ? money(r.credit) : ''}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="3">Total</td><td class="num">${money(d.trial.debit)}</td><td class="num">${money(d.trial.credit)}</td></tr></tfoot></table>${d.trial.rows.length ? '' : '<div class="empty">No journals yet.</div>'}</div></div>
       <div class="card" style="margin-top:14px"><div class="card-h"><h3>Last journals</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>No.</th><th>Date</th><th>From</th><th>Note</th><th></th></tr></thead><tbody>${d.journals.map(j => `<tr><td>${esc(j.journal_no)}</td><td>${esc(j.journal_date)}</td><td>${esc(j.source_type)}</td><td>${esc(j.memo || '')}</td><td>${j.reversed_by_id ? '<span class="chip lock">Reversed</span>' : j.reverses_id ? '<span class="chip warn">Reversal</span>' : ''}</td></tr>`).join('')}</tbody></table></div></div>`;
+  }
+
+  // ---------- stock: on hand, ledger, lots; every change goes through the stock service ----------
+  let PICK = null;
+  const pickData = async () => PICK = PICK || await api('stock/pick');
+  const opt = (rows, f) => [['', 'Choose…'], ...rows.map(f)];
+  async function stockAction(kind, preset = {}, done) {
+    busy(true); let p; try { p = await pickData(); } finally { busy(false); }
+    const prod = { name: 'product', label: 'Product', required: true, value: preset.product, options: opt(p.products, x => [x.id, x.sku + ' · ' + x.name]) };
+    const locs = (name, label, value) => ({ name, label, required: true, value, options: opt(p.locations, x => [x.id, x.name + (x.kind ? ' (' + x.kind.toLowerCase().replace(/_/g, ' ') + ')' : '')]) });
+    const send = path => async v => { const r = await api(path, { method: 'POST', body: v }); done && done(); return r; };
+    if (kind === 'opening') return miniForm('Opening stock', 'Units you already have. They become a lot with their cost, so sales can be costed.', [prod, locs('location', 'Location'), { name: 'qty', label: 'Units', type: 'number', required: true },
+      { name: 'unit_cost', label: 'Cost per unit (' + S.boot.base_currency + ')', type: 'number', required: true, help: 'Landed cost of one unit.' }, { name: 'received_date', label: 'Received on', type: 'date', required: true, value: S.boot.today },
+      { name: 'owner', label: 'Owner', options: opt(p.owners, x => [x.id, x.name]), help: 'Leave empty for company stock.' }], send('stock/opening'));
+    if (kind === 'transfer') return miniForm('Move stock', 'Oldest lots move first. The lot and its cost travel with the units.', [prod, locs('from', 'From', preset.from), locs('to', 'To'), { name: 'qty', label: 'Units', type: 'number', required: true }, { name: 'reason', label: 'Note' }], send('stock/transfer'), 'Move');
+    if (kind === 'adjust') return miniForm('Adjust stock', 'Use minus to take units out (broken, lost) and plus to add found units. The value goes to the ledger.', [prod, locs('location', 'Location', preset.location), { name: 'qty', label: 'Change (+ or −)', type: 'number', required: true, help: 'Example: -2 or 3' },
+      { name: 'reason', label: 'Reason', required: true }], send('stock/adjust'), 'Adjust');
+    if (kind === 'ownership') return miniForm('Give units to another owner', 'The lot is split. Cost and received date stay the same, so the selling order does not change.', [{ name: 'lot', label: 'Lot', required: true, value: preset.lot, options: [[preset.lot, preset.lot_code]] }, { name: 'qty', label: 'Units', type: 'number', required: true },
+      { name: 'to_owner', label: 'New owner', required: true, options: opt(p.owners, x => [x.id, x.name]) }], send('stock/ownership'), 'Give');
+  }
+  async function pageStock(st = {}) {
+    busy(true); let d; try { d = await api('stock/on-hand?q=' + encodeURIComponent(st.q || '')); } finally { busy(false); }
+    const rows = st.low ? d.rows.filter(r => r.low) : d.rows;
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Stock on hand</h1><div class="sub">Units come from the stock ledger and its lots. Nobody types a stock number.</div></div>
+      <div class="actions">${d.can_change ? `<button class="btn" data-sa="opening">${ic('plus')} Opening stock</button><button class="btn" data-sa="transfer">${ic('truck')} Move</button><button class="btn" data-sa="adjust">${ic('wand')} Adjust</button>` : ''}<button class="btn" id="sChk" title="Compare the product numbers with the ledger">${ic('check')} Check</button></div></div>
+      <div class="kpis"><div class="card kpi"><div class="bar"></div><div class="lbl">Units in stock</div><div class="val">${d.total_units.toLocaleString('en-GB')}</div></div>
+        ${d.show_value ? `<div class="card kpi"><div class="bar"></div><div class="lbl">Value at cost</div><div class="val">${money(d.total_value)}</div><div class="foot">equals ledger account 1200</div></div>` : ''}
+        <div class="card kpi ${d.low ? 'warn' : 'done'}" data-low="1" style="cursor:pointer"><div class="bar"></div><div class="lbl">Low stock</div><div class="val">${d.low}</div><div class="foot">${st.low ? 'showing only these · click to show all' : 'click to show only these'}</div></div></div>
+      <div class="card" style="margin-top:14px"><div class="list-bar"><input class="q" id="sQ" placeholder="SKU or product name…" value="${esc(st.q || '')}"></div><div class="tbl-wrap"><table class="t"><thead><tr><th>SKU</th><th>Product</th><th class="num">Units</th><th class="num">Can be sold</th>${d.show_value ? '<th class="num">Value</th>' : ''}<th></th></tr></thead>
+      <tbody>${rows.map(r => `<tr class="click" data-id="${r.id}"><td>${esc(r.sku)}</td><td>${esc(r.name)}</td><td class="num">${r.units}</td><td class="num">${r.available}</td>${d.show_value ? `<td class="num">${money(r.value)}</td>` : ''}<td>${r.low ? '<span class="chip warn">Low</span> ' : ''}${r.mismatch ? '<span class="chip err">Differs from ledger</span>' : ''}</td></tr>`).join('')}</tbody></table>
+      ${rows.length ? '' : `<div class="empty">${ic('file')}<div>${st.low ? 'No product is low.' : 'No products yet. Create a product, then add its opening stock.'}</div></div>`}</div></div>`;
+    $$('#main [data-sa]').forEach(b => b.onclick = () => stockAction(b.dataset.sa, {}, () => pageStock(st)));
+    $('#sQ').onkeydown = e => { if (e.key === 'Enter') pageStock({ ...st, q: e.target.value }); };
+    $('#main [data-low]').onclick = () => pageStock({ ...st, low: !st.low });
+    $('#sChk').onclick = async () => { try { const c = await api('stock/check'); toast(c.mismatch || c.negative_balances || !c.value_matches_ledger ? `Check found a problem: ${c.mismatch} product(s) differ; value matches ledger: ${c.value_matches_ledger ? 'yes' : 'NO'}. Tasks were opened.` : 'Check passed: every product equals the ledger, and the stock value equals the accounts.', c.mismatch || !c.value_matches_ledger ? 'err' : 'ok'); pageStock(st); } catch (e) { toast(e.message, 'err'); } };
+    $$('#main tr[data-id]').forEach(tr => tr.onclick = () => go('#/stock/product/' + tr.dataset.id));
+  }
+  async function pageStockProduct(id) {
+    busy(true); let d, o; try { d = await api('stock/product/' + id); o = (await api('stock/on-hand')).rows.find(r => r.id === id) || {}; } finally { busy(false); }
+    const cost = d.rows.length && d.rows[0].unit_cost_gbp !== undefined;
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/stock">Stock on hand</a> ›</div><h1>${esc(o.sku || 'Product ' + id)}</h1><div class="sub">${esc(o.name || '')}</div></div>
+      <div class="actions"><a class="btn" href="#/rec/${esc(S.boot.product_form)}/${id}">Product record</a><a class="btn" href="#/stock/ledger?product=${id}">Ledger of this product</a><button class="btn" data-sa="transfer">${ic('truck')} Move</button><button class="btn" data-sa="adjust">${ic('wand')} Adjust</button></div></div>
+      <div class="kpis"><div class="card kpi"><div class="bar"></div><div class="lbl">Units in stock</div><div class="val">${d.units}</div></div><div class="card kpi"><div class="bar"></div><div class="lbl">Can be sold</div><div class="val">${d.available}</div><div class="foot">sellable places, minus reserved</div></div></div>
+      <div class="card" style="margin-top:14px"><div class="card-h"><h3>Where the units are · oldest lot first (sold first)</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Location</th><th>Lot</th><th>Received</th><th>Owner</th><th>Pool / private</th>${cost ? '<th class="num">Cost</th>' : ''}<th class="num">Units</th></tr></thead>
+      <tbody>${d.rows.map(r => `<tr><td>${esc(r.location)}${r.kind ? ` <span class="small muted">${esc(r.kind.toLowerCase().replace(/_/g, ' '))}</span>` : ''}</td><td>${esc(r.lot_code)}</td><td>${esc(r.received_date)}</td><td>${esc(r.owner || 'Company')}</td><td>${esc(r.visibility || '')}</td>${cost ? `<td class="num">${(+r.unit_cost_gbp).toFixed(4)}${r.landed_status === 'PROVISIONAL' ? ' <span class="chip warn plain" title="Landed cost is not final yet">prov.</span>' : ''}</td>` : ''}<td class="num">${r.qty}</td></tr>`).join('')}</tbody></table>${d.rows.length ? '' : '<div class="empty">No units in stock.</div>'}</div></div>`;
+    $$('#main [data-sa]').forEach(b => b.onclick = () => stockAction(b.dataset.sa, { product: id }, () => pageStockProduct(id)));
+  }
+  const MOVE = { opening: 'Opening', purchase_in: 'Received', sale_out: 'Sold', adjustment: 'Adjusted', return_in: 'Returned', transfer_out: 'Moved out', transfer_in: 'Moved in', ownership_out: 'Owner out', ownership_in: 'Owner in', damaged: 'Damaged', count_adjust: 'Count', written_off: 'Written off' };
+  async function pageStockLedger(st = {}) {
+    busy(true); let d; try { d = await api('stock/ledger?' + new URLSearchParams({ page: st.page || 1, q: st.q || '', type: st.type || '', product: st.product || '' })); } finally { busy(false); }
+    const pages = Math.max(1, Math.ceil(d.total / 50)), cost = d.rows.length && d.rows[0].unit_cost_gbp !== undefined;
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Stock ledger</h1><div class="sub">Every change of stock, with its lot, cost and source. ${d.total.toLocaleString('en-GB')} lines. Lines are never edited; a mistake is corrected by a new line.</div></div>
+      <div class="actions"><button class="btn" data-sa="transfer">${ic('truck')} Move</button><button class="btn" data-sa="adjust">${ic('wand')} Adjust</button></div></div>
+      <div class="card"><div class="list-bar"><input class="q" id="gQ" placeholder="SKU or lot…" value="${esc(st.q || '')}"><select class="q" id="gT"><option value="">Every kind</option>${Object.entries(MOVE).map(([k, l]) => `<option value="${k}" ${st.type === k ? 'selected' : ''}>${l}</option>`).join('')}</select>${st.product ? `<span class="chip accent plain">One product <a href="#/stock/ledger" title="Show all">✕</a></span>` : ''}</div>
+      <div class="tbl-wrap"><table class="t"><thead><tr><th>When</th><th>SKU</th><th>What</th><th class="num">Change</th><th class="num">After</th><th>Location</th><th>Lot</th>${cost ? '<th class="num">Cost</th>' : ''}<th>Source</th><th>By</th></tr></thead>
+      <tbody>${d.rows.map(r => `<tr><td style="white-space:nowrap">${esc(r.created_at)}</td><td><a href="#/stock/product/${r.product_id}">${esc(r.sku)}</a></td><td>${esc(MOVE[r.movement_type] || r.movement_type)}</td><td class="num" style="color:${r.qty_change < 0 ? 'var(--err)' : 'var(--done)'};font-weight:600">${r.qty_change > 0 ? '+' : ''}${r.qty_change}</td><td class="num">${r.stock_after ?? ''}</td><td>${esc(r.location || '')}</td><td>${esc(r.lot_code || '')}</td>${cost ? `<td class="num">${r.unit_cost_gbp === null ? '' : (+r.unit_cost_gbp).toFixed(4)}</td>` : ''}<td>${esc(r.source_type || '')}${r.source_id ? ' #' + r.source_id : ''}${r.notes ? `<div class="small muted">${esc(r.notes)}</div>` : ''}</td><td>${esc(r.by || 'System')}</td></tr>`).join('')}</tbody></table>${d.rows.length ? '' : '<div class="empty">No stock lines yet.</div>'}</div>
+      <div class="pager"><span>Page ${d.page} of ${pages}</span><button class="btn sm" id="pPrev" ${d.page <= 1 ? 'disabled' : ''}>Previous</button><button class="btn sm" id="pNext" ${d.page >= pages ? 'disabled' : ''}>Next</button></div></div>`;
+    const again = x => pageStockLedger({ ...st, act: null, ...x });
+    $$('#main [data-sa]').forEach(b => b.onclick = () => stockAction(b.dataset.sa, { product: st.product }, () => again({})));
+    $('#gQ').onkeydown = e => { if (e.key === 'Enter') again({ q: e.target.value, page: 1 }); }; $('#gT').onchange = e => again({ type: e.target.value, page: 1 });
+    $('#pPrev').onclick = () => again({ page: d.page - 1 }); $('#pNext').onclick = () => again({ page: d.page + 1 });
+    if (st.act) stockAction(st.act, { product: st.product }, () => again({}));
+  }
+  async function pageLots(st = {}) {
+    busy(true); let d; try { d = await api('stock/lots?' + new URLSearchParams({ q: st.q || '', left: st.all ? '0' : '1' })); } finally { busy(false); }
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Lots and owners</h1><div class="sub">A lot = units received together, with their cost and owner. The oldest lot is sold first.</div></div>
+      <div class="actions"><div class="seg"><button type="button" class="${st.all ? '' : 'on'}" data-all="0">With stock</button><button type="button" class="${st.all ? 'on' : ''}" data-all="1">All</button></div></div></div>
+      <div class="card"><div class="list-bar"><input class="q" id="lq" placeholder="SKU or lot…" value="${esc(st.q || '')}"></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Lot</th><th>SKU</th><th>Received</th><th>From</th><th>Owner</th><th>Pool / private</th>${d.show_value ? '<th class="num">Cost</th>' : ''}<th class="num">Received</th><th class="num">Left</th><th></th></tr></thead>
+      <tbody>${d.rows.map(r => `<tr><td>${esc(r.lot_code)}</td><td><a href="#/stock/product/${r.product_id}">${esc(r.sku)}</a></td><td>${esc(r.received_date)}</td><td>${esc(r.source)}</td><td>${esc(r.owner || 'Company')}</td><td>${esc(r.visibility || '')}</td>${d.show_value ? `<td class="num">${(+r.unit_cost_gbp).toFixed(4)}${r.landed_status === 'PROVISIONAL' ? ' <span class="chip warn plain">prov.</span>' : ''}</td>` : ''}<td class="num">${r.qty}</td><td class="num">${r.qty_left}</td><td>${r.qty_left > 0 && ['OWNER', 'MANAGER'].includes(S.boot.user.role) ? `<button class="btn sm" data-own="${r.id}" data-code="${esc(r.lot_code)}">Give to owner</button>` : ''}</td></tr>`).join('')}</tbody></table>${d.rows.length ? '' : '<div class="empty">No lots yet.</div>'}</div></div>`;
+    $$('#main [data-all]').forEach(b => b.onclick = () => pageLots({ ...st, all: b.dataset.all === '1' }));
+    $('#lq').onkeydown = e => { if (e.key === 'Enter') pageLots({ ...st, q: e.target.value }); };
+    $$('#main [data-own]').forEach(b => b.onclick = () => stockAction('ownership', { lot: b.dataset.own, lot_code: b.dataset.code }, () => pageLots(st)));
   }
 
   // ---------- modal ----------

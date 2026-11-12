@@ -3,6 +3,7 @@
 use App\Http\Controllers\AppController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\StockController;
 use App\Http\Controllers\WorkController;
 use App\Http\Middleware\SetContext;
 use Illuminate\Support\Facades\Route;
@@ -41,6 +42,16 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('health', [AdminController::class, 'health']);
         Route::post('health/retry', [AdminController::class, 'retryEvents']);
         Route::get('ledger', [AdminController::class, 'ledger']);
+        Route::get('stock/on-hand', [StockController::class, 'onHand']);
+        Route::get('stock/product/{id}', [StockController::class, 'product'])->whereNumber('id');
+        Route::get('stock/ledger', [StockController::class, 'ledger']);
+        Route::get('stock/lots', [StockController::class, 'lots']);
+        Route::get('stock/pick', [StockController::class, 'pick']);
+        Route::get('stock/check', [StockController::class, 'check']);
+        Route::post('stock/opening', [StockController::class, 'opening']);
+        Route::post('stock/transfer', [StockController::class, 'transfer']);
+        Route::post('stock/adjust', [StockController::class, 'adjust']);
+        Route::post('stock/ownership', [StockController::class, 'ownership']);
         Route::get('tasks', [WorkController::class, 'tasks']);
         Route::post('tasks/{id}/status', [WorkController::class, 'taskStatus'])->whereNumber('id');
     });
