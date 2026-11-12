@@ -294,6 +294,34 @@ class StockService
         return ['mismatch' => $bad->count(), 'negative_balances' => $neg, 'stock_value' => self::value($ent), 'ledger_1200' => $gl, 'value_matches_ledger' => abs(self::value($ent) - $gl) < 0.005] + $r;
     }
 
+    /**
+     * Give an opening (or hand-made) lot its real unit cost. Units still in stock change the stock value (Dr 1200); units already sold correct the cost of sales (Dr 5000);
+     * the other side is the opening equity (3000). Lots from a purchase order get their cost from the PO and landed cost, not here.
+     */
+    public static function setLotCost(int $ent, int $lotId, float $cost, string $reason): array
+    {
+        return DB::transaction(function () use ($ent, $lotId, $cost, $reason) {
+            $lot = DB::table('fin_lots')->where('id', $lotId)->where('company_id', $ent)->lockForUpdate()->first() ?? throw new \InvalidArgumentException('Lot not found.');
+            if (! in_array($lot->source, ['OPENING', 'MANUAL'], true)) throw new \InvalidArgumentException('This lot came from a purchase order: its cost comes from the PO and the landed cost.');
+            if ($cost < 0) throw new \InvalidArgumentException('Unit cost cannot be negative.');
+            if (trim($reason) === '') throw new \InvalidArgumentException('Say where this cost comes from (for example: supplier invoice, last purchase price).');
+            $cost = round($cost, 4); $delta = round($cost - (float) $lot->unit_cost_gbp, 4);
+            if ($delta == 0.0) throw new \InvalidArgumentException('That is already the cost of this lot.');
+            $inStock = (int) DB::table('fin_lot_balances')->where('fk_id_lot', $lotId)->sum('qty'); $sold = (int) DB::table('fin_lot_consumption')->where('lot_id', $lotId)->sum('qty');
+            $vStock = round($inStock * $delta, 2); $vSold = round($sold * $delta, 2); $lines = [];
+            $side = fn (float $v, bool $debitWhenPositive) => ($v > 0) === $debitWhenPositive ? 'debit' : 'credit';
+            if ($vStock != 0.0) $lines[] = ['account' => '1200', $side($vStock, true) => abs($vStock), 'memo' => "$inStock unit(s) in stock"];
+            if ($vSold != 0.0) $lines[] = ['account' => '5000', $side($vSold, true) => abs($vSold), 'memo' => "$sold unit(s) already sold"];
+            $tot = round($vStock + $vSold, 2);
+            if ($tot != 0.0) $lines[] = ['account' => '3000', $side($tot, false) => abs($tot)];
+            DB::table('fin_lots')->where('id', $lotId)->update(['unit_cost_gbp' => $cost, 'landed_status' => 'FINAL']);
+            DB::table('fin_lot_consumption')->where('lot_id', $lotId)->update(['unit_cost_gbp' => $cost]);
+            if (count($lines) >= 2) Ledger::post($ent, date('Y-m-d'), 'LOT_COST', $lotId, $lines, ['memo' => "Cost of lot {$lot->lot_code} set to " . rtrim(rtrim(number_format($cost, 4, '.', ''), '0'), '.') . ' · ' . mb_substr($reason, 0, 80)]);
+            Audit::log('fin_lots', $lotId, 'UPDATE', ['unit_cost' => [(float) $lot->unit_cost_gbp, $cost]], $reason, $ent);
+            return ['stock_value_change' => $vStock, 'cost_of_sales_change' => $vSold];
+        });
+    }
+
     /** Pool view: per product, units and value per owner, pool and private. */
     public static function pool(int $ent): array
     {

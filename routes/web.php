@@ -53,6 +53,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('stock/product/{id}', [StockController::class, 'product'])->whereNumber('id');
         Route::get('stock/ledger', [StockController::class, 'ledger']);
         Route::get('stock/lots', [StockController::class, 'lots']);
+        Route::post('stock/lots/{id}/cost', [StockController::class, 'lotCost'])->whereNumber('id');
         Route::get('stock/pick', [StockController::class, 'pick']);
         Route::get('stock/check', [StockController::class, 'check']);
         Route::post('stock/opening', [StockController::class, 'opening']);

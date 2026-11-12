@@ -107,4 +107,26 @@ class Stock2Test extends TestCase
         $this->expectExceptionMessage('between 1 and 2,000');
         LocationGenerator::run(1, ['parent' => $this->wh, 'zone' => 'A', 'levels' => 100, 'positions' => 100], false);
     }
+
+    public function test_an_opening_lot_gets_its_cost_and_stock_value_and_cost_of_sales_follow(): void
+    {
+        $f = fn ($t, $d) => DB::table($t)->insertGetId(\App\Services\RecordService::fillNotNull($t, $d));
+        $p = $f('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'OPEN-01', 'product_name_vendor' => 'Opening product', 'stock' => 0, 'f_active' => 1, 'e_product_type' => 'pool']);
+        $loc = $f('cat_inventory_locations', ['location_name' => 'O-1', 'kind' => 'BIN', 'fk_id_ent' => 1, 'f_sellable' => 1, 'f_active' => 1]);
+        $lot = \App\Services\StockService::receive(1, [['product' => $p, 'qty' => 10, 'location' => $loc, 'unit_cost' => 0]], 'OPENING', null, ['lot_source' => 'OPENING'])['lots'][0];
+        $before = \App\Services\Ledger::balance(1, '1200');
+        \App\Services\StockService::adjust(1, $p, $loc, -2, 'Broken');                       // 2 units leave at cost 0
+        DB::table('fin_lot_consumption')->insert(\App\Services\RecordService::fillNotNull('fin_lot_consumption', ['lot_id' => $lot, 'sku' => 'OPEN-01', 'qty' => 3, 'unit_cost_gbp' => 0, 'consumed_on' => date('Y-m-d')]));   // 3 units count as sold
+        try { \App\Services\StockService::setLotCost(1, $lot, 2.5, ''); $this->fail('reason'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('where this cost comes from', $e->getMessage()); }
+        $x = \App\Services\StockService::setLotCost(1, $lot, 2.5, 'Supplier invoice 77');
+        $this->assertSame([20.0, 7.5], [$x['stock_value_change'], $x['cost_of_sales_change']]);   // 8 on the shelf, 3 sold
+        $this->assertSame([$before + 20.0, \App\Services\StockService::value(1)], [\App\Services\Ledger::balance(1, '1200'), \App\Services\Ledger::balance(1, '1200')]);
+        $this->assertSame(2.5, (float) DB::table('fin_lot_consumption')->where('lot_id', $lot)->where('qty', 3)->value('unit_cost_gbp'));
+        try { \App\Services\StockService::setLotCost(1, $lot, 2.5, 'again'); $this->fail('same'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('already the cost', $e->getMessage()); }
+        \App\Services\StockService::setLotCost(1, $lot, 2.0, 'Corrected');
+        $this->assertSame(\App\Services\StockService::value(1), \App\Services\Ledger::balance(1, '1200'));
+        $po = \App\Services\StockService::receive(1, [['product' => $p, 'qty' => 1, 'location' => $loc, 'unit_cost' => 1]], 'GRN', 5)['lots'][0];
+        try { \App\Services\StockService::setLotCost(1, $po, 3, 'x y z'); $this->fail('po lot'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('purchase order', $e->getMessage()); }
+        $tb = \App\Services\Ledger::trialBalance(1); $this->assertSame($tb['debit'], $tb['credit']);
+    }
 }

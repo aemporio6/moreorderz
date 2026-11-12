@@ -11,7 +11,7 @@ public repo (code only, never data or secrets) · old data = export of 18 Sep 20
 | 4 | Sales and Dispatch (orders, labels, printing) | DONE (12 Nov) – carrier label PDF import carried, see below |
 | 5 | Money (bank, settlements, TikTok, profit views) | DONE (12 Nov) – carried items listed below |
 | 6 | Month close, Partners, Reports | DONE (12 Nov) – parts of the profit waterfall not built, listed below |
-| 7 | Import old data + reconciliation report + full test | IN PROGRESS – master data and transactions imported (12 Nov); full end-to-end test next |
+| 7 | Import old data + reconciliation report + full test | DONE (12 Nov) – see docs/RESULTS.md and docs/HANDOVER.md |
 
 ## Log
 - 12 Nov 04:45 PKT – Laravel 13.40 installed. `mo:install` builds the database in 3 s: 507 baseline tables + core tables, 4,084 registry fields, 146 menu screens with roles, 30 ledger accounts.
@@ -127,6 +127,9 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
   - Also fixed: the Stock page counted "Units in stock" over the 200 listed products only; it now shows the company total and says how many products are listed.
   - **117 tests pass (1,043 assertions)** incl. part 2 on the made-up old database.
   - **Honest limits:** history sales are stored in GBP as written in the old tool (no currency column there); whether t_sale (2022–23 audit file) repeats orders of t_sale_orders_1 under another order number format was not verified; history lines are not linked to products except where the old row had the product id; the three old sourcing POs and two payments are copied as documents only – they are **not** in the books (enter open supplier balances by hand); old bin positions (8 rows) are not used; money totals were compared per table, not row by row.
+
+- 12 Nov – **Step 7, part 3: end-to-end on the imported real data, results, hand-over.** New: `StockService::setLotCost` + Stock › Lots "Set cost" (opening / hand-made lots: units in stock change the stock value, units already sold correct the cost of sales, other side opening equity) with a banner and filter for lots without a cost – the import report told the owner to do this and the screen did not exist. End-to-end, 15 steps on the masked imported database (product → lot cost → order → pick → pack → PDFs → handover → month confirm → bank → expense → buying run → books → self-check → close checks → phone): **15 of 15 pass**; step 11 failed once on an error in the test script (a quantity sent as text), not in the tool. `docs/HANDOVER.md` (install, import, cron, roles, not built, open decisions) and `docs/RESULTS.md` (per step, import, end-to-end, honest estimate). **118 tests pass (1,051 assertions).**
+  - **The 7-step plan ends here.** What is left is listed in docs/HANDOVER.md §6 and §7.
 
 ## Step 6 – carried forward
 - Profit waterfall parts (PHASE_06 §6.3): VA share / salary, handler share, lot-owner investor earnings and the stacking rule, owner modes, loss carried forward, INVESTOR_INVOICING route, tax-reserve ledger · partner statement PDF with versions, accept / query, WhatsApp / e-mail · adjustment form for a locked month · close checks PURCHASE_VS_SUPPLIER and EXPENSES (shared-expense rules) · the rest of the report catalogue.

@@ -70,10 +70,19 @@ class StockController extends Controller
         $q = DB::table('fin_lots as l')->join('t_product_vendors as p', 'p.id', '=', 'l.fk_id_product')->leftJoin('t_account as a', 'a.id', '=', 'l.fk_id_owner')->where('l.company_id', Context::ent());
         if ($r->query('left', '1') === '1') $q->where('l.qty_left', '>', 0);
         if ($v = $r->query('q')) $q->where(fn ($w) => $w->where('l.sku', 'like', "%$v%")->orWhere('l.lot_code', 'like', "%$v%"));
+        if ($r->query('nocost') === '1') $q->where('l.unit_cost_gbp', '<=', 0);
         $money = in_array($r->user()->role_code, self::MONEY, true);
         $cols = ['l.id', 'l.lot_code', 'l.sku', 'p.id as product_id', 'p.product_name_vendor as name', 'l.source', 'l.received_date', 'l.qty', 'l.qty_left', 'l.visibility', 'l.landed_status', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as owner")];
         if ($money) $cols[] = 'l.unit_cost_gbp';
-        return ['rows' => $q->orderBy('l.received_date')->orderBy('l.id')->limit(500)->get($cols), 'show_value' => $money];
+        $noCost = DB::table('fin_lots')->where('company_id', Context::ent())->where('qty_left', '>', 0)->where('unit_cost_gbp', '<=', 0)->count();
+        return ['rows' => $q->orderBy('l.received_date')->orderBy('l.id')->limit(500)->get($cols), 'show_value' => $money, 'no_cost' => $noCost, 'can_cost' => in_array($r->user()->role_code, ['OWNER', 'MANAGER', 'FINANCE'], true)];
+    }
+
+    public function lotCost(Request $r, int $id)
+    {
+        $this->can($r, ['OWNER', 'MANAGER', 'FINANCE']);
+        $d = $r->validate(['cost' => 'required|numeric|min:0', 'reason' => 'required|string|min:3|max:200']);
+        return $this->run(function () use ($id, $d) { $x = StockService::setLotCost((int) Context::ent(), $id, (float) $d['cost'], $d['reason']); return $x + ['message' => 'Cost saved' . ($x['stock_value_change'] ? ' – stock value changed by ' . number_format($x['stock_value_change'], 2) : '')]; });
     }
 
     /** Dropdown data for the stock action forms. */
