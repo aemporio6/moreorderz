@@ -94,7 +94,10 @@ class CloseService
         $value = StockService::value($ent); $gl = Ledger::balance($ent, '1200'); $tb = Ledger::trialBalance($ent); $vOk = abs($value - $gl) < 0.005; $tOk = abs($tb['debit'] - $tb['credit']) < 0.005;
         $set('STOCK_ROLL', $bad || ! $vOk || ! $tOk ? 'RED' : 'GREEN', $bad || ! $vOk || ! $tOk ? trim(($bad ? "$bad product(s) where the stock figure differs from its lots. " : '') . ($vOk ? '' : 'Stock value ' . number_format($value, 2) . ' ≠ ledger ' . number_format($gl, 2) . '. ') . ($tOk ? '' : 'The trial balance does not balance.'))
             : 'Products = lots, stock value ' . number_format($value, 2) . ' = ledger, trial balance balanced.', $bad + ($vOk ? 0 : 1) + ($tOk ? 0 : 1), '#/stock');
-        $set('SHARES_LE_100', 'NA', $later); $set('SPLIT_RULES', 'NA', $later);
+        $over = array_filter(PartnerService::scopeTotals($ent, $from), fn ($t) => $t > 100.0001);
+        $set('SHARES_LE_100', $over ? 'RED' : 'GREEN', $over ? implode(' · ', array_map(fn ($k, $t) => PartnerService::scopeName($ent, $k) . ' = ' . rtrim(rtrim(number_format($t, 3), '0'), '.') . '%', array_keys($over), $over)) . '. End or change an agreement.' : 'No scope is over 100 %.', count($over), '#/partners');
+        $everAg = DB::table('fin_investor_agreements')->where('company_id', $ent)->exists(); $sh = $everAg ? PartnerService::monthShares($ent, $branchId, $month) : null;
+        $set('SPLIT_RULES', $everAg && ! $sh['lines'] ? 'RED' : 'GREEN', ! $everAg ? 'The company has no partner agreement: all profit stays with the company.' : ($sh['lines'] ? count($sh['lines']) . ' agreement(s) share this month.' : 'The company has partner agreements but none covers this shop on the first day of the month.'), $everAg && ! $sh['lines'] ? 1 : 0, '#/partners');
         $set('OPENING_LOCKED', 'NA', 'Opening balances come with the old-data import (Step 7).');
         // 16 earlier months of this shop
         $first = min(array_filter([DB::table('t_sales')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->where('sale_source', 'active')->whereIn('status', ['Pending', 'Confirmed'])->min('d_order'), DB::table('mo_settlements')->where('fk_id_branch', $branchId)->min('statement_date'), $from]));
@@ -178,10 +181,12 @@ class CloseService
             $run = self::run($ent, $branchId, $month); $fig = self::figures($ent, $branchId, $month);
             $snap = ['figures' => $fig, 'checks' => array_map(fn ($c) => ['code' => $c['code'], 'status' => $c['status'], 'detail' => $c['detail'], 'waive_reason' => $c['waive_reason'] ?? null], $page['checks']), 'locked_at' => now()->toDateTimeString(), 'route' => $run->profit_route];
             DB::table('aud_runs')->where('id', $run->id)->update(['status' => 'LOCKED', 'locked_by' => Context::userId(), 'locked_at' => now(), 'owner_note' => mb_substr(trim($note), 0, 255), 'snapshot_json' => json_encode($snap)]);
+            $shares = PartnerService::postMonth($ent, $branchId, $month, $run);
+            DB::table('aud_runs')->where('id', $run->id)->update(['snapshot_json' => json_encode($snap + ['shares' => $shares])]);
             Audit::log('aud_runs', $run->id, 'LOCK', ['shop' => $branchId, 'month' => $month, 'profit' => $fig['profit']], $note, $ent);
             EventBus::fire('MONTH_LOCKED', 'aud_runs', $run->id, ['shop' => $branchId, 'month' => $month], $ent);
             TaskEngine::close('FIN_PERIOD_OPEN', [$branchId . '-' . $month], 'Month locked');
-            return ['run' => $run->id, 'ledger_locked_up_to' => self::syncLedgerLock($ent)];
+            return ['run' => $run->id, 'partner_rows' => $shares['rows'], 'to_partners' => $shares['to_partners'], 'ledger_locked_up_to' => self::syncLedgerLock($ent)];
         });
     }
 
@@ -213,6 +218,7 @@ class CloseService
         return ['shop' => ['id' => (int) $shop->id, 'name' => $shop->shop_name], 'month' => $month, 'month_name' => date('F Y', strtotime($from)), 'status' => $run->status ?? 'OPEN', 'run_code' => $run->run_code ?? null, 'checked_at' => $run->checked_at ?? null,
             'checks' => $rows, 'red' => count(array_filter($rows, fn ($r) => $r['status'] === 'RED')), 'figures' => $locked ? ($snap['figures'] ?? []) : self::figures($ent, $branchId, $month), 'frozen' => $locked,
             'owner_note' => $run->owner_note ?? null, 'locked_at' => $run->locked_at ?? null, 'locked_by' => $run && $run->locked_by ? DB::table('t_users')->where('id', $run->locked_by)->value('display_name') : null,
+            'shares' => $locked ? ($snap['shares'] ?? null) : PartnerService::monthShares($ent, $branchId, $month),
             'ended' => $to < date('Y-m-d'), 'has_activity' => self::hasActivity($ent, $branchId, $from, $to), 'ledger_locked_up_to' => (string) Settings::get('GL_LOCKED_UPTO', $ent, '')];
     }
 

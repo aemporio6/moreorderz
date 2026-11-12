@@ -17,6 +17,10 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         // Stock arrived (GRN posted, opening stock) → orders that were short get their units, oldest dispatch date first.
+        \App\Services\Approvals::handler('WITHDRAWAL', function (object $a, bool $ok) {
+            if ($ok) \App\Services\PartnerService::payWithdrawal((int) $a->entity_id);
+            else \Illuminate\Support\Facades\DB::table('fin_withdrawals')->where('id', $a->entity_id)->where('status', 'REQUESTED')->update(['status' => 'REJECTED']);
+        });
         \App\Services\Approvals::handler('PAYMENT', function (object $a, bool $ok) { if ($ok) \App\Services\BuyingService::pay(json_decode($a->change_json, true)['pay']); });
         \App\Services\Approvals::handler('STOCK_ADJUST', function (object $a, bool $ok) {
             if ($ok) { $d = json_decode($a->change_json, true)['adjust']; \App\Services\StockService::adjust((int) $a->fk_id_ent, (int) $d['product'], (int) $d['location'], (int) $d['qty'], $d['reason'], isset($d['unit_cost']) ? ['unit_cost' => $d['unit_cost']] : []); }

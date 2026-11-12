@@ -43,7 +43,7 @@ class CloseTest extends TestCase
         Money::importStatement(1, $this->bank, $profile, "Date,Description,Reference,Amount,Balance,Transaction ID\n" . date('d/m/Y', strtotime($this->m1 . '-10')) . ",SOMETHING,,-5,,T1\n");
         $p = Close::check(1, $this->shop, $this->m1);
         $this->assertSame(['OPEN', 2], [$p['status'], $p['red']]);
-        $this->assertSame(['RED', 'RED', 'NA', 'GREEN', 'GREEN', 'NA'], [$this->st($p, 'SALES_CONFIRMED'), $this->st($p, 'BANK_ALL_CATEGORISED'), $this->st($p, 'FILES_PRESENT'), $this->st($p, 'STOCK_ROLL'), $this->st($p, 'PREVIOUS_LOCKED'), $this->st($p, 'SHARES_LE_100')]);
+        $this->assertSame(['RED', 'RED', 'NA', 'GREEN', 'GREEN', 'GREEN'], [$this->st($p, 'SALES_CONFIRMED'), $this->st($p, 'BANK_ALL_CATEGORISED'), $this->st($p, 'FILES_PRESENT'), $this->st($p, 'STOCK_ROLL'), $this->st($p, 'PREVIOUS_LOCKED'), $this->st($p, 'SHARES_LE_100')]);
         $run = Close::run(1, $this->shop, $this->m1);
         $this->assertTrue(TaskEngine::isOpen('FIN_CLOSE_CHECK', [$run->id]));
         Sales::confirmMonth($this->shop, $this->m1, true);
