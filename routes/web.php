@@ -9,6 +9,7 @@ use App\Http\Controllers\MoneyController;
 use App\Http\Controllers\OrdersController;
 use App\Http\Controllers\PartnerController;
 use App\Http\Controllers\PrintController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\WorkController;
 use App\Http\Middleware\SetContext;
@@ -87,6 +88,9 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('grn', [BuyingController::class, 'grn']);
         Route::post('grn/{id}/post', [BuyingController::class, 'postGrn'])->whereNumber('id');
         Route::match(['get', 'post'], 'fx', [BuyingController::class, 'fx']);
+        Route::get('reports', [ReportController::class, 'index']);
+        Route::get('reports/{key}', [ReportController::class, 'show'])->where('key', '[a-z_]+');
+        Route::get('reports/{key}/csv', [ReportController::class, 'csv'])->where('key', '[a-z_]+');
         Route::get('partners', [PartnerController::class, 'index']);
         Route::get('partners/{id}', [PartnerController::class, 'show'])->whereNumber('id');
         Route::post('partners/agreement', [PartnerController::class, 'agreement']);

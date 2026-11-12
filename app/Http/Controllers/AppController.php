@@ -71,6 +71,7 @@ class AppController extends Controller
         if ($no === '4.13') return '#/stock/held';
         if ($no === '4.10') return '#/stock/ledger?act=transfer';
         if (in_array($no, ['11.1', '11.2', '11.4', '11.5', '11.6'], true)) return '#/partners';
+        if ($no === '16.1') return '#/reports';
         if ($no === '10.2') return '#/close';
         if ($no === '9.1') return '#/money';
         if ($no === '10.3') return '#/profit';
