@@ -204,6 +204,11 @@ class StockController extends Controller
     {
         $this->can($r, ['OWNER', 'MANAGER']);
         $d = $r->validate(['parent' => 'required|integer', 'zone' => 'required|string|max:6', 'levels' => 'required|integer|min:1', 'positions' => 'required|integer|min:1', 'create' => 'boolean']);
-        return $this->run(fn () => LocationGenerator::run((int) Context::ent(), $d, (bool) ($d['create'] ?? false)) + ['message' => ! empty($d['create']) ? 'Bins created' : 'Preview']);
+        return $this->run(function () use ($d) {
+            $x = LocationGenerator::run((int) Context::ent(), $d, (bool) ($d['create'] ?? false));
+            $pj = ! empty($x['ids']) ? \App\Services\PrintService::auto((int) Context::ent(), 'WH_AUTOPRINT_SHELF', 'LOCATION', $x['ids'], 'AUTO_SHELF') : null;
+            if ($pj && $pj['status'] === 'PRINTED') $x['print_url'] = "/api/print-jobs/{$pj['job']}/pdf";
+            return $x + ['message' => ! empty($d['create']) ? 'Bins created' . (isset($x['print_url']) ? ' – bin labels are ready to print' : '') : 'Preview'];
+        });
     }
 }

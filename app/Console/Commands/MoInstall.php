@@ -23,12 +23,15 @@ class MoInstall extends Command
         if (! Schema::hasTable('sys_forms')) {
             $this->info('Loading baseline schema…');
             DB::unprepared(file_get_contents(database_path('schema/baseline.sql')));
+            DB::reconnect();   // the baseline file changes session settings (names, collation); start clean
         }
         Artisan::call('migrate', ['--force' => true]);
         $this->line(trim(Artisan::output()));
         $this->info('Registry: ' . self::loadRegistry() . ' fields');
         $this->info('Menu roles: ' . self::loadMenuRoles() . ' screens');
         Ledger::seedChart();
+        \App\Services\PrintService::seed();
+        $this->info('Printing: ' . DB::table('label_templates')->count() . ' templates, ' . DB::table('print_routes')->count() . ' routes');
         $this->info('Chart of accounts: ' . DB::table('gl_accounts')->count() . ' accounts');
         return 0;
     }

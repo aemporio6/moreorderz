@@ -101,7 +101,7 @@ class Stock2Test extends TestCase
         $this->assertSame(['A-A-01', 'A-A-02', 'A-A-03', 'A-B-01', 'A-B-02', 'A-B-03'], $pre['codes']);
         $this->assertSame(6, LocationGenerator::run(1, ['parent' => $this->wh, 'zone' => 'A', 'levels' => 2, 'positions' => 3], true)['created']);
         $again = LocationGenerator::run(1, ['parent' => $this->wh, 'zone' => 'A', 'levels' => 3, 'positions' => 3], true);
-        $this->assertSame(['created' => 3, 'skipped' => 6], $again);
+        $this->assertSame([3, 6, 3], [$again['created'], $again['skipped'], count($again['ids'])]);
         $bin = DB::table('cat_inventory_locations')->where('location_code', 'A-C-02')->first();
         $this->assertSame(['BIN', $this->wh, 'A-C-02'], [$bin->kind, (int) $bin->fk_id_parent, $bin->barcode_value]);
         $this->expectExceptionMessage('between 1 and 2,000');

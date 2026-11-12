@@ -35,6 +35,7 @@ class LocationGenerator
             }
         });
         Audit::log('cat_inventory_locations', (int) $parent->id, 'INSERT', ['bins_created' => count($new), 'zone' => $p['zone']], null, $ent);
-        return ['created' => count($new), 'skipped' => count($exists)];
+        return ['created' => count($new), 'skipped' => count($exists),
+            'ids' => $new ? DB::table('cat_inventory_locations')->where('fk_id_ent', $ent)->whereIn('location_code', array_column($new, 'code'))->pluck('id')->all() : []];
     }
 }
