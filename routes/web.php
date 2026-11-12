@@ -48,6 +48,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('settings', [AdminController::class, 'settings']);
         Route::post('settings', [AdminController::class, 'saveSetting']);
         Route::get('audit', [AdminController::class, 'audit']);
+        Route::get('setup', [AdminController::class, 'setup']);
+        Route::post('setup/tick', [AdminController::class, 'setupTick']);
         Route::get('sessions', [AdminController::class, 'sessions']);
         Route::post('sessions/end', [AdminController::class, 'endSession']);
         Route::post('ip-rules', [AdminController::class, 'ipRule']);
@@ -102,6 +104,16 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('shipment', [BuyingController::class, 'shipment']);
         Route::get('shipment/{id}/lines', [BuyingController::class, 'shipmentLines'])->whereNumber('id');
         Route::post('grn', [BuyingController::class, 'grn']);
+        Route::get('cycle/{id}/extras', [BuyingController::class, 'extras'])->whereNumber('id');
+        Route::post('samples', [BuyingController::class, 'sample']);
+        Route::post('samples/{id}/{step}', [BuyingController::class, 'sampleStep'])->whereNumber('id')->whereIn('step', ['received', 'decide', 'book']);
+        Route::post('qc/photo', [BuyingController::class, 'qcPhoto']);
+        Route::get('qc/photo/{id}', [BuyingController::class, 'qcPhotoShow'])->whereNumber('id');
+        Route::post('qc', [BuyingController::class, 'qc']);
+        Route::post('qc/{id}/action', [BuyingController::class, 'qcAction'])->whereNumber('id');
+        Route::post('customs', [BuyingController::class, 'customs']);
+        Route::post('customs/{id}/pay', [BuyingController::class, 'customsPay'])->whereNumber('id');
+        Route::post('quick-buy', [BuyingController::class, 'quickBuy']);
         Route::post('grn/{id}/post', [BuyingController::class, 'postGrn'])->whereNumber('id');
         Route::match(['get', 'post'], 'fx', [BuyingController::class, 'fx']);
         Route::get('reports', [ReportController::class, 'index']);

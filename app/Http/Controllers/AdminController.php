@@ -260,4 +260,18 @@ class AdminController extends Controller
         DB::table('sys_saved_views')->where('id', $id)->delete();
         return ['message' => 'View removed'];
     }
+
+    // ───────────── first-time setup wizard (17.1) ─────────────
+    public function setup(Request $r)
+    {
+        $this->owner($r);
+        return \App\Services\SetupWizard::page((int) Context::ent());
+    }
+
+    public function setupTick(Request $r)
+    {
+        $this->owner($r);
+        $d = $r->validate(['step' => 'required|string|max:20', 'on' => 'required|boolean', 'note' => 'nullable|string|max:200']);
+        return $this->guard(function () use ($d) { \App\Services\SetupWizard::tick((int) Context::ent(), $d['step'], (bool) $d['on'], $d['note'] ?? null); return ['message' => $d['on'] ? 'Step ticked' : 'Tick taken off']; });
+    }
 }

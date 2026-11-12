@@ -226,4 +226,80 @@ class BuyingController extends Controller
         $d = $r->validate(['currency' => 'required|string|size:3', 'date' => 'required|date', 'rate' => 'required|numeric|gt:0']);
         return $this->run(function () use ($d) { Fx::set($d['currency'], $d['date'], (float) $d['rate']); Audit::log('fin_fx_rates', 0, 'UPDATE', [$d['currency'] . ' ' . $d['date'] => [null, $d['rate']]]); return ['message' => 'Rate saved']; });
     }
+
+    // ───────────── samples, QC, customs, quick buy (SourcingExtras) ─────────────
+    public function extras(Request $r, int $id)
+    {
+        $this->can($r, self::SEE);
+        return \App\Services\SourcingExtras::page((int) Context::ent(), $id);
+    }
+
+    public function sample(Request $r)
+    {
+        $d = $r->validate(['id' => 'nullable|integer', 'cycle' => 'required|integer', 'cycle_product' => 'nullable|integer', 'sample_date' => 'required|date', 'sample_qty' => 'nullable|numeric|gt:0', 'sample_cost' => 'nullable|numeric|min:0', 'shipping_cost' => 'nullable|numeric|min:0',
+            'currency' => 'nullable|string|size:3', 'exchange_rate' => 'nullable|numeric|gt:0', 'tracking_number' => 'nullable|string|max:120', 'notes' => 'nullable|string|max:2000']);
+        return $this->run(fn () => ['id' => \App\Services\SourcingExtras::saveSample((int) Context::ent(), $d), 'message' => 'Sample saved']);
+    }
+
+    public function sampleStep(Request $r, int $id, string $step)
+    {
+        $ent = (int) Context::ent();
+        return $this->run(function () use ($r, $id, $step, $ent) {
+            if ($step === 'received') { \App\Services\SourcingExtras::sampleReceived($ent, $id, $r->validate(['date' => 'required|date'])['date']); return ['message' => 'Sample marked as received']; }
+            if ($step === 'decide') { $d = $r->validate(['approve' => 'required|boolean', 'reason' => 'nullable|string|max:500']); \App\Services\SourcingExtras::decideSample($ent, $id, (bool) $d['approve'], $d['reason'] ?? null); return ['message' => $d['approve'] ? 'Sample approved' : 'Sample rejected']; }
+            $d = $r->validate(['bank' => 'required|integer']); $x = \App\Services\SourcingExtras::bookSample($ent, $id, (int) $d['bank']);
+            return $x + ['message' => 'Sample cost ' . number_format($x['total'], 2) . ' booked as expense, shared by ' . count($x['parts']) . ' shop(s)'];
+        });
+    }
+
+    public function qcPhoto(Request $r)
+    {
+        $r->validate(['file' => 'required|file|max:8192']);
+        return $this->run(fn () => ['id' => \App\Services\SourcingExtras::savePhoto((int) Context::ent(), $r->file('file')), 'message' => 'Photo added']);
+    }
+
+    public function qcPhotoShow(Request $r, int $id)
+    {
+        $this->can($r, self::SEE);
+        $doc = DB::table('sys_documents')->where('id', $id)->where('fk_id_ent', Context::ent())->where('tags', 'qc')->first() ?? abort(404);
+        abort_unless(\Illuminate\Support\Facades\Storage::disk('local')->exists($doc->stored_name), 404);
+        return response(\Illuminate\Support\Facades\Storage::disk('local')->get($doc->stored_name), 200, ['Content-Type' => $doc->mime ?: 'image/jpeg', 'Cache-Control' => 'private, max-age=3600']);
+    }
+
+    public function qc(Request $r)
+    {
+        $d = $r->validate(['po' => 'required|integer', 'inspection_type' => 'nullable|string|max:40', 'inspector' => 'nullable|string|max:120', 'inspection_date' => 'required|date', 'qty_submitted' => 'nullable|numeric|min:0', 'qty_inspected' => 'required|numeric|min:0', 'qty_passed' => 'required|numeric|min:0',
+            'qty_failed' => 'required|numeric|min:0', 'corrective_action' => 'nullable|string|max:2000', 'report_ref' => 'nullable|string|max:200', 're_inspection_of' => 'nullable|integer', 'override_pass' => 'nullable|boolean', 'override_reason' => 'nullable|string|max:500',
+            'checks' => 'nullable|array', 'checks.*.text' => 'nullable|string|max:200', 'checks.*.result' => 'nullable|string|max:4', 'checks.*.note' => 'nullable|string|max:255', 'checks.*.photo' => 'nullable|integer', 'checks.*.product' => 'nullable|integer']);
+        return $this->run(function () use ($d) { $x = \App\Services\SourcingExtras::saveQc((int) Context::ent(), $d); return $x + ['message' => "QC {$x['code']}: {$x['result']}"]; });
+    }
+
+    public function qcAction(Request $r, int $id)
+    {
+        $d = $r->validate(['action' => 'required|string|max:2000']);
+        return $this->run(function () use ($id, $d) { \App\Services\SourcingExtras::qcAction((int) Context::ent(), $id, $d['action']); return ['message' => 'Corrective action saved']; });
+    }
+
+    public function customs(Request $r)
+    {
+        $d = $r->validate(['id' => 'nullable|integer', 'shipment' => 'required|integer', 'declaration_number' => 'nullable|string|max:120', 'hs_code' => 'nullable|string|max:40', 'importer_of_record' => 'nullable|string|max:200', 'customs_qty' => 'nullable|numeric|min:0', 'customs_value' => 'required|numeric|min:0',
+            'currency' => 'nullable|string|size:3', 'exchange_rate' => 'nullable|numeric|gt:0', 'duty_rate' => 'nullable|numeric|min:0|max:100', 'duty_amount' => 'nullable|numeric|min:0', 'import_vat' => 'nullable|numeric|min:0', 'clearance_date' => 'nullable|date', 'status' => 'nullable|string|max:20', 'product' => 'nullable|integer', 'broker' => 'nullable|integer']);
+        return $this->run(fn () => ['id' => \App\Services\SourcingExtras::saveCustoms((int) Context::ent(), $d), 'message' => 'Customs entry saved']);
+    }
+
+    public function customsPay(Request $r, int $id)
+    {
+        $d = $r->validate(['bank' => 'required|integer', 'date' => 'required|date', 'duty' => 'nullable|numeric|min:0', 'import_vat' => 'nullable|numeric|min:0']);
+        return $this->run(function () use ($id, $d) { $x = \App\Services\SourcingExtras::payCustoms((int) Context::ent(), $id, (int) $d['bank'], $d['date'], isset($d['duty']) ? (float) $d['duty'] : null, isset($d['import_vat']) ? (float) $d['import_vat'] : null);
+            return $x + ['message' => 'Paid: duty ' . number_format($x['duty_base'], 2) . ' (into the goods\' cost) · import VAT ' . number_format($x['vat_base'], 2) . ' (to claim back)']; });
+    }
+
+    public function quickBuy(Request $r)
+    {
+        $d = $r->validate(['supplier' => 'required|integer', 'location' => 'required|integer', 'date' => 'required|date', 'currency' => 'nullable|string|size:3', 'bank' => 'nullable|integer', 'reference' => 'nullable|string|max:150', 'note' => 'nullable|string|max:500',
+            'lines' => 'required|array|min:1', 'lines.*.product' => 'nullable|integer', 'lines.*.sku' => 'nullable|string|max:80', 'lines.*.qty' => 'required|integer|min:1', 'lines.*.unit_price' => 'required|numeric|min:0']);
+        return $this->run(function () use ($d) { $x = \App\Services\SourcingExtras::quickBuy((int) Context::ent(), $d);
+            $paid = $x['paid'] ? (collect($x['paid'])->contains(fn ($p) => $p['status'] === 'WAITING') ? ' · payment waits for approval' : ' · paid') : ' · not paid yet';
+            return $x + ['message' => "Quick buy {$x['po_number']}: {$x['units']} unit(s) in stock$paid"]; });
+    }
 }

@@ -28,6 +28,7 @@ class AppController extends Controller
         return [
             'user' => ['id' => $u->id, 'name' => $u->display_name ?: $u->login_id, 'role' => $role],
             'ent' => Context::ent(), 'companies' => $companies, 'menu' => self::menu($role), 'create' => self::createCatalogue($role),
+            'setup_open' => $role === 'OWNER' && \App\Services\SetupWizard::open((int) Context::ent()),
             'tasks_open' => DB::table('tasks')->where('owner_user_id', $u->id)->whereNotIn('status', ['DONE', 'APPROVED', 'CANCELLED'])->count(),
             'product_form' => RecordService::formOfTable('t_product_vendors'), 'base_currency' => Settings::get('BASE_CURRENCY', Context::ent(), 'GBP'), 'today' => date('Y-m-d'),
         ];
@@ -60,6 +61,8 @@ class AppController extends Controller
     }
 
     /** A menu item opens the list of its first data form; special screens get their own route as they are built. */
+    public static function routeOf(object $m): string { return self::route($m); }
+
     private static function route(object $m): string
     {
         $no = (string) $m->screen_no;
@@ -94,6 +97,7 @@ class AppController extends Controller
         if ($no === '17.9') return '#/printers';
         if ($no === '17.15') return '#/users';
         if ($no === '17.16') return '#/sessions';
+        if ($no === '17.1') return '#/setup';
         if ($no === '4.5') return '#/sku-homes';
         if ($no === '17.17') return '#/audit';
         if ($no === '17.18') return '#/settings';
