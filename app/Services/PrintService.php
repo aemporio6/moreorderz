@@ -148,7 +148,7 @@ class PrintService
         $note = null;
         if (! self::usable($printer)) {
             $backup = self::printer($route?->fk_id_backup_printer); $mode = strtoupper((string) Settings::get('PRINT_FAILOVER', $ent, 'ASK'));
-            $state = $printer->f_active ? strtolower($printer->printer_status) : 'switched off';
+            $state = $printer->f_active ? (['REPAIR' => 'in repair', 'OFFLINE' => 'offline', 'RETIRED' => 'retired'][$printer->printer_status] ?? strtolower($printer->printer_status)) : 'switched off';
             if ($mode !== 'OFF' && self::usable($backup) && $backup->id !== $printer->id) {
                 if ($mode === 'ASK' && empty($opt['use_backup']) && empty($opt['auto'])) {
                     return ['ask' => ['printer' => $printer->name, 'state' => $state, 'backup_id' => $backup->id, 'backup' => $backup->name]];
@@ -167,14 +167,14 @@ class PrintService
 
         // 3. test page first (setting), reprint reason
         if ($kind !== 'TEST' && (int) Settings::get('PRINT_TEST_REQUIRED', $ent, 1) === 1 && ! self::tested($printer->id, $media->id)) {
-            throw new \InvalidArgumentException("Print the test page on {$printer->name} with {$media->name} first (Settings › Printers › Test), then print again.");
+            throw new \InvalidArgumentException("Print the test page on {$printer->name} with {$media->name} first (Settings › Printers › Test), then print again.", 22);
         }
         $reason = $opt['reason'] ?? null; $before = collect();
         if ($kind !== 'TEST') {
             $before = DB::table('label_print_log as g')->join('label_templates as t', 't.id', '=', 'g.fk_id_label_template')->where('t.label_kind', $kind)
                 ->where('g.entity_type', $entityType)->whereIn('g.entity_id', $ids)->groupBy('g.entity_id')->selectRaw('g.entity_id, MAX(g.copy_no) as n')->pluck('n', 'entity_id');
             if ($before->isNotEmpty() && ! $reason) {
-                throw new \InvalidArgumentException(count($ids) === 1 ? 'This was printed before. Choose a reason to print it again.' : $before->count() . ' of these were printed before. Choose a reason to print them again.');
+                throw new \InvalidArgumentException(count($ids) === 1 ? 'This was printed before. Choose a reason to print it again.' : $before->count() . ' of these were printed before. Choose a reason to print them again.', 21);
             }
             if ($reason && ! isset(self::REASONS[$reason])) throw new \InvalidArgumentException('Choose a reprint reason from the list.');
             if ($before->isEmpty()) $reason = null;
@@ -231,9 +231,9 @@ class PrintService
     {
         $fits = fn ($m) => (! $printer->max_print_width_mm || min($m->width_mm, $m->height_mm) <= $printer->max_print_width_mm + 0.5)
             && (! $printer->min_media_width_mm || $m->width_mm >= $printer->min_media_width_mm - 0.5) && (! $printer->max_media_width_mm || $m->width_mm <= $printer->max_media_width_mm + 0.5);
-        if ($fits($media)) return $media;
+        if ($fits($media) && self::tested($printer->id, $media->id)) return $media;
         $all = DB::table('label_media')->whereIn('fk_id_ent', [0, $ent])->where('f_active', 1)->orderBy('id')->get()->filter($fits);
-        return $all->first(fn ($m) => self::tested($printer->id, $m->id)) ?? $all->first() ?? $media;
+        return $all->first(fn ($m) => self::tested($printer->id, $m->id)) ?? ($fits($media) ? $media : ($all->first() ?? $media));
     }
 
     private static function fail(int $ent, string $kind, string $entityType, array $ids, object $printer, int $copies, array $opt, string $why): array

@@ -105,7 +105,9 @@ class OrdersController extends Controller
     {
         $this->can($r, self::WAREHOUSE);
         $d = $r->validate(['order_no' => 'required|string|max:100', 'branch' => 'required|integer', 'carrier' => 'nullable|integer', 'box' => 'nullable|integer', 'weight_g' => 'nullable|integer|min:1', 'tracking_no' => 'nullable|string|max:60']);
-        return $this->run(function () use ($d) { $id = Dispatch::pack(array_filter($d, fn ($v) => $v !== null)); return ['id' => $id, 'parcel_code' => DB::table('wh_parcels')->where('id', $id)->value('parcel_code'), 'message' => 'Parcel packed and ready']; });
+        return $this->run(function () use ($d) { $id = Dispatch::pack(array_filter($d, fn ($v) => $v !== null));
+            $pj = \App\Services\PrintService::auto((int) Context::ent(), 'WH_AUTOPRINT_PACKING_SLIP', 'PACKING_SLIP', [$id], 'AUTO_PACK');
+            return ['id' => $id, 'print' => $pj && $pj['status'] === 'PRINTED' ? $pj + ['url' => "/api/print-jobs/{$pj['job']}/pdf"] : null, 'parcel_code' => DB::table('wh_parcels')->where('id', $id)->value('parcel_code'), 'message' => 'Parcel packed and ready']; });
     }
 
     // ---- handover ----
@@ -129,7 +131,7 @@ class OrdersController extends Controller
         $d = $r->validate(['driver' => 'nullable|string|max:120']);
         return $this->run(function () use ($id, $d) { $x = Dispatch::closeHandover($id, $d['driver'] ?? null);
             $pj = \App\Services\PrintService::auto((int) Context::ent(), 'WH_AUTOPRINT_MANIFEST', 'MANIFEST', [$id], 'AUTO_MANIFEST');
-            if ($pj && $pj['status'] === 'PRINTED') { DB::table('wh_handover_sessions')->where('id', $id)->update(['manifest_file' => $pj['file']]); $x['print_url'] = "/api/print-jobs/{$pj['job']}/pdf"; }
+            if ($pj && $pj['status'] === 'PRINTED') { DB::table('wh_handover_sessions')->where('id', $id)->update(['manifest_file' => $pj['file']]); $x['print'] = $pj + ['url' => "/api/print-jobs/{$pj['job']}/pdf"]; }
             return $x + ['message' => "{$x['shipped']} parcel(s) shipped" . ($x['left_ready'] ? ", {$x['left_ready']} still ready" : '') . ($x['exceptions'] ? ", {$x['exceptions']} scan(s) to resolve" : '')]; });
     }
 

@@ -25,7 +25,7 @@ class PrintHttpTest extends TestCase
 
         // bins made before the printer is tested: bins are created, auto-print is skipped quietly
         $r = $this->postJson('/api/stock/bins', ['parent' => $whLoc, 'zone' => 'A', 'levels' => 2, 'positions' => 3, 'create' => true])->assertOk()->json();
-        $this->assertSame(6, $r['created']); $this->assertArrayNotHasKey('print_url', $r);
+        $this->assertSame(6, $r['created']); $this->assertArrayNotHasKey('print', $r);
         $this->postJson('/api/print', ['kind' => 'LOCATION', 'ids' => $r['ids']])->assertStatus(422)->assertJsonPath('message', fn ($m) => str_contains($m, 'test page'));
 
         // test page → real PDF → pass
@@ -48,7 +48,7 @@ class PrintHttpTest extends TestCase
 
         // new bins now print by themselves (setting WH_AUTOPRINT_SHELF = Y)
         $r2 = $this->actingAs($mgr)->postJson('/api/stock/bins', ['parent' => $whLoc, 'zone' => 'B', 'levels' => 1, 'positions' => 2, 'create' => true])->assertOk()->json();
-        $this->assertArrayHasKey('print_url', $r2);
+        $this->assertArrayHasKey('print', $r2);
 
         // printer in repair → the app asks → backup; routes and printers are for Owner / Manager
         $this->actingAs($wh)->postJson('/api/print-routes', ['kind' => 'LOCATION', 'printer' => $a4, 'media' => $plain])->assertStatus(403);

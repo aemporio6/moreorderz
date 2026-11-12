@@ -207,8 +207,8 @@ class StockController extends Controller
         return $this->run(function () use ($d) {
             $x = LocationGenerator::run((int) Context::ent(), $d, (bool) ($d['create'] ?? false));
             $pj = ! empty($x['ids']) ? \App\Services\PrintService::auto((int) Context::ent(), 'WH_AUTOPRINT_SHELF', 'LOCATION', $x['ids'], 'AUTO_SHELF') : null;
-            if ($pj && $pj['status'] === 'PRINTED') $x['print_url'] = "/api/print-jobs/{$pj['job']}/pdf";
-            return $x + ['message' => ! empty($d['create']) ? 'Bins created' . (isset($x['print_url']) ? ' – bin labels are ready to print' : '') : 'Preview'];
+            if ($pj && $pj['status'] === 'PRINTED') $x['print'] = $pj + ['url' => "/api/print-jobs/{$pj['job']}/pdf"];
+            return $x + ['message' => ! empty($d['create']) ? 'Bins created' . (isset($x['print']) ? ' – bin labels are ready to print' : '') : 'Preview'];
         });
     }
 }

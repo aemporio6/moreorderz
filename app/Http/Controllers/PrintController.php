@@ -27,7 +27,7 @@ class PrintController extends Controller
     private function run(callable $fn)
     {
         try { return $fn(); }
-        catch (\InvalidArgumentException|\RuntimeException $e) { return response()->json(['message' => $e->getMessage(), 'errors' => ['_form' => [$e->getMessage()]]], 422); }
+        catch (\InvalidArgumentException|\RuntimeException $e) { return response()->json(['message' => $e->getMessage(), 'need' => [21 => 'reason', 22 => 'test'][$e->getCode()] ?? null, 'errors' => ['_form' => [$e->getMessage()]]], 422); }
     }
 
     private function answer(array $x)
