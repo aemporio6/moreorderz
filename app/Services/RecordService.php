@@ -46,8 +46,8 @@ class RecordService
         return [
             'form_key' => $formKey, 'table' => $table, 'total' => $total, 'page' => $page, 'per_page' => $per, 'all_columns' => array_map(fn ($c) => ['name' => $c, 'label' => self::fieldByCol($fields, $c)['label']], $allCols),
             'columns' => array_map(fn ($c) => ['name' => $c, 'label' => self::fieldByCol($fields, $c)['label'], 'type' => self::fieldByCol($fields, $c)['type']], $cols),
-            'rows' => $rows->map(function ($r) use ($labels) {
-                $a = (array) $r;
+            'rows' => $rows->map(function ($r) use ($labels, $table) {
+                $a = Vault::maskRow($table, (array) $r);
                 foreach ($a as $k => $v) if (isset($labels[$k][(string) $v])) $a[$k . '__label'] = $labels[$k][(string) $v];
                 return $a;
             })->all(),
@@ -62,6 +62,7 @@ class RecordService
         $row = (array) ($q->first() ?? abort(404, 'Record not found.'));
         foreach (self::BLOCKED as $b) unset($row[$b]);
         foreach (Registry::fields($formKey) as $f) if ($f['secret'] && $f['column_name'] && isset($row[$f['column_name']]) && Context::role() !== 'OWNER') $row[$f['column_name']] = '••••';
+        $row = Vault::maskRow($table, $row);   // secrets are masked for every role; the Owner reveals one with "Reveal" (logged)
         return $row;
     }
 
@@ -105,8 +106,12 @@ class RecordService
         }
         if ($errors) throw ValidationException::withMessages($errors);
 
+        $vault = Vault::prepare($table, $data, $id);   // secrets go to the vault, card numbers keep 4 digits, CVV / PIN are dropped
         try {
-            return self::write($table, $pk, $id, $data, $old, $formKey, $opt);
+            $res = self::write($table, $pk, $id, $data, $old, $formKey, $opt);
+            if ($vault['put']) Vault::store($table, (int) $res['id'], $vault['put']);
+            if ($vault['dropped']) $res['note'] = 'Not kept on purpose (CVV / PIN are never stored): ' . implode(', ', $vault['dropped']) . '.';
+            return $res;
         } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
             throw ValidationException::withMessages(['_form' => 'A record with the same code or name already exists. Change it and save again.']);
         } catch (\Illuminate\Database\QueryException $e) {
@@ -138,7 +143,7 @@ class RecordService
                         $data[$f['column_name']] = Numbering::next(substr($f['default_rule'], 10), (int) ($data['fk_id_ent'] ?? $ent ?? 0));
                     }
                 }
-                $data = self::fillNotNull($table, $data);
+                $data = self::fillNotNull($table, array_filter($data, fn ($v) => $v !== null));   // an empty field of a new record takes the column's own default
                 $id = (int) DB::table($table)->insertGetId($data, $pk);
                 Audit::log($table, $id, 'INSERT', $data, null, $ent);
                 $created = true;

@@ -115,6 +115,19 @@ class OrdersController extends Controller
         return response($bytes, 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="' . $name . '"']);
     }
 
+    /** 7.6 Tracking upload: the file the marketplace needs back – one line per order with its tracking number and carrier. */
+    public function trackingUpload(Request $r)
+    {
+        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER', 'WAREHOUSE', 'TL', 'VA'], true), 403);
+        $ent = (int) \App\Services\Context::ent(); $shop = (int) $r->query('shop', 0); $from = $r->query('from') ?: date('Y-m-d', strtotime('-7 day')); $to = $r->query('to') ?: date('Y-m-d');
+        $rows = DB::table('t_sales as s')->leftJoin('t_branches as b', 'b.id', '=', 's.fk_id_branch')->where('s.fk_id_ent', $ent)->where('s.sale_source', 'active')->whereNotNull('s.tracking_no')->where('s.tracking_no', '<>', '')->whereBetween('s.d_order', [$from, $to])
+            ->when($shop, fn ($q) => $q->where('s.fk_id_branch', $shop))->groupBy('b.shop_name', 's.order_no', 's.tracking_no', 's.carrier_service_text', 's.label_status')->orderBy('s.order_no')
+            ->selectRaw('b.shop_name shop, s.order_no, s.tracking_no, s.carrier_service_text service, s.label_status, MIN(s.d_order) d, SUM(s.qty) units')->get();
+        if ($r->query('csv') === '1') return response()->streamDownload(function () use ($rows) { $o = fopen('php://output', 'w'); fputcsv($o, ['order-id', 'tracking-number', 'carrier-service', 'ship-date']);
+            foreach ($rows as $x) fputcsv($o, [$x->order_no, $x->tracking_no, $x->service, date('Y-m-d')]); fclose($o); }, 'tracking_upload_' . date('Ymd') . '.csv', ['Content-Type' => 'text/csv']);
+        return ['rows' => $rows, 'shops' => DB::table('t_branches')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name as name']), 'from' => $from, 'to' => $to, 'shop' => $shop];
+    }
+
     public function cancel(Request $r, int $id)
     {
         $this->can($r, self::ENTER);

@@ -67,6 +67,10 @@ class OldImport
                 $report[] = $line;
             }
         } finally { DB::statement('SET FOREIGN_KEY_CHECKS = 1'); }
+        // secrets that came over as plain values (an import without masking) go into the vault; card numbers keep 4 digits; CVV / PIN are wiped
+        if (! $dry) { $sealed = Vault::sealExisting(array_column(array_filter($report, fn ($r) => $r['plan'] === 'COPY'), 'old_table'));
+            foreach ($report as &$r) foreach ($sealed as $v) if ($v['table'] === $r['old_table']) $r['note'] = mb_substr(trim(($r['note'] ?? '') . " Secrets: {$v['sealed']} value(s) put in the vault" . ($v['cards'] ? ", {$v['cards']} card number(s) cut to the last 4 digits" : '') . ($v['wiped'] ? ", {$v['wiped']} CVV / PIN value(s) wiped" : '') . '.'), 0, 500);
+            unset($r); }
         foreach (array_chunk($report, 200) as $c) DB::table('mo_import_report')->insert($c);
         $sum = fn (string $k, ?string $plan = null) => array_sum(array_map(fn ($r) => $plan === null || $r['plan'] === $plan ? $r[$k] : 0, $report));
         return ['run' => $run, 'rows' => $report, 'totals' => ['tables' => count($report), 'old_rows' => $sum('old_rows'), 'to_copy' => $sum('old_rows', 'COPY'), 'imported' => $sum('imported'), 'already_there' => $sum('already_there'), 'merged' => $sum('merged'), 'failed' => $sum('failed'),
@@ -81,7 +85,8 @@ class OldImport
         $secret = $oc->keys()->filter(fn ($c) => preg_match(self::SECRET, $c))->values();
         $gone = $oc->keys()->diff($nc->keys())->diff($secret)->values();
         $use = $oc->keys()->intersect($nc->keys())->reject(fn ($c) => preg_match(self::SECRET, $c) || str_contains((string) $nc[$c]->ex, 'GENERATED'))->values();
-        $masked = $mask ? $use->filter(fn ($c) => preg_match(self::PERSONAL, $c) && in_array($nc[$c]->ty, ['varchar', 'char', 'text', 'tinytext', 'mediumtext', 'longtext'], true))->values() : collect();
+        $vk = Vault::kinds($t);   // secrets are masked in a test copy too (a real import puts them in the vault)
+        $masked = $mask ? $use->filter(fn ($c) => (preg_match(self::PERSONAL, $c) || isset($vk[$c])) && in_array($nc[$c]->ty, ['varchar', 'char', 'text', 'tinytext', 'mediumtext', 'longtext'], true))->values() : collect();
         $left = $secret->map(fn ($c) => "$c (secret – never read)")->merge($gone->map(fn ($c) => "$c (no such column in the new tool)"));
         $line['left_out_columns'] = $left->isEmpty() ? null : mb_substr($left->implode(', '), 0, 500); $line['masked_columns'] = $masked->isEmpty() ? null : mb_substr($masked->implode(', '), 0, 500);
         $pk = $nc->first(fn ($c) => $c->k === 'PRI')->c ?? null; $hasPk = $pk && $use->contains($pk);
@@ -99,9 +104,20 @@ class OldImport
         $uniq = collect(DB::select('SELECT index_name AS i, column_name AS c FROM information_schema.statistics WHERE table_schema = ? AND table_name = ? AND non_unique = 0 AND index_name <> ? ORDER BY index_name, seq_in_index', [$target, $t, 'PRIMARY']))->groupBy('i')->map(fn ($g) => $g->pluck('c')->all());
         $settle = function (array $batch) use ($t, $pk, $hasPk, $uniq, &$line) {   // after an insert that skipped rows: which were already there, which are duplicates
             if (! $hasPk) return;
-            $there = DB::table($t)->whereIn($pk, array_column($batch, $pk))->pluck($pk)->flip();
+            $there = DB::table($t)->whereIn($pk, array_column($batch, $pk))->get()->keyBy($pk);
+            $nameCol = collect(array_keys($batch[0] ?? []))->first(fn ($c) => $c !== $pk && preg_match('/(^|_)(name|heading|title|label|code)$/', $c) && ! preg_match(self::PERSONAL, $c));
             foreach ($batch as $row) {
-                if (isset($there[$row[$pk]])) continue;
+                if (isset($there[$row[$pk]])) {
+                    // the id is taken: by the same thing (truly already there), or by something else the new tool seeded with that id (an id clash: the old row gets a new id)
+                    $cur = $there[$row[$pk]];
+                    if (! $nameCol || mb_strtolower(trim((string) ($cur->{$nameCol} ?? ''))) === mb_strtolower(trim((string) ($row[$nameCol] ?? '')))) continue;
+                    if (self::mapped($t, $row[$pk]) != $row[$pk]) continue;                              // moved to a new id on an earlier run
+                    $new = $row; unset($new[$pk]);
+                    try { $nid = DB::table($t)->insertGetId($new); } catch (\Throwable) { $line['failed']++; continue; }
+                    $line['imported']++; $line['already_there']--; $line['remapped'] = ($line['remapped'] ?? 0) + 1;
+                    DB::table('sys_merge_map')->updateOrInsert(['source_table' => $t, 'source_id' => $row[$pk], 'master_table' => $t], ['entity' => 'ID_CLASH', 'master_id' => $nid, 'match_score' => 0, 'status' => 'CONFIRMED', 'decided_at' => now()]);
+                    continue;
+                }
                 $kept = null; foreach ($uniq as $cols) { $q = DB::table($t); foreach ($cols as $c) $q->where($c, $row[$c] ?? null); if ($kept = $q->value($pk)) break; }
                 if (! $kept) { $line['failed']++; continue; }
                 $line['merged']++; $line['already_there']--;
@@ -119,19 +135,23 @@ class OldImport
                 }
                 foreach ($masked as $c) $row[$c] = self::mask($row[$c] === null ? null : (string) $row[$c]);
                 if ($hasLegacy && $hasPk) { $row['legacy_table'] = $t; $row['legacy_id'] = $row[$pk]; }
+                foreach (self::FK[$t] ?? [] as $fc => $parent) if (isset($row[$fc]) && ($m = self::mapped($parent, $row[$fc])) !== null) $row[$fc] = $m;   // the parent got a new id (id clash)
                 if ($t === 't_product_vendors' && array_key_exists('stock', $row)) $row['stock'] = 0;   // stock comes in part 2 as opening lots; the product's figure must equal its lots
                 $batch[] = $row + $fill;
             }
-            try { $n = DB::table($t)->insertOrIgnore($batch); $line['imported'] += $n; $line['already_there'] += count($batch) - $n; if ($n < count($batch)) $settle($batch); }
+            $skipped = [];   // rows the insert left out (id or code already there): settled after the insert, outside its error handling, so they are never tried twice
+            try { $n = DB::table($t)->insertOrIgnore($batch); $line['imported'] += $n; $line['already_there'] += count($batch) - $n; if ($n < count($batch)) $skipped = $batch; }
             catch (\Throwable $e) {   // one bad row must not stop the others: try them one by one and keep the reason
                 foreach ($batch as $row) {
-                    try { $n = DB::table($t)->insertOrIgnore([$row]); $line['imported'] += $n; $line['already_there'] += 1 - $n; if (! $n) $settle([$row]); }
+                    try { $n = DB::table($t)->insertOrIgnore([$row]); $line['imported'] += $n; $line['already_there'] += 1 - $n; if (! $n) $skipped[] = $row; }
                     catch (\Throwable $e2) { $line['failed']++; $why = preg_replace('/\(Connection:.*$/s', '', $e2->getMessage()); $why = preg_replace("/'[^']{0,80}'/", "'…'", $why); $errors[mb_substr(trim($why), 0, 110)] = true; }
                 }
             }
+            if ($skipped) $settle($skipped);
         };
         if ($hasPk) $q->chunk(500, $handle); else $handle($q->get());
         if ($line['merged']) $line['note'] = "{$line['merged']} old row(s) repeat a row that is kept (same code); they are merged into it and the old id → kept id is recorded.";
+        if (! empty($line['remapped'])) { $line['note'] = trim(($line['note'] ?? '') . " {$line['remapped']} old row(s) had an id the new tool already uses for something else: they got a new id (old id → new id recorded)."); unset($line['remapped']); }
         if ($errors) $line['note'] = ($line['note'] ? $line['note'] . ' ' : '') . mb_substr(count($errors) . ' kind(s) of problem: ' . implode(' | ', array_keys($errors)), 0, 500);
         if ($t === 't_users') $line['note'] = trim(($line['note'] ?? '') . ' Passwords are not carried over: every user sets a new one, and the Owner gives each user a role.');
         if ($t === 't_product_vendors') $line['note'] = trim(($line['note'] ?? '') . ' Stock figures are set to 0 here; stock comes in part 2 as opening lots.');
@@ -267,7 +287,51 @@ class OldImport
         return $line;
     }
 
-    /** The id to use in the new tool for an old id of a table (follows the merge of duplicates). */
+    /**
+     * Field-by-field check after an import: for every table copied with the same name, every column both sides have (secret columns never read),
+     * on the rows that exist on both sides by id: how many had a value in the old tool, how many have one now, and how many values differ.
+     * OK = nothing differs; MASKED = differs because personal data was masked on purpose; DIFF = look at it. Results go to mo_import_fields.
+     */
+    public static function compareFields(string $oldDb, array $opt = []): array
+    {
+        $old = self::ident($oldDb); $target = DB::getDatabaseName(); $run = 'CMP-' . date('ymd-His'); $out = [];
+        $tables = collect(DB::select('SELECT table_name AS t FROM information_schema.tables WHERE table_schema = ? AND table_type = ?', [$oldDb, 'BASE TABLE']))->pluck('t')
+            ->filter(fn ($t) => self::plan($t) === 'COPY')->intersect(collect(DB::select('SELECT table_name AS t FROM information_schema.tables WHERE table_schema = ? AND table_type = ?', [$target, 'BASE TABLE']))->pluck('t'));
+        if (! empty($opt['only'])) $tables = $tables->intersect($opt['only']);
+        $cols = fn (string $db, string $t) => collect(DB::select('SELECT column_name AS c, column_key AS k, data_type AS ty FROM information_schema.columns WHERE table_schema = ? AND table_name = ?', [$db, $t]))->keyBy('c');
+        foreach ($tables->values() as $t) {
+            $oc = $cols($oldDb, $t); $nc = $cols($target, $t); $pk = $nc->first(fn ($c) => $c->k === 'PRI')->c ?? null;
+            if (! $pk || ! $oc->has($pk)) { $out[] = ['run_code' => $run, 'old_table' => $t, 'column_name' => '*', 'rows_both' => 0, 'old_filled' => 0, 'new_filled' => 0, 'differ' => 0, 'status' => 'SKIPPED', 'note' => 'No common id column – compared by counts only in the import report.', 'created_at' => now()]; continue; }
+            // an old row that got a new id because the new tool already used its id (id clash) is compared with the row it became
+            $join = "FROM $old." . self::ident($t) . ' o LEFT JOIN sys_merge_map mm ON mm.source_table = ' . DB::getPdo()->quote($t) . " AND mm.master_table = mm.source_table AND mm.entity = 'ID_CLASH' AND mm.status = 'CONFIRMED' AND mm.source_id = o." . self::ident($pk)
+                . ' JOIN ' . self::ident($t) . ' n ON n.' . self::ident($pk) . ' = COALESCE(mm.master_id, o.' . self::ident($pk) . ')';
+            $both = (int) DB::selectOne("SELECT COUNT(*) c $join")->c;
+            foreach ($oc->keys()->intersect($nc->keys())->reject(fn ($c) => preg_match(self::SECRET, $c) || $c === $pk) as $c) {
+                $q = self::ident($c); $filled = fn (string $a) => "SUM($a.$q IS NOT NULL AND CAST($a.$q AS CHAR) NOT IN ('', '0000-00-00', '0000-00-00 00:00:00'))";
+                // the same value written another way is not a difference: empty = NULL = zero date, 10.5 = 10.5000, 2026-01-01 = 2026-01-01 00:00:00
+                $nums = ['decimal', 'int', 'bigint', 'smallint', 'tinyint', 'mediumint', 'float', 'double'];
+                $numeric = in_array($oc[$c]->ty, $nums, true) || in_array($nc[$c]->ty, $nums, true);   // "100" kept as text in the old tool and 100.00 as a number now are the same value
+                $date = in_array($oc[$c]->ty, ['date', 'datetime', 'timestamp'], true) || in_array($nc[$c]->ty, ['date', 'datetime', 'timestamp'], true);
+                $norm = fn (string $a) => $numeric ? "CAST(NULLIF(TRIM($a.$q), '') AS DECIMAL(30,8))" : ($date ? "NULLIF(NULLIF(NULLIF(DATE_FORMAT($a.$q, '%Y-%m-%d %H:%i:%s'), '0000-00-00 00:00:00'), ''), '00:00:00')" : "NULLIF(TRIM(CAST($a.$q AS CHAR)), '')");
+                $ov = $norm('o');
+                if ($parent = self::FK[$t][$c] ?? null)   // a link to a parent that got a new id: compare with the new id
+                    $ov = "COALESCE((SELECT x.master_id FROM sys_merge_map x WHERE x.source_table = " . DB::getPdo()->quote($parent) . " AND x.master_table = x.source_table AND x.entity = 'ID_CLASH' AND x.status = 'CONFIRMED' AND x.source_id = o.$q), $ov)";
+                $r = DB::selectOne("SELECT {$filled('o')} o, {$filled('n')} nn, SUM(NOT ($ov <=> {$norm('n')})) d $join");
+                $d = (int) $r->d; $personal = (bool) preg_match(self::PERSONAL, $c);
+                $vk = Vault::kinds($t)[$c] ?? null;
+                $status = $d === 0 ? 'OK' : ($personal || $vk ? 'MASKED' : 'DIFF');
+                $note = $d === 0 ? null : ($vk ? ['VAULT' => 'Secret – the value is kept encrypted in the vault; the record shows ••••.', 'CARD' => 'Card number – only the last 4 digits are kept.', 'NEVER' => 'CVV / PIN – never stored.'][$vk] : null) ?? ($personal ? 'Personal data – masked on purpose in a test copy, or kept as is in the real import.' : ((int) $r->o > (int) $r->nn ? 'Values were lost or emptied: look at this column.' : ((int) $r->o < (int) $r->nn ? 'Empty in the old tool, filled now (a default of the new tool).' : 'Same rows filled, other values: the record of that id was already in the new tool (seeded list) or was changed after the import.')));
+                $out[] = ['run_code' => $run, 'old_table' => $t, 'column_name' => $c, 'rows_both' => $both, 'old_filled' => (int) $r->o, 'new_filled' => (int) $r->nn, 'differ' => $d, 'status' => $status, 'note' => $note, 'created_at' => now()];
+            }
+        }
+        foreach (array_chunk($out, 300) as $c) DB::table('mo_import_fields')->insert($c);
+        return ['run' => $run, 'tables' => $tables->count(), 'columns' => count($out), 'ok' => count(array_filter($out, fn ($r) => $r['status'] === 'OK')), 'diff' => count(array_filter($out, fn ($r) => $r['status'] === 'DIFF')), 'masked' => count(array_filter($out, fn ($r) => $r['status'] === 'MASKED')), 'rows' => $out];
+    }
+
+    /** Foreign keys of copied tables whose parent may get a new id (id clash). child table → [column → parent table] */
+    public const FK = ['reference_items' => ['fk_reference_id' => 'cat_references']];
+
+    /** The id to use in the new tool for an old id of a table (follows the merge of duplicates and ids moved because of an id clash). */
     public static function mapped(string $table, int|string|null $oldId): int|string|null
     {
         if ($oldId === null) return null;

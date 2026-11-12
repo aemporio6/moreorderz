@@ -32,6 +32,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('list/{key}', [AppController::class, 'list']);
         Route::get('record/{key}/{id}', [AppController::class, 'record'])->whereNumber('id');
         Route::post('record/{key}/{id?}', [AppController::class, 'save'])->whereNumber('id');
+        Route::post('reveal/{key}/{id}', [AppController::class, 'reveal'])->whereNumber('id');
         Route::get('page/{key}/{id}', [WorkController::class, 'page'])->whereNumber('id');
         Route::get('search', [WorkController::class, 'search']);
         Route::get('export/{key}', [WorkController::class, 'export']);
@@ -51,6 +52,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('setup', [AdminController::class, 'setup']);
         Route::post('setup/tick', [AdminController::class, 'setupTick']);
         Route::get('sessions', [AdminController::class, 'sessions']);
+        Route::get('accounts-dash', [AdminController::class, 'accounts']);
         Route::post('sessions/end', [AdminController::class, 'endSession']);
         Route::post('ip-rules', [AdminController::class, 'ipRule']);
         Route::post('ip-rules/{id}/remove', [AdminController::class, 'ipRuleRemove'])->whereNumber('id');
@@ -175,6 +177,10 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('orders', [OrdersController::class, 'enter']);
         Route::post('orders/import', [OrdersController::class, 'importFile']);
         Route::get('labels', [OrdersController::class, 'labels']);
+        Route::get('tracking-upload', [OrdersController::class, 'trackingUpload']);
+        Route::get('import-history', [AdminController::class, 'importHistory']);
+        Route::get('merges', [AdminController::class, 'merges']);
+        Route::get('registry', [AdminController::class, 'registry']);
         Route::post('labels/import', [OrdersController::class, 'labelImport']);
         Route::post('labels/{id}/pick', [OrdersController::class, 'labelPick'])->whereNumber('id');
         Route::post('labels/batch/{id}/undo', [OrdersController::class, 'labelUndo'])->whereNumber('id');

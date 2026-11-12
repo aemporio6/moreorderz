@@ -97,6 +97,8 @@ class AppController extends Controller
         if ($no === '17.9') return '#/printers';
         if ($no === '17.15') return '#/users';
         if ($no === '17.16') return '#/sessions';
+        $map = ['4.1' => '#/stock', '10.1' => '#/close', '13.1' => '#/tasks?scope=all', '6.1' => '#/orders', '5.7' => '#/reports/price_log', '15.1' => '#/import', '15.2' => '#/import-history', '7.6' => '#/tracking-upload', '6.9' => '#/calculator', '17.14' => '#/registry', '12.9' => '#/merges', '12.1' => '#/accounts'];
+        if (isset($map[$no])) return $map[$no];
         if ($no === '9.10') return '#/forecast';
         if ($no === '17.1') return '#/setup';
         if ($no === '4.5') return '#/sku-homes';
@@ -154,7 +156,18 @@ class AppController extends Controller
     public function record(string $key, int $id)
     {
         Rights::check('VIEW', $key);
-        return ['values' => RecordService::get($key, $id)];
+        $table = \App\Services\Registry::table($key);
+        $kinds = $table ? \App\Services\Vault::kinds($table) : [];
+        return ['values' => RecordService::get($key, $id), 'vault' => array_keys(array_filter($kinds, fn ($k) => $k === 'VAULT')), 'card' => array_keys(array_filter($kinds, fn ($k) => $k === 'CARD')),
+            'never' => array_keys(array_filter($kinds, fn ($k) => $k === 'NEVER')), 'may_reveal' => \App\Services\Vault::mayReveal(Context::role())];
+    }
+
+    /** Reveal one secret of a record (logged as REVEAL: SHOWN or DENIED; never the value). */
+    public function reveal(Request $r, string $key, int $id)
+    {
+        try { return \App\Services\Vault::reveal($key, $id, (string) $r->input('field')); }
+        catch (\Illuminate\Auth\Access\AuthorizationException $e) { return response()->json(['message' => $e->getMessage()], 403); }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
     }
 
     public function save(Request $r, string $key, ?int $id = null)

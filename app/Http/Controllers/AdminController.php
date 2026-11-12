@@ -274,4 +274,70 @@ class AdminController extends Controller
         $d = $r->validate(['step' => 'required|string|max:20', 'on' => 'required|boolean', 'note' => 'nullable|string|max:200']);
         return $this->guard(function () use ($d) { \App\Services\SetupWizard::tick((int) Context::ent(), $d['step'], (bool) $d['on'], $d['note'] ?? null); return ['message' => $d['on'] ? 'Step ticked' : 'Tick taken off']; });
     }
+
+    // ───────────── import hub, history, merges, field registry, calculator, tracking upload ─────────────
+    public function importHistory(Request $r)
+    {
+        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER', 'FINANCE', 'ACCOUNTANT'], true), 403);
+        $ent = (int) Context::ent();
+        return ['rows' => DB::table('fin_import_batches as b')->leftJoin('t_branches as s', 's.id', '=', 'b.branch_id')->leftJoin('t_users as u', 'u.id', '=', 'b.imported_by')->where('b.company_id', $ent)->orderByDesc('b.id')->limit(300)
+            ->get(['b.id', 'b.report_type', 'b.file_name', 's.shop_name as shop', 'b.period_from', 'b.period_to', 'b.rows_total', 'b.rows_new', 'b.rows_duplicate', 'b.rows_error', 'b.imported_at', 'u.login_id as by'])
+            ->map(function ($b) { $b->undone = str_starts_with((string) DB::table('fin_import_batches')->where('id', $b->id)->value('file_hash'), 'UNDONE-'); return $b; }),
+            'old' => DB::table('mo_import_report')->orderBy('id')->limit(400)->get(),
+            'fields' => ($last = DB::table('mo_import_fields')->max('run_code')) ? DB::table('mo_import_fields')->where('run_code', $last)->orderByRaw("FIELD(status, 'DIFF', 'MASKED', 'SKIPPED', 'OK')")->orderBy('old_table')->orderBy('column_name')->limit(1000)->get() : []];
+    }
+
+    /** 12.1 Accounts dashboard: people, staff, companies, shops, bank accounts and cards; what expires soon; what is in the vault. */
+    public function accounts(Request $r)
+    {
+        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER'], true), 403);
+        $ent = \App\Services\Context::ent(); $has = fn ($t) => DB::getSchemaBuilder()->hasTable($t);
+        $q = function (string $t) use ($ent, $has) { $x = DB::table($t); if ($ent && \App\Services\Registry::hasColumn($t, 'fk_id_ent')) $x->where('fk_id_ent', $ent); return $x; };
+        $count = fn (string $t, ?string $active = 'f_active') => $has($t) ? (int) (($active && \App\Services\Registry::hasColumn($t, $active)) ? $q($t)->where($active, 1) : $q($t))->count() : 0;
+        $people = $has('t_account') ? $q('t_account')->get(['id', 'account_code', 'first_name', 'sur_name', 'f_active', 'current_passport_expires', 'dual_passport_expires', 'current_cnic_expires', 'dual_cnic_expires', 'resident_permit_expires', 'driving_license_expires']) : collect();
+        $soon = date('Y-m-d', strtotime('+60 days')); $today = date('Y-m-d'); $due = [];
+        $docs = ['current_passport_expires' => 'Passport', 'dual_passport_expires' => 'Second passport', 'current_cnic_expires' => 'ID card (CNIC)', 'dual_cnic_expires' => 'Second ID card', 'resident_permit_expires' => 'Residence permit', 'driving_license_expires' => 'Driving licence'];
+        foreach ($people as $p) foreach ($docs as $c => $what) {
+            $d = \App\Services\MarketplaceFiles::day((string) ($p->{$c} ?? '')); if (! $d || $d > $soon) continue;
+            $due[] = ['who' => trim($p->first_name . ' ' . $p->sur_name) ?: $p->account_code, 'person_id' => $p->id, 'what' => $what, 'date' => $d, 'state' => $d < $today ? 'EXPIRED' : 'SOON', 'open' => '#/list/t_account?id=' . $p->id];
+        }
+        foreach (['t_account_banks' => 'Bank card', 't_account_credit_cards' => 'Credit card'] as $t => $what) {
+            if (! $has($t)) continue;
+            foreach (DB::table($t . ' as c')->join('t_account as a', 'a.id', '=', 'c.fk_id_account')->when($ent, fn ($x) => $x->where('a.fk_id_ent', $ent))->where('c.f_active', 1)->whereNotNull('c.valid_upto')->where('c.valid_upto', '>', '1971-01-01')->where('c.valid_upto', '<=', $soon)
+                ->get(['c.valid_upto', 'c.card_last4', 'a.id', 'a.first_name', 'a.sur_name', 'a.account_code']) as $c)
+                $due[] = ['who' => trim($c->first_name . ' ' . $c->sur_name) ?: $c->account_code, 'person_id' => $c->id, 'what' => $what . ($c->card_last4 ? ' •••• ' . $c->card_last4 : ''), 'date' => substr((string) $c->valid_upto, 0, 10), 'state' => $c->valid_upto < $today ? 'EXPIRED' : 'SOON', 'open' => '#/list/t_account?id=' . $c->id];
+        }
+        usort($due, fn ($a, $b) => strcmp($a['date'], $b['date']));
+        return [
+            'tiles' => [
+                ['label' => 'People', 'n' => $people->where('f_active', 1)->count(), 'of' => $people->count(), 'open' => '#/list/' . (\App\Services\Registry::exists('party') ? 'party' : 't_account')],
+                ['label' => 'Staff in work', 'n' => $count('t_account_employment'), 'open' => '#/list/t_account_employment'],
+                ['label' => 'Companies', 'n' => $count('t_enterprise'), 'open' => '#/list/t_enterprise'],
+                ['label' => 'Shops', 'n' => $count('t_branches'), 'open' => '#/list/t_branch'],
+                ['label' => 'Bank accounts', 'n' => $count('t_account_banks'), 'open' => '#/list/t_account_bank'],
+                ['label' => 'Credit cards', 'n' => $count('t_account_credit_cards'), 'open' => '#/list/t_account_credit_card'],
+                ['label' => 'Subscriptions', 'n' => $count('t_account_subscriptions'), 'open' => '#/list/t_account_subscription'],
+                ['label' => 'Secrets in the vault', 'n' => $has('sys_vault') ? (int) DB::table('sys_vault')->when($ent, fn ($x) => $x->whereIn('fk_id_ent', [0, $ent]))->count() : 0, 'open' => null],
+            ],
+            'due' => array_slice($due, 0, 200), 'expired' => count(array_filter($due, fn ($d) => $d['state'] === 'EXPIRED')), 'soon' => count(array_filter($due, fn ($d) => $d['state'] === 'SOON')),
+            'reveals' => DB::table('sys_audit_log as l')->leftJoin('t_users as u', 'u.id', '=', 'l.user_id')->where('l.action', 'REVEAL')->when($ent, fn ($x) => $x->where('l.fk_id_ent', $ent))->orderByDesc('l.id')->limit(20)
+                ->get(['l.created_at', 'l.table_name', 'l.record_id', 'l.changes_json', 'u.login_id'])->map(fn ($x) => ['at' => $x->created_at, 'table' => $x->table_name, 'id' => $x->record_id, 'who' => $x->login_id, 'field' => json_decode((string) $x->changes_json, true)['field'] ?? '', 'result' => json_decode((string) $x->changes_json, true)['result'] ?? '']),
+        ];
+    }
+
+    public function merges(Request $r)
+    {
+        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER'], true), 403);
+        return ['rows' => DB::table('sys_merge_map')->orderByDesc('id')->limit(500)->get()];
+    }
+
+    public function registry(Request $r)
+    {
+        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER'], true), 403);
+        $q = trim((string) $r->query('q', ''));
+        $forms = DB::table('sys_registry')->groupBy('form_key', 'form_title', 'form_kind')->selectRaw('form_key, form_title, form_kind, COUNT(*) fields, SUM(required = 1) required, MAX(table_name) tbl')->orderBy('form_key')->get();
+        $fields = $q === '' ? [] : DB::table('sys_registry')->where(fn ($w) => $w->where('form_key', 'like', "%$q%")->orWhere('field_name', 'like', "%$q%")->orWhere('label', 'like', "%$q%")->orWhere('column_name', 'like', "%$q%"))->orderBy('form_key')->orderBy('section_no')->orderBy('field_no')->limit(300)
+            ->get(['form_key', 'section', 'field_name', 'label', 'type', 'required', 'table_name', 'column_name', 'visible_to', 'secret']);
+        return ['forms' => $forms, 'fields' => $fields, 'total_fields' => DB::table('sys_registry')->count()];
+    }
 }

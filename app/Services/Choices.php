@@ -36,6 +36,9 @@ class Choices
             'BASE' => ['Temu\'s base price (what the seller is paid)', 'Uses "activity goods base price", else "goods base price", × quantity.'], 'RETAIL' => ['Retail price the buyer paid', 'Uses "retail price total" of the line.']]],
         'MENU_NAMES' => ['Which names does the menu show?', 'Only the words in the menu change; every screen stays where it is.', 'SIMPLE', [
             'SIMPLE' => ['Short names', 'For example "Owner Home" – the part in brackets is left out.'], 'ORIGINAL' => ['Full names of the specification', 'For example "Owner Home ("Command Center")".']]],
+        'VAULT_REVEAL' => ['Who may reveal a secret (passwords, memorable answers, full account numbers)?', 'Every reveal and every refusal is written to the audit log with the user, the record and the field – never the value.', 'OWNER', [
+            'OWNER' => ['Owner only', 'Everybody else sees ••••; the Owner opens a value when it is needed.'],
+            'OWNER_MANAGER' => ['Owner and Manager', 'A Manager who may open the record may also reveal its secrets.']]],
         'VAT_REGISTERED' => ['Is the company registered for VAT?', 'This is a fact about the company, not a preference. It decides where the VAT inside fees and expenses goes.', '0', [
             '0' => ['No', 'VAT paid on fees and expenses is part of the cost.'],
             '1' => ['Yes', 'VAT on marketplace fees and on expenses is kept apart as VAT to claim back (account 1400) and shown in the VAT report.']], true],

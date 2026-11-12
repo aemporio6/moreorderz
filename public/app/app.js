@@ -88,6 +88,13 @@
       if (r === '#/quick-buy') return await pageQuickBuy();
       if (r === '#/forecast') return await pageForecast();
       if (r === '#/labels') return await pageLabels();
+      if (r === '#/import') return pageImportHub();
+      if (r === '#/import-history') return await pageImportHistory();
+      if (r.startsWith('#/tracking-upload')) return await pageTrackingUpload();
+      if (r === '#/calculator') return pageCalculator();
+      if (r === '#/registry') return await pageRegistry();
+      if (r === '#/merges') return await pageMerges();
+      if (r === '#/accounts') return await pageAccounts();
       if (r === '#/setup') return await pageSetup();
       if ((mt = r.match(/^#\/po\/(\d+)/))) return await pagePo(+mt[1]);
       if (r === '#/fx') return await pageFx();
@@ -142,7 +149,7 @@
   function pageScreen(no) {
     const [, it] = findItem(i => i.no === no);
     $('#main').innerHTML = `<div class="page-head"><div><h1>${esc(it ? it.name : 'Screen ' + no)}</h1><div class="sub">Screen ${esc(no)} of the system map</div></div></div>
-      <div class="card"><div class="empty">${ic('wand')}<div>This screen is built in a later step of the build plan (see PROGRESS.md). Its records can already be created from + Create.</div></div></div>`;
+      <div class="card"><div class="empty">${ic('wand')}<div>${({ '14.2': 'Drive folders need the connection to Google Drive – it comes with the outside connections (part 6).', '6.4': 'The marketplace operations hubs come with the outside connections to the marketplaces (part 6). Their money and order files are loaded today under Import a file.', '12.7': 'Subscriptions (software and services the company pays every month) are not built yet. Book them as expenses meanwhile.', '12.1': 'The people and companies are under People › People & companies.' })[no] || 'This screen is not built yet. Its records can already be created from + Create.'}</div></div></div>`;
   }
 
   const fmtCell = (v, type, row, name) => { if (row[name + '__label'] !== undefined) return esc(row[name + '__label']); if (v === null || v === undefined || v === '') return '<span class="faint">—</span>';
@@ -965,6 +972,61 @@
       [{ name: 'qty', label: 'Units to buy', type: 'number', required: true, value: x.units || '' }, { name: 'reason', label: 'Reason' + (m !== null && m < d.min_margin || x.risk_flags ? ' (needed)' : ' (optional)') }], async v => { const r = await api(`research/${id}/go`, { method: 'POST', body: v }); go('#/cycle/' + r.cycle); return r; }, 'GO');
   }
 
+  function pageImportHub() {
+    const tiles = [['#/orders', 'Orders', 'eBay orders report, Temu order list, any order table – Orders › Load order file.'], ['#/settlements', 'Marketplace money files', 'TikTok workbook, Amazon settlement (date range and flat file V2), eBay transaction report, OnBuy / Temu tables.'],
+      ['#/bank', 'Bank statements', 'CSV or Excel from the bank, in the layout of that bank.'], ['#/labels', 'Carrier label PDFs', 'Labels downloaded from the carrier, linked to their orders.'], ['#/import-history', 'Everything loaded so far', 'Every file, when, by whom, new / already there / problems; and the old-tool import, table by table.']];
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Import a file</h1><div class="sub">Each kind of file is loaded where its work is done. The tool finds the layout from the file itself; a file loaded twice adds nothing.</div></div></div>
+      <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">${tiles.map(([h, t, w]) => `<a class="card" href="${h}" style="display:block;padding:14px;text-decoration:none;color:inherit"><b>${esc(t)}</b><div class="small muted" style="margin-top:4px">${esc(w)}</div></a>`).join('')}</div>`;
+  }
+  async function pageImportHistory() {
+    busy(true); let d; try { d = await api('import-history'); } finally { busy(false); }
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Import history</h1><div class="sub">Every file loaded into the tool, newest first.</div></div></div>
+      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>When</th><th>Kind</th><th>File</th><th>Shop</th><th>Period</th><th class="num">Rows</th><th class="num">New</th><th class="num">Already there</th><th class="num">Problems</th><th>By</th></tr></thead><tbody>${d.rows.map(b => `<tr style="${b.undone ? 'opacity:.5' : ''}"><td style="white-space:nowrap">${esc((b.imported_at || '').slice(0, 16))}</td><td>${esc(b.report_type)}${b.undone ? ' <span class="chip lock">undone</span>' : ''}</td><td>${esc(b.file_name)}</td><td>${esc(b.shop || '')}</td><td style="white-space:nowrap">${esc(b.period_from || '')}${b.period_to ? ' – ' + esc(b.period_to) : ''}</td><td class="num">${b.rows_total}</td><td class="num">${b.rows_new}</td><td class="num">${b.rows_duplicate}</td><td class="num">${b.rows_error}</td><td>${esc(b.by || '')}</td></tr>`).join('')}</tbody></table>${d.rows.length ? '' : '<div class="empty">No file loaded yet.</div>'}</div></div>
+      ${d.old.length ? `<div class="card" style="margin-top:12px"><div class="card-h"><h3>Old tool → new tool, table by table</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Old table</th><th>Plan</th><th class="num">Old rows</th><th class="num">Imported</th><th class="num">Already there</th><th class="num">Merged</th><th class="num">Failed</th><th>Columns left out / masked</th></tr></thead><tbody>${d.old.map(o => `<tr><td>${esc(o.old_table)}</td><td>${esc(o.plan)}</td><td class="num">${o.old_rows}</td><td class="num">${o.imported}</td><td class="num">${o.already_there}</td><td class="num">${o.merged}</td><td class="num">${o.failed}</td><td class="small">${esc([o.left_out_columns, o.masked_columns].filter(Boolean).join(' · '))}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
+      ${(d.fields || []).length ? `<div class="card" style="margin-top:12px"><div class="card-h"><h3>Old tool → new tool, column by column</h3><span class="small muted">${d.fields.filter(f => f.status === 'OK').length} OK · ${d.fields.filter(f => f.status === 'MASKED').length} masked · ${d.fields.filter(f => f.status === 'DIFF').length} to look at</span></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Table.column</th><th class="num">Rows on both sides</th><th class="num">Filled before</th><th class="num">Filled now</th><th class="num">Differ</th><th>Result</th></tr></thead><tbody>${d.fields.map(f => `<tr><td><code>${esc(f.old_table)}.${esc(f.column_name)}</code></td><td class="num">${f.rows_both}</td><td class="num">${f.old_filled}</td><td class="num">${f.new_filled}</td><td class="num">${f.differ}</td><td><span class="chip ${({ OK: 'done', MASKED: 'pend', DIFF: 'err' })[f.status] || 'lock'}">${esc(f.status)}</span>${f.note ? `<div class="small muted">${esc(f.note)}</div>` : ''}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
+  }
+  async function pageTrackingUpload(st = {}) {
+    busy(true); let d; try { d = await api('tracking-upload?' + new URLSearchParams({ shop: st.shop || '', from: st.from || '', to: st.to || '' })); } finally { busy(false); }
+    const qs = new URLSearchParams({ shop: d.shop || '', from: d.from, to: d.to, csv: 1 });
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Tracking upload</h1><div class="sub">The file the marketplace needs back: one line per order with its tracking number. Download it and upload it in the marketplace's seller centre.</div></div><div class="actions"><a class="btn primary" href="/api/tracking-upload?${qs}">${ic('ext')} Download CSV</a></div></div>
+      <div class="card"><div class="list-bar"><select class="q" id="tuS" style="min-width:0"><option value="">All shops</option>${d.shops.map(s => `<option value="${s.id}" ${s.id == d.shop ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select><input class="q" id="tuF" type="date" value="${esc(d.from)}" style="min-width:0"><input class="q" id="tuT" type="date" value="${esc(d.to)}" style="min-width:0"></div>
+      <div class="tbl-wrap"><table class="t"><thead><tr><th>Order</th><th>Shop</th><th>Date</th><th class="num">Units</th><th>Tracking</th><th>Service</th><th>Label</th></tr></thead><tbody>${d.rows.map(x => `<tr><td>${esc(x.order_no)}</td><td>${esc(x.shop || '')}</td><td>${esc(x.d)}</td><td class="num">${x.units}</td><td>${esc(x.tracking_no)}</td><td>${esc(x.service || '')}</td><td>${esc(x.label_status || '')}</td></tr>`).join('')}</tbody></table>${d.rows.length ? '' : '<div class="empty">No order with a tracking number in these dates.</div>'}</div></div>
+      <div class="small muted" style="margin-top:8px">The columns are a common layout (order-id, tracking-number, carrier-service, ship-date). A marketplace whose upload needs other column names: rename the header in the file – a layout per marketplace profile is not built yet.</div>`;
+    const go2 = () => pageTrackingUpload({ shop: $('#tuS').value, from: $('#tuF').value, to: $('#tuT').value }); $('#tuS').onchange = go2; $('#tuF').onchange = go2; $('#tuT').onchange = go2;
+  }
+  function pageCalculator() {
+    const f = [['sell', 'Selling price', 20], ['cost', 'Product cost per unit', 4], ['freight', 'Freight per unit', 1.5], ['postage', 'Postage and packing per unit', 0], ['fee', 'Marketplace fee %', 13], ['ads', 'Advertising %', 5], ['vat', 'VAT inside the price %', 0]];
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Marketplace calculator</h1><div class="sub">What is left of one sale: price less VAT, marketplace fee, advertising, product, freight and postage. Change any number.</div></div></div>
+      <div class="card"><div class="card-b"><div class="form" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px">${f.map(([k, l, v]) => `<div class="fld"><label for="c_${k}">${esc(l)}</label><input id="c_${k}" type="number" step="0.01" value="${v}"></div>`).join('')}</div></div>
+      <div class="card-b" id="cOut" style="border-top:1px solid var(--line)"></div></div>`;
+    const calc = () => { const g = k => +$('#c_' + k).value || 0, sell = g('sell'), vat = sell - sell / (1 + g('vat') / 100), fee = sell * g('fee') / 100, ads = sell * g('ads') / 100, cost = g('cost') + g('freight') + g('postage'), left = sell - vat - fee - ads - cost, net = sell - vat;
+      $('#cOut').innerHTML = `<table class="t"><tbody>${[['Selling price', sell], ['− VAT inside', -vat], ['− Marketplace fee', -fee], ['− Advertising', -ads], ['− Product, freight, postage', -cost]].map(([l, v]) => `<tr><td>${l}</td><td class="num">${amt(v)}</td></tr>`).join('')}<tr><td><b>Left per unit</b></td><td class="num"><b>${amt(left)}</b></td></tr><tr><td>Margin on the price without VAT</td><td class="num"><b>${net > 0 ? (left / net * 100).toFixed(1) : '—'} %</b></td></tr><tr><td>Return on the product cost</td><td class="num">${cost > 0 ? (left / cost * 100).toFixed(1) : '—'} %</td></tr></tbody></table>`; };
+    $$('#main input').forEach(i => i.oninput = calc); calc();
+  }
+  async function pageRegistry(q = '') {
+    busy(true); let d; try { d = await api('registry?q=' + encodeURIComponent(q)); } finally { busy(false); }
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Field registry</h1><div class="sub">Every form of the tool and its fields, as the screens are built from it: ${d.forms.length} forms, ${d.total_fields.toLocaleString('en-GB')} fields. Search a field to see where it lives.</div></div></div>
+      <div class="card"><div class="list-bar"><input class="q" id="rgQ" placeholder="Field, label, column or form…" value="${esc(q)}"></div>
+      ${q ? `<div class="tbl-wrap"><table class="t"><thead><tr><th>Form</th><th>Section</th><th>Field</th><th>Label</th><th>Type</th><th>Table.column</th><th>Who sees it</th></tr></thead><tbody>${d.fields.map(x => `<tr><td>${esc(x.form_key)}</td><td>${esc(x.section || '')}</td><td><code>${esc(x.field_name)}</code></td><td>${esc(x.label)}${+x.required ? ' <span class="req">*</span>' : ''}${+x.secret ? ' <span class="chip lock">secret</span>' : ''}</td><td>${esc(x.type)}</td><td class="small">${esc([x.table_name, x.column_name].filter(Boolean).join('.'))}</td><td class="small">${esc(x.visible_to || 'all')}</td></tr>`).join('')}</tbody></table>${d.fields.length ? '' : '<div class="empty">No field found.</div>'}</div>`
+        : `<div class="tbl-wrap"><table class="t"><thead><tr><th>Form</th><th>Title</th><th>Kind</th><th>Table</th><th class="num">Fields</th><th class="num">Required</th></tr></thead><tbody>${d.forms.map(x => `<tr class="click" data-fk="${esc(x.form_key)}"><td><code>${esc(x.form_key)}</code></td><td>${esc(x.form_title || '')}</td><td>${esc(x.form_kind || '')}</td><td>${esc(x.tbl || '—')}</td><td class="num">${x.fields}</td><td class="num">${x.required}</td></tr>`).join('')}</tbody></table></div>`}</div>`;
+    $('#rgQ').onkeydown = e => { if (e.key === 'Enter') pageRegistry(e.target.value.trim()); };
+    $$('#main [data-fk]').forEach(tr => tr.onclick = () => pageRegistry(tr.dataset.fk));
+  }
+  async function pageAccounts() {
+    busy(true); let d; try { d = await api('accounts-dash'); } finally { busy(false); }
+    const chip = st => st === 'EXPIRED' ? '<span class="chip err">Expired</span>' : '<span class="chip warn">Within 60 days</span>';
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Accounts</h1><div class="sub">People, staff, companies, shops, bank accounts and cards in one place: what expires soon, and who opened a secret.</div></div></div>
+      <div class="kpis">${d.tiles.map(t => `<div class="card kpi" ${t.open ? `data-go="${esc(t.open)}" style="cursor:pointer"` : ''}><div class="bar"></div><div class="lbl">${esc(t.label)}</div><div class="val">${t.n}</div>${t.of != null && t.of !== t.n ? `<div class="foot">${t.of} incl. inactive</div>` : ''}</div>`).join('')}</div>
+      <div class="card" style="margin-top:12px"><div class="card-h"><h3>Expires soon · ${d.expired} expired, ${d.soon} within 60 days</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Who</th><th>What</th><th>Date</th><th>State</th></tr></thead><tbody>${d.due.map(x => `<tr><td><a href="${esc(x.open)}">${esc(x.who)}</a></td><td>${esc(x.what)}</td><td>${esc(x.date)}</td><td>${chip(x.state)}</td></tr>`).join('')}</tbody></table>${d.due.length ? '' : '<div class="empty">Nothing expires in the next 60 days.</div>'}</div></div>
+      <div class="card" style="margin-top:12px"><div class="card-h"><h3>Secrets opened (last 20)</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>When</th><th>Who</th><th>Record</th><th>Field</th><th>Result</th></tr></thead><tbody>${d.reveals.map(x => `<tr><td>${esc(x.at)}</td><td>${esc(x.who || '')}</td><td>${esc(x.table)} #${x.id}</td><td><code>${esc(x.field)}</code></td><td>${x.result === 'DENIED' ? '<span class="chip err">Denied</span>' : `<span class="chip">${esc(x.result)}</span>`}</td></tr>`).join('')}</tbody></table>${d.reveals.length ? '' : '<div class="empty">No secret has been opened.</div>'}</div></div>`;
+    $$('#main [data-go]').forEach(c => c.onclick = () => { location.hash = c.dataset.go; });
+  }
+  async function pageMerges() {
+    busy(true); let d; try { d = await api('merges'); } finally { busy(false); }
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Merged duplicates</h1><div class="sub">Records that were the same thing twice (found while the old tool's data was brought over) and were kept as one. Each row says which record was folded into which.</div></div></div>
+      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>What</th><th>From (old)</th><th>Kept</th><th class="num">Score</th><th>Status</th><th>When</th></tr></thead><tbody>${d.rows.map(m => `<tr><td>${esc(m.entity || '')}</td><td>${esc(m.source_table)} #${m.source_id}</td><td>${esc(m.master_table)} #${m.master_id}</td><td class="num">${m.match_score ?? ''}</td><td>${esc(m.status || '')}</td><td>${esc((m.decided_at || '').slice(0, 10))}</td></tr>`).join('')}</tbody></table>${d.rows.length ? '' : '<div class="empty">No duplicate was merged.</div>'}</div></div>
+      <div class="small muted" style="margin-top:8px">Finding new look-alike records in daily work and merging them by hand is not built yet.</div>`;
+  }
   async function pageLabels() {
     busy(true); let d; try { d = await api('labels'); } finally { busy(false); }
     const again = () => pageLabels();
@@ -1270,8 +1332,8 @@
   // ---------- form: built from the registry; Quick / Full; Back, Undo, Redo, Fill from last, suggestions ----------
   const lastSaved = (() => { try { return JSON.parse(localStorage.getItem('mo_last_forms') || '{}'); } catch (e) { return {}; } })();
   async function openForm(key, id, opt = {}) {
-    busy(true); let def, rec;
-    try { def = await api('form/' + key); rec = id ? (await api(`record/${key}/${id}`)).values : def.blank; } catch (e) { busy(false); return toast(e.message, 'err'); }
+    busy(true); let def, rec, vinfo = {};
+    try { def = await api('form/' + key); if (id) { vinfo = await api(`record/${key}/${id}`); rec = vinfo.values; } else rec = def.blank; } catch (e) { busy(false); return toast(e.message, 'err'); }
     busy(false);
     const flds = def.sections.flatMap(s => s.fields), hasQuick = flds.some(f => f.quick) && !id;
     let mode = hasQuick ? 'quick' : 'full';
@@ -1289,9 +1351,13 @@
     const cond = ex => { const m = ex.match(/^([\w.]+)\s*(!=|=|>|<)\s*(.*)$/); if (!m) return true; const h = String(val[m[1].replace(/^parent\./, '')] ?? ''); return m[2] === '=' ? h === m[3] : m[2] === '!=' ? h !== m[3] : m[2] === '>' ? +h > +m[3] : +h < +m[3]; };
     const input = f => { const idn = `${uid}_${f.name}`, v = val[f.name] ?? '', ro = f.readonly ? 'disabled' : '';
       if (f.numbered && !id && !v) return `<input id="${idn}" data-f="${f.name}" type="text" value="" placeholder="Given by the system when saved" autocomplete="off">`;
-      if (f.has_options) return `<div class="selwrap"><select id="${idn}" data-f="${f.name}" ${ro} ${f.type === 'multiselect' ? 'multiple' : ''}><option value="">${v !== '' ? esc(v) : 'Choose…'}</option></select>${f.add_form && !f.readonly ? `<button type="button" class="addbtn" data-add="${esc(f.name)}" title="Add a new one – opens its form, saves it to the list and selects it here">${ic('plus')}<span>Add</span></button>` : ''}</div>`;
+      if (f.has_options) return `<div class="selwrap"><select id="${idn}" data-f="${f.name}" ${ro} ${f.type === 'multiselect' ? 'multiple' : ''}><option value="">${v !== '' && String(v) !== '0' ? esc(v) : 'Choose…'}</option></select>${f.add_form && !f.readonly ? `<button type="button" class="addbtn" data-add="${esc(f.name)}" title="Add a new one – opens its form, saves it to the list and selects it here">${ic('plus')}<span>Add</span></button>` : ''}</div>`;
       if (f.type === 'textarea') return `<textarea id="${idn}" data-f="${f.name}" rows="3" ${ro}>${esc(v)}</textarea>`;
       if (f.type === 'check') return `<label class="chk"><input id="${idn}" data-f="${f.name}" type="checkbox" ${+v ? 'checked' : ''} ${ro}> Yes</label>`;
+      const vk = (vinfo.never || []).includes(f.col) ? 'NEVER' : (vinfo.card || []).includes(f.col) ? 'CARD' : (vinfo.vault || []).includes(f.col) ? 'VAULT' : (/(^|_)(cvv|cvc|pin)(_|$)/i.test(f.col || '') ? 'NEVER' : '');
+      if (vk === 'NEVER') return `<input id="${idn}" data-f="${f.name}" type="text" value="" disabled placeholder="Never stored (CVV / PIN)">`;
+      if (vk === 'CARD') return `<input id="${idn}" data-f="${f.name}" type="text" value="${esc(v)}" ${ro} autocomplete="off" placeholder="Card number"><div class="small muted">Only the last 4 digits are kept.</div>`;
+      if (vk === 'VAULT') return `<div style="display:flex;gap:6px"><input id="${idn}" data-f="${f.name}" type="password" value="${esc(v)}" ${ro} autocomplete="new-password" style="flex:1">${id && vinfo.may_reveal && v ? `<button type="button" class="btn sm" data-reveal="${f.name}" title="Show the value (logged)">Reveal</button>` : ''}</div><div class="small muted">Kept encrypted in the vault.${id && v ? ' Leave •••• to keep it; type - to remove it.' : ''}</div>`;
       const t = { number: 'number', money: 'number', date: 'date', email: 'email', phone: 'tel', link: 'url', file: 'text' }[f.type] || 'text';
       return `<input id="${idn}" data-f="${f.name}" type="${f.secret ? 'password' : t}" value="${esc(v)}" ${t === 'number' ? `step="${f.step || (f.type === 'money' ? '0.01' : 'any')}"` : ''} ${ro} autocomplete="off">`; };
     function draw(errors = {}) {
@@ -1307,12 +1373,16 @@
       try { optCache[f.name] = optCache[f.name] || (await api(`options/${key}/${f.name}`)).options; } catch (e) { optCache[f.name] = []; }
       const cur = String(val[f.name] ?? ''), multi = f.type === 'multiselect', picked = multi ? cur.split(',') : [cur];
       el.innerHTML = (multi ? '' : `<option value="">Choose…</option>`) + optCache[f.name].map(([v, l]) => `<option value="${esc(v)}" ${picked.includes(v) ? 'selected' : ''}>${esc(l)}</option>`).join(''); if (multi) return;
-      if (cur && !optCache[f.name].some(o => o[0] === cur)) el.insertAdjacentHTML('beforeend', `<option value="${esc(cur)}" selected>${esc(cur)}</option>`); }
+      if (cur && cur !== '0' && !optCache[f.name].some(o => o[0] === cur)) el.insertAdjacentHTML('beforeend', `<option value="${esc(cur)}" selected>${esc(cur)}</option>`); }
     const read = el => el.type === 'checkbox' ? (el.checked ? 1 : 0) : el.multiple ? [...el.selectedOptions].map(o => o.value).join(',') : el.value;
     const setVal = (name, v) => { val[name] = v; const el = $(`[data-f="${name}"]`, ov); if (el) { if (el.type === 'checkbox') el.checked = !!+v; else el.value = v; } };
     const change = (name, nw) => { const old = val[name] ?? ''; if (String(old) === String(nw)) return; undo.push({ name, old, nw }); redo.length = 0; val[name] = nw; if (flds.some(f => f.show_if && f.show_if.startsWith(name))) draw(); paint(); };
     const paint = () => { const q = a => $(`[data-a=${a}]`, bar); q('undo').disabled = !undo.length; q('redo').disabled = !redo.length; if (q('last')) q('last').disabled = !lastSaved[key]; };
     $('#fBody', ov).addEventListener('change', e => { const el = e.target; if (!el.dataset.f) return; change(el.dataset.f, read(el)); const w = el.closest('.fld'); if (w && w.classList.contains('has-err')) { w.classList.remove('has-err'); const m = w.querySelector('.errtext'); m && m.remove(); } });
+    // a secret: shown only on request, and every reveal is logged
+    $('#fBody', ov).addEventListener('click', async e => { const b = e.target.closest('[data-reveal]'); if (!b) return; const el = $(`[data-f="${b.dataset.reveal}"]`, ov);
+      try { const x = await api(`reveal/${key}/${id}`, { method: 'POST', body: { field: b.dataset.reveal } }); if (x.value == null) return toast('Nothing is kept for this field.', 'warn');
+        el.type = 'text'; el.value = x.value; val[b.dataset.reveal] = x.value; b.remove(); toast('Shown – this reveal is in the audit log.'); } catch (x) { toast(x.message, 'err'); } });
     // suggestions: the values used most on this form, as quick-pick chips under an empty text field
     $('#fBody', ov).addEventListener('focusin', async e => { const el = e.target, name = el.dataset.f; $$('.mo-chips', ov).forEach(c => c.remove());
       if (!name || el.tagName !== 'INPUT' || !['text', 'tel', 'email'].includes(el.type) || el.value || id) return;

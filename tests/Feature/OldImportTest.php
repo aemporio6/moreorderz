@@ -45,6 +45,9 @@ class OldImportTest extends TestCase
             $pdo->exec("CREATE TABLE t_stock_movements (id INT PRIMARY KEY, fk_id_product INT, qty_change INT)"); $pdo->exec("INSERT INTO t_stock_movements VALUES (1,9701,40)");
             $pdo->exec("CREATE TABLE t_product_vendors (id INT PRIMARY KEY, fk_id_ent INT, SKU_VENDOR VARCHAR(50), product_name_vendor VARCHAR(100), stock INT, raw_price DECIMAL(10,2), landing_price DECIMAL(10,2), f_active TINYINT)");
             $pdo->exec("INSERT INTO t_product_vendors VALUES (9701,1,'OLD-SKU-1','Old product one',40,2.00,2.50,1),(9702,1,'OLD-SKU-2','Old product two',10,0,0,1),(9703,1,'OLD-SKU-3','Old product three',0,1,1,1)");
+            // lists the old tool kept under ids the new tool already uses for its own seeded lists (id clash)
+            $pdo->exec("CREATE TABLE cat_references (id INT PRIMARY KEY, reference_heading VARCHAR(255), f_active TINYINT, fk_id_ent INT)"); $pdo->exec("INSERT INTO cat_references VALUES (1,'UTILITY',1,1),(2,'Ports of loading',1,0)");
+            $pdo->exec("CREATE TABLE reference_items (id INT PRIMARY KEY, fk_reference_id INT, reference_name VARCHAR(255), fk_id_ent INT)"); $pdo->exec("INSERT INTO reference_items VALUES (1,1,'Gas',1),(2,1,'Electricity',1)");
             self::$ready = true;
         } catch (\Throwable $e) { self::$why = $e->getMessage(); }
     }
@@ -75,10 +78,10 @@ class OldImportTest extends TestCase
         // every old row is in exactly one bucket
         $t = $x['totals'];
         $this->assertSame($t['old_rows'], $t['imported'] + $t['already_there'] + $t['merged'] + $t['failed'] + $t['later'] + $t['retired'] + $t['tool']);
-        $this->assertSame([8, 1, 1], [$t['to_copy'], $t['retired'], $t['tool']]);   // 3 currencies + 1 user + 1 bank row + 3 products
+        $this->assertSame([12, 1, 1], [$t['to_copy'], $t['retired'], $t['tool']]);   // 3 currencies + 1 user + 1 bank row + 3 products + 2 lists + 2 list items
         // again: nothing twice
         $y = OldImport::run('mo_old_test', ['mask' => true])['totals'];
-        $this->assertSame([0, 7, 1, 0], [$y['imported'], $y['already_there'], $y['merged'], $y['failed']]);
+        $this->assertSame([0, 11, 1, 0], [$y['imported'], $y['already_there'], $y['merged'], $y['failed']]);
         $this->assertSame(1, DB::table('cat_currency')->where('currency_code', 'ZZA')->count());
         $this->assertSame(2, DB::table('mo_import_report')->where('old_table', 't_users')->count(), 'each run leaves its report');
     }
@@ -126,10 +129,50 @@ class OldImportTest extends TestCase
         $this->assertSame([0, 0], [$d['totals']['imported'], DB::table('t_users')->where('id', 9001)->count()]);
         $this->assertStringContainsString('3 row(s) would be imported', collect($d['rows'])->firstWhere('old_table', 'cat_currency')['note']);
         OldImport::run('mo_old_test', ['only' => ['t_account_banks']]);
-        $this->assertSame('12345678', DB::table('t_account_banks')->where('id', 9101)->value('account_no'), 'live import: real value, still no security code or PIN');
+        // live import: the real value is kept – encrypted in the vault, the record shows •••• + last 4; still no security code or PIN
+        $this->assertSame('•••• 5678', DB::table('t_account_banks')->where('id', 9101)->value('account_no'));
+        $this->assertSame('12345678', \Illuminate\Support\Facades\Crypt::decryptString(DB::table('sys_vault')->where(['table_name' => 't_account_banks', 'record_id' => 9101, 'column_name' => 'account_no'])->value('cipher')));
         $this->assertSame(0, DB::table('t_users')->where('id', 9001)->count(), '--only limits the tables');
         try { OldImport::run(DB::getDatabaseName()); $this->fail('same database'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('are the same', $e->getMessage()); }
         try { OldImport::run('no_such_db_here'); $this->fail('no db'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('has no tables', $e->getMessage()); }
         $this->assertSame(['COPY', 'LATER', 'RETIRED', 'TOOL'], [OldImport::plan('t_branches'), OldImport::plan('t_sale'), OldImport::plan('t_import_options'), OldImport::plan('cat_rights')]);
+    }
+
+    public function test_field_by_field_comparison_finds_kept_masked_and_changed_columns(): void
+    {
+        OldImport::run('mo_old_test', ['only' => ['cat_currency', 't_account_banks'], 'mask' => false]);
+        $x = OldImport::compareFields('mo_old_test', ['only' => ['cat_currency', 't_account_banks']]);
+        $by = collect($x['rows'])->keyBy(fn ($r) => $r['old_table'] . '.' . $r['column_name']);
+        $this->assertSame('OK', $by['cat_currency.currency_code']['status']);
+        $this->assertArrayNotHasKey('t_account_banks.card_cvv', $by->all(), 'secret columns are never read, not even to compare');
+        $this->assertArrayNotHasKey('t_account_banks.atm_pin', $by->all());
+        $this->assertSame($x['columns'], DB::table('mo_import_fields')->where('run_code', $x['run'])->count());
+    }
+
+    public function test_old_rows_whose_id_the_new_tool_already_uses_for_something_else_get_a_new_id_and_their_links_follow(): void
+    {
+        $seeded = DB::table('cat_references')->where('id', 1)->value('reference_heading');
+        $this->assertNotSame('UTILITY', $seeded, 'the test needs the seeded list in id 1');
+        $x = OldImport::run('mo_old_test', ['only' => ['cat_references', 'reference_items'], 'mask' => false]);
+        $by = collect($x['rows'])->keyBy('old_table');
+        $this->assertSame($seeded, DB::table('cat_references')->where('id', 1)->value('reference_heading'), 'the seeded list is not touched');
+        $utility = DB::table('cat_references')->where('reference_heading', 'UTILITY')->value('id');
+        $this->assertNotNull($utility, 'the old list came over'); $this->assertNotEquals(1, $utility);
+        $this->assertSame(1, $by['cat_references']['imported']); $this->assertSame(1, $by['cat_references']['already_there'], 'id 2 holds the same list: truly already there');
+        $this->assertStringContainsString('new id', $by['cat_references']['note']);
+        $this->assertEquals($utility, OldImport::mapped('cat_references', 1));
+        $items = DB::table('reference_items')->whereIn('reference_name', ['Gas', 'Electricity'])->pluck('fk_reference_id', 'reference_name');
+        $this->assertCount(2, $items, 'both old items came over, even the one whose id clashed');
+        $this->assertEquals([$utility, $utility], array_values($items->all()), 'the items point to the new id of their list');
+        $this->assertSame('Urgent', DB::table('reference_items')->where('id', 1)->value('reference_name'));
+        // a second run brings nothing twice
+        OldImport::run('mo_old_test', ['only' => ['cat_references', 'reference_items'], 'mask' => false]);
+        $this->assertSame(1, DB::table('cat_references')->where('reference_heading', 'UTILITY')->count());
+        $this->assertSame(1, DB::table('reference_items')->where('reference_name', 'Gas')->count());
+        // the comparison follows the moved rows: nothing differs
+        $c = collect(OldImport::compareFields('mo_old_test', ['only' => ['cat_references', 'reference_items']])['rows'])->keyBy(fn ($r) => $r['old_table'] . '.' . $r['column_name']);
+        $this->assertSame('OK', $c['cat_references.reference_heading']['status']);
+        $this->assertSame('OK', $c['reference_items.reference_name']['status']);
+        $this->assertSame('OK', $c['reference_items.fk_reference_id']['status']);
     }
 }
