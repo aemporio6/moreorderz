@@ -31,7 +31,7 @@ abstract class TestCase extends BaseTestCase
             self::$installed = true;
         }
         DB::beginTransaction();
-        Registry::forget(); Settings::flush(); EventBus::reset(); TaskEngine::reset();
+        Registry::forget(); Settings::flush(); EventBus::reset(); TaskEngine::reset(); \App\Services\Rights::flush(); \App\Services\HomeCards::reset();
         app()->register(\App\Providers\AppServiceProvider::class, true);
         if (! DB::table('t_enterprise')->where('id', 1)->exists()) {
             DB::table('t_enterprise')->insert(['id' => 1, 'fk_id_module' => 0, 'iso_ent' => 'TST', 'ent_name' => 'Test Company Ltd', 'ent_address' => '1 Test Street', 'f_active' => 1, 'ent_short' => 'TST']);

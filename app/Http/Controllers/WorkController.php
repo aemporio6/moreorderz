@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Services\Audit;
 use App\Services\Context;
 use App\Services\RecordService;
+use App\Services\Rights;
 use App\Services\SearchIndex;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,12 +22,13 @@ class WorkController extends Controller
 
     public function page(string $key, int $id)
     {
+        Rights::check('VIEW', $key);
         return RecordService::page($key, $id);
     }
 
     public function export(Request $r, string $key)
     {
-        abort_unless(in_array(Context::role(), self::CAN_EXPORT, true), 403, 'Your role cannot export lists.');
+        abort_unless(Rights::can(Context::role(), 'EXPORT', $key), 403, 'Your role cannot export this list.');
         [$head, $rows] = RecordService::export($key, $r->only(['q', 'sort', 'dir', 'filter']));
         return response()->streamDownload(function () use ($head, $rows) {
             $o = fopen('php://output', 'w');

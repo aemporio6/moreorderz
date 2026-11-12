@@ -42,7 +42,7 @@
       <button class="tb-btn icon hide-m" id="btnBack" title="Back">${ic('chev')}</button>
       <button class="tb-btn icon" id="btnRefresh" title="Refresh data (keeps filters)">${ic('refresh')}</button>
       <button class="tb-btn icon bell" id="btnBell" title="My tasks">${ic('bell')}<span class="dot" id="bellDot" style="display:${b.tasks_open ? 'flex' : 'none'}">${b.tasks_open}</span></button>
-      <div class="user" id="btnUser" title="Sign out"><div class="avatar">${esc(ini)}</div><div class="hide-m"><div style="font-weight:600;font-size:13px">${esc(b.user.name)}</div><div class="small muted">${esc(b.user.role)} · sign out</div></div></div>`;
+      <div class="user" id="btnUser" title="My account: password, 2-step sign-in, sign out"><div class="avatar">${esc(ini)}</div><div class="hide-m"><div style="font-weight:600;font-size:13px">${esc(b.user.name)}</div><div class="small muted">${esc(b.user.role)}</div></div></div>`;
     $('#btnBack svg') && ($('#btnBack svg').style.transform = 'rotate(180deg)');
     $('#btnSide').onclick = () => document.body.classList.toggle('side-open');
     wireSearch();
@@ -51,7 +51,7 @@
     $('#btnRefresh').onclick = () => render();
     $('#btnBack').onclick = () => { if (S.hist.length) { S.fwd.push(S.route); go(S.hist.pop(), false); } };
     $('#btnBell').onclick = () => go('#/tasks');
-    $('#btnUser').onclick = () => $('#logoutForm').submit();
+    $('#btnUser').onclick = () => go('#/me');
     $('#selEnt').onchange = async e => { busy(true); try { await api('company', { method: 'POST', body: { ent: +e.target.value } }); S.boot = await api('boot'); drawTop(); drawSide(); render(); toast('Now working in ' + e.target.selectedOptions[0].text); } catch (x) { toast(x.message, 'err'); } busy(false); };
   }
   const ICONS = { Home: 'home', Research: 'search', Buying: 'buy', Selling: 'sell', Money: 'money', Dispatch: 'truck', Documents: 'docs', Reports: 'reports', Setup: 'setup', Work: 'work' };
@@ -72,21 +72,29 @@
       if ((mt = r.match(/^#\/list\/([\w-]+)(?:\?(.*))?/))) { const f = {}; new URLSearchParams(mt[2] || '').forEach((v, k) => { const m2 = k.match(/^f\[(\w+)\]$/); if (m2) f[m2[1]] = v; }); return await pageList(mt[1], { filter: f }); }
       if ((mt = r.match(/^#\/rec\/([\w-]+)\/(\d+)/))) return await pageRecord(mt[1], +mt[2]);
       if (r.startsWith('#/tasks')) return await pageTasks(r.includes('scope=all') ? 'all' : 'mine');
+      if (r === '#/users') return await pageUsers();
+      if (r === '#/settings') return await pageSettings();
+      if (r.startsWith('#/audit')) return await pageAudit();
+      if (r === '#/health') return await pageHealth();
+      if (r === '#/ledger') return await pageLedger();
+      if (r === '#/me') return await pageMe();
       if ((mt = r.match(/^#\/screen\/([\d.]+)/))) return pageScreen(mt[1]);
-      return pageHome();
+      return await pageHome();
     } catch (e) { m.innerHTML = `<div class="card"><div class="empty">${ic('alert')}<div>${esc(e.message)}</div></div></div>`; }
   }
   function findItem(pred) { for (const s of S.boot.menu) for (const i of s.items) if (pred(i)) return [s, i]; return [null, null]; }
 
-  function pageHome() {
-    const b = S.boot;
-    $('#main').innerHTML = `<div class="page-head"><div><h1>Good to see you, ${esc(b.user.name.split(' ')[0])}</h1><div class="sub">${esc((b.companies.find(c => c.id == b.ent) || {}).name || '')} · ${esc(b.today)}</div></div>
+  async function pageHome() {
+    const b = S.boot; let d = { cards: [], recent: [] };
+    try { d = await api('home'); } catch (e) {}
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Good to see you, ${esc(b.user.name.split(' ')[0])}</h1><div class="sub">${esc((b.companies.find(c => c.id == b.ent) || {}).name || '')} · ${esc(b.user.role)} · ${esc(b.today)}</div></div>
       <div class="actions"><button class="btn primary" id="hCreate">${ic('plus')} Create</button></div></div>
-      <div class="kpis"><div class="card kpi ${b.tasks_open ? 'warn' : 'done'}" data-go="#/tasks"><div class="bar"></div><div class="lbl">My open tasks</div><div class="val">${b.tasks_open}</div><div class="foot">Tasks opened by rules close themselves when the problem is gone</div></div></div>
+      <div class="kpis">${d.cards.map(c => `<div class="card kpi ${esc(c.tone || '')}" data-go="${esc(c.go || '')}"><div class="bar"></div><div class="lbl">${esc(c.label)}</div><div class="val">${esc(c.value)}</div><div class="foot">${esc(c.foot || '')}</div></div>`).join('')}</div>
+      ${d.recent.length ? `<div class="card" style="margin-top:16px"><div class="card-h"><h3>Where you worked last</h3></div><div class="card-b">${d.recent.map(r => `<a href="${esc(r.url)}" style="display:inline-block;margin:0 14px 8px 0">${esc(r.title)} <span class="small muted">${esc(r.subtitle)}</span></a>`).join('')}</div></div>` : ''}
       <div class="card" style="margin-top:16px"><div class="card-h"><h3>Menu · in the order of the work</h3></div><div class="card-b"><div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px">
-      ${b.menu.map(s => `<a class="card kpi" href="${esc(s.items[0].route)}" style="text-decoration:none;color:inherit"><div class="lbl">${ic(secIcon(s.name))} ${esc(s.name)}</div><div class="foot">${s.items.length} screens</div></a>`).join('')}</div></div></div>`;
+      ${b.menu.filter(s => s.name !== 'Home').map(s => `<a class="card kpi" href="${esc(s.items[0].route)}" style="text-decoration:none;color:inherit"><div class="lbl">${ic(secIcon(s.name))} ${esc(s.name)}</div><div class="foot">${s.items.length} screens</div></a>`).join('')}</div></div></div>`;
     $('#hCreate').onclick = () => openCreate();
-    $$('#main [data-go]').forEach(k => k.onclick = () => go(k.dataset.go));
+    $$('#main [data-go]').forEach(k => k.onclick = () => k.dataset.go && go(k.dataset.go));
   }
   function pageScreen(no) {
     const [, it] = findItem(i => i.no === no);
@@ -173,6 +181,101 @@
       document.body.appendChild(box); box.onclick = () => { hide(); inp.value = ''; }; }, 220); };
     inp.onkeydown = e => { if (e.key === 'Escape') { hide(); inp.blur(); } if (e.key === 'Enter' && box) { const a = box.querySelector('a'); a && a.click(); } };
     document.addEventListener('click', e => { if (box && !e.target.closest('#sres') && e.target !== inp) hide(); });
+  }
+
+  // ---------- small form in a modal (users, password, settings) ----------
+  function miniForm(title, sub, fields, onSave, saveLabel = 'Save') {
+    const { ov, close } = modal(title, sub, `<div class="form">${fields.map(f => `<div class="fld ${f.required ? 'is-req' : ''}" data-w="${f.name}"><label for="mf_${f.name}"><span>${esc(f.label)}</span>${f.required ? ' <span class="req">*</span>' : ''}</label>
+      ${f.options ? `<select id="mf_${f.name}" data-f="${f.name}">${f.options.map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(f.value ?? '') ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`
+        : f.type === 'check' ? `<label class="chk"><input id="mf_${f.name}" data-f="${f.name}" type="checkbox" ${f.value ? 'checked' : ''}> Yes</label>`
+        : `<input id="mf_${f.name}" data-f="${f.name}" type="${f.type || 'text'}" value="${esc(f.value ?? '')}" autocomplete="${f.type === 'password' ? 'new-password' : 'off'}">`}${f.help ? `<div class="helptext" style="display:block">${esc(f.help)}</div>` : ''}</div>`).join('')}</div>${sub && sub.html ? sub.html : ''}`,
+      `<span class="left small muted" id="mfMsg"></span><button class="btn" id="mfCancel">Cancel</button><button class="btn primary" id="mfSave">${esc(saveLabel)}</button>`, false);
+    $('#mfCancel', ov).onclick = close;
+    $('#mfSave', ov).onclick = async () => { const v = {}; $$('[data-f]', ov).forEach(el => { v[el.dataset.f] = el.type === 'checkbox' ? el.checked : el.value; });
+      $$('.errtext', ov).forEach(e => e.remove()); $$('.has-err', ov).forEach(e => e.classList.remove('has-err')); busy(true);
+      try { const r = await onSave(v); close(); toast((r && r.message) || 'Saved'); }
+      catch (e) { Object.entries(e.errors || {}).forEach(([k, m]) => { const w = $(`[data-w="${k}"]`, ov); if (w) { w.classList.add('has-err'); w.insertAdjacentHTML('beforeend', `<div class="errtext">${esc(m[0] || m)}</div>`); } }); $('#mfMsg', ov).textContent = e.message; }
+      busy(false); };
+    return { ov, close };
+  }
+
+  // ---------- users and roles ----------
+  async function pageUsers() {
+    busy(true); let d; try { d = await api('users'); } finally { busy(false); }
+    const owner = S.boot.user.role === 'OWNER';
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Users and roles</h1><div class="sub">The role decides which menu items, forms and buttons a person sees. ${d.users.length} users.</div></div>
+      <div class="actions">${owner ? `<button class="btn primary" id="uNew">${ic('plus')} New user</button>` : ''}</div></div>
+      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>Name</th><th>Login</th><th>Role</th><th>Company</th><th>2-step</th><th>Last sign-in</th><th>Status</th></tr></thead><tbody>
+      ${d.users.map(u => `<tr class="${owner ? 'click' : ''}" data-id="${u.id}"><td>${esc(u.display_name || '—')}</td><td>${esc(u.login_id)}</td><td><span class="chip accent plain">${esc(u.role_code)}</span></td><td>${esc(u.company || '—')}</td><td>${+u.two_step ? '<span class="chip done">On</span>' : '<span class="chip pend">Off</span>'}</td><td>${esc(u.last_login_at || 'never')}</td>
+        <td>${!+u.has_password ? '<span class="chip warn">No password yet</span>' : +u.f_active ? '<span class="chip done">Active</span>' : '<span class="chip lock">Off</span>'}</td></tr>`).join('')}</tbody></table></div></div>`;
+    const edit = u => miniForm(u ? 'Edit user' : 'New user', u ? 'Leave the password empty to keep the current one.' : 'The person signs in with this login and password.', [
+      { name: 'display_name', label: 'Name', required: true, value: u && u.display_name }, { name: 'login_id', label: 'Login', required: true, value: u && u.login_id },
+      { name: 'role_code', label: 'Role', required: true, value: u ? u.role_code : 'VA', options: d.roles.map(r => [r, r]) }, { name: 'fk_id_ent', label: 'Company', required: true, value: u ? u.fk_id_ent : S.boot.ent, options: d.companies.map(c => [c.id, c.name]) },
+      { name: 'password', label: u ? 'New password' : 'Password', type: 'password', required: !u, help: 'At least 10 characters.' }, { name: 'f_active', label: 'Can sign in', type: 'check', value: u ? +u.f_active : 1 }],
+      async v => { const r = await api('users' + (u ? '/' + u.id : ''), { method: 'POST', body: v }); pageUsers(); return r; });
+    if (owner) { $('#uNew').onclick = () => edit(null); $$('#main tr[data-id]').forEach(tr => tr.onclick = () => edit(d.users.find(u => u.id == tr.dataset.id))); }
+  }
+
+  // ---------- my account: password, 2-step sign-in, sign out ----------
+  async function pageMe() {
+    $('#main').innerHTML = `<div class="page-head"><div><h1>My account</h1><div class="sub">${esc(S.boot.user.name)} · ${esc(S.boot.user.role)}</div></div><div class="actions"><button class="btn" id="mOut">Sign out</button></div></div>
+      <div class="card"><div class="card-h"><h3>Password</h3></div><div class="card-b"><button class="btn" id="mPw">Change password</button></div></div>
+      <div class="card" style="margin-top:12px"><div class="card-h"><h3>2-step sign-in</h3></div><div class="card-b"><p class="muted" style="margin-top:0">After the password, the tool asks for a 6-digit code from an authenticator app on your phone. A stolen password alone is then not enough.</p><div id="m2"></div></div></div>`;
+    $('#mOut').onclick = () => $('#logoutForm').submit();
+    $('#mPw').onclick = () => miniForm('Change password', '', [{ name: 'current', label: 'Current password', type: 'password', required: true }, { name: 'new', label: 'New password', type: 'password', required: true, help: 'At least 10 characters.' }], v => api('me/password', { method: 'POST', body: v }));
+    const s = await api('me/two-step');
+    $('#m2').innerHTML = s.on ? `<span class="chip done">On</span> <button class="btn sm" id="m2off" style="margin-left:10px">Switch off</button>`
+      : `<div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start"><div style="background:#fff;padding:8px;border-radius:8px;width:216px">${s.qr_svg}</div><div style="flex:1;min-width:220px"><p style="margin-top:0">1. Open an authenticator app (Google Authenticator, Microsoft Authenticator, Authy) and scan this square.<br>2. Type the 6-digit code it shows.</p><p class="small muted">Cannot scan? Type this key into the app: <code>${esc(s.secret)}</code></p><input class="q" id="m2code" inputmode="numeric" placeholder="6-digit code" style="min-width:140px"> <button class="btn primary" id="m2on">Switch on</button></div></div>`;
+    if (s.on) $('#m2off').onclick = async () => { await api('me/two-step-off', { method: 'POST' }); toast('2-step sign-in is off'); pageMe(); };
+    else $('#m2on').onclick = async () => { try { await api('me/two-step', { method: 'POST', body: { code: $('#m2code').value } }); toast('2-step sign-in is on'); pageMe(); } catch (e) { toast(e.message, 'err'); } };
+  }
+
+  // ---------- settings ----------
+  async function pageSettings() {
+    busy(true); let d; try { d = await api('settings'); } finally { busy(false); }
+    const ent = (S.boot.companies.find(c => c.id == S.boot.ent) || {}).name || 'this company';
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Settings</h1><div class="sub">A value for ${esc(ent)} wins over the value for all companies. ${d.settings.length} settings.</div></div></div>
+      <div class="card"><div class="list-bar"><input class="q" id="sQ" placeholder="Find a setting…"></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Setting</th><th>All companies</th><th>${esc(ent)}</th></tr></thead><tbody id="sBody"></tbody></table></div></div>`;
+    const draw = () => { const q = $('#sQ').value.trim().toLowerCase(); $('#sBody').innerHTML = d.settings.filter(s => !q || s.key.toLowerCase().includes(q)).map(s => `<tr><td><code>${esc(s.key)}</code></td><td class="click" data-k="${esc(s.key)}" data-s="global" style="cursor:pointer">${s.global === null ? '<span class="faint">—</span>' : esc(s.global)}</td><td class="click" data-k="${esc(s.key)}" data-s="company" style="cursor:pointer">${s.company === null ? '<span class="faint">same</span>' : esc(s.company)}</td></tr>`).join('');
+      $$('#sBody [data-k]').forEach(td => td.onclick = () => { const s = d.settings.find(x => x.key === td.dataset.k);
+        miniForm(s.key, td.dataset.s === 'global' ? 'Value for all companies' : 'Value for ' + ent + ' only', [{ name: 'value', label: 'Value', value: (s[td.dataset.s] === '••••' ? '' : s[td.dataset.s]) ?? '' }], async v => { const r = await api('settings', { method: 'POST', body: { key: s.key, value: v.value, scope: td.dataset.s } }); pageSettings(); return r; }); }); };
+    $('#sQ').oninput = draw; draw();
+  }
+
+  // ---------- audit log ----------
+  async function pageAudit(st = {}) {
+    busy(true); let d; try { d = await api('audit?' + new URLSearchParams({ page: st.page || 1, action: st.action || '', user: st.user || '', table: st.table || '' })); } finally { busy(false); }
+    const pages = Math.max(1, Math.ceil(d.total / 50));
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Audit log</h1><div class="sub">Every change, sign-in and export. ${d.total.toLocaleString('en-GB')} rows. Nothing here can be edited or deleted.</div></div></div>
+      <div class="card"><div class="list-bar"><input class="q" id="aU" placeholder="User login…" value="${esc(st.user || '')}"><input class="q" id="aT" placeholder="Table…" value="${esc(st.table || '')}"><select class="q" id="aA"><option value="">Every action</option>${['INSERT', 'UPDATE', 'DELETE', 'LOGIN', 'LOGIN_FAIL', 'LOGOUT', 'EXPORT', 'APPROVE', 'REJECT', 'LOCK', 'UNLOCK'].map(a => `<option ${st.action === a ? 'selected' : ''}>${a}</option>`).join('')}</select><button class="btn sm primary" id="aGo">Show</button></div>
+      <div class="tbl-wrap"><table class="t"><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Where</th><th>Change</th><th>IP</th></tr></thead><tbody>${d.rows.map(r => { let ch = ''; try { const c = JSON.parse(r.changes_json || 'null'); if (c && r.action === 'UPDATE') ch = Object.entries(c).map(([k, v]) => `<b>${esc(k)}</b>: ${esc(Array.isArray(v) ? (v[0] ?? '—') + ' → ' + (v[1] ?? '—') : v)}`).join('<br>'); else if (c) ch = esc(JSON.stringify(c).slice(0, 140)); } catch (e) {}
+        return `<tr><td style="white-space:nowrap">${esc(r.created_at)}</td><td>${esc(r.display_name || r.login_id || 'System')}</td><td><span class="chip ${r.action === 'LOGIN_FAIL' ? 'err' : r.action === 'EXPORT' ? 'warn' : 'pend'} plain">${esc(r.action)}</span></td><td>${esc(r.table_name)}${+r.record_id ? ' #' + r.record_id : ''}</td><td>${ch}${r.reason ? `<div class="small muted">${esc(r.reason)}</div>` : ''}</td><td>${esc(r.ip || '')}</td></tr>`; }).join('')}</tbody></table></div>
+      <div class="pager"><span>Page ${d.page} of ${pages}</span><button class="btn sm" id="pPrev" ${d.page <= 1 ? 'disabled' : ''}>Previous</button><button class="btn sm" id="pNext" ${d.page >= pages ? 'disabled' : ''}>Next</button></div></div>`;
+    const again = x => pageAudit({ ...st, ...x });
+    $('#aGo').onclick = () => again({ page: 1, user: $('#aU').value, table: $('#aT').value, action: $('#aA').value });
+    $('#pPrev').onclick = () => again({ page: d.page - 1 }); $('#pNext').onclick = () => again({ page: d.page + 1 });
+  }
+
+  // ---------- system health ----------
+  async function pageHealth() {
+    busy(true); let d; try { d = await api('health'); } finally { busy(false); }
+    const ev = d.events || {}, failed = +(ev.FAILED || 0);
+    $('#main').innerHTML = `<div class="page-head"><div><h1>System health</h1><div class="sub">Events connect the modules. A failed event is kept and tried again; nothing is lost.</div></div><div class="actions">${failed ? `<button class="btn primary" id="hRetry">${ic('refresh')} Try failed events again</button>` : ''}</div></div>
+      <div class="kpis"><div class="card kpi ${failed ? 'err' : 'done'}"><div class="bar"></div><div class="lbl">Failed events</div><div class="val">${failed}</div></div><div class="card kpi"><div class="bar"></div><div class="lbl">Events done</div><div class="val">${+(ev.DONE || 0)}</div></div><div class="card kpi"><div class="bar"></div><div class="lbl">Open tasks</div><div class="val">${d.counts.open_tasks}</div></div><div class="card kpi"><div class="bar"></div><div class="lbl">Records in search</div><div class="val">${d.counts.records_indexed}</div></div><div class="card kpi"><div class="bar"></div><div class="lbl">Active users</div><div class="val">${d.counts.users}</div></div></div>
+      ${failed ? `<div class="card" style="margin-top:14px"><div class="card-h"><h3>Failed</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Event</th><th>Record</th><th>Tries</th><th>Why</th><th>When</th></tr></thead><tbody>${d.failed.map(e => `<tr><td><code>${esc(e.event_code)}</code></td><td>${esc(e.entity)} #${e.entity_id}</td><td>${e.attempts}</td><td>${esc(e.last_error || '')}</td><td>${esc(e.created_at)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
+      <div class="card" style="margin-top:14px"><div class="card-h"><h3>Last events</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Event</th><th>Record</th><th>Status</th><th>When</th></tr></thead><tbody>${d.recent.map(e => `<tr><td><code>${esc(e.event_code)}</code></td><td>${esc(e.entity)} #${e.entity_id}</td><td><span class="chip ${e.status === 'DONE' ? 'done' : e.status === 'FAILED' ? 'err' : 'pend'}">${esc(e.status)}</span></td><td>${esc(e.created_at)}</td></tr>`).join('')}</tbody></table>${d.recent.length ? '' : '<div class="empty">No events yet.</div>'}</div></div>`;
+    if (failed) $('#hRetry').onclick = async () => { const r = await api('health/retry', { method: 'POST' }); toast(r.message); pageHealth(); };
+  }
+
+  // ---------- ledger (double entry) ----------
+  const money = v => (+v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  async function pageLedger() {
+    busy(true); let d; try { d = await api('ledger'); } finally { busy(false); }
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Ledger</h1><div class="sub">Every money movement is one journal: debits = credits. Mistakes are reversed, never edited.${d.locked_up_to ? ' Locked up to ' + esc(d.locked_up_to) + '.' : ''}</div></div></div>
+      <div class="kpis"><div class="card kpi ${d.trial.balanced ? 'done' : 'err'}"><div class="bar"></div><div class="lbl">Trial balance</div><div class="val">${d.trial.balanced ? 'Balanced' : 'NOT balanced'}</div><div class="foot">${money(d.trial.debit)} = ${money(d.trial.credit)}</div></div>
+        <div class="card kpi"><div class="bar"></div><div class="lbl">Income · ${esc(d.from)} to ${esc(d.to)}</div><div class="val">${money(d.pl.income)}</div></div><div class="card kpi"><div class="bar"></div><div class="lbl">Costs</div><div class="val">${money(d.pl.expense)}</div></div><div class="card kpi ${d.pl.profit < 0 ? 'err' : 'done'}"><div class="bar"></div><div class="lbl">Profit</div><div class="val">${money(d.pl.profit)}</div></div></div>
+      <div class="card" style="margin-top:14px"><div class="card-h"><h3>Balances by account</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Code</th><th>Account</th><th>Kind</th><th class="num">Debit</th><th class="num">Credit</th></tr></thead><tbody>${d.trial.rows.map(r => `<tr><td>${esc(r.code)}</td><td>${esc(r.name)}</td><td>${esc(r.kind)}</td><td class="num">${r.debit ? money(r.debit) : ''}</td><td class="num">${r.credit ? money(r.credit) : ''}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="3">Total</td><td class="num">${money(d.trial.debit)}</td><td class="num">${money(d.trial.credit)}</td></tr></tfoot></table>${d.trial.rows.length ? '' : '<div class="empty">No journals yet.</div>'}</div></div>
+      <div class="card" style="margin-top:14px"><div class="card-h"><h3>Last journals</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>No.</th><th>Date</th><th>From</th><th>Note</th><th></th></tr></thead><tbody>${d.journals.map(j => `<tr><td>${esc(j.journal_no)}</td><td>${esc(j.journal_date)}</td><td>${esc(j.source_type)}</td><td>${esc(j.memo || '')}</td><td>${j.reversed_by_id ? '<span class="chip lock">Reversed</span>' : j.reverses_id ? '<span class="chip warn">Reversal</span>' : ''}</td></tr>`).join('')}</tbody></table></div></div>`;
   }
 
   // ---------- modal ----------

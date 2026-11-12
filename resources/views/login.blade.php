@@ -15,6 +15,18 @@ body{display:grid;place-items:center;min-height:100vh;padding:20px}
 </style>
 </head>
 <body>
+@if (($step ?? '') === 'code')
+<form class="login" method="post" action="/login/code">
+  @csrf
+  <h1>{{ config('app.name') }}</h1>
+  <p>Enter the 6-digit code from the authenticator app on your phone.</p>
+  @if ($errors->any())<div class="errbox">{{ $errors->first() }}</div>@endif
+  <label for="code">Code</label>
+  <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="7" autofocus required>
+  <button class="btn primary" type="submit">Continue</button>
+  <p style="margin-top:14px"><a href="/login">Start again</a></p>
+</form>
+@else
 <form class="login" method="post" action="/login">
   @csrf
   <h1>{{ config('app.name') }}</h1>
@@ -27,5 +39,6 @@ body{display:grid;place-items:center;min-height:100vh;padding:20px}
   <label style="font-weight:400;display:flex;gap:8px;align-items:center"><input type="checkbox" name="remember" value="1"> Keep me signed in on this device</label>
   <button class="btn primary" type="submit">Sign in</button>
 </form>
+@endif
 </body>
 </html>

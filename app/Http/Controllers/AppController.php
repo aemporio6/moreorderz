@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Services\Context;
 use App\Services\RecordService;
 use App\Services\Registry;
+use App\Services\Rights;
 use App\Services\Settings;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -47,8 +48,7 @@ class AppController extends Controller
 
     private static function roleSees(?string $roles, string $role): bool
     {
-        if ($role === 'OWNER' || ! $roles) return true;
-        return (bool) preg_match('/\b(all|' . preg_quote($role, '/') . ')\b/i', $roles);
+        return Rights::sees($roles, $role);
     }
 
     /** A menu item opens the list of its first data form; special screens get their own route as they are built. */
@@ -58,6 +58,10 @@ class AppController extends Controller
         if (str_starts_with($no, '1.')) return '#/home';
         if ($no === '13.2') return '#/tasks?scope=all';
         if ($no === '13.3') return '#/tasks';
+        if ($no === '17.15') return '#/users';
+        if ($no === '17.17') return '#/audit';
+        if ($no === '17.18') return '#/settings';
+        if ($no === '17.20') return '#/health';
         foreach (preg_split('/[;,\s]+/', (string) $m->forms, -1, PREG_SPLIT_NO_EMPTY) as $f) {
             $key = trim(explode('(', $f)[0], " `");
             if ($key && Registry::exists($key) && Registry::table($key)) return '#/list/' . $key;
@@ -69,12 +73,13 @@ class AppController extends Controller
     public static function createCatalogue(string $role): array
     {
         return DB::table('sys_forms')->where('f_active', 1)->where('f_in_create', 1)->orderBy('sort_no')->get(['form_key', 'title', 'department', 'module', 'f_quick'])
-            ->filter(fn ($f) => Registry::exists($f->form_key))
+            ->filter(fn ($f) => Registry::exists($f->form_key) && Rights::can($role, 'ADD', $f->form_key))
             ->map(fn ($f) => ['key' => $f->form_key, 'title' => $f->title, 'dept' => $f->department ?: $f->module, 'quick' => (bool) $f->f_quick])->values()->all();
     }
 
     public function form(string $key)
     {
+        Rights::check('VIEW', $key);
         return Registry::definition($key, Context::role()) + ['blank' => RecordService::blank($key)];
     }
 
@@ -101,16 +106,19 @@ class AppController extends Controller
 
     public function list(Request $r, string $key)
     {
+        Rights::check('VIEW', $key);
         return RecordService::list($key, $r->only(['q', 'page', 'per_page', 'sort', 'dir', 'filter']));
     }
 
     public function record(string $key, int $id)
     {
+        Rights::check('VIEW', $key);
         return ['values' => RecordService::get($key, $id)];
     }
 
     public function save(Request $r, string $key, ?int $id = null)
     {
+        Rights::check($id ? 'EDIT' : 'ADD', $key);
         $res = RecordService::save($key, (array) $r->input('values', []), $id, ['quick' => $r->boolean('quick'), 'reason' => $r->input('reason')]);
         $title = Registry::fields($key)[0]['form_title'];
         return $res + ['message' => ($res['created'] ? 'Saved: ' : 'Updated: ') . $title, 'open' => "#/list/$key"];

@@ -31,7 +31,39 @@ class AuthController extends Controller
             return back()->withErrors(['login' => 'Login or password is not right.'])->onlyInput('login');
         }
         RateLimiter::clear($key);
-        Auth::login($u, $r->boolean('remember'));
+        if ($u->totp_secret) {      // 2-step sign-in: the password was right, now ask for the code of the phone app
+            $r->session()->put('login_2fa', ['id' => $u->id, 'remember' => $r->boolean('remember'), 'at' => time()]);
+            return redirect('/login/code');
+        }
+        return $this->finish($r, $u, $r->boolean('remember'));
+    }
+
+    public function codeForm(Request $r)
+    {
+        return $r->session()->has('login_2fa') ? view('login', ['step' => 'code']) : redirect('/login');
+    }
+
+    public function code(Request $r)
+    {
+        $p = $r->session()->get('login_2fa');
+        if (! $p || time() - $p['at'] > 300) { $r->session()->forget('login_2fa'); return redirect('/login')->withErrors(['login' => 'That took too long. Sign in again.']); }
+        $u = User::where('id', $p['id'])->where('f_active', 1)->firstOrFail();
+        $key = 'login2:' . $u->id . '|' . $r->ip();
+        if (RateLimiter::tooManyAttempts($key, 5)) return back()->withErrors(['code' => 'Too many wrong codes. Wait a few minutes and sign in again.']);
+        $code = preg_replace('/\s+/', '', (string) $r->input('code'));
+        if (! (new \PragmaRX\Google2FA\Google2FA())->verifyKey(decrypt($u->totp_secret), $code, 1)) {
+            RateLimiter::hit($key, 600);
+            Audit::log('t_users', $u->id, 'LOGIN_FAIL', ['step' => 'code'], null, $u->fk_id_ent ?? 0);
+            return back()->withErrors(['code' => 'That code is not right. Try the next one.']);
+        }
+        RateLimiter::clear($key);
+        $r->session()->forget('login_2fa');
+        return $this->finish($r, $u, (bool) $p['remember']);
+    }
+
+    private function finish(Request $r, User $u, bool $remember)
+    {
+        Auth::login($u, $remember);
         $r->session()->regenerate();
         $r->session()->put('ent', $u->fk_id_ent);
         DB::table('t_users')->where('id', $u->id)->update(['last_login_at' => now()]);
