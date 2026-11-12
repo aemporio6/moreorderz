@@ -47,6 +47,6 @@ Found and fixed during this run: there was no way to give an opening lot its cos
 
 ## How much of the spec works – an honest estimate, not a measurement
 - **The daily chain works end to end and is tested:** idea → purchase → shelf → order → courier → money → month close → partner share, on the owner's real data.
-- **Every registry form with a table (302 of 322) opens, validates and saves** through the generic form engine; 113 of 129 menu screens open real screens, 16 are placeholders.
+- **Every registry form with a table (302 of 322) has a list and a generic form.** Tested: all 302 lists load without error and every Create entry opens its form; saving through the generic form engine was tested on a sample of forms, not on all 302. 113 of 129 menu screens open real screens, 16 are placeholders.
 - **Of the spec's rules (the engines), roughly half are built and tested.** Not built: all outside connections (marketplace, carrier, WhatsApp APIs), the generic Import Center, most of HR / VA pay, tax, documents, the accounts vault encryption, and the items listed in `PROGRESS.md` and `docs/HANDOVER.md` §6.
 - **Not proven:** anything on the real printers, on the real server, with real users and real volumes over time; field-by-field equality of the imported rows.
