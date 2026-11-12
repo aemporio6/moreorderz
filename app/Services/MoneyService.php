@@ -175,8 +175,9 @@ class MoneyService
                     'source' => 'BANK', 'note' => $d['note'] ?? mb_substr((string) $l->description, 0, 200), 'f_active' => 1, 'created_by' => Context::userId(), 'created_at' => now()]);
             }
             $bankLine = ['account' => '1000', $in ? 'debit' : 'credit' => $base, 'ref_id' => (int) $l->bank_account_id, 'amount_cur' => (float) $l->amount];
-            $other = ['account' => $acc, $in ? 'credit' : 'debit' => $base, 'ref_id' => $ref];
-            Ledger::post($ent, $l->txn_date, $isCost ? 'EXPENSE' : 'BANK_LINE', $isCost ? $expId : (int) $l->id, [$bankLine, $other], ['memo' => $memo, 'currency' => $l->currency, 'allow_no_ref' => $noRef]);
+            $vat = $isCost && Choices::get('VAT_REGISTERED', $ent) === '1' ? round(min((float) ($d['vat_amount'] ?? 0), abs((float) $l->amount)) * ((float) $l->amount != 0.0 ? $base / abs((float) $l->amount) : 1), 2) : 0.0;
+            $other = [['account' => $acc, $in ? 'credit' : 'debit' => round($base - $vat, 2), 'ref_id' => $ref]]; if ($vat > 0) $other[] = ['account' => '1400', 'debit' => $vat, 'memo' => 'VAT to claim back'];
+            Ledger::post($ent, $l->txn_date, $isCost ? 'EXPENSE' : 'BANK_LINE', $isCost ? $expId : (int) $l->id, [$bankLine, ...$other], ['memo' => $memo, 'currency' => $l->currency, 'allow_no_ref' => $noRef]);
             DB::table('fin_bank_transactions')->where('id', $l->id)->update(['category_code' => $cat->code, 'branch_id' => $d['branch'] ?? null]);
             self::link($l, $isCost ? 'EXPENSE' : 'CATEGORY', $isCost ? $expId : (int) $l->id, 'BY_HAND', 'MANUAL');
             return ['line' => (int) $l->id, 'account' => $acc, 'expense' => $expId];
@@ -266,11 +267,12 @@ class MoneyService
         return DB::transaction(function () use ($ent, $d) {
             $bank = self::bank($ent, (int) $d['bank']); $amt = round((float) $d['amount'], 2);
             if ($amt <= 0) throw new \InvalidArgumentException('The amount must be more than zero.');
+            if ((float) ($d['vat_amount'] ?? 0) < 0 || (float) ($d['vat_amount'] ?? 0) >= $amt) throw new \InvalidArgumentException('The VAT inside the amount must be less than the amount.');
             $cat = DB::table('fin_categories')->where('code', $d['category'])->where('f_active', 1)->whereIn('direction', ['OUT', 'BOTH'])->first() ?? throw new \InvalidArgumentException('Choose a money-out category.');
             if (isset(self::NOT_BY_HAND[$cat->code])) throw new \InvalidArgumentException(self::NOT_BY_HAND[$cat->code]);
             $date = $d['date'] ?? date('Y-m-d'); $cur = $bank->currency ?: Fx::base($ent); $rate = Fx::rate($cur, $date, $ent); $base = round($amt * $rate, 2);
             $wait = Approvals::needed($ent, 'EXPENSE', $base, 250);
-            $id = DB::table('fin_expenses')->insertGetId(['fk_id_ent' => $ent, 'd_expense' => $date, 'category_code' => $cat->code, 'fk_id_branch' => $d['branch'] ?? null, 'fk_id_payee' => $d['party'] ?? null, 'amount' => $amt,
+            $id = DB::table('fin_expenses')->insertGetId(['fk_id_ent' => $ent, 'd_expense' => $date, 'category_code' => $cat->code, 'fk_id_branch' => $d['branch'] ?? null, 'fk_id_payee' => $d['party'] ?? null, 'vat_amount' => ((float) ($d['vat_amount'] ?? 0)) ?: null, 'amount' => $amt,
                 'fk_id_currency' => self::currencyId($cur, $ent), 'exchange_rate' => $rate, 'amount_gbp' => $base, 'vat_amount' => $d['vat_amount'] ?? null, 'fk_id_paid_from' => $bank->id, 'source' => 'MANUAL',
                 'note' => $d['note'] ?? null, 'f_active' => $wait ? 0 : 1, 'created_by' => Context::userId(), 'created_at' => now()]);
             Audit::log('fin_expenses', $id, 'INSERT', ['category' => $cat->code, 'amount' => $amt, 'currency' => $cur], null, $ent);
@@ -285,7 +287,10 @@ class MoneyService
         $e = DB::table('fin_expenses')->where('id', $id)->first(); $bank = DB::table('fin_bank_accounts')->where('id', $e->fk_id_paid_from)->first();
         $cat = DB::table('fin_categories')->where('code', $e->category_code)->first(); $acc = self::accountFor($e->category_code); $sub = DB::table('gl_accounts')->where('code', $acc)->value('sub_ledger');
         $ref = $sub === 'SHOP' ? ($e->fk_id_branch ?: throw new \InvalidArgumentException('Choose the shop for this category.')) : ($sub === 'PARTY' ? $e->fk_id_payee : null);
-        return Ledger::post((int) $e->fk_id_ent, $e->d_expense, 'EXPENSE', $id, [['account' => $acc, 'debit' => (float) $e->amount_gbp, 'ref_id' => $ref], ['account' => '1000', 'credit' => (float) $e->amount_gbp, 'ref_id' => (int) $bank->id, 'amount_cur' => -1 * (float) $e->amount]],
+        // VAT-registered company: the VAT inside the expense is not a cost, it is claimed back
+        $vat = Choices::get('VAT_REGISTERED', (int) $e->fk_id_ent) === '1' ? round((float) $e->vat_amount * ((float) $e->amount > 0 ? (float) $e->amount_gbp / (float) $e->amount : 1), 2) : 0.0; $net = round((float) $e->amount_gbp - $vat, 2);
+        $dr = [['account' => $acc, 'debit' => $net, 'ref_id' => $ref]]; if ($vat > 0) $dr[] = ['account' => '1400', 'debit' => $vat, 'memo' => 'VAT to claim back'];
+        return Ledger::post((int) $e->fk_id_ent, $e->d_expense, 'EXPENSE', $id, [...$dr, ['account' => '1000', 'credit' => (float) $e->amount_gbp, 'ref_id' => (int) $bank->id, 'amount_cur' => -1 * (float) $e->amount]],
             ['memo' => ($cat->name ?? $e->category_code) . ($e->note ? ' · ' . mb_substr($e->note, 0, 80) : ''), 'currency' => $bank->currency ?: 'GBP', 'fx_rate' => $e->exchange_rate ?: 1, 'allow_no_ref' => $sub === 'PARTY' && ! $ref]);
     }
 

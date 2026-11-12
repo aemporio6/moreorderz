@@ -23,6 +23,7 @@ class ReportService
         'suppliers' => ['Buying', 'Supplier balances', 'Per supplier today: paid in advance for goods not received, and owed for goods received.', ['OWNER', 'MANAGER', 'FINANCE', 'ACCOUNTANT'], false],
         'cash' => ['Money', 'Cash in and out by kind', 'Every movement on the bank accounts in the period, grouped by what it was for, per month.', self::FIN, true],
         'partners' => ['Money', 'Partner summary', 'Per partner in the period: capital in, profit share, fees, withdrawn; and the balance today.', self::FIN, true],
+        'vat' => ['Money', 'VAT to claim back', 'VAT inside marketplace fees and expenses per month (for a VAT-registered company).', self::FIN, true],
         'close' => ['Money', 'Month close status', 'Every shop × month of the period: open, checked or locked, with the locked profit.', ['OWNER', 'MANAGER', 'FINANCE', 'ACCOUNTANT'], true],
     ];
     private const NO_MONEY = ['WAREHOUSE'];
@@ -154,6 +155,16 @@ class ReportService
         ksort($out);
         return [[['month', 'Month', 'text'], ['kind', 'What for', 'text'], ['in', 'Money in', 'money'], ['out', 'Money out', 'money'], ['net', 'Net', 'money']], array_values($out),
             'From the books, by booking date, all bank accounts together in the base currency. The total "Net" is the change of the cash balance in the period. A reversed entry shows as in and out of the same kind. Transfers between own accounts net to zero.'];
+    }
+
+    private static function r_vat(int $ent, string $from, string $to): array
+    {
+        $rows = DB::table('gl_lines as l')->join('gl_journals as j', 'j.id', '=', 'l.journal_id')->join('gl_accounts as a', 'a.id', '=', 'l.account_id')->where('j.fk_id_ent', $ent)->where('a.code', '1400')->whereBetween('j.journal_date', [$from, $to])
+            ->groupBy(DB::raw("DATE_FORMAT(j.journal_date, '%Y-%m')"), 'j.source_type')->selectRaw("DATE_FORMAT(j.journal_date, '%Y-%m') m, j.source_type st, SUM(l.debit - l.credit) v")->get(); $out = [];
+        foreach ($rows as $r) { $out[$r->m] ??= ['month' => $r->m, 'fees' => 0.0, 'expenses' => 0.0, 'other' => 0.0, 'total' => 0.0]; $k = $r->st === 'SETTLEMENT' ? 'fees' : ($r->st === 'EXPENSE' ? 'expenses' : 'other'); $out[$r->m][$k] = round($out[$r->m][$k] + (float) $r->v, 2); $out[$r->m]['total'] = round($out[$r->m]['total'] + (float) $r->v, 2); }
+        ksort($out);
+        return [[['month', 'Month', 'text'], ['fees', 'VAT on marketplace fees', 'money'], ['expenses', 'VAT on expenses', 'money'], ['other', 'Other', 'money'], ['total', 'VAT to claim back', 'money']], array_values($out),
+            (Choices::get('VAT_REGISTERED', $ent) === '1' ? '' : 'The company is set as NOT registered for VAT (Settings › Choices), so VAT stays inside the costs and this report is empty. ') . 'This is the VAT you paid (input VAT) as booked on account 1400. The VAT on your own sales (output VAT) is NOT worked out by the tool yet – this is not a VAT return.'];
     }
 
     private static function r_partners(int $ent, string $from, string $to): array

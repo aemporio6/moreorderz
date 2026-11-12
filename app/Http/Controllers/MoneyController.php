@@ -72,9 +72,18 @@ class MoneyController extends Controller
     {
         $this->can($r, self::SEE);
         $ent = (int) Context::ent();
-        return ['rows' => $this->refundRows($ent), 'base' => Fx::base($ent), 'can_edit' => in_array($r->user()->role_code, ['OWNER', 'MANAGER', 'FINANCE'], true),
+        return ['rows' => $this->refundRows($ent), 'base' => Fx::base($ent), 'shops' => $this->lists($ent)['shops'], 'can_edit' => in_array($r->user()->role_code, ['OWNER', 'MANAGER', 'FINANCE'], true),
             'decided' => DB::table('t_sale_refund_proposals as p')->join('t_sales as s', 's.id', '=', 'p.fk_id_sale')->leftJoin('t_users as u', 'u.id', '=', 'p.decided_by')->where('s.fk_id_ent', $ent)->where('p.status', '<>', 'PROPOSED')->orderByDesc('p.decided_at')->limit(30)
                 ->get(['p.id', 'p.status', 'p.reject_reason', 'p.decided_at', 's.order_no', 's.sku', 's.total_amount_gbp', 'u.display_name as by'])];
+    }
+
+    /** A refund entered by hand: the whole order, or an amount of it. */
+    public function refundManual(Request $r)
+    {
+        $this->can($r, ['OWNER', 'MANAGER', 'FINANCE']);
+        $d = $r->validate(['shop' => 'required|integer', 'order_no' => 'required|string|max:100', 'amount' => 'nullable|numeric|gt:0', 'reason' => 'required|string|min:3|max:250']);
+        return $this->run(function () use ($d) { $x = Settle::refundOrder((int) Context::ent(), (int) $d['shop'], trim($d['order_no']), isset($d['amount']) ? (float) $d['amount'] : null, $d['reason']);
+            return $x + ['message' => $x['cancelled'] ? "{$x['cancelled']} line(s) not confirmed yet were cancelled and their stock is free again" . ($x['amount'] ? '; ' . number_format($x['amount'], 2) . ' refunded' : '') : number_format($x['amount'], 2) . " refunded on {$x['lines']} line(s)"]; });
     }
 
     public function refundDecide(Request $r, int $id)
@@ -94,6 +103,7 @@ class MoneyController extends Controller
             ->get(['t.id', 't.bank_account_id', 'b.account_label as bank', 't.txn_date', 't.amount', 't.currency', 't.description', 't.reference_no', 't.match_status', 't.matched_to_type', 't.match_rule', 't.category_code']);
         $names = DB::table('fin_categories')->pluck('name', 'code'); foreach ($lines as $l) $l->category = $names[$l->category_code] ?? null;
         return ['banks' => Money::banks($ent), 'lines' => $lines, 'show' => $show, 'bank' => $bank, 'base' => Fx::base($ent), 'can_edit' => in_array($r->user()->role_code, self::EDIT, true),
+            'vat' => \App\Services\Choices::get('VAT_REGISTERED', $ent) === '1',
             'profiles' => DB::table('bank_statement_profiles')->whereIn('fk_id_ent', [0, $ent])->where('f_active', 1)->orderBy('id')->get(['id', 'name', 'date_format'])] + $this->lists($ent);
     }
 
@@ -119,7 +129,7 @@ class MoneyController extends Controller
         $this->can($r, self::EDIT);
         $ent = (int) Context::ent();
         return $this->run(function () use ($r, $id, $what, $ent) {
-            if ($what === 'categorise') { $d = $r->validate(['category' => 'required|string|max:40', 'branch' => 'nullable|integer', 'note' => 'nullable|string|max:200']); Money::categorise($ent, $id, array_filter($d, fn ($v) => $v !== null)); return ['message' => 'Booked']; }
+            if ($what === 'categorise') { $d = $r->validate(['category' => 'required|string|max:40', 'branch' => 'nullable|integer', 'note' => 'nullable|string|max:200', 'vat_amount' => 'nullable|numeric|min:0']); Money::categorise($ent, $id, array_filter($d, fn ($v) => $v !== null)); return ['message' => 'Booked']; }
             if ($what === 'transfer') { $d = $r->validate(['other' => 'required|integer']); $x = Money::transfer($ent, $id, (int) $d['other']); return ['message' => 'Transfer booked' . ($x['mirror'] ? ' – the line in the other account is linked too' : '')]; }
             if ($what === 'payout') { $d = $r->validate(['branch' => 'required|integer', 'pay_key' => 'required|string|max:40']); Money::matchPayout($ent, $id, (int) $d['branch'], $d['pay_key']); return ['message' => 'Payout matched']; }
             if ($what === 'ignore') { $d = $r->validate(['reason' => 'required|string|max:200']); Money::ignore($ent, $id, $d['reason']); return ['message' => 'Line set aside']; }
@@ -156,13 +166,13 @@ class MoneyController extends Controller
         foreach ($rows as $x) $x->category = $names[$x->category_code] ?? $x->category_code;
         foreach ($rows as $x) $x->status = $x->approval === 'PENDING' ? 'WAITING' : ($x->approval === 'REJECTED' ? 'REJECTED' : ($x->f_active ? ($x->fk_id_bank_line ? 'ON_BANK' : 'BOOKED') : 'CANCELLED'));
         return ['rows' => $rows, 'month' => $month, 'total' => round((float) $rows->whereIn('status', ['BOOKED', 'ON_BANK'])->sum('amount_gbp'), 2), 'base' => Fx::base($ent), 'limit' => Approvals::limit($ent, 'EXPENSE', 250),
-            'banks' => DB::table('fin_bank_accounts')->where('company_id', $ent)->where('is_active', 1)->get(['id', 'account_label as name', 'currency']), 'can_add' => in_array($r->user()->role_code, self::EXPENSE, true)] + $this->lists($ent);
+            'banks' => DB::table('fin_bank_accounts')->where('company_id', $ent)->where('is_active', 1)->get(['id', 'account_label as name', 'currency']), 'can_add' => in_array($r->user()->role_code, self::EXPENSE, true), 'vat' => \App\Services\Choices::get('VAT_REGISTERED', $ent) === '1'] + $this->lists($ent);
     }
 
     public function expenseAdd(Request $r)
     {
         $this->can($r, self::EXPENSE);
-        $d = $r->validate(['bank' => 'required|integer', 'category' => 'required|string|max:40', 'amount' => 'required|numeric|min:0.01', 'date' => 'required|date', 'branch' => 'nullable|integer', 'note' => 'nullable|string|max:200']);
+        $d = $r->validate(['bank' => 'required|integer', 'category' => 'required|string|max:40', 'amount' => 'required|numeric|min:0.01', 'date' => 'required|date', 'branch' => 'nullable|integer', 'note' => 'nullable|string|max:200', 'vat_amount' => 'nullable|numeric|min:0']);
         return $this->run(function () use ($d) { $x = Money::addExpense((int) Context::ent(), array_filter($d, fn ($v) => $v !== null)); return $x + ['message' => $x['status'] === 'WAITING' ? 'Saved – it is over the limit, so it waits for approval and is not booked yet' : 'Expense booked']; });
     }
 

@@ -34,7 +34,7 @@ class ProfitService
         foreach ($sales as $s) {
             [$k, $n] = $keyOf($s->fk_id_branch, $s->fk_product_id, $s->sku, $s->name, $s->d_order); $rows[$k] ??= $blank($k, $n);
             $rows[$k]['units'] += (int) $s->qty; $rows[$k]['sales'] += (float) $s->total_amount_gbp; $rows[$k]['cost'] += (float) ($cost[$s->id] ?? 0);
-            if ($s->refunded_at) { $rows[$k]['mp_costs'] += (float) $s->refund_loss_amount; $refunds += (float) $s->refund_loss_amount; }
+            if ((float) $s->refund_loss_amount > 0) { $rows[$k]['mp_costs'] += (float) $s->refund_loss_amount; $refunds += (float) $s->refund_loss_amount; }
             $orderKey[$s->fk_id_branch . '|' . $s->order_no] ??= [$s->fk_product_id, $s->sku, $s->name, $s->d_order];
         }
         // 2. marketplace costs from booked statements (everything in the money file except net sales; a cost is a positive number here)

@@ -108,6 +108,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('money', [MoneyController::class, 'dashboard']);
         Route::get('profit', [MoneyController::class, 'profit']);
         Route::get('refunds', [MoneyController::class, 'refunds']);
+        Route::post('refunds/manual', [MoneyController::class, 'refundManual']);
         Route::post('refunds/{id}', [MoneyController::class, 'refundDecide'])->whereNumber('id');
         Route::get('bank', [MoneyController::class, 'bank']);
         Route::post('bank', [MoneyController::class, 'bankCreate']);

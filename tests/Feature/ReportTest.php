@@ -91,7 +91,7 @@ class ReportTest extends TestCase
         $this->getJson('/api/reports/cash')->assertStatus(403);
         $this->actingAs($fin)->getJson('/api/reports/nonsense')->assertStatus(403);
         $this->getJson("/api/reports/cash?from={$this->to}&to={$this->from}")->assertStatus(422);
-        $this->assertCount(10, $this->getJson('/api/reports')->json('reports'));
+        $this->assertCount(11, $this->getJson('/api/reports')->json('reports'));
         $csv = $this->get("/api/reports/sales_shop/csv?from={$this->from}&to={$this->to}")->assertOk()->streamedContent();
         $lines = array_values(array_filter(explode("\n", trim($csv))));
         $this->assertStringContainsString('Shop,Orders,Units,"Confirmed sales"', $lines[0]);

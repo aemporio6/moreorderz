@@ -201,7 +201,8 @@ class SettlementService
             $add('1100', (float) $s->net_sales, 'Net sales settled', true);
             if ($s->f_rows_complete) {
                 $by = DB::table('fin_settlement_lines')->where('branch_id', $shop)->where('settlement_id', $s->statement_id)->where('amount_type', '<>', 'NET_SALES')->groupBy('amount_type')->selectRaw('amount_type, SUM(amount) v')->pluck('v', 'amount_type');
-                foreach ($by as $bucket => $v) { $acc = self::BUCKETS[$bucket][0] ?? '5100'; $add($acc, (float) $v, self::BUCKET_NAMES[$bucket] ?? $bucket, $sub($acc)); }
+                $vat = Choices::get('VAT_REGISTERED', $ent) === '1';
+                foreach ($by as $bucket => $v) { $acc = $bucket === 'TT_VAT' && $vat ? '1400' : (self::BUCKETS[$bucket][0] ?? '5100'); $add($acc, (float) $v, self::BUCKET_NAMES[$bucket] ?? $bucket, $sub($acc)); }
             } else {
                 $add('5200', (float) $s->shipping, 'Shipping (net)', false); $add('5100', (float) $s->fees, 'Marketplace fees (statement total)', true); $add('5100', (float) $s->adjustments, 'Adjustments (statement total)', true);
             }
@@ -288,13 +289,62 @@ class SettlementService
                 DB::table('t_sale_refund_proposals')->where('id', $p->id)->update(['status' => 'REJECTED', 'reject_reason' => $reason, 'decided_by' => Context::userId(), 'decided_at' => now()]);
                 return;
             }
-            if ($s->refunded_at) throw new \InvalidArgumentException('This order line is already refunded.');
-            if ($s->status !== 'Confirmed') throw new \InvalidArgumentException("Order {$s->order_no} is not confirmed yet. Confirm its month first (Selling › Month confirm), or cancel the line if it never shipped – then decide this refund.");
-            $amount = round((float) $s->total_amount_gbp, 2);
-            if ($amount > 0) Ledger::post($ent, date('Y-m-d'), 'REFUND', (int) $s->id, [['account' => '5400', 'debit' => $amount, 'ref_id' => (int) $s->fk_id_branch], ['account' => '1100', 'credit' => $amount, 'ref_id' => (int) $s->fk_id_branch]], ['memo' => "Full refund of order {$s->order_no}"]);
-            DB::table('t_sales')->where('id', $s->id)->update(['refunded_at' => now(), 'refunded_by' => Context::userId(), 'refund_loss_nature' => 'FULL', 'refund_loss_amount' => $amount, 'refund_reason' => 'Marketplace money file', 'fk_id_refund_proposal' => $p->id]);
+            $amount = $p->refund_kind === 'FULL' ? null : (float) $p->amount;
+            $x = self::refund($ent, (int) $s->id, $amount, 'Marketplace money file', (int) $p->id);
             DB::table('t_sale_refund_proposals')->where('id', $p->id)->update(['status' => 'ACCEPTED', 'decided_by' => Context::userId(), 'decided_at' => now()]);
-            Audit::log('t_sales', $s->id, 'UPDATE', ['refund' => 'FULL', 'amount' => $amount], 'Refund proposal accepted', $ent);
+        });
+    }
+
+    /**
+     * Refund a sale line, fully ($amount null) or in part. Several part refunds may follow each other, never more than the line's value.
+     * Confirmed line: Dr 5400 refunds / Cr 1100 (the shop owes us less). A line not confirmed and not shipped: a full refund cancels the line and frees its stock;
+     * a part refund of such a line is refused (change its price instead); a shipped, unconfirmed line must be confirmed first.
+     * The goods coming back are a separate step (Returns).
+     */
+    public static function refund(int $ent, int $saleId, ?float $amount, string $reason, ?int $proposalId = null): array
+    {
+        return DB::transaction(function () use ($ent, $saleId, $amount, $reason, $proposalId) {
+            $s = DB::table('t_sales')->where('id', $saleId)->where('fk_id_ent', $ent)->where('sale_source', 'active')->lockForUpdate()->first() ?? throw new \InvalidArgumentException('Order line not found.');
+            if (trim($reason) === '') throw new \InvalidArgumentException('Give the reason for the refund.');
+            $total = round((float) $s->total_amount_gbp, 2); $done = round((float) $s->refund_loss_amount, 2); $left = round($total - $done, 2);
+            if ($s->status === 'Pending') {
+                if ($amount !== null && round($amount, 2) < $total) throw new \InvalidArgumentException("Order {$s->order_no} is not confirmed yet: a part refund is not booked – change the line's price instead, or refund it in full.");
+                if ((int) $s->qty_shipped > 0) throw new \InvalidArgumentException("Order {$s->order_no} is shipped but its month is not confirmed yet. Confirm the month first (Selling › Month confirm), then refund.");
+                DispatchService::release($saleId, 'Refunded in full: ' . $reason);
+                DB::table('t_sales')->where('id', $saleId)->update(['status' => 'Cancelled', 'refund_reason' => mb_substr($reason, 0, 250), 'refunded_at' => now(), 'refunded_by' => Context::userId(), 'refund_loss_nature' => 'FULL', 'fk_id_refund_proposal' => $proposalId, 'updated_at' => now()]);
+                Audit::log('t_sales', $saleId, 'UPDATE', ['status' => ['Pending', 'Cancelled'], 'refund' => 'FULL before confirm'], $reason, $ent);
+                return ['kind' => 'CANCELLED', 'amount' => 0.0, 'left' => 0.0];
+            }
+            if ($s->status !== 'Confirmed') throw new \InvalidArgumentException('This order line is ' . strtolower($s->status) . ' – it cannot be refunded.');
+            if ($left <= 0) throw new \InvalidArgumentException('This order line is already refunded in full.');
+            $amt = $amount === null ? $left : round($amount, 2);
+            if ($amt <= 0) throw new \InvalidArgumentException('The refund must be more than zero.');
+            if ($amt > $left + 0.005) throw new \InvalidArgumentException('This is more than the ' . number_format($left, 2) . ' still left on this line.');
+            Ledger::post($ent, date('Y-m-d'), 'REFUND', $saleId, [['account' => '5400', 'debit' => $amt, 'ref_id' => (int) $s->fk_id_branch], ['account' => '1100', 'credit' => $amt, 'ref_id' => (int) $s->fk_id_branch]], ['memo' => ($amt >= $left && $done == 0.0 ? 'Full' : 'Part') . " refund of order {$s->order_no}"]);
+            $full = $amt >= $left - 0.005;
+            DB::table('t_sales')->where('id', $saleId)->update(['refund_loss_amount' => round($done + $amt, 2), 'refund_loss_nature' => $full ? 'FULL' : 'PARTIAL', 'refund_reason' => mb_substr($reason, 0, 250), 'refunded_at' => now(), 'refunded_by' => Context::userId(),
+                'fk_id_refund_proposal' => $proposalId ?? $s->fk_id_refund_proposal, 'updated_at' => now()]);
+            Audit::log('t_sales', $saleId, 'UPDATE', ['refund' => $full ? 'FULL' : 'PARTIAL', 'amount' => $amt, 'refunded_so_far' => round($done + $amt, 2)], $reason, $ent);
+            return ['kind' => $full ? 'FULL' : 'PARTIAL', 'amount' => $amt, 'left' => round($left - $amt, 2)];
+        });
+    }
+
+    /** Refund an order by its number: all its lines in full, or an amount spread over its lines in order. */
+    public static function refundOrder(int $ent, int $branchId, string $orderNo, ?float $amount, string $reason): array
+    {
+        return DB::transaction(function () use ($ent, $branchId, $orderNo, $amount, $reason) {
+            $lines = DB::table('t_sales')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->where('order_no', $orderNo)->where('sale_source', 'active')->whereIn('status', ['Pending', 'Confirmed'])->orderBy('id')->get();
+            if ($lines->isEmpty()) throw new \InvalidArgumentException("No open or confirmed line of order $orderNo in this shop.");
+            $out = ['lines' => 0, 'amount' => 0.0, 'cancelled' => 0]; $rest = $amount;
+            foreach ($lines as $l) {
+                $left = round((float) $l->total_amount_gbp - (float) $l->refund_loss_amount, 2);
+                if ($amount === null) { if ($l->status === 'Confirmed' && $left <= 0) continue; $x = self::refund($ent, (int) $l->id, null, $reason); }
+                else { if ($rest <= 0.004) break; if ($l->status !== 'Confirmed' || $left <= 0) continue; $x = self::refund($ent, (int) $l->id, min($rest, $left), $reason); $rest = round($rest - $x['amount'], 2); }
+                $out['lines']++; $out['amount'] = round($out['amount'] + $x['amount'], 2); if ($x['kind'] === 'CANCELLED') $out['cancelled']++;
+            }
+            if ($amount !== null && $rest > 0.004) throw new \InvalidArgumentException('This is ' . number_format($rest, 2) . ' more than what is left to refund on the confirmed lines of this order.');
+            if (! $out['lines']) throw new \InvalidArgumentException('This order is already refunded in full.');
+            return $out;
         });
     }
 

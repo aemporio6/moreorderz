@@ -67,7 +67,12 @@ class Money2Test extends TestCase
         $a = $this->confirmed('ORD-1', 1); $b = $this->confirmed('ORD-2', 1);
         $mk = fn ($sale, $ref) => DB::table('t_sale_refund_proposals')->insertGetId(['fk_id_sale' => $sale, 'refund_id' => $ref, 'refund_kind' => 'FULL', 'amount' => 20, 'status' => 'PROPOSED', 'created_at' => now()]);
         $pa = $mk($a, 'R1'); $pb = $mk($b, 'R2');
-        try { Settle::decideRefund(1, $pa, true); $this->fail('not confirmed'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('not confirmed yet', $e->getMessage()); }
+        // a full refund of an order that is not confirmed and not shipped = the line is cancelled, its stock is free again, nothing is booked
+        $c = $this->confirmed('ORD-3', 2); $free = fn () => Stock::available($this->p);
+        $before = $free(); Settle::decideRefund(1, $mk($c, 'R3'), true);
+        $this->assertSame(['Cancelled', 'FULL'], [DB::table('t_sales')->where('id', $c)->value('status'), DB::table('t_sales')->where('id', $c)->value('refund_loss_nature')]);
+        $this->assertSame([0.0, true], [Ledger::balance(1, '5400'), $free() >= $before]);
+        try { Settle::refund(1, $a, 5.0, 'part before confirm'); $this->fail('part'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('not confirmed yet', $e->getMessage()); }
         Sales::confirmMonth($this->shop, '2026-09', true);
         $this->assertSame(40.0, Ledger::balance(1, '1100', null, $this->shop));
         Settle::decideRefund(1, $pa, true);
@@ -79,6 +84,58 @@ class Money2Test extends TestCase
         $this->assertSame('REJECTED', DB::table('t_sale_refund_proposals')->where('id', $pb)->value('status'));
         $v = ProfitService::view(1, 'shop', '2026-09-01', '2026-09-30');
         $this->assertSame(20.0, $v['rows'][0]['mp_costs'], 'the refund shows in the profit view');
+    }
+
+    public function test_part_refunds_add_up_and_never_pass_the_sale_and_a_refund_by_hand_works_by_order_number(): void
+    {
+        $a = $this->confirmed('ORD-1', 2); $this->confirmed('ORD-2', 1); $c = $this->confirmed('ORD-7', 1);
+        DB::table('t_sales')->where('id', $c)->update(['d_order' => '2026-10-02']);   // stays unconfirmed
+        Sales::confirmMonth($this->shop, '2026-09', true);
+        $this->assertSame(60.0, Ledger::balance(1, '1100', null, $this->shop));
+        $x = Settle::refund(1, $a, 15.0, 'Item arrived scratched');
+        $this->assertSame(['PARTIAL', 15.0, 25.0], [$x['kind'], $x['amount'], $x['left']]);
+        try { Settle::refund(1, $a, 30.0, 'too much'); $this->fail('over'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('25.00 still left', $e->getMessage()); }
+        try { Settle::refund(1, $a, 5.0, ' '); $this->fail('reason'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('reason', $e->getMessage()); }
+        $this->assertSame('FULL', Settle::refund(1, $a, null, 'Second complaint – rest refunded')['kind']);
+        $s = DB::table('t_sales')->where('id', $a)->first();
+        $this->assertSame([40.0, 'FULL', 'Confirmed'], [(float) $s->refund_loss_amount, $s->refund_loss_nature, $s->status]);
+        try { Settle::refund(1, $a, 1.0, 'again'); $this->fail('full'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('already refunded in full', $e->getMessage()); }
+        $this->assertSame([20.0, 40.0], [Ledger::balance(1, '1100', null, $this->shop), Ledger::balance(1, '5400')]);
+        // by hand over the API: part of ORD-2, then a not-confirmed order = cancelled
+        $fin = $this->makeUser('FINANCE'); $wh = $this->makeUser('WAREHOUSE');
+        $this->actingAs($wh)->postJson('/api/refunds/manual', ['shop' => $this->shop, 'order_no' => 'ORD-2', 'reason' => 'x y z'])->assertStatus(403);
+        $this->actingAs($fin)->postJson('/api/refunds/manual', ['shop' => $this->shop, 'order_no' => 'ORD-2', 'amount' => 8, 'reason' => 'Late delivery'])->assertOk()->assertJsonPath('amount', 8);
+        $this->actingAs($fin)->postJson('/api/refunds/manual', ['shop' => $this->shop, 'order_no' => 'ORD-2', 'amount' => 50, 'reason' => 'Late delivery'])->assertStatus(422);
+        $this->actingAs($fin)->postJson('/api/refunds/manual', ['shop' => $this->shop, 'order_no' => 'NOPE', 'reason' => 'Late delivery'])->assertStatus(422);
+        $free = Stock::available($this->p);
+        $this->actingAs($fin)->postJson('/api/refunds/manual', ['shop' => $this->shop, 'order_no' => 'ORD-7', 'reason' => 'Buyer cancelled'])->assertOk()->assertJsonPath('cancelled', 1);
+        $this->assertSame(['Cancelled', $free + 1], [DB::table('t_sales')->where('id', $c)->value('status'), Stock::available($this->p)]);
+        $this->assertSame([12.0, 48.0], [Ledger::balance(1, '1100', null, $this->shop), Ledger::balance(1, '5400')]);
+        // the view shows a refund in the month of its order, the books on the day it was refunded – over a period holding both they agree
+        $v = ProfitService::view(1, 'shop', '2026-09-01', date('Y-m-d'));
+        $this->assertSame([48.0, 0.0], [$v['rows'][0]['mp_costs'], $v['books']['difference']], 'part refunds show in the profit view and agree with the ledger');
+        $this->assertSame(Stock::value(1), Ledger::balance(1, '1200')); $this->assertTrue(Ledger::trialBalance(1)['balanced']);
+    }
+
+    public function test_vat_registered_company_keeps_vat_on_fees_and_expenses_apart_and_the_other_way_stays_available(): void
+    {
+        $mk = function (string $id) { $st = DB::table('mo_settlements')->insertGetId(['fk_id_ent' => 1, 'fk_id_branch' => $this->shop, 'report_type' => 'TIKTOK_SETTLEMENT', 'statement_id' => $id, 'statement_date' => '2026-09-12', 'currency' => 'GBP', 'total' => -6, 'net_sales' => 0, 'fees' => -6, 'payable' => -6, 'rows_total' => -6, 'rows_count' => 2, 'f_rows_complete' => 1, 'status' => 'LOADED']);
+            foreach ([['TT_COMMISSION', -5.0], ['TT_VAT', -1.0]] as [$b, $amt]) DB::table('fin_settlement_lines')->insert(RecordService::fillNotNull('fin_settlement_lines', ['batch_id' => 1, 'company_id' => 1, 'branch_id' => $this->shop, 'settlement_id' => $id, 'order_id' => 'O' . $id, 'amount_type' => $b, 'amount_description' => $b, 'amount' => $amt, 'bucket' => 'FEE', 'row_hash' => sha1($id . $b), 'quantity' => 1]));
+            return $st; };
+        // not registered (default): VAT is part of the cost
+        Settle::post(1, $mk('V1'));
+        Money::addExpense(1, ['bank' => $this->bank, 'category' => 'SOFTWARE', 'amount' => 12, 'vat_amount' => 2, 'date' => '2026-09-10']);
+        $this->assertSame([0.0, 6.0, 12.0], [Ledger::balance(1, '1400'), Ledger::balance(1, '5100'), Ledger::balance(1, '6000')]);
+        // registered: kept apart on 1400
+        $this->actingAs($this->owner)->postJson('/api/choices', ['key' => 'VAT_REGISTERED', 'value' => '1'])->assertOk();
+        Settle::post(1, $mk('V2'));
+        Money::addExpense(1, ['bank' => $this->bank, 'category' => 'SOFTWARE', 'amount' => 12, 'vat_amount' => 2, 'date' => '2026-09-11']);
+        $this->assertSame([3.0, 11.0, 22.0], [Ledger::balance(1, '1400'), Ledger::balance(1, '5100'), Ledger::balance(1, '6000')]);
+        try { Money::addExpense(1, ['bank' => $this->bank, 'category' => 'SOFTWARE', 'amount' => 12, 'vat_amount' => 12, 'date' => '2026-09-11']); $this->fail('vat'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('less than the amount', $e->getMessage()); }
+        $r = $this->actingAs($this->owner)->getJson('/api/reports/vat?from=2026-09-01&to=2026-09-30')->assertOk()->json();
+        $this->assertStringContainsString('not a VAT return', json_encode($r));
+        $this->assertStringContainsString('"fees":1', json_encode($r)); $this->assertStringContainsString('"expenses":2', json_encode($r));
+        $this->assertTrue(Ledger::trialBalance(1)['balanced']);
     }
 
     public function test_big_stock_adjustment_and_big_supplier_payment_wait_for_a_second_person(): void

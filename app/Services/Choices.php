@@ -26,6 +26,9 @@ class Choices
             'ASK' => ['ask before using the backup printer', 'The person printing decides.'],
             'AUTO' => ['use the backup printer by itself', 'No stop at the packing desk.'],
             'OFF' => ['fail the job', 'Nothing prints anywhere else; a task is opened.']]],
+        'VAT_REGISTERED' => ['Is the company registered for VAT?', 'This is a fact about the company, not a preference. It decides where the VAT inside fees and expenses goes.', '0', [
+            '0' => ['No', 'VAT paid on fees and expenses is part of the cost.'],
+            '1' => ['Yes', 'VAT on marketplace fees and on expenses is kept apart as VAT to claim back (account 1400) and shown in the VAT report.']], true],
     ];
 
     public static function get(string $key, int $ent): string
@@ -36,10 +39,11 @@ class Choices
     public static function all(int $ent): array
     {
         $out = [];
-        foreach (self::LIST as $key => [$q, $why, $def, $opts]) {
+        foreach (self::LIST as $key => $row) {
+            [$q, $why, $def, $opts] = $row; $fact = ! empty($row[4]);
             $cur = self::get($key, $ent); if (! isset($opts[$cur])) $cur = $def;
-            $out[] = ['key' => $key, 'question' => $q, 'why' => $why, 'value' => $cur, 'recommended' => $def,
-                'options' => array_map(fn ($v, $o) => ['value' => (string) $v, 'label' => $o[0], 'effect' => $o[1], 'recommended' => (string) $v === $def], array_keys($opts), $opts)];
+            $out[] = ['key' => $key, 'question' => $q, 'why' => $why, 'value' => $cur, 'recommended' => $fact ? null : $def,
+                'options' => array_map(fn ($v, $o) => ['value' => (string) $v, 'label' => $o[0], 'effect' => $o[1], 'recommended' => ! $fact && (string) $v === $def], array_keys($opts), $opts), 'fact' => $fact];
         }
         return $out;
     }
