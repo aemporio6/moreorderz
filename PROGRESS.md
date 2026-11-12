@@ -11,7 +11,7 @@ public repo (code only, never data or secrets) · old data = export of 18 Sep 20
 | 4 | Sales and Dispatch (orders, labels, printing) | DONE (12 Nov) – carrier label PDF import carried, see below |
 | 5 | Money (bank, settlements, TikTok, profit views) | DONE (12 Nov) – carried items listed below |
 | 6 | Month close, Partners, Reports | DONE (12 Nov) – parts of the profit waterfall not built, listed below |
-| 7 | Import old data + reconciliation report + full test | IN PROGRESS – part 1 (master data) done (12 Nov) |
+| 7 | Import old data + reconciliation report + full test | IN PROGRESS – master data and transactions imported (12 Nov); full end-to-end test next |
 
 ## Log
 - 12 Nov 04:45 PKT – Laravel 13.40 installed. `mo:install` builds the database in 3 s: 507 baseline tables + core tables, 4,084 registry fields, 146 menu screens with roles, 30 ledger accounts.
@@ -102,6 +102,31 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
     Every one of the 200,117 rows is in exactly one line of the report. A second run imported 0. Key masters: 3 companies, 49 shops, 2,155 products, 101 accounts, 4 users (no passwords). The app was opened on the imported database: all 129 menu routes open, 29 screens show the real rows, no errors.
   - **116 tests pass (1,022 assertions)** – the import tests run on a tiny made-up old database (needs `GRANT ALL ON mo_old_test.*` for the test login; skipped with that message otherwise).
   - **Honest limits:** (1) only master data is in – no sale, purchase or stock row yet, and product stock is 0 until part 2 makes opening lots; (2) content of the copied rows was compared by count and id, not field by field; (3) the 40 "already there" rows (cat_references, reference_items) have the same ids as rows the install seeds – their content was not compared; (4) bank account / card numbers are stored as in the old tool (not encrypted) – the vault encryption of the spec is not built; (5) the export is from 18 Sep 2026: it has 156 tables, the November structure has more – a fresh full export is needed before go-live; (6) the import must start on a fresh install (it keeps old ids).
+
+- 12 Nov – **Step 7, part 2: transactions of the old data.** `php artisan mo:import-old --from=<old database> --transactions [--opening-date=YYYY-MM-DD] [--mask] [--dry]` (after the master-data run). Migration 000008 adds the sale source "history".
+  - **History tables** (31): the old sales files, audits, purchase files, price-change log, reminders, feedback, sourcing documents are copied as they are (every column the new table has; personal details masked with `--mask`). The old stock movements are not copied – the new tool writes its own; opening lots bring in the stock. Lookup ids that were merged in part 1 are repointed in the documents.
+  - **One sales list:** the six old sales tables are merged into `t_sales` as *history* lines – same shop + order + SKU only once, the more trusted table wins (t_sale_orders_new → t_sale_orders → t_sale_orders_1 → ebay → t_sale → t_tiktok_sale). History lines are locked and searchable; they have **no effect on stock, the books or the profit figures**.
+  - **Opening stock:** one opening lot per product with stock, quantity = the old product stock figure, cost = the old landing price (else raw price), booked Dr 1200 / Cr 3000 on the opening date, in one location per company.
+  - **Result on the real 18 Sep 2026 export:**
+
+    | What | Old rows | Outcome |
+    |---|---|---|
+    | 31 history tables | 134,185 | 134,185 copied · 0 failed |
+    | t_sale_orders_new → sales list | 4,977 | 4,853 in · 124 left out (22 shop not in the tool, 102 no order number / date) |
+    | t_sale_orders → sales list | 355 | 337 in · 18 already there from t_sale_orders_new |
+    | t_sale_orders_1 → sales list | 18,809 | 18,466 in · 26 repeats · 317 left out (310 shop not in the tool, 7 no order number) |
+    | ebay (raw file) → sales list | 29,955 | 10,034 in · 18,732 already there (the same orders as t_sale_orders_1) · 1,189 left out |
+    | t_sale → sales list | 3,384 | 2,877 in · 507 left out (their audit month has no shop) |
+    | t_tiktok_sale → sales list | 109 | 7 in · 102 left out (48 shop not in the tool, 54 no date) |
+    | **Sales list total** | | **36,574 history lines, 311,470.22, 4 Feb 2022 – 31 Mar 2026** |
+    | Opening stock | 1,331 products | 1,331 lots · 64,116 units = the old stock figure · value 519.25 = ledger 1200 |
+    | Old stock movements | 1,740 | replaced by the opening lots |
+
+    Second run: 0 imported. Night check on the imported database: stock mismatches 0, value = ledger for all 3 companies; trial balance balanced. The app on the imported database: 129 menu routes open, 55 screens show real rows, none slower than 3 s, 0 errors.
+  - **Findings in the old data the owner must know:** (1) **1,326 of the 1,331 products with stock have no cost in the old tool** – their opening lots have cost 0 (stock value 519.25 for 64,116 units); each needs its cost before its units are sold, or profit will be overstated. (2) The old tool's own stock movements add up to 53,138 units while the product stock figures add up to 64,116 – the product figure was used. (3) Lines left out of the sales list belong to shops that no longer exist in the old tool, or have no order number / date; their rows are still in the history copies.
+  - Also fixed: the Stock page counted "Units in stock" over the 200 listed products only; it now shows the company total and says how many products are listed.
+  - **117 tests pass (1,043 assertions)** incl. part 2 on the made-up old database.
+  - **Honest limits:** history sales are stored in GBP as written in the old tool (no currency column there); whether t_sale (2022–23 audit file) repeats orders of t_sale_orders_1 under another order number format was not verified; history lines are not linked to products except where the old row had the product id; the three old sourcing POs and two payments are copied as documents only – they are **not** in the books (enter open supplier balances by hand); old bin positions (8 rows) are not used; money totals were compared per table, not row by row.
 
 ## Step 6 – carried forward
 - Profit waterfall parts (PHASE_06 §6.3): VA share / salary, handler share, lot-owner investor earnings and the stacking rule, owner modes, loss carried forward, INVESTOR_INVOICING route, tax-reserve ledger · partner statement PDF with versions, accept / query, WhatsApp / e-mail · adjustment form for a locked month · close checks PURCHASE_VS_SUPPLIER and EXPENSES (shared-expense rules) · the rest of the report catalogue.

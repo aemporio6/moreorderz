@@ -36,8 +36,9 @@ class StockController extends Controller
         $ent = (int) Context::ent(); $money = in_array($r->user()->role_code, self::MONEY, true);
         $rows = StockService::onHand($ent, $r->query('q'));
         if (! $money) foreach ($rows as &$x) unset($x['value']);
-        return ['rows' => $rows, 'show_value' => $money, 'total_value' => $money ? StockService::value($ent) : null, 'total_units' => array_sum(array_column($rows, 'units')),
-            'low' => count(array_filter($rows, fn ($x) => $x['low'])), 'can_change' => in_array($r->user()->role_code, self::CHANGE, true)];
+        return ['rows' => $rows, 'show_value' => $money, 'total_value' => $money ? StockService::value($ent) : null, 'total_units' => (int) \Illuminate\Support\Facades\DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->where('l.company_id', $ent)->sum('b.qty'),   // the whole company, not only the rows shown
+            'low' => \Illuminate\Support\Facades\DB::table('t_product_vendors')->where('fk_id_ent', $ent)->where('min_level', '>', 0)->whereColumn('stock', '<=', 'min_level')->count(),
+            'shown' => count($rows), 'products' => \Illuminate\Support\Facades\DB::table('t_product_vendors')->where('fk_id_ent', $ent)->where('stock', '<>', 0)->count(), 'can_change' => in_array($r->user()->role_code, self::CHANGE, true)];
     }
 
     public function product(Request $r, int $id)
