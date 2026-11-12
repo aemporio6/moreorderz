@@ -106,6 +106,7 @@
       if (r === '#/printers') return await pagePrinters();
       if (r === '#/print-queue') return await pagePrintQueue();
       if (r === '#/users') return await pageUsers();
+      if (r === '#/choices') return await pageChoices();
       if (r === '#/settings') return await pageSettings();
       if (r.startsWith('#/audit')) return await pageAudit();
       if (r === '#/health') return await pageHealth();
@@ -611,10 +612,19 @@
   }
 
   // ---------- settings ----------
+  async function pageChoices() {
+    busy(true); let d; try { d = await api('choices'); } finally { busy(false); }
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/settings">Settings</a> ›</div><h1>Choices</h1><div class="sub">Where the tool can work in more than one way, every way is built in. Pick the one that fits this company; the recommended one is marked. A change applies from now on – locked months never change.</div></div></div>
+      ${d.choices.map(c => `<div class="card" style="margin-bottom:12px"><div class="card-b"><div style="font-weight:650;font-size:15px">${esc(c.question)}</div><div class="small muted" style="margin:2px 0 8px">${esc(c.why)}</div>
+        ${c.options.map(o => `<label style="display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid ${o.value === c.value ? 'var(--accent)' : 'var(--line)'};border-radius:8px;margin-top:6px;cursor:${d.can_edit ? 'pointer' : 'default'}"><input type="radio" name="ch_${c.key}" value="${esc(o.value)}" ${o.value === c.value ? 'checked' : ''} ${d.can_edit ? '' : 'disabled'} data-ch="${c.key}" style="margin-top:3px">
+          <span><b>${esc(o.label)}</b>${o.recommended ? ' <span class="chip done">recommended</span>' : ''}<div class="small muted">${esc(o.effect)}</div></span></label>`).join('')}</div></div>`).join('')}
+      ${d.can_edit ? '' : '<div class="small muted">Only the Owner changes a choice.</div>'}`;
+    $$('#main [data-ch]').forEach(i => i.onchange = () => act('choices', { key: i.dataset.ch, value: i.value }, () => pageChoices()));
+  }
   async function pageSettings() {
     busy(true); let d; try { d = await api('settings'); } finally { busy(false); }
     const ent = (S.boot.companies.find(c => c.id == S.boot.ent) || {}).name || 'this company';
-    $('#main').innerHTML = `<div class="page-head"><div><h1>Settings</h1><div class="sub">A value for ${esc(ent)} wins over the value for all companies. ${d.settings.length} settings.</div></div></div>
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Settings</h1><div class="sub">A value for ${esc(ent)} wins over the value for all companies. ${d.settings.length} settings.</div></div><div class="actions"><a class="btn primary" href="#/choices">Choices – how the company works</a></div></div>
       <div class="card"><div class="list-bar"><input class="q" id="sQ" placeholder="Find a setting…"></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Setting</th><th>All companies</th><th>${esc(ent)}</th></tr></thead><tbody id="sBody"></tbody></table></div></div>`;
     const draw = () => { const q = $('#sQ').value.trim().toLowerCase(); $('#sBody').innerHTML = d.settings.filter(s => !q || s.key.toLowerCase().includes(q)).map(s => `<tr><td><code>${esc(s.key)}</code></td><td class="click" data-k="${esc(s.key)}" data-s="global" style="cursor:pointer">${s.global === null ? '<span class="faint">—</span>' : esc(s.global)}</td><td class="click" data-k="${esc(s.key)}" data-s="company" style="cursor:pointer">${s.company === null ? '<span class="faint">same</span>' : esc(s.company)}</td></tr>`).join('');
       $$('#sBody [data-k]').forEach(td => td.onclick = () => { const s = d.settings.find(x => x.key === td.dataset.k);

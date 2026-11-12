@@ -43,6 +43,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('me/two-step', [AdminController::class, 'twoStepSetup']);
         Route::post('me/two-step', [AdminController::class, 'twoStepEnable']);
         Route::post('me/two-step-off', [AdminController::class, 'twoStepOff']);
+        Route::get('choices', [AdminController::class, 'choices']);
+        Route::post('choices', [AdminController::class, 'saveChoice']);
         Route::get('settings', [AdminController::class, 'settings']);
         Route::post('settings', [AdminController::class, 'saveSetting']);
         Route::get('audit', [AdminController::class, 'audit']);

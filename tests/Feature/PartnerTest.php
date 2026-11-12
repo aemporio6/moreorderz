@@ -131,7 +131,7 @@ class PartnerTest extends TestCase
         $sh = Partners::monthShares(1, $this->shop, $this->m1);
         $this->assertSame([190.0, 95.0, 60.0], [$sh['distributable'], $sh['lines'][0]['profit'], $sh['overhead_share']]);
         $this->assertSame('GREEN', collect(Close::check(1, $this->shop, $this->m1)['checks'])->firstWhere('code', 'EXPENSES')['status']);
-        \App\Services\Settings::set('PROFIT_SHARE_AFTER_OVERHEADS', 0, 1);
+        \App\Services\Choices::set('PROFIT_SHARE_AFTER_OVERHEADS', '0', 1);
         $this->assertSame(125.0, Partners::monthShares(1, $this->shop, $this->m1)['lines'][0]['profit'], 'switched off: the share is on the shop profit before overheads');
     }
 }

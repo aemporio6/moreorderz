@@ -140,4 +140,32 @@ class CloseTest extends TestCase
         $this->order('ORD-2', $this->m2 . '-10');
         $this->assertSame('RED', collect(Close::check(1, $this->shop, $this->m2)['checks'])->firstWhere('code', 'FILES_PRESENT')['status']);
     }
+
+    public function test_choices_keep_both_ways_available_and_only_the_owner_switches(): void
+    {
+        $c = collect(\App\Services\Choices::all(1))->keyBy('key');
+        $this->assertSame(['1', '1', 'FORWARD'], [$c['PROFIT_SHARE_AFTER_OVERHEADS']['value'], $c['CLOSE_FIRST_FILE_PARTIAL']['value'], $c['LATE_LINES_LOCKED_MONTH']['value']], 'the recommended way is the default');
+        foreach ($c as $x) { $this->assertGreaterThanOrEqual(2, count($x['options'])); $this->assertCount(1, array_filter($x['options'], fn ($o) => $o['recommended'])); }
+        $mgr = $this->makeUser('MANAGER');
+        $this->actingAs($mgr)->getJson('/api/choices')->assertOk()->assertJsonPath('can_edit', false);
+        $this->postJson('/api/choices', ['key' => 'LATE_LINES_LOCKED_MONTH', 'value' => 'REFUSE'])->assertStatus(403);
+        $this->actingAs($this->owner)->postJson('/api/choices', ['key' => 'LATE_LINES_LOCKED_MONTH', 'value' => 'MAYBE'])->assertStatus(422);
+        // strict first file: the mid-month file no longer covers the first month
+        $this->order('ORD-1', $this->m1 . '-20'); Sales::confirmMonth($this->shop, $this->m1, true);
+        DB::table('mo_settlement_periods')->insert(['fk_id_ent' => 1, 'fk_id_branch' => $this->shop, 'report_type' => 'TIKTOK_SETTLEMENT', 'period_from' => $this->m1 . '-03', 'period_to' => date('Y-m-t', strtotime($this->m1 . '-01')), 'hub_check' => 'OK', 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('mo_settlements')->insert(['fk_id_ent' => 1, 'fk_id_branch' => $this->shop, 'report_type' => 'TIKTOK_SETTLEMENT', 'statement_id' => 'ST1', 'statement_date' => $this->m1 . '-25', 'currency' => 'GBP', 'status' => 'PAID', 'f_rows_complete' => 1]);
+        $this->postJson('/api/choices', ['key' => 'CLOSE_FIRST_FILE_PARTIAL', 'value' => '0'])->assertOk();
+        $this->assertSame('RED', collect(Close::check(1, $this->shop, $this->m1)['checks'])->firstWhere('code', 'FILES_PRESENT')['status']);
+        $this->postJson('/api/choices', ['key' => 'CLOSE_FIRST_FILE_PARTIAL', 'value' => '1'])->assertOk();
+        // late line of a locked month: refused when the company chooses so, booked forward otherwise
+        Context::set(1, $this->owner->id);
+        foreach (['ORDERS_VS_TXN', 'PAYOUT_VS_BANK'] as $w) if (collect(Close::check(1, $this->shop, $this->m1)['checks'])->firstWhere('code', $w)['status'] === 'RED') Close::waive(1, $this->shop, $this->m1, $w, 'test');
+        Close::lock(1, $this->shop, $this->m1, 'ok');
+        $this->order('ORD-LATE', $this->m1 . '-28');
+        $this->postJson('/api/choices', ['key' => 'LATE_LINES_LOCKED_MONTH', 'value' => 'REFUSE'])->assertOk();
+        try { Sales::confirmMonth($this->shop, $this->m1, true); $this->fail('refused'); } catch (\RuntimeException $e) { $this->assertStringContainsString('Settings › Choices', $e->getMessage()); }
+        $this->postJson('/api/choices', ['key' => 'LATE_LINES_LOCKED_MONTH', 'value' => 'FORWARD'])->assertOk();
+        $this->assertSame(1, Sales::confirmMonth($this->shop, $this->m1, true)['lines']);
+        $this->assertSame(3, DB::table('sys_audit_log')->where('table_name', 'sys_settings')->where('fk_id_ent', 1)->where('changes_json', 'like', '%LATE_LINES_LOCKED_MONTH%')->count() + DB::table('sys_audit_log')->where('changes_json', 'like', '%CLOSE_FIRST_FILE_PARTIAL%')->count() - 1, 'every switch is in the audit');
+    }
 }

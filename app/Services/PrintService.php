@@ -147,7 +147,7 @@ class PrintService
         if (! isset($opt['copies']) && $route?->copies) $copies = max(1, (int) $route->copies);
         $note = null;
         if (! self::usable($printer)) {
-            $backup = self::printer($route?->fk_id_backup_printer); $mode = strtoupper((string) Settings::get('PRINT_FAILOVER', $ent, 'ASK'));
+            $backup = self::printer($route?->fk_id_backup_printer); $mode = Choices::get('PRINT_FAILOVER', $ent);
             $state = $printer->f_active ? (['REPAIR' => 'in repair', 'OFFLINE' => 'offline', 'RETIRED' => 'retired'][$printer->printer_status] ?? strtolower($printer->printer_status)) : 'switched off';
             if ($mode !== 'OFF' && self::usable($backup) && $backup->id !== $printer->id) {
                 if ($mode === 'ASK' && empty($opt['use_backup']) && empty($opt['auto'])) {
@@ -263,7 +263,7 @@ class PrintService
         $out = self::failJob($ent, $jobId, $printer, $what ?: 'Reported: did not print correctly');
         $kind = DB::table('label_templates')->where('id', $j->fk_id_label_template)->value('label_kind');
         $route = self::route($ent, $kind); $backup = self::printer($route?->fk_id_backup_printer);
-        if ($kind !== 'TEST' && self::usable($backup) && $backup->id !== $printer->id && strtoupper((string) Settings::get('PRINT_FAILOVER', $ent, 'ASK')) !== 'OFF') {
+        if ($kind !== 'TEST' && self::usable($backup) && $backup->id !== $printer->id && Choices::get('PRINT_FAILOVER', $ent) !== 'OFF') {
             $out['backup'] = ['id' => $backup->id, 'name' => $backup->name];
         }
         return $out;
@@ -514,7 +514,7 @@ class PrintService
         return ['printers' => $printers, 'routes' => $routes,
             'media' => DB::table('label_media')->whereIn('fk_id_ent', [0, $ent])->where('f_active', 1)->orderBy('id')->get(['id', 'code', 'name', 'media_kind', 'width_mm', 'height_mm']),
             'adapters' => DB::table('print_adapters')->where('f_active', 1)->orderBy('id')->get(['id', 'code', 'name', 'needs_local_agent']),
-            'settings' => ['failover' => strtoupper((string) Settings::get('PRINT_FAILOVER', $ent, 'ASK')), 'scale_limit' => (float) Settings::get('PRINT_SCALE_LIMIT_PCT', $ent, 3), 'test_required' => (int) Settings::get('PRINT_TEST_REQUIRED', $ent, 1)],
+            'settings' => ['failover' => Choices::get('PRINT_FAILOVER', $ent), 'scale_limit' => (float) Settings::get('PRINT_SCALE_LIMIT_PCT', $ent, 3), 'test_required' => (int) Settings::get('PRINT_TEST_REQUIRED', $ent, 1)],
             'reasons' => self::REASONS];
     }
 

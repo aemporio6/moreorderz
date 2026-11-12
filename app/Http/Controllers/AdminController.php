@@ -171,6 +171,20 @@ class AdminController extends Controller
         return ['message' => EventBus::runQueue() . ' events processed'];
     }
 
+    public function choices(Request $r)
+    {
+        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER', 'FINANCE', 'ACCOUNTANT'], true), 403, 'Your role cannot see the company choices.');
+        return ['choices' => \App\Services\Choices::all((int) Context::ent()), 'can_edit' => $r->user()->role_code === 'OWNER'];
+    }
+
+    public function saveChoice(Request $r)
+    {
+        abort_unless($r->user()->role_code === 'OWNER', 403, 'Only the Owner changes a company choice.');
+        $d = $r->validate(['key' => 'required|string|max:60', 'value' => 'required|string|max:30']);
+        try { \App\Services\Choices::set($d['key'], $d['value'], (int) Context::ent()); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+        return ['message' => 'Choice saved – it applies from now on'];
+    }
+
     public function ledger(Request $r)
     {
         abort_unless(in_array($r->user()->role_code, ['OWNER', 'FINANCE', 'ACCOUNTANT'], true), 403, 'Only Owner, Finance and Accountant see the ledger.');
