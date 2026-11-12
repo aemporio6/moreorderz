@@ -24,6 +24,20 @@ class ReportService
         'cash' => ['Money', 'Cash in and out by kind', 'Every movement on the bank accounts in the period, grouped by what it was for, per month.', self::FIN, true],
         'partners' => ['Money', 'Partner summary', 'Per partner in the period: capital in, profit share, fees, withdrawn; and the balance today.', self::FIN, true],
         'vat' => ['Money', 'VAT to claim back', 'VAT inside marketplace fees and expenses per month (for a VAT-registered company).', self::FIN, true],
+        'research' => ['Research', 'Research pipeline and margin: estimate vs real', 'Every idea of the period: its status, the estimated margin and – once it sells – the real margin of its product.', ['OWNER', 'MANAGER', 'SOURCING', 'PARTNER'], true],
+        'landed' => ['Buying', 'Landed cost per lot', 'Each lot received in the period: product cost, its share of freight, duty and other costs, cost per unit, provisional or final.', self::FIN + [3 => 'MANAGER', 4 => 'SOURCING'], true],
+        'in_transit' => ['Buying', 'Goods on the way', 'Shipments not arrived yet: PO, supplier, units, ETA and how late.', ['OWNER', 'MANAGER', 'SOURCING', 'WAREHOUSE', 'FINANCE'], false],
+        'supplier_perf' => ['Buying', 'Supplier performance', 'Per supplier in the period: POs, units ordered and received, missing and damaged %, days late on average.', ['OWNER', 'MANAGER', 'SOURCING'], true],
+        'po_payments' => ['Buying', 'PO payment position', 'Every payment term still open or paid in the period: planned, paid, left, due date.', self::FIN + [3 => 'MANAGER', 4 => 'SOURCING'], true],
+        'valuation' => ['Stock', 'Stock valuation at a date', 'Units and value per product as at the end date: lots received by then less units that left by then.', self::FIN + [3 => 'MANAGER'], true],
+        'slow_dead' => ['Stock', 'Slow and dead stock', 'Products with stock and no sale for 90 days (slow) or 180 days (dead), with the value tied up.', ['OWNER', 'MANAGER', 'FINANCE', 'SOURCING'], false],
+        'sales_months' => ['Sales', 'Sales per shop and month', 'Confirmed and not confirmed sales of each shop, month by month, in the period.', ['OWNER', 'MANAGER', 'FINANCE', 'ACCOUNTANT', 'PARTNER'], true],
+        'price_log' => ['Sales', 'Price changes', 'Every selling price change of the period: product, marketplace, old and new price, by whom.', ['OWNER', 'MANAGER', 'TL'], true],
+        'expenses' => ['Money', 'Expenses by category', 'Booked expenses of the period per category and shop (cancelled ones left out).', self::FIN + [3 => 'MANAGER'], true],
+        'ledger' => ['Money', 'Ledger lines (export for the accountant)', 'Every journal line of the period: date, number, account, debit, credit, memo.', self::FIN, true],
+        'tasks_week' => ['Tasks', 'Tasks per person', 'Per person in the period: tasks closed, late now, stuck now, average score.', ['OWNER', 'MANAGER', 'TL'], true],
+        'users' => ['People', 'Logins and roles', 'Every login: role, company, active, last sign-in, open sign-ins.', ['OWNER', 'MANAGER'], false],
+        'menu' => ['System', 'Menu and who sees it', 'Every screen of the menu with its number and the roles that see it.', ['OWNER', 'MANAGER'], false],
         'close' => ['Money', 'Month close status', 'Every shop × month of the period: open, checked or locked, with the locked profit.', ['OWNER', 'MANAGER', 'FINANCE', 'ACCOUNTANT'], true],
     ];
     private const NO_MONEY = ['WAREHOUSE'];
@@ -165,6 +179,147 @@ class ReportService
         ksort($out);
         return [[['month', 'Month', 'text'], ['fees', 'VAT on marketplace fees', 'money'], ['expenses', 'VAT on expenses', 'money'], ['other', 'Other', 'money'], ['total', 'VAT to claim back', 'money']], array_values($out),
             (Choices::get('VAT_REGISTERED', $ent) === '1' ? '' : 'The company is set as NOT registered for VAT (Settings › Choices), so VAT stays inside the costs and this report is empty. ') . 'This is the VAT you paid (input VAT) as booked on account 1400. The VAT on your own sales (output VAT) is NOT worked out by the tool yet – this is not a VAT return.'];
+    }
+
+    // ───────────── research, buying, stock, sales, money, tasks, people, system (added in Round 2 part 5) ─────────────
+
+    private static function r_research(int $ent, string $from, string $to): array
+    {
+        $rows = DB::table('src_research as r')->leftJoin('t_product_vendors as p', 'p.id', '=', 'r.fk_id_product')->where('r.fk_id_ent', $ent)->where('r.f_deleted', 0)->whereBetween(DB::raw('DATE(r.created_at)'), [$from, $to])->orderByDesc('r.id')
+            ->get(['r.research_code', 'r.title', 'r.status', 'r.est_margin_pct', 'r.fk_id_product', 'p.SKU_VENDOR as sku']);
+        $real = $rows->pluck('fk_id_product')->filter()->isEmpty() ? collect() : DB::table('t_sales as s')->leftJoin('fin_lot_consumption as c', 'c.fk_id_sale', '=', 's.id')->whereIn('s.fk_product_id', $rows->pluck('fk_id_product')->filter())->where('s.status', 'Confirmed')->where('s.sale_source', 'active')
+            ->groupBy('s.fk_product_id')->selectRaw('s.fk_product_id p, SUM(s.total_amount_gbp) sales, SUM(COALESCE(c.qty * c.unit_cost_gbp, 0)) cost, SUM(s.qty) units')->get()->keyBy('p');
+        return [[['code', 'Research', 'text'], ['title', 'Idea', 'text'], ['status', 'Status', 'text'], ['sku', 'SKU', 'text'], ['est', 'Estimated margin %', 'pct'], ['units', 'Units sold', 'int'], ['sales', 'Sales', 'money'], ['real', 'Real gross margin %', 'pct']],
+            $rows->map(function ($r) use ($real) { $x = $real[$r->fk_id_product] ?? null; $sales = (float) ($x->sales ?? 0);
+                return ['code' => $r->research_code, 'title' => $r->title, 'status' => $r->status, 'sku' => $r->sku ?? '', 'est' => $r->est_margin_pct !== null ? (float) $r->est_margin_pct : null, 'units' => (int) ($x->units ?? 0), 'sales' => round($sales, 2), 'real' => $sales > 0 ? round(($sales - (float) $x->cost) / $sales * 100, 1) : null]; })->all(),
+            'The real margin is sales less the cost of the units sold (before marketplace fees). Empty until the product has confirmed sales.'];
+    }
+
+    private static function r_landed(int $ent, string $from, string $to): array
+    {
+        $rows = DB::table('fin_lots as l')->leftJoin('t_src_po as p', 'p.id', '=', 'l.po_id')->leftJoin('t_src_landed_cost as c', fn ($j) => $j->on('c.fk_id_po', '=', 'l.po_id')->where('c.f_active', 1)->whereNull('c.superseded_by'))
+            ->where('l.company_id', $ent)->where('l.source', 'GRN')->whereBetween('l.received_date', [$from, $to])->orderBy('l.received_date')->get(['l.lot_code', 'l.sku', 'p.po_number', 'l.received_date', 'l.qty', 'l.unit_cost_gbp', 'l.landed_status', 'c.freight_cost', 'c.customs_duty', 'c.other_cost', 'c.product_cost']);
+        return [[['lot', 'Lot', 'text'], ['sku', 'SKU', 'text'], ['po', 'PO', 'text'], ['date', 'Received', 'date'], ['qty', 'Units', 'int'], ['unit', 'Cost per unit', 'money'], ['value', 'Lot value', 'money'], ['po_freight', 'PO freight', 'money'], ['po_duty', 'PO duty', 'money'], ['po_other', 'PO other', 'money'], ['status', 'Cost', 'text']],
+            $rows->map(fn ($r) => ['lot' => $r->lot_code, 'sku' => $r->sku, 'po' => $r->po_number ?? '', 'date' => $r->received_date, 'qty' => (int) $r->qty, 'unit' => round((float) $r->unit_cost_gbp, 4), 'value' => round((float) $r->unit_cost_gbp * $r->qty, 2),
+                'po_freight' => round((float) $r->freight_cost, 2), 'po_duty' => round((float) $r->customs_duty, 2), 'po_other' => round((float) $r->other_cost, 2), 'status' => $r->landed_status])->all(),
+            'The cost per unit already holds the lot\'s share of freight, duty and other costs once the landed-cost run is done. PO costs are repeated on each lot of the PO – do not add them up across lots.'];
+    }
+
+    private static function r_in_transit(int $ent, string $from, string $to): array
+    {
+        $rows = DB::table('t_src_shipments as s')->leftJoin('t_src_po as p', 'p.id', '=', 's.fk_id_po')->leftJoin('t_src_suppliers as u', 'u.id', '=', 's.fk_id_supplier')->where('s.fk_id_ent', $ent)->where('s.f_active', 1)->whereNull('s.actual_arrival')->orderBy('s.eta')
+            ->get(['s.shipment_code', 'p.po_number', 'u.supplier_name', 's.planned_qty', 's.etd', 's.eta', 's.shipping_mode', 's.status']);
+        $today = date('Y-m-d');
+        return [[['ship', 'Shipment', 'text'], ['po', 'PO', 'text'], ['supplier', 'Supplier', 'text'], ['units', 'Units', 'int'], ['mode', 'Mode', 'text'], ['etd', 'Left', 'date'], ['eta', 'Expected', 'date'], ['late', 'Days late', 'int']],
+            $rows->map(fn ($r) => ['ship' => $r->shipment_code, 'po' => $r->po_number ?? '', 'supplier' => $r->supplier_name ?? '', 'units' => (int) $r->planned_qty, 'mode' => $r->shipping_mode ?? '', 'etd' => $r->etd, 'eta' => $r->eta, 'late' => $r->eta && $r->eta < $today ? (int) ((strtotime($today) - strtotime($r->eta)) / 86400) : 0])->all(),
+            'Today\'s position: every shipment with no arrival date yet. The dates of the report are not used.'];
+    }
+
+    private static function r_supplier_perf(int $ent, string $from, string $to): array
+    {
+        $po = DB::table('t_src_po as p')->join('t_src_suppliers as u', 'u.id', '=', 'p.fk_id_supplier')->where('p.fk_id_ent', $ent)->where('p.f_active', 1)->whereBetween('p.po_date', [$from, $to])->whereNotIn('p.status', ['DRAFT', 'CANCELLED'])
+            ->groupBy('u.id', 'u.supplier_name')->selectRaw('u.id, u.supplier_name, COUNT(*) pos, SUM(p.po_total) total')->get()->keyBy('id');
+        $g = DB::table('t_src_grn as g')->join('t_src_po as p', 'p.id', '=', DB::raw('(SELECT fk_id_po FROM t_src_shipments WHERE id = g.fk_id_shipment)'))->where('g.fk_id_ent', $ent)->where('g.posting_status', 'POSTED')->whereBetween('p.po_date', [$from, $to])
+            ->groupBy('p.fk_id_supplier')->selectRaw('p.fk_id_supplier s, SUM(g.expected_units) exp, SUM(g.units_received) rec, SUM(g.damaged_units) dmg, SUM(g.missing_units) mis')->get()->keyBy('s');
+        $late = DB::table('t_src_shipments as s')->join('t_src_po as p', 'p.id', '=', 's.fk_id_po')->where('s.fk_id_ent', $ent)->whereNotNull('s.actual_arrival')->whereNotNull('s.eta')->whereBetween('p.po_date', [$from, $to])
+            ->groupBy('p.fk_id_supplier')->selectRaw('p.fk_id_supplier s, AVG(GREATEST(DATEDIFF(s.actual_arrival, s.eta), 0)) late, COUNT(*) n')->get()->keyBy('s');
+        return [[['supplier', 'Supplier', 'text'], ['pos', 'POs', 'int'], ['total', 'Ordered (PO currency, added up)', 'money'], ['expected', 'Units expected', 'int'], ['received', 'Units received', 'int'], ['missing_pct', 'Missing %', 'pct'], ['damaged_pct', 'Damaged %', 'pct'], ['late', 'Days late on average', 'pct']],
+            $po->map(function ($r) use ($g, $late) { $x = $g[$r->id] ?? null; $exp = (float) ($x->exp ?? 0); $rec = (float) ($x->rec ?? 0);
+                return ['supplier' => $r->supplier_name, 'pos' => (int) $r->pos, 'total' => round((float) $r->total, 2), 'expected' => (int) $exp, 'received' => (int) $rec, 'missing_pct' => $exp > 0 ? round((float) $x->mis / $exp * 100, 1) : null, 'damaged_pct' => $rec > 0 ? round((float) $x->dmg / $rec * 100, 1) : null, 'late' => isset($late[$r->id]) ? round((float) $late[$r->id]->late, 1) : null]; })->values()->all(),
+            'POs dated in the period (drafts and cancelled left out). "Ordered" adds PO totals in their own currencies – compare suppliers of the same currency.'];
+    }
+
+    private static function r_po_payments(int $ent, string $from, string $to): array
+    {
+        $rows = DB::table('t_src_payment_terms as t')->join('t_src_po as p', 'p.id', '=', 't.fk_id_po')->leftJoin('t_src_suppliers as u', 'u.id', '=', 'p.fk_id_supplier')->leftJoin('cat_currency as c', 'c.id', '=', 'p.fk_id_currency')->where('t.fk_id_ent', $ent)->where('t.f_active', 1)
+            ->where(fn ($w) => $w->where('t.remaining_amount', '>', 0)->orWhereBetween('t.due_date', [$from, $to]))->orderBy('t.due_date')->get(['p.po_number', 'u.supplier_name', 't.milestone', 'c.currency_code', 't.planned_amount', 't.paid_amount', 't.remaining_amount', 't.due_date', 't.status']);
+        return [[['po', 'PO', 'text'], ['supplier', 'Supplier', 'text'], ['term', 'Term', 'text'], ['currency', 'Currency', 'text'], ['planned', 'Planned', 'money'], ['paid', 'Paid', 'money'], ['left', 'Left', 'money'], ['due', 'Due', 'date'], ['status', 'Status', 'text']],
+            $rows->map(fn ($r) => ['po' => $r->po_number, 'supplier' => $r->supplier_name ?? '', 'term' => $r->milestone, 'currency' => $r->currency_code ?? '', 'planned' => round((float) $r->planned_amount, 2), 'paid' => round((float) $r->paid_amount, 2), 'left' => round((float) $r->remaining_amount, 2), 'due' => $r->due_date, 'status' => $r->status])->all(),
+            'Amounts in the currency of each PO. Every term still open, plus the terms due in the period.'];
+    }
+
+    private static function r_valuation(int $ent, string $from, string $to): array
+    {
+        $in = DB::table('fin_lots')->where('company_id', $ent)->where('received_date', '<=', $to)->where('source', '<>', 'SPLIT')->groupBy('fk_id_product')->selectRaw('fk_id_product p, SUM(qty) q, SUM(qty * unit_cost_gbp) v')->get()->keyBy('p');
+        $split = DB::table('fin_lots')->where('company_id', $ent)->where('received_date', '<=', $to)->where('source', 'SPLIT')->groupBy('fk_id_product')->selectRaw('fk_id_product p, SUM(qty) q, SUM(qty * unit_cost_gbp) v')->get()->keyBy('p');
+        $out = DB::table('fin_lot_consumption as c')->join('fin_lots as l', 'l.id', '=', 'c.lot_id')->where('l.company_id', $ent)->where('c.consumed_on', '<=', $to)->groupBy('l.fk_id_product')->selectRaw('l.fk_id_product p, SUM(c.qty) q, SUM(c.qty * c.unit_cost_gbp) v')->get()->keyBy('p');
+        $names = DB::table('t_product_vendors')->whereIn('id', $in->keys())->get(['id', 'SKU_VENDOR', 'product_name_vendor'])->keyBy('id'); $rows = [];
+        foreach ($in as $p => $x) { $q = (int) $x->q + (int) ($split[$p]->q ?? 0) - (int) ($out[$p]->q ?? 0); $v = (float) $x->v + (float) ($split[$p]->v ?? 0) - (float) ($out[$p]->v ?? 0); if ($q === 0 && abs($v) < 0.005) continue;
+            $rows[] = ['sku' => $names[$p]->SKU_VENDOR ?? '', 'name' => $names[$p]->product_name_vendor ?? '', 'units' => $q, 'value' => round($v, 2), 'avg' => $q ? round($v / $q, 4) : null]; }
+        usort($rows, fn ($a, $b) => $b['value'] <=> $a['value']);
+        return [[['sku', 'SKU', 'text'], ['name', 'Product', 'text'], ['units', 'Units', 'int'], ['value', 'Value at cost', 'money'], ['avg', 'Average cost per unit', 'money']], $rows,
+            'As at the end date. Units that left by sale, loss or write-off up to that date are taken out at the cost of their own lot (FIFO), so today\'s figure equals the stock value in the books. Later cost corrections of a lot show at the date the lot was received.'];
+    }
+
+    private static function r_slow_dead(int $ent, string $from, string $to): array
+    {
+        $stock = DB::table('fin_lots')->where('company_id', $ent)->where('qty_left', '>', 0)->groupBy('fk_id_product')->selectRaw('fk_id_product p, SUM(qty_left) q, SUM(qty_left * unit_cost_gbp) v')->get()->keyBy('p');
+        $last = DB::table('t_sales')->where('fk_id_ent', $ent)->where('sale_source', 'active')->whereIn('status', ['Pending', 'Confirmed'])->whereIn('fk_product_id', $stock->keys())->groupBy('fk_product_id')->selectRaw('fk_product_id p, MAX(d_order) d')->pluck('d', 'p');
+        $names = DB::table('t_product_vendors')->whereIn('id', $stock->keys())->get(['id', 'SKU_VENDOR', 'product_name_vendor'])->keyBy('id');
+        $slow = (int) Settings::get('slow_days', $ent, 90); $dead = (int) Settings::get('dead_days', $ent, 180); $rows = [];
+        foreach ($stock as $p => $x) { $d = $last[$p] ?? null; $days = $d ? (int) ((time() - strtotime($d)) / 86400) : null; if ($days !== null && $days < $slow) continue;
+            $rows[] = ['sku' => $names[$p]->SKU_VENDOR ?? '', 'name' => $names[$p]->product_name_vendor ?? '', 'units' => (int) $x->q, 'value' => round((float) $x->v, 2), 'last' => $d, 'days' => $days, 'kind' => $days === null || $days >= $dead ? 'Dead' : 'Slow']; }
+        usort($rows, fn ($a, $b) => $b['value'] <=> $a['value']);
+        return [[['sku', 'SKU', 'text'], ['name', 'Product', 'text'], ['units', 'Units in stock', 'int'], ['value', 'Value at cost', 'money'], ['last', 'Last sale', 'date'], ['days', 'Days since', 'int'], ['kind', 'Slow / dead', 'text']], $rows,
+            "Today's position. Slow = no sale for $slow days, dead = $dead days or never sold (settings slow_days, dead_days)."];
+    }
+
+    private static function r_sales_months(int $ent, string $from, string $to): array
+    {
+        $rows = self::sales($ent, $from, $to)->leftJoin('t_branches as b', 'b.id', '=', 's.fk_id_branch')->groupBy('b.shop_name', DB::raw("DATE_FORMAT(s.d_order, '%Y-%m')"))->orderBy('b.shop_name')->orderBy(DB::raw("DATE_FORMAT(s.d_order, '%Y-%m')"))
+            ->selectRaw("b.shop_name shop, DATE_FORMAT(s.d_order, '%Y-%m') m, " . self::SALE_SUMS)->get();
+        return [array_merge([['shop', 'Shop', 'text'], ['month', 'Month', 'text']], self::SALE_COLS), $rows->map(fn ($r) => self::saleRow($r, ['shop' => $r->shop ?: 'No shop', 'month' => $r->m]))->all(), self::SALE_NOTE];
+    }
+
+    private static function r_price_log(int $ent, string $from, string $to): array
+    {
+        $rows = DB::table('t_product_inventory_change_log as c')->join('t_product_vendors as p', 'p.id', '=', 'c.fk_product_id')->leftJoin('cat_marketplaces as m', 'm.id', '=', 'c.fk_id_marketplace')->leftJoin('t_users as u', 'u.id', '=', 'c.changed_by')
+            ->where('p.fk_id_ent', $ent)->whereBetween(DB::raw('DATE(c.created_at)'), [$from, $to])->orderByDesc('c.id')->limit(5000)->get(['c.created_at', 'p.SKU_VENDOR', 'm.marketplace_short', 'c.old_price', 'c.new_price', 'c.from_date', 'u.login_id']);
+        return [[['when', 'Changed on', 'date'], ['sku', 'SKU', 'text'], ['mp', 'Marketplace', 'text'], ['old', 'Old price', 'money'], ['new', 'New price', 'money'], ['from', 'Valid from', 'date'], ['by', 'By', 'text']],
+            $rows->map(fn ($r) => ['when' => substr((string) $r->created_at, 0, 10), 'sku' => $r->SKU_VENDOR, 'mp' => $r->marketplace_short ?? '', 'old' => $r->old_price !== null ? round((float) $r->old_price, 2) : null, 'new' => round((float) $r->new_price, 2), 'from' => $r->from_date, 'by' => $r->login_id ?? ''])->all(), 'Up to 5,000 changes, newest first.'];
+    }
+
+    private static function r_expenses(int $ent, string $from, string $to): array
+    {
+        $rows = DB::table('fin_expenses as e')->leftJoin('fin_categories as c', 'c.code', '=', 'e.category_code')->leftJoin('t_branches as b', 'b.id', '=', 'e.fk_id_branch')->where('e.fk_id_ent', $ent)->where('e.f_active', 1)->whereBetween('e.d_expense', [$from, $to])
+            ->groupBy('c.name', 'b.shop_name')->orderBy('c.name')->selectRaw('c.name cat, b.shop_name shop, COUNT(*) n, SUM(e.amount_gbp) v, SUM(COALESCE(e.vat_amount,0) * COALESCE(e.exchange_rate,1)) vat')->get();
+        return [[['category', 'Category', 'text'], ['shop', 'Shop', 'text'], ['count', 'Expenses', 'int'], ['amount', 'Amount', 'money'], ['vat', 'VAT inside', 'money']],
+            $rows->map(fn ($r) => ['category' => $r->cat ?? '', 'shop' => $r->shop ?: 'Shared (no shop)', 'count' => (int) $r->n, 'amount' => round((float) $r->v, 2), 'vat' => round((float) $r->vat, 2)])->all(), 'Expenses waiting for approval are counted only once approved.'];
+    }
+
+    private static function r_ledger(int $ent, string $from, string $to): array
+    {
+        $rows = DB::table('gl_lines as l')->join('gl_journals as j', 'j.id', '=', 'l.journal_id')->join('gl_accounts as a', 'a.id', '=', 'l.account_id')->where('j.fk_id_ent', $ent)->whereBetween('j.journal_date', [$from, $to])->orderBy('j.journal_date')->orderBy('j.id')->orderBy('l.id')->limit(20000)
+            ->get(['j.journal_date', 'j.journal_no', 'j.source_type', 'a.code', 'a.name', 'l.ref_id', 'l.debit', 'l.credit', 'j.memo']);
+        return [[['date', 'Date', 'date'], ['no', 'Journal', 'text'], ['source', 'From', 'text'], ['account', 'Account', 'text'], ['name', 'Account name', 'text'], ['ref', 'Ref', 'text'], ['debit', 'Debit', 'money'], ['credit', 'Credit', 'money'], ['memo', 'Memo', 'text']],
+            $rows->map(fn ($r) => ['date' => $r->journal_date, 'no' => $r->journal_no, 'source' => $r->source_type, 'account' => $r->code, 'name' => $r->name, 'ref' => (string) ($r->ref_id ?? ''), 'debit' => round((float) $r->debit, 2), 'credit' => round((float) $r->credit, 2), 'memo' => mb_substr((string) $r->memo, 0, 120)])->all(),
+            'Debit total = credit total (the books always balance). Up to 20,000 lines per run – use a shorter period for more.'];
+    }
+
+    private static function r_tasks_week(int $ent, string $from, string $to): array
+    {
+        $users = DB::table('t_users')->where('fk_id_ent', $ent)->where('f_active', 1)->pluck('login_id', 'id'); $now = now();
+        $closed = DB::table('tasks')->where('fk_id_ent', $ent)->whereIn('status', ['DONE', 'APPROVED'])->whereBetween(DB::raw('DATE(done_at)'), [$from, $to])->groupBy('owner_user_id')->selectRaw('owner_user_id u, COUNT(*) n, AVG(score) s')->get()->keyBy('u');
+        $open = DB::table('tasks')->where('fk_id_ent', $ent)->whereNotIn('status', ['DONE', 'APPROVED', 'CANCELLED'])->groupBy('owner_user_id')->selectRaw("owner_user_id u, SUM(due_at < ?) late, SUM(stuck_since IS NOT NULL) stuck, COUNT(*) n", [$now->toDateString()])->get()->keyBy('u');
+        $rows = [];
+        foreach ($users as $id => $login) { $c = $closed[$id] ?? null; $o = $open[$id] ?? null; if (! $c && ! $o) continue;
+            $rows[] = ['who' => $login, 'closed' => (int) ($c->n ?? 0), 'score' => $c && $c->s !== null ? round((float) $c->s, 1) : null, 'open' => (int) ($o->n ?? 0), 'late' => (int) ($o->late ?? 0), 'stuck' => (int) ($o->stuck ?? 0)]; }
+        usort($rows, fn ($a, $b) => [$b['closed'], $a['late']] <=> [$a['closed'], $b['late']]);
+        return [[['who', 'Person', 'text'], ['closed', 'Closed in the period', 'int'], ['score', 'Average score', 'pct'], ['open', 'Open now', 'int'], ['late', 'Late now', 'int'], ['stuck', 'Stuck now', 'int']], $rows, 'Closed = done or approved in the period; open, late and stuck are today\'s figures. The list is the leaderboard: most closed first.'];
+    }
+
+    private static function r_users(int $ent, string $from, string $to): array
+    {
+        $open = DB::table('sys_user_sessions')->whereNull('ended_at')->groupBy('user_id')->selectRaw('user_id u, COUNT(*) n')->pluck('n', 'u');
+        $rows = DB::table('t_users as u')->leftJoin('t_enterprise as e', 'e.id', '=', 'u.fk_id_ent')->where('u.fk_id_ent', $ent)->orderBy('u.role_code')->orderBy('u.login_id')->get(['u.id', 'u.login_id', 'u.display_name', 'u.role_code', 'e.ent_name', 'u.f_active', 'u.last_login_at', 'u.totp_secret']);
+        return [[['login', 'Login', 'text'], ['name', 'Name', 'text'], ['role', 'Role', 'text'], ['company', 'Company', 'text'], ['active', 'Active', 'text'], ['two_step', '2-step sign-in', 'text'], ['last', 'Last sign-in', 'date'], ['open', 'Signed in now', 'int']],
+            $rows->map(fn ($r) => ['login' => $r->login_id, 'name' => $r->display_name ?? '', 'role' => $r->role_code, 'company' => $r->ent_name ?? '', 'active' => $r->f_active ? 'yes' : 'no', 'two_step' => $r->totp_secret ? 'on' : 'off', 'last' => $r->last_login_at ? substr((string) $r->last_login_at, 0, 10) : null, 'open' => (int) ($open[$r->id] ?? 0)])->all(), 'No password or secret is shown.'];
+    }
+
+    private static function r_menu(int $ent, string $from, string $to): array
+    {
+        $rows = DB::table('sidebar_modules as m')->leftJoin('sidebar_modules as s', 's.id_module', '=', 'm.parent_id')->whereNotNull('m.parent_id')->where('m.e_status', 'ACTIVE')->orderBy('s.sort_order')->orderBy('m.sort_order')->get(['s.module_name as section', 'm.screen_no', 'm.module_name', 'm.roles']);
+        return [[['section', 'Section', 'text'], ['no', 'No.', 'text'], ['screen', 'Screen', 'text'], ['roles', 'Who sees it', 'text']], $rows->map(fn ($r) => ['section' => $r->section ?? '', 'no' => $r->screen_no ?? '', 'screen' => $r->module_name, 'roles' => $r->roles ?: 'everyone'])->all(), ''];
     }
 
     private static function r_partners(int $ent, string $from, string $to): array

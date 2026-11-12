@@ -75,6 +75,46 @@ class OrdersController extends Controller
         catch (\InvalidArgumentException|\RuntimeException $e) { return response()->json(['message' => $e->getMessage(), 'errors' => ['_form' => [$e->getMessage()]]], 422); }
     }
 
+    // ───────────── carrier label PDFs (R-A_SALES-85) ─────────────
+    private function guarded(callable $fn)
+    {
+        try { return $fn(); }
+        catch (\Illuminate\Database\QueryException $e) { report($e); return response()->json(['message' => 'Something went wrong on our side. Nothing was saved. The details are in the system log.'], 500); }
+        catch (\InvalidArgumentException|\RuntimeException $e) { return response()->json(['message' => $e->getMessage(), 'errors' => ['_form' => [$e->getMessage()]]], 422); }
+    }
+
+    public function labels(Request $r)
+    {
+        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER', 'WAREHOUSE', 'TL'], true), 403, 'Your role cannot see carrier labels.');
+        return \App\Services\CarrierLabels::page((int) \App\Services\Context::ent());
+    }
+
+    public function labelImport(Request $r)
+    {
+        $r->validate(['carrier' => 'required|integer', 'shop' => 'required|integer', 'file' => 'required|file|max:51200']);
+        $f = $r->file('file'); abort_unless(strtolower($f->getClientOriginalExtension()) === 'pdf', 422, 'Choose the label PDF the carrier gave you.');
+        return $this->guarded(function () use ($r, $f) { $x = \App\Services\CarrierLabels::import((int) \App\Services\Context::ent(), (int) $r->input('carrier'), (int) $r->input('shop'), $f->getRealPath(), $f->getClientOriginalName());
+            return $x + ['message' => "{$x['pages']} label(s): {$x['matched']} linked to their order" . ($x['set_aside'] ? ", {$x['set_aside']} waiting for you to pick the order" : '') . ($x['unmapped_service'] ? " · {$x['unmapped_service']} with a service text that is not mapped" : '')]; });
+    }
+
+    public function labelPick(Request $r, int $id)
+    {
+        $d = $r->validate(['sale' => 'required|integer']);
+        return $this->guarded(function () use ($id, $d) { \App\Services\CarrierLabels::pick((int) \App\Services\Context::ent(), $id, (int) $d['sale']); return ['message' => 'Label linked to the order']; });
+    }
+
+    public function labelUndo(Request $r, int $id)
+    {
+        return $this->guarded(function () use ($id) { $n = \App\Services\CarrierLabels::undo((int) \App\Services\Context::ent(), $id); return ['message' => "Label file undone · $n order line(s) unlinked"]; });
+    }
+
+    public function labelFile(Request $r, int $id)
+    {
+        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER', 'WAREHOUSE', 'TL'], true), 403);
+        try { [$bytes, $name] = \App\Services\CarrierLabels::file((int) \App\Services\Context::ent(), $id); } catch (\InvalidArgumentException $e) { abort(404, $e->getMessage()); }
+        return response($bytes, 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="' . $name . '"']);
+    }
+
     public function cancel(Request $r, int $id)
     {
         $this->can($r, self::ENTER);

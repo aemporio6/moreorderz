@@ -174,6 +174,11 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('orders', [OrdersController::class, 'board']);
         Route::post('orders', [OrdersController::class, 'enter']);
         Route::post('orders/import', [OrdersController::class, 'importFile']);
+        Route::get('labels', [OrdersController::class, 'labels']);
+        Route::post('labels/import', [OrdersController::class, 'labelImport']);
+        Route::post('labels/{id}/pick', [OrdersController::class, 'labelPick'])->whereNumber('id');
+        Route::post('labels/batch/{id}/undo', [OrdersController::class, 'labelUndo'])->whereNumber('id');
+        Route::get('labels/file/{id}', [OrdersController::class, 'labelFile'])->whereNumber('id');
         Route::post('orders/{id}/cancel', [OrdersController::class, 'cancel'])->whereNumber('id');
         Route::post('pick-lists', [OrdersController::class, 'buildPick']);
         Route::get('pick-lists/{id}', [OrdersController::class, 'pickList'])->whereNumber('id');
