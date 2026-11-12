@@ -218,10 +218,11 @@ class MoneyController extends Controller
         $this->can($r, self::EDIT);
         $r->validate(['shop' => 'required|integer', 'file' => 'required|file|max:20480']);
         $f = $r->file('file');
-        abort_unless(in_array(strtolower($f->getClientOriginalExtension()), ['xlsx', 'xls'], true), 422, 'Choose the Excel file the marketplace gave you (.xlsx).');
-        return $this->run(function () use ($r, $f) {
-            $x = Settle::importTikTok((int) Context::ent(), (int) $r->input('shop'), $f->getRealPath(), $f->getClientOriginalName());
-            return $x + ['message' => "{$x['statements_new']} new statement(s)" . ($x['statements_already'] ? ", {$x['statements_already']} were already loaded" : '') . ' · all checks passed to the penny'];
+        abort_unless(in_array(strtolower($f->getClientOriginalExtension()), ['xlsx', 'xls', 'csv', 'txt', 'tsv'], true), 422, 'Choose the file the marketplace gave you (.xlsx, .csv or .txt).');
+        $opt = $r->validate(['platform' => 'nullable|string|max:10', 'reference' => 'nullable|string|max:34', 'payout_date' => 'nullable|date', 'currency' => 'nullable|string|size:3']);
+        return $this->run(function () use ($r, $f, $opt) {
+            $x = \App\Services\MarketplaceFiles::import((int) Context::ent(), (int) $r->input('shop'), $f->getRealPath(), $f->getClientOriginalName(), $opt);
+            return $x + ['message' => "{$x['format_name']}: {$x['statements_new']} new statement(s)" . ($x['statements_already'] ? ", {$x['statements_already']} were already loaded" : '') . (($x['all_ok'] ?? true) ? ' · all checks passed' : ' · loaded, but look at the checks')];
         });
     }
 

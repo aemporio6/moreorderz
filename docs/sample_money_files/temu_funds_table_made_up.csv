@@ -1,0 +1,4 @@
+Settlement ID,Order ID,Transaction type,Amount,Settlement time
+B9001,PO-000-1,Order payment,12.00,2026-10-10
+B9001,PO-000-1,Platform commission,-1.20,2026-10-10
+B9001,PO-000-2,Refund,-6.00,2026-10-11

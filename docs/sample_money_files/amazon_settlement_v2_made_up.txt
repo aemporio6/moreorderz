@@ -1,0 +1,10 @@
+settlement-id	settlement-start-date	settlement-end-date	deposit-date	total-amount	currency	transaction-type	order-id	merchant-order-id	adjustment-id	shipment-id	marketplace-name	amount-type	amount-description	amount	fulfillment-id	posted-date	posted-date-time	order-item-code	merchant-order-item-id	merchant-adjustment-item-id	sku	quantity-purchased	promotion-id
+888001	2026-10-01 00:00:00 UTC	2026-10-14 00:00:00 UTC	2026-10-16 00:00:00 UTC	-4.06	GBP																		
+888001						Order	205-0000001-0000001				Amazon.co.uk	ItemPrice	Principal	20.00	AFN	2026-10-05	2026-10-05 10:11:12 UTC				DEMO-SKU-1	1	
+888001						Order	205-0000001-0000001				Amazon.co.uk	ItemFees	Commission	-3.06	AFN	2026-10-05	2026-10-05 10:11:12 UTC				DEMO-SKU-1		
+888001						Order	205-0000001-0000001				Amazon.co.uk	ItemFees	FBAPerUnitFulfillmentFee	-2.50	AFN	2026-10-05	2026-10-05 10:11:12 UTC				DEMO-SKU-1		
+888001						Refund	205-0000002-0000002				Amazon.co.uk	ItemPrice	Principal	-10.00	AFN	2026-10-05	2026-10-05 10:11:12 UTC				DEMO-SKU-1		
+888001						Refund	205-0000002-0000002				Amazon.co.uk	ItemFees	Commission	1.50	AFN	2026-10-05	2026-10-05 10:11:12 UTC				DEMO-SKU-1		
+888001						ServiceFee					Amazon.co.uk	Cost of Advertising	TransactionTotalAmount	-4.00	AFN	2026-10-05	2026-10-05 10:11:12 UTC						
+888001						other-transaction					Amazon.co.uk	other-transaction	Storage Fee	-1.00	AFN	2026-10-05	2026-10-05 10:11:12 UTC						
+888001						other-transaction					Amazon.co.uk	other-transaction	Current Reserve Amount	-5.00	AFN	2026-10-05	2026-10-05 10:11:12 UTC						

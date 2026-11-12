@@ -197,12 +197,12 @@ class SettlementService
             $rate = Fx::rate($s->currency, $s->statement_date, $ent); $b = fn ($v) => round((float) $v * $rate, 2); $shop = (int) $s->fk_id_branch; $lines = [];
             // $v > 0 = money for us (credit), $v < 0 = cost (debit)
             $add = function (string $acc, float $v, string $memo, bool $shopRef) use (&$lines, $b, $shop) { if (round($v, 2) == 0.0) return; $lines[] = ['account' => $acc, $v > 0 ? 'credit' : 'debit' => abs($b($v)), 'ref_id' => $shopRef ? $shop : null, 'memo' => $memo, 'amount_cur' => $v]; };
-            $sub = fn (string $acc) => in_array($acc, ['5100', '5300', '5400'], true);
+            $sub = fn (string $acc) => in_array($acc, ['5100', '5300', '5400', '1120'], true);
             $add('1100', (float) $s->net_sales, 'Net sales settled', true);
             if ($s->f_rows_complete) {
                 $by = DB::table('fin_settlement_lines')->where('branch_id', $shop)->where('settlement_id', $s->statement_id)->where('amount_type', '<>', 'NET_SALES')->groupBy('amount_type')->selectRaw('amount_type, SUM(amount) v')->pluck('v', 'amount_type');
                 $vat = Choices::get('VAT_REGISTERED', $ent) === '1';
-                foreach ($by as $bucket => $v) { $acc = $bucket === 'TT_VAT' && $vat ? '1400' : (self::BUCKETS[$bucket][0] ?? '5100'); $add($acc, (float) $v, self::BUCKET_NAMES[$bucket] ?? $bucket, $sub($acc)); }
+                foreach ($by as $bucket => $v) { $acc = in_array($bucket, ['TT_VAT', 'MP_VAT_ON_FEES'], true) && $vat ? '1400' : (self::BUCKETS[$bucket][0] ?? MarketplaceFiles::BUCKETS[$bucket][0] ?? '5100'); $add($acc, (float) $v, self::BUCKET_NAMES[$bucket] ?? MarketplaceFiles::BUCKETS[$bucket][2] ?? $bucket, $sub($acc)); }
             } else {
                 $add('5200', (float) $s->shipping, 'Shipping (net)', false); $add('5100', (float) $s->fees, 'Marketplace fees (statement total)', true); $add('5100', (float) $s->adjustments, 'Adjustments (statement total)', true);
             }

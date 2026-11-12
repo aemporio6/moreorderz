@@ -1,0 +1,13 @@
+--,--,--,--
+Notes
+Gross transaction amount: The total payment for a transaction before any fees or credits are applied.
+
+Transaction report
+Seller,made-up-seller
+Start date,01/10/2026 00:00:00 am BST
+End date,31/10/2026 23:59:59 pm GMT
+Transaction creation date,Type,Order number,Legacy order ID,Buyer username,Buyer name,Post to city,Post to province/region/state,Post to postcode,Post to country,Net amount,Payout currency,Payout date,Payout ID,Payout method,Payout status,Reason for hold,Item ID,Transaction ID,Item title,Custom label,Quantity,Item subtotal,Postage and packaging,Seller collected tax,eBay collected tax,Seller specified VAT rate,Final value fee – fixed,Final value fee – variable,Regulatory operating fee,Very high 'item not as described' fee,Below standard performance fee,International fee,Gross transaction amount,Transaction currency,Exchange rate,Reference ID,Description
+5 Oct 2026,Order,11-00001-00001,11-00001-00001,buyer1,Made Up,Town,--,AB1 2CD,GB,17.32,GBP,7 Oct 2026,9101,Bank *0001,Funds sent,--,1,2,Demo item,DEMO-SKU-1,1,20,0,--,--,20%,-0.36,-2.26,-0.06,--,--,--,20,GBP,--,--,--
+5 Oct 2026,Other fee,11-00001-00001,11-00001-00001,buyer1,Made Up,--,--,--,--,-1.20,GBP,7 Oct 2026,9101,Bank *0001,Funds sent,--,1,--,--,--,--,--,--,--,--,0%,--,--,--,--,--,--,-1.20,GBP,--,FEE-1,Promoted Listings - General fee
+6 Oct 2026,Refund,11-00001-00001,11-00001-00001,buyer1,Made Up,Town,--,AB1 2CD,GB,-4.40,GBP,7 Oct 2026,9101,Bank *0001,Funds sent,--,1,2,Demo item,DEMO-SKU-1,1,-5,0,--,--,20%,--,0.6,--,--,--,--,-5,GBP,--,--,--
+7 Oct 2026,Payout,--,--,--,--,--,--,--,--,-11.72,GBP,7 Oct 2026,9101,Bank *0001,Funds sent,--,--,--,--,--,--,--,--,--,--,--,--,--,--,--,--,--,-11.72,GBP,--,--,--
