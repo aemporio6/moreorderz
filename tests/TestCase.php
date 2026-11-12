@@ -30,6 +30,7 @@ abstract class TestCase extends BaseTestCase
             if (! Schema::hasTable('sys_registry') || getenv('MO_TEST_FRESH')) Artisan::call('mo:install', ['--fresh' => true]);
             self::$installed = true;
         }
+        $this->beforeTransaction();
         DB::beginTransaction();
         Registry::forget(); Settings::flush(); EventBus::reset(); TaskEngine::reset(); \App\Services\Rights::flush(); \App\Services\HomeCards::reset();
         app()->register(\App\Providers\AppServiceProvider::class, true);
@@ -39,6 +40,9 @@ abstract class TestCase extends BaseTestCase
         $this->owner = User::create(['login_id' => 'owner@test', 'password_hash' => bcrypt('secret-password'), 'role_code' => 'OWNER', 'display_name' => 'Owner', 'fk_id_ent' => 1, 'f_active' => 1]);
         Context::set(1, $this->owner->id);
     }
+
+    /** For a test that must create something outside the test's transaction (for example a second database). */
+    protected function beforeTransaction(): void {}
 
     protected function tearDown(): void
     {

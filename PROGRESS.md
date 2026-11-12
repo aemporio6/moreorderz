@@ -11,7 +11,7 @@ public repo (code only, never data or secrets) · old data = export of 18 Sep 20
 | 4 | Sales and Dispatch (orders, labels, printing) | DONE (12 Nov) – carrier label PDF import carried, see below |
 | 5 | Money (bank, settlements, TikTok, profit views) | DONE (12 Nov) – carried items listed below |
 | 6 | Month close, Partners, Reports | DONE (12 Nov) – parts of the profit waterfall not built, listed below |
-| 7 | Import old data + reconciliation report + full test | – |
+| 7 | Import old data + reconciliation report + full test | IN PROGRESS – part 1 (master data) done (12 Nov) |
 
 ## Log
 - 12 Nov 04:45 PKT – Laravel 13.40 installed. `mo:install` builds the database in 3 s: 507 baseline tables + core tables, 4,084 registry fields, 146 menu screens with roles, 30 ledger accounts.
@@ -84,6 +84,24 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
   - The totals are tested against the other screens and the books: confirmed sales and cost = Profit views; stock value = StockService = ledger 1200; cash net = ledger 1000; supplier advances = ledger 1300; partner and locked-month figures = their own screens.
   - **114 tests pass (996 assertions).** Browser desktop + phone: all ten reports open, date change, export; 0 errors, no sideways overflow; 129 menu routes, 16 placeholders.
   - **Honest limits:** ten reports, not the full report catalogue of the spec (R-FIN / R-A report lists: refund rates, slow / dead stock ageing, VA performance, tax worksheets and others are not built); no charts; no saved or scheduled reports; export is CSV (opens in Excel), not .xlsx or PDF.
+
+- 12 Nov – **Step 7, part 1: import of the old data – master data.** Command `php artisan mo:import-old --from=<old database> [--dry] [--mask] [--only=table] [--force]`, service `OldImport`, report table `mo_import_report` (migration 000007) + a CSV of table names and counts in storage/app/import (not in git).
+  - How: the old export is loaded into a separate database on the same server; the command reads it and writes the new tables. Every old table gets a plan: **COPY** (same table in the new tool, not a transaction), **LATER** (transactions – part 2, through the stock and ledger services), **RETIRED** (old backup copies / helper tables), **TOOL** (menu / rights lists the new tool owns). Rows keep their old id, so a second run adds nothing. Columns the new tool needs and the old table lacks get a neutral default; zero dates are repaired; one bad row never stops the others (it is counted with the reason).
+  - **Never read:** any column named like password / pass / PIN / CVV / token / secret / security answer (25 such columns in the old data). Users come over without a password and must set a new one; the Owner gives each a role.
+  - Old lookup tables hold the same code several times (for example 20 currency rows for 5 currencies). The new tool keeps one row per code: the repeats are **merged**, and old id → kept id is recorded in `sys_merge_map` (`OldImport::mapped()`), so part 2 can repoint the purchase orders that used a repeated id.
+  - `--mask` (for development copies, used in this workspace): phone, e-mail, address, passport / ID numbers, bank account and card numbers are masked. Without it (the owner's live import) the real values come over.
+  - **Result on the real 18 Sep 2026 export (133 tables with data, 200,117 rows):**
+
+    | Plan | Tables | Old rows | Outcome |
+    |---|---|---|---|
+    | COPY (now) | 87 | 54,183 | 53,806 imported · 40 already there (rows the install seeds) · 337 repeats merged · **0 failed** |
+    | LATER (part 2) | 32 | 135,925 | sales, purchases, stock movements, audits, sourcing documents |
+    | RETIRED | 5 | 9,714 | four old backup copies of the product table + a helper table |
+    | TOOL | 9 | 295 | old menu / rights / module lists |
+
+    Every one of the 200,117 rows is in exactly one line of the report. A second run imported 0. Key masters: 3 companies, 49 shops, 2,155 products, 101 accounts, 4 users (no passwords). The app was opened on the imported database: all 129 menu routes open, 29 screens show the real rows, no errors.
+  - **116 tests pass (1,022 assertions)** – the import tests run on a tiny made-up old database (needs `GRANT ALL ON mo_old_test.*` for the test login; skipped with that message otherwise).
+  - **Honest limits:** (1) only master data is in – no sale, purchase or stock row yet, and product stock is 0 until part 2 makes opening lots; (2) content of the copied rows was compared by count and id, not field by field; (3) the 40 "already there" rows (cat_references, reference_items) have the same ids as rows the install seeds – their content was not compared; (4) bank account / card numbers are stored as in the old tool (not encrypted) – the vault encryption of the spec is not built; (5) the export is from 18 Sep 2026: it has 156 tables, the November structure has more – a fresh full export is needed before go-live; (6) the import must start on a fresh install (it keeps old ids).
 
 ## Step 6 – carried forward
 - Profit waterfall parts (PHASE_06 §6.3): VA share / salary, handler share, lot-owner investor earnings and the stacking rule, owner modes, loss carried forward, INVESTOR_INVOICING route, tax-reserve ledger · partner statement PDF with versions, accept / query, WhatsApp / e-mail · adjustment form for a locked month · close checks PURCHASE_VS_SUPPLIER and EXPENSES (shared-expense rules) · the rest of the report catalogue.
