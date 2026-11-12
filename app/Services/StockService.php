@@ -52,7 +52,7 @@ class StockService
                     $dl = self::systemLocation($ent, 'DAMAGED');
                     self::addBalance($lotId, $dl, $dmg);
                     self::move($ent, $p->id, 'damaged', $dmg, $dl, $lotId, $l['owner'] ?? null, $cost, $sourceType, $sourceId, 'Arrived damaged');
-                    TaskEngine::open('SRC_GRN_SHORT', [$sourceId ?? 0, $p->SKU_VENDOR], "Damaged on arrival – claim from the supplier: $dmg × {$p->SKU_VENDOR}", ['ent' => $ent, 'module' => 'fin_lots', 'record_id' => $lotId, 'amount' => round($dmg * $cost, 2)]);
+                    TaskEngine::open('SRC_GRN_SHORT', [$sourceId ?? 0], "Damaged on arrival – claim from the supplier: $dmg × {$p->SKU_VENDOR}", ['ent' => $ent, 'module' => 'fin_lots', 'record_id' => $lotId, 'amount' => round($dmg * $cost, 2)]);
                 }
                 self::refreshCache($p->id);
                 $lotIds[] = $lotId; $value += $qty * $cost;

@@ -54,6 +54,14 @@ class HomeCards
             $n = DB::table('sys_events')->where('status', 'FAILED')->count();
             return ['label' => 'System health', 'value' => $n ? "$n failed" : 'OK', 'foot' => $n ? 'events waiting for a retry' : 'all events processed', 'tone' => $n ? 'err' : 'done', 'go' => '#/health'];
         });
+        self::register(['OWNER', 'MANAGER', 'SOURCING', 'FINANCE'], function ($ent) {
+            $d = BuyingService::dashboard($ent);
+            return ['label' => 'Supplier payments due', 'value' => $d['pay_due_count'], 'foot' => number_format($d['pay_due_base'], 2) . ' open on confirmed POs', 'tone' => $d['pay_due_count'] ? 'err' : 'done', 'go' => '#/buying'];
+        });
+        self::register(['OWNER', 'MANAGER', 'SOURCING', 'WAREHOUSE'], function ($ent) {
+            $d = BuyingService::dashboard($ent);
+            return ['label' => 'Shipments on the way', 'value' => $d['in_transit'], 'foot' => $d['overdue'] ? "{$d['overdue']} overdue" : ($d['grn_to_post'] ? "{$d['grn_to_post']} GRN to post" : 'none overdue'), 'tone' => $d['overdue'] ? 'err' : ($d['in_transit'] ? 'prog' : 'done'), 'go' => '#/buying'];
+        });
         self::register(['OWNER', 'MANAGER', 'FINANCE', 'PARTNER'], function ($ent) {
             $v = StockService::value($ent);
             $units = (int) DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->where('l.company_id', $ent)->sum('b.qty');

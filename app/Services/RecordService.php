@@ -294,7 +294,7 @@ class RecordService
     }
 
     /** Old tables have NOT NULL columns without defaults: give them an empty value so a quick create never fails. */
-    private static function fillNotNull(string $table, array $data): array
+    public static function fillNotNull(string $table, array $data): array
     {
         static $meta = [];
         $meta[$table] ??= DB::select('SELECT column_name c, data_type t, column_type ct FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND is_nullable = "NO" AND column_default IS NULL AND extra NOT LIKE "%auto_increment%"', [$table]);

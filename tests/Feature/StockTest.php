@@ -173,7 +173,7 @@ class StockTest extends TestCase
         $this->assertSame(8, Stock::balance($this->p, $this->wh));
         $this->assertSame(8, Stock::available($this->p));
         $this->assertSame(10, Stock::balance($this->p));
-        $this->assertTrue(TaskEngine::isOpen('SRC_GRN_SHORT', [7, 'BOWL-01']));
+        $this->assertTrue(TaskEngine::isOpen('SRC_GRN_SHORT', [7]));
     }
 
     public function test_reserved_units_are_not_available(): void
