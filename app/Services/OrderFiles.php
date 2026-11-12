@@ -98,7 +98,7 @@ class OrderFiles
     {
         if (! in_array(Context::role(), ['OWNER', 'MANAGER', 'TL', 'VA'], true)) throw new \InvalidArgumentException('Your role cannot load orders.');
         $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION)) ?: 'csv';
-        $x = self::read($path, $ext, $opt + ['temu_value' => Choices::get('TEMU_SALE_VALUE', $ent)]);
+        $x = self::read($path, $ext, $opt + ['temu_value' => Choices::get('TEMU_SALE_VALUE', $ent, $branchId)]);
         if (! $x['lines']) return ['format' => $x['format'], 'format_name' => $x['format_name'], 'new' => 0, 'updated' => 0, 'unmatched' => 0, 'short' => 0, 'locked' => 0, 'skipped' => $x['skipped'], 'orders' => 0, 'lines_read' => 0];
         $r = SalesService::intake($branchId, $x['lines']);
         Audit::log('t_sales', 0, 'INSERT', ['format' => $x['format'], 'file' => mb_substr($fileName, 0, 120), 'lines' => count($x['lines']), 'new' => $r['new']], null, $ent);

@@ -133,7 +133,7 @@ class Money2Test extends TestCase
         $this->assertSame([3.0, 11.0, 22.0], [Ledger::balance(1, '1400'), Ledger::balance(1, '5100'), Ledger::balance(1, '6000')]);
         try { Money::addExpense(1, ['bank' => $this->bank, 'category' => 'SOFTWARE', 'amount' => 12, 'vat_amount' => 12, 'date' => '2026-09-11']); $this->fail('vat'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('less than the amount', $e->getMessage()); }
         $r = $this->actingAs($this->owner)->getJson('/api/reports/vat?from=2026-09-01&to=2026-09-30')->assertOk()->json();
-        $this->assertStringContainsString('not a VAT return', json_encode($r));
+        $this->assertStringContainsString('VAT return screen', json_encode($r));
         $this->assertStringContainsString('"fees":1', json_encode($r)); $this->assertStringContainsString('"expenses":2', json_encode($r));
         $this->assertTrue(Ledger::trialBalance(1)['balanced']);
     }

@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="#125e52"><link rel="apple-touch-icon" href="/app/icons/icon-192.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
 <title>Sign in · {{ config('app.name') }}</title>
 <link rel="stylesheet" href="/app/design.css">
 <style>
@@ -40,5 +41,6 @@ body{display:grid;place-items:center;min-height:100vh;padding:20px}
   <button class="btn primary" type="submit">Sign in</button>
 </form>
 @endif
+<script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});</script>
 </body>
 </html>

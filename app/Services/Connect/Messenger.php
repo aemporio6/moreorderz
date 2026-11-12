@@ -73,7 +73,7 @@ class Messenger
     /** At the lock, when the Owner chose to send statements by themselves. */
     public static function statementsOfRun(int $ent, int $runId): int
     {
-        if (Choices::get('STATEMENT_SEND', $ent) !== 'AUTO') return 0;
+        if (Choices::get('STATEMENT_SEND', $ent, (int) (DB::table('aud_runs')->where('id', $runId)->value('fk_id_branch') ?? 0) ?: null) !== 'AUTO') return 0;
         $n = 0;
         foreach (DB::table('fin_statements')->where('period_id', $runId)->whereNotNull('investor_id')->where('superseded', 0)->pluck('id') as $id) { try { self::statement($ent, (int) $id); $n++; } catch (\InvalidArgumentException) {} }
         return $n;

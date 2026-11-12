@@ -31,6 +31,8 @@ class Connections
         'ROYALMAIL_CLICKDROP' => ['CARRIER', RoyalMailClickDrop::class, 'Royal Mail Click & Drop', ['api_key' => 'API key'], ['base' => 'https://api.parcel.royalmail.com/api/v1', 'package_format' => 'parcel', 'default_service' => 'CRL48'], 'Buys labels for orders (PDF goes through Carrier labels)', 'Built to contract, not tested on a real account'],
         'ROYALMAIL_TRACKING' => ['CARRIER', RoyalMailTracking::class, 'Royal Mail Tracking API', ['client_id' => 'Client id', 'client_secret' => 'Client secret'], [], 'Where a parcel is (events)', 'Built to contract, not tested on a real account'],
         'GOOGLE_DRIVE' => ['STORAGE', GoogleDrive::class, 'Google Drive (service account)', ['service_account_json' => 'Service account key file (paste the whole JSON)'], ['root_folder_id' => ''], 'Makes record folders; reads watched report folders', 'Built to contract, not tested on the real Drive'],
+        'PRINT_AGENT' => ['PRINT', null, 'Print helper on the packing PC', ['agent_token' => 'Helper token (any long random word – the same one goes into the helper\'s settings)'], [], 'Prints jobs of "print helper" printers silently on the PC (tools/print-agent)', 'Built; run the helper on the PC and print the test page'],
+        'PRINTNODE' => ['PRINT', null, 'PrintNode cloud printing', ['api_key' => 'PrintNode API key'], [], 'Prints jobs of "cloud" printers through PrintNode', 'Built to contract, not tested on a real account'],
         'WHATSAPP_CLOUD' => ['MESSAGING', WhatsAppCloud::class, 'WhatsApp Cloud API (Meta)', ['phone_number_id' => 'Phone number id', 'access_token' => 'Permanent access token', 'app_secret' => 'App secret (for the webhook)', 'verify_token' => 'Webhook verify token (any word you choose)'], ['version' => 'v21.0', 'language' => 'en'], 'Sends statements, approvals, task alerts; reads replies', 'Built to contract, not tested on a real number'],
     ];
 
@@ -58,6 +60,7 @@ class Connections
     public static function adapter(object $c): Adapter
     {
         $a = self::ADAPTERS[$c->adapter] ?? throw new \InvalidArgumentException('Unknown adapter ' . $c->adapter . '.');
+        if (! $a[1]) return new PrintLink($c, self::secrets($c), []);
         $cfg = (json_decode((string) $c->settings_json, true) ?: []) + $a[4];
         if ($a[0] === 'CARRIER' && $c->fk_id_carrier) $cfg['tracking_url_pattern'] = (string) DB::table('t_carriers')->where('id', $c->fk_id_carrier)->value('tracking_url_pattern');
         return new $a[1]($c, self::secrets($c), $cfg);

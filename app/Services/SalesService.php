@@ -120,12 +120,12 @@ class SalesService
             foreach ($pre['shortages'] as $sh) TaskEngine::open('SAL_STOCK_SHORT', [$sh['sku'], $branchId . '-' . $month], "Not enough stock to confirm $month of {$shop->shop_name}: {$sh['sku']} needs {$sh['needed']}, has {$sh['in_stock']}", ['ent' => $ent, 'module' => 't_product_vendors', 'record_id' => $sh['product']]);
             throw new \RuntimeException('Not enough stock for ' . count($pre['shortages']) . ' product(s). Nothing was confirmed.');
         }
-        $mode = Choices::get('WH_UNSHIPPED_AT_CONFIRM', $ent);
+        $mode = Choices::get('WH_UNSHIPPED_AT_CONFIRM', $ent, $branchId);
         if ($pre['unshipped'] && ! $bookUnshipped && $mode !== 'AUTO') {
             TaskEngine::open('WH_UNSHIPPED_LINES', [$branchId . '-' . $month], count($pre['unshipped']) . " own-stock line(s) of {$shop->shop_name} $month have no shipment in the tool", ['ent' => $ent, 'module' => 't_branches', 'record_id' => $branchId]);
             throw new \RuntimeException(count($pre['unshipped']) . ' line(s) were not shipped through the tool. Choose "Book as shipped now" to confirm them, or ship them first.');
         }
-        if (Ledger::periodLocked($ent, $month) && Choices::get('LATE_LINES_LOCKED_MONTH', $ent) === 'REFUSE') {
+        if (Ledger::periodLocked($ent, $month) && Choices::get('LATE_LINES_LOCKED_MONTH', $ent, $branchId) === 'REFUSE') {
             TaskEngine::open('WH_UNSHIPPED_LINES', ['late-' . $branchId . '-' . $month], "{$pre['lines']} sale line(s) of {$shop->shop_name} are dated in $month, which is locked – decide what to do with them", ['ent' => $ent, 'module' => 't_branches', 'record_id' => $branchId]);
             throw new \RuntimeException("Month $month is locked and the company's choice is not to book late lines forward. The Owner can change this under Settings › Choices.");
         }
@@ -150,6 +150,7 @@ class SalesService
                             foreach (self::shelfBins((int) $s->fk_product_id, $ent, $miss) as [$loc, $q]) StockService::transfer($ent, (int) $s->fk_product_id, $q, $loc, $shipped, 'Backfill at Month Confirm', $rule + ['source_type' => 'SHIP', 'source_id' => $s->id]);
                             $upd['f_ship_backfill'] = 1; $upd['qty_shipped'] = (int) $s->qty_shipped + $miss; $backfilled++;
                         }
+                        if (Choices::get('STOCK_COST_LAYER', $ent) === 'FIFO_AT_CONFIRM') StockService::swapToFifo($ent, (int) $s->fk_product_id, (int) $s->qty, $shipped, $rule['owner']);   // two layers: the oldest lots are the ones sold
                         $c = StockService::consumeForSale($ent, (int) $s->id, (int) $s->fk_product_id, (int) $s->qty, $shipped, $rule['owner'], ['date' => $postDate]);
                         $upd += ['f_stock_deducted' => 1, 'cost_gbp' => $c['cost'], 'buy_amount' => $c['cost'], 'buy_rate' => $s->qty > 0 ? round($c['cost'] / $s->qty, 2) : 0, 'cost_source' => 'lots', 'profit' => round((float) $s->total_amount_gbp - $c['cost'], 2), 'wh_status' => 'CONFIRMED'];
                         $units += (int) $s->qty; $cogs += $c['cost'];

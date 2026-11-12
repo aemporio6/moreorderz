@@ -1,6 +1,6 @@
 # MoreOrderz – results (12 Nov 2026, final)
 
-Automatic tests: **175 pass, 0 fail (1,720 checks)** on a freshly built test database. Tests that need the owner's real files run only where the files are present. Round 1 (the 7 steps) ended at 118 tests; round 2 closed the gaps (below).
+Automatic tests: **185 pass, 0 fail (1,809 checks)** on a freshly built test database. Tests that need the owner's real files run only where the files are present. Round 1 (the 7 steps) ended at 118 tests; round 2 closed the gaps (below).
 
 ## Round 1 – per step (limits as they were then; round 2 closed most of them)
 | Step | What | Tests | Checked in the browser | Main limits |
@@ -58,6 +58,7 @@ Found and fixed during this run: there was no way to give an opening lot its cos
 | 5b | Vault (secrets encrypted, cards 4 digits, CVV / PIN never), import id-clash fix, field-by-field import check, Accounts dashboard, 6 screens | 158 | real copy: 1,105 columns – OK 1,044, masked 55, DIFF 5 all explained |
 | 6 | Outside connections (eBay, Amazon, TikTok, OnBuy, Temu, Royal Mail ×2, WhatsApp, Google Drive), outboxes, webhook, hubs, Drive folders, subscriptions | 171 | **built to contract, not run against the real services** |
 | 7 | Final retest; first sign-in on an install without a company (crashed – fixed); tracking-upload layouts per marketplace profile (data, editable); merging look-alike people / suppliers / products by hand with Undo | 175 | – |
+| 8 | Every open decision as a choice with a company default **and per-shop values**; VA salary from the split rule / job history / expenses; two-layer stock option; VAT return (9 boxes, book, pay); loans with payments and due tasks; budgets against actual; capital calls (WhatsApp / e-mail, money in = partner capital); partner Accept / Ask on statements with Finance answers; one-click printing (IPP, raw TSPL / ZPL / EPL, print helper, PrintNode); installable phone app | 185 | one-click printing and the APIs: not yet on the real printers / services; VAT return is not filed to HMRC by the tool |
 
 ## Final retest (part 7)
 | Check | Result |
@@ -71,5 +72,5 @@ Found and fixed during this run: there was no way to give an opening lot its cos
 ## How much of the spec works – an honest estimate, not a measurement
 - **The daily chain works end to end and is tested:** idea → purchase → shelf → order → courier → money → month close → partner share and statement, on the owner's real data (masked copy).
 - **All 146 menu screens are real screens** (no placeholders left). Every registry form with a table has a list and a generic form.
-- **Most engines of the spec are built and tested.** Still not built: one-click printing adapters, output VAT / VAT return, loans / budgets / capital-call engines, HR / VA pay from the job history, partner Accept / Ask on statements, a phone app – see HANDOVER §11.
+- **The engines of the spec are built and tested**, including the items that were still open at part 7 (one-click printing, VAT return, loans / budgets / capital calls, VA salary from the job history, partner answers on statements, phone app). What remains is listed honestly in HANDOVER §11.
 - **Not proven:** the outside services with real keys, the real printers, the real server, real users and volumes over months.

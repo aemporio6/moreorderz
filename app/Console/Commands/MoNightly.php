@@ -29,6 +29,7 @@ class MoNightly extends Command
             $this->line("Company $ent: stock mismatches {$r['mismatch']}, negative balances {$r['negative_balances']}, value = ledger: " . ($r['value_matches_ledger'] ? 'yes' : 'NO') . ", low stock tasks open {$low['open']}");
         }
         $subs = \App\Services\Subscriptions::nightly();
+        $loans = \App\Services\FinanceExtras::loanTasks(); if ($loans) $this->line("Loan payments due: $loans new task(s)");
         $dig = \App\Services\Connect\Messenger::digests();
         $this->line("Subscriptions overdue: $subs new task(s) · task digests queued: $dig");
         Context::set(null, null);

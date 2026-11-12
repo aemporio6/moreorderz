@@ -28,7 +28,7 @@ class PartnerService
 
     // ───────────── agreements ─────────────
 
-    private static function activeOn(int $ent, string $date)
+    public static function activeOn(int $ent, string $date)
     {
         return DB::table('fin_investor_agreements')->where('company_id', $ent)->where('status', 'ACTIVE')->where('effective_from', '<=', $date)->where(fn ($w) => $w->whereNull('effective_to')->orWhere('effective_to', '>=', $date))->orderBy('id')->get();
     }
@@ -112,12 +112,33 @@ class PartnerService
      * The waterfall and the shares of one shop × month (order and rules: WaterfallService). Agreements and the split rule are the ones valid for that month, never today's.
      * Without a split rule, a lot owner or a loss to carry this is exactly "distributable × agreement %".
      */
+    /**
+     * The VA salary the waterfall takes off (choice VA_SALARY_SOURCE, per shop): from the split rule, from the VA's job history valid in the month
+     * (salary in its currency ÷ its pound rate when it is not the base currency), or none because it is booked as an expense.
+     */
+    public static function vaSalary(int $ent, int $branchId, string $month, ?object $split = null): float
+    {
+        $src = Choices::get('VA_SALARY_SOURCE', $ent, $branchId);
+        if ($src === 'EXPENSES') return 0.0;
+        if ($src === 'JOB_HISTORY') {
+            $from = $month . '-01'; $to = date('Y-m-t', strtotime($from)); $base = Fx::base($ent); $sum = 0.0;
+            foreach (DB::table('t_account_job_history as j')->leftJoin('cat_currency as c', 'c.id', '=', 'j.fk_id_currency')->where('j.fk_id_branch', $branchId)->where('j.salary', '>', 0)
+                ->where(fn ($q) => $q->whereNull('j.d_job_start_date')->orWhere('j.d_job_start_date', '<=', $to))->where(fn ($q) => $q->whereNull('j.d_end_date')->orWhere('j.d_end_date', '>=', $from))
+                ->get(['j.salary', 'j.pound_exchange_rate', 'c.currency_code']) as $j) {
+                $cur = $j->currency_code ?: $base; $rate = (float) $j->pound_exchange_rate;
+                $sum += $cur === $base ? (float) $j->salary : ($rate > 0 ? (float) $j->salary / $rate : (float) $j->salary * Fx::rate($cur, $to, $ent));
+            }
+            return round($sum, 2);
+        }
+        return $split && $split->va_mode !== 'SHARE' ? (float) $split->va_salary_override : 0.0;
+    }
+
     public static function monthShares(int $ent, int $branchId, string $month): array
     {
         $from = $month . '-01'; $to = date('Y-m-t', strtotime($from)); $r2 = fn ($v) => round((float) $v, 2);
         $fig = CloseService::figures($ent, $branchId, $month); $net = (float) $fig['profit_to_share']; $ags = self::activeOn($ent, $from);
         $split = WaterfallService::split($ent, $branchId, $to); $route = WaterfallService::route($ent, $branchId, $month);
-        $vaSalary = $split && $split->va_mode !== 'SHARE' ? (float) $split->va_salary_override : 0.0; $ownerFixed = $split && $split->owner_mode !== 'SHARE' ? (float) $split->owner_fixed : 0.0; $handlerFixed = $split && $split->handler_mode !== 'SHARE' ? (float) $split->handler_fixed : 0.0;
+        $vaSalary = self::vaSalary($ent, $branchId, $month, $split); $ownerFixed = $split && $split->owner_mode !== 'SHARE' ? (float) $split->owner_fixed : 0.0; $handlerFixed = $split && $split->handler_mode !== 'SHARE' ? (float) $split->handler_fixed : 0.0;
         $final = $r2($net - $vaSalary - $ownerFixed - $handlerFixed); $lossBf = WaterfallService::lossBroughtForward($ent, $branchId, $month); $afterLoss = $r2($final - $lossBf);
         $d = self::distributable($ent, $afterLoss) + ['shop_profit' => (float) $fig['profit'], 'overhead_share' => $fig['share_after_overheads'] ? (float) $fig['overhead_share'] : 0.0];
         $D = (float) $d['distributable']; $pos = $D > 0; $lossCf = $pos ? 0.0 : $r2(-$D);
@@ -158,7 +179,7 @@ class PartnerService
         } else {
             $k = $D > 0 ? $afterRoles / $D : 0.0; $net1 = fn (float $v) => ($v - max(0, $v) * $d['rate'] / 100) * $k;   // after the tax reserve and the VA / handler shares
             // how much of his own units' profit a lot owner gets: a company choice (100 %, his agreement's %, or a fixed %)
-            $lo = Choices::get('LOT_OWNER_SHARE', $ent); $ownPct = function (int $ow, int $po) use ($lo, $ags, $branchId): float { if ($lo !== 'AGREEMENT') return (float) $lo;
+            $lo = Choices::get('LOT_OWNER_SHARE', $ent, $branchId); $ownPct = function (int $ow, int $po) use ($lo, $ags, $branchId): float { if ($lo !== 'AGREEMENT') return (float) $lo;
                 $a = $ags->first(fn ($x) => (int) $x->investor_id === $ow && $x->scope === 'PO' && (int) $x->po_id === $po) ?? $ags->first(fn ($x) => (int) $x->investor_id === $ow && ($x->scope === 'POOL' || ($x->scope === 'MARKETPLACE' && (int) $x->branch_id === $branchId))); return $a ? (float) $a->profit_share_pct : 100.0; };
             $ownBy = []; $ownFull = []; foreach ($raw as $po => $byOwner) foreach ($byOwner as $ow => $v) if ($ow && $v > 0) { $ownFull[$ow][$po] = $net1($v); $ownBy[$ow][$po] = $net1($v) * $ownPct($ow, $po) / 100; }
             foreach ($ownBy as $ow => $pos2) foreach ($pos2 as $po => $v) $lines[] = $mk($ow, $po ? 'PO:' . $po : 'LOTS', 'OWN_LOT', $ownPct($ow, $po), $ownFull[$ow][$po], $v);

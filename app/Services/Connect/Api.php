@@ -35,7 +35,7 @@ class Api
     {
         if ($method === 'GET') return $req->get($url, $opt['query'] ?? []);
         if (! empty($opt['query'])) $url .= (str_contains($url, '?') ? '&' : '?') . http_build_query($opt['query']);
-        if (isset($opt['raw'])) return $req->withBody($opt['raw'], 'application/json')->send($method, $url);
+        if (isset($opt['raw'])) return $req->withBody($opt['raw'], $opt['headers']['Content-Type'] ?? 'application/json')->send($method, $url);
         if (isset($opt['form'])) return $req->asForm()->send($method, $url, ['form_params' => $opt['form']]);
         return $req->send($method, $url, ['json' => $opt['json'] ?? new \stdClass()]);
     }

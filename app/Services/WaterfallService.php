@@ -80,7 +80,7 @@ class WaterfallService
     {
         $d = $month . '-01';
         $r = DB::table('t_branch_profit_routes')->where('fk_id_company', $ent)->where('fk_id_branch', $branchId)->where('d_start', '<=', $d)->where(fn ($w) => $w->whereNull('d_end')->orWhere('d_end', '>=', $d))->orderByDesc('d_start')->orderByDesc('id')->value('profit_route');
-        return $r ?: Choices::get('DEFAULT_PROFIT_ROUTE', $ent);
+        return $r ?: Choices::get('DEFAULT_PROFIT_ROUTE', $ent, $branchId);
     }
 
     public static function setRoute(int $ent, int $branchId, string $route, string $fromMonth, string $reason): void
@@ -181,7 +181,7 @@ class WaterfallService
     {
         return DB::table('fin_statements as s')->join('aud_runs as r', 'r.id', '=', 's.period_id')->leftJoin('t_branches as b', 'b.id', '=', 'r.fk_id_branch')->where('r.fk_id_ent', $ent)
             ->when($partner, fn ($q) => $q->where('s.investor_id', $partner))->when($runId, fn ($q) => $q->where('s.period_id', $runId))->orderByDesc('r.period_month')->orderBy('s.investor_id')->orderByDesc('s.version')
-            ->get(['s.id', 's.period_id as run', 's.investor_id', 's.version', 's.superseded', 's.file_type', 's.partner_profit', 's.created_at', 'r.period_month', 'r.run_code', 'b.shop_name as shop'])
+            ->get(['s.id', 's.period_id as run', 's.investor_id', 's.version', 's.superseded', 's.file_type', 's.partner_profit', 's.created_at', 's.partner_status', 's.accepted_at', 'r.period_month', 'r.run_code', 'b.shop_name as shop'])
             ->map(function ($s) { $s->partner_name = $s->investor_id ? PartnerService::name((int) $s->investor_id) : 'Company'; $s->pending = $s->file_type !== 'PDF'; return $s; })->all();
     }
 
@@ -214,7 +214,7 @@ class WaterfallService
             $name = PartnerService::name($partner);
             Ledger::post($ent, $date, 'PARTNER_ADJUST', $id, [['account' => '7000', $amount > 0 ? 'debit' : 'credit' => abs($amount), 'ref_id' => $partner], ['account' => '2100', $amount > 0 ? 'credit' : 'debit' => abs($amount), 'ref_id' => $partner]], ['memo' => "Adjustment to {$run->period_month} · $name"]);
             $st = self::makeStatement($ent, $run, $partner, 'Adjustment of ' . self::m($amount) . ' booked on ' . $date . ': ' . trim($note));
-            if (Choices::get('STATEMENT_SEND', $ent) === 'AUTO') { try { \App\Services\Connect\Messenger::statement($ent, $st); } catch (\InvalidArgumentException) {} }
+            if (Choices::get('STATEMENT_SEND', $ent, (int) ($run->fk_id_branch ?? 0) ?: null) === 'AUTO') { try { \App\Services\Connect\Messenger::statement($ent, $st); } catch (\InvalidArgumentException) {} }
             Audit::log('aud_runs', $run->id, 'UPDATE', ['adjustment' => $amount, 'partner' => $partner, 'booked_on' => $date], $note, $ent);
             EventBus::fire('STATEMENT_READY', 'fin_statements', $st, ['partner' => $partner, 'run' => $run->id, 'updated' => true], $ent);
             return ['ledger_id' => $id, 'booked_on' => $date, 'statement' => $st, 'version' => (int) DB::table('fin_statements')->where('id', $st)->value('version')];

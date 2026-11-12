@@ -201,7 +201,7 @@ class PrintTest extends TestCase
         DB::table('printer_profiles')->where('id', $new)->update(['fk_id_adapter' => DB::table('print_adapters')->where('code', 'RAW_TSPL')->value('id')]);
         $f = Prints::print(1, 'PACKING_SLIP', [$x['parcel']], ['reason' => 'OTHER']);
         $this->assertSame('FAILED', $f['status']);
-        $this->assertStringContainsString('not installed yet', $f['error']);
+        $this->assertStringContainsString('network address', $f['error'], 'a raw label printer without its address cannot be reached: the job fails with the reason');
     }
 
     public function test_reported_problem_fails_the_job_and_offers_the_backup(): void

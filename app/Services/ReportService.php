@@ -178,7 +178,7 @@ class ReportService
         foreach ($rows as $r) { $out[$r->m] ??= ['month' => $r->m, 'fees' => 0.0, 'expenses' => 0.0, 'other' => 0.0, 'total' => 0.0]; $k = $r->st === 'SETTLEMENT' ? 'fees' : ($r->st === 'EXPENSE' ? 'expenses' : 'other'); $out[$r->m][$k] = round($out[$r->m][$k] + (float) $r->v, 2); $out[$r->m]['total'] = round($out[$r->m]['total'] + (float) $r->v, 2); }
         ksort($out);
         return [[['month', 'Month', 'text'], ['fees', 'VAT on marketplace fees', 'money'], ['expenses', 'VAT on expenses', 'money'], ['other', 'Other', 'money'], ['total', 'VAT to claim back', 'money']], array_values($out),
-            (Choices::get('VAT_REGISTERED', $ent) === '1' ? '' : 'The company is set as NOT registered for VAT (Settings › Choices), so VAT stays inside the costs and this report is empty. ') . 'This is the VAT you paid (input VAT) as booked on account 1400. The VAT on your own sales (output VAT) is NOT worked out by the tool yet – this is not a VAT return.'];
+            (Choices::get('VAT_REGISTERED', $ent) === '1' ? '' : 'The company is set as NOT registered for VAT (Settings › Choices), so VAT stays inside the costs and this report is empty. ') . 'This is the VAT you paid (input VAT) as booked on account 1400. The VAT on sales and the nine boxes are on the VAT return screen (Money › VAT return).'];
     }
 
     // ───────────── research, buying, stock, sales, money, tasks, people, system (added in Round 2 part 5) ─────────────

@@ -127,6 +127,47 @@ class StockService
         });
     }
 
+    /**
+     * Two layers (choice STOCK_COST_LAYER = FIFO_AT_CONFIRM): before a sale is booked from the shipped place, the oldest lots of the product
+     * (by the shop's owner rule, wherever they stand) take the place of the lots that were picked. Physically nothing moves: every place keeps
+     * the same number of units of the product, every lot keeps its quantity – only which lot is where swaps (spec R-H-1 / D-W1).
+     * Returns the number of units swapped.
+     */
+    public static function swapToFifo(int $ent, int $productId, int $qty, int $shippedLoc, ?int $privateOwner = null): int
+    {
+        return DB::transaction(function () use ($ent, $productId, $qty, $shippedLoc, $privateOwner) {
+            $rule = $privateOwner ? 'PRIVATE' : 'POOL';
+            $all = DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->join('cat_inventory_locations as c', 'c.id', '=', 'b.fk_id_location')
+                ->where('l.fk_id_product', $productId)->where('b.qty', '>', 0)->where(fn ($w) => $w->where('c.f_sellable', 1)->orWhere('b.fk_id_location', $shippedLoc))
+                ->when($rule === 'PRIVATE', fn ($q) => $q->where('l.fk_id_owner', $privateOwner))
+                ->when($rule === 'POOL', fn ($q) => $q->where(fn ($w) => $w->where('l.visibility', 'POOL')->orWhereNull('l.fk_id_owner')))
+                ->orderBy('l.received_date')->orderBy('l.id')->lockForUpdate()->get(['b.fk_id_lot as lot', 'b.fk_id_location as loc', 'b.qty']);
+            // the lots FIFO would sell, and how many of each
+            $want = []; $left = $qty;
+            foreach ($all->groupBy('lot') as $lot => $rows) { if ($left <= 0) break; $t = min($left, (int) $rows->sum('qty')); $want[(int) $lot] = $t; $left -= $t; }
+            $here = $all->where('loc', $shippedLoc)->mapWithKeys(fn ($r) => [(int) $r->lot => (int) $r->qty])->all();
+            // lots at the shipped place that FIFO would not sell (yet) give their place to FIFO lots standing elsewhere
+            $give = []; $need = [];
+            $toUse = $qty;
+            foreach ($want as $lot => $n) { $at = min($n, $here[$lot] ?? 0); $here[$lot] = ($here[$lot] ?? 0) - $at; $toUse -= $at; if ($n - $at > 0) $need[$lot] = $n - $at; }
+            foreach ($here as $lot => $n) if ($n > 0) $give[$lot] = $n;
+            $swapped = 0;
+            foreach ($need as $lotIn => $n) {
+                $elsewhere = $all->where('lot', $lotIn)->where('loc', '!=', $shippedLoc)->values();
+                foreach ($elsewhere as $e) {
+                    while ($n > 0 && (int) $e->qty > 0 && $give) {
+                        $lotOut = array_key_first($give); $k = min($n, (int) $e->qty, $give[$lotOut]);
+                        self::addBalance($lotIn, (int) $e->loc, -$k); self::addBalance($lotIn, $shippedLoc, $k);
+                        self::addBalance($lotOut, $shippedLoc, -$k); self::addBalance($lotOut, (int) $e->loc, $k);
+                        $n -= $k; $e->qty -= $k; $give[$lotOut] -= $k; if ($give[$lotOut] <= 0) unset($give[$lotOut]); $swapped += $k;
+                    }
+                }
+            }
+            if ($swapped) { self::refreshCache($productId); Audit::log('fin_lots', 0, 'UPDATE', ['product' => $productId, 'units_swapped' => $swapped, 'rule' => 'FIFO at Month confirm'], 'Two-layer stock: oldest lots booked', $ent); }
+            return $swapped;
+        });
+    }
+
     /** A return booked as received: the units go back into the lot they came from, at the location for their condition. */
     public static function returnIn(int $ent, int $saleId, int $qty, string $condition = 'SELLABLE', ?int $toLoc = null): array
     {

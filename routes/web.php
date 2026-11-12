@@ -21,6 +21,9 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::get('/login/code', [AuthController::class, 'codeForm']);
 Route::post('/login/code', [AuthController::class, 'code']);
 Route::post('/logout', [AuthController::class, 'logout']);
+// print helper on the packing PC: no sign-in, its own token (connection PRINT_AGENT)
+Route::get('/print-agent/next', [\App\Http\Controllers\PrintController::class, 'agentNext'])->middleware('throttle:240,1');
+Route::post('/print-agent/{id}/done', [\App\Http\Controllers\PrintController::class, 'agentDone'])->whereNumber('id')->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class])->middleware('throttle:240,1');
 // WhatsApp webhook: no sign-in, no CSRF; only bodies signed with the app secret of a WhatsApp connection are read
 Route::get('/wa/inbound', [ConnectController::class, 'waVerify']);
 Route::post('/wa/inbound', [ConnectController::class, 'waInbound'])->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class])->middleware('throttle:120,1');
@@ -57,6 +60,20 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('setup/tick', [AdminController::class, 'setupTick']);
         Route::get('sessions', [AdminController::class, 'sessions']);
         Route::get('accounts-dash', [AdminController::class, 'accounts']);
+        Route::get('vat-return', [\App\Http\Controllers\FinanceExtrasController::class, 'vat']);
+        Route::post('vat-return/book', [\App\Http\Controllers\FinanceExtrasController::class, 'vatBook']);
+        Route::post('vat-return/{id}/pay', [\App\Http\Controllers\FinanceExtrasController::class, 'vatPay'])->whereNumber('id');
+        Route::get('loans', [\App\Http\Controllers\FinanceExtrasController::class, 'loans']);
+        Route::post('loans', [\App\Http\Controllers\FinanceExtrasController::class, 'loanNew']);
+        Route::post('loans/{id}/pay', [\App\Http\Controllers\FinanceExtrasController::class, 'loanPay'])->whereNumber('id');
+        Route::get('budgets', [\App\Http\Controllers\FinanceExtrasController::class, 'budgets']);
+        Route::post('budgets', [\App\Http\Controllers\FinanceExtrasController::class, 'budgetSet']);
+        Route::get('capital-calls', [\App\Http\Controllers\FinanceExtrasController::class, 'calls']);
+        Route::post('capital-calls', [\App\Http\Controllers\FinanceExtrasController::class, 'callNew']);
+        Route::post('capital-calls/answer/{id}', [\App\Http\Controllers\FinanceExtrasController::class, 'callAnswer'])->whereNumber('id');
+        Route::post('statements/{id}/answer', [\App\Http\Controllers\FinanceExtrasController::class, 'statementAnswer'])->whereNumber('id');
+        Route::post('statement-questions/{id}/reply', [\App\Http\Controllers\FinanceExtrasController::class, 'statementReply'])->whereNumber('id');
+        Route::get('statement-questions', [\App\Http\Controllers\FinanceExtrasController::class, 'questions']);
         Route::get('connections', [ConnectController::class, 'connections']);
         Route::post('connections/{id?}', [ConnectController::class, 'saveConnection'])->whereNumber('id');
         Route::post('connections/{id}/test', [ConnectController::class, 'testConnection'])->whereNumber('id');

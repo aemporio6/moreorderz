@@ -180,9 +180,12 @@ class AdminController extends Controller
     public function saveChoice(Request $r)
     {
         abort_unless($r->user()->role_code === 'OWNER', 403, 'Only the Owner changes a company choice.');
-        $d = $r->validate(['key' => 'required|string|max:60', 'value' => 'required|string|max:30']);
-        try { \App\Services\Choices::set($d['key'], $d['value'], (int) Context::ent()); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
-        return ['message' => 'Choice saved – it applies from now on'];
+        $d = $r->validate(['key' => 'required|string|max:60', 'value' => 'nullable|string|max:30', 'shop' => 'nullable|integer']);
+        try {
+            if (! empty($d['shop'])) { \App\Services\Choices::setShop($d['key'], (int) $d['shop'], (string) ($d['value'] ?? ''), (int) Context::ent()); return ['message' => 'Saved for this shop – it applies from now on']; }
+            \App\Services\Choices::set($d['key'], (string) ($d['value'] ?? ''), (int) Context::ent());
+        } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+        return ['message' => 'Default saved – it applies to every shop that has no value of its own'];
     }
 
     public function ledger(Request $r)

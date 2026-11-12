@@ -45,14 +45,40 @@ class Choices
         'TASK_DIGEST' => ['Morning WhatsApp of late and urgent tasks?', 'One message a day per person who has late or urgent tasks, to the WhatsApp number of the person.', 'WHATSAPP', [
             'WHATSAPP' => ['Yes, by WhatsApp', 'Each morning, only to people with something late or urgent.'],
             'OFF' => ['No', 'People see their tasks only in the tool.']]],
+        'VA_SALARY_SOURCE' => ['Where does the VA\'s salary in the profit waterfall come from?', 'The salary is taken off the shop\'s profit before shares. Take it from one place only, so it is never taken twice.', 'SPLIT_RULE', [
+            'SPLIT_RULE' => ['The split rule of the shop', 'The salary typed on the shop\'s split rule (Partners › Split rules).'],
+            'JOB_HISTORY' => ['The VA\'s job history', 'The salary on the VA\'s job history row for this shop that is valid in the month (People › job history), turned into the base currency at its rate.'],
+            'EXPENSES' => ['Booked expenses only', 'The waterfall takes no salary: the salary is booked as an expense of the shop (category Salaries) and is inside the shop\'s profit already.']]],
+        'OUTPUT_VAT_MODE' => ['Who pays the VAT on this shop\'s sales?', 'Only when the company is VAT-registered. UK marketplaces collect the VAT themselves for sellers based outside the UK; a UK-based seller usually charges and pays it.', 'SELLER', [
+            'SELLER' => ['The company (VAT is inside the sale price)', 'VAT return box 1 gets the VAT inside the confirmed sales of the shop (sales × rate ÷ (100 + rate)).'],
+            'MARKETPLACE' => ['The marketplace collects it', 'The shop\'s sales carry no output VAT for the company (deemed supplier rule); box 6 still shows the sales.']]],
+        'STOCK_COST_LAYER' => ['Which lot\'s cost does a sold unit carry?', 'Physical stock is always counted per product and place. This decides which lot (owner and cost) a sold unit is booked from at Month confirm.', 'PICKED_LOT', [
+            'PICKED_LOT' => ['The lot that was picked', 'The unit carries the cost and owner of the lot the picker took it from (one layer: lot × place).'],
+            'FIFO_AT_CONFIRM' => ['Oldest lot at Month confirm (two layers)', 'At Month confirm the sold units are booked from the oldest lots of the product by the shop\'s owner rule, whichever lot was picked; the lots swap their places so every place still holds the same number of units (spec R-H-1).']]],
         'VAT_REGISTERED' => ['Is the company registered for VAT?', 'This is a fact about the company, not a preference. It decides where the VAT inside fees and expenses goes.', '0', [
             '0' => ['No', 'VAT paid on fees and expenses is part of the cost.'],
             '1' => ['Yes', 'VAT on marketplace fees and on expenses is kept apart as VAT to claim back (account 1400) and shown in the VAT report.']], true],
     ];
 
-    public static function get(string $key, ?int $ent): string   // no company yet (first sign-in after install): the global value or the default
+    /** Choices a shop can have its own value for (several shops, several values); the company value is the default for every other shop. */
+    public const PER_SHOP = ['PROFIT_SHARE_AFTER_OVERHEADS', 'CLOSE_FIRST_FILE_PARTIAL', 'LATE_LINES_LOCKED_MONTH', 'WH_UNSHIPPED_AT_CONFIRM', 'DEFAULT_PROFIT_ROUTE', 'LOT_OWNER_SHARE', 'TEMU_SALE_VALUE', 'VA_SALARY_SOURCE', 'OUTPUT_VAT_MODE', 'STATEMENT_SEND'];
+
+    /** The shop's own value if it has one, else the company default, else the recommended option. No company yet (first sign-in after install) → the global value or the recommended one. */
+    public static function get(string $key, ?int $ent, ?int $shop = null): string
     {
+        if ($shop && in_array($key, self::PER_SHOP, true) && ($v = Settings::get($key . '@' . $shop, $ent, null)) !== null && $v !== '') return (string) $v;
         return (string) (Settings::get($key, $ent, null) ?? self::LIST[$key][2]);
+    }
+
+    /** Give one shop its own value ('' = follow the company default again). */
+    public static function setShop(string $key, int $shop, string $value, int $ent): void
+    {
+        if (! in_array($key, self::PER_SHOP, true)) throw new \InvalidArgumentException('This choice is the same for the whole company.');
+        if ($value !== '' && ! isset(self::LIST[$key][3][$value])) throw new \InvalidArgumentException('Choose one of the options shown.');
+        if (! \Illuminate\Support\Facades\DB::table('t_branches')->where('id', $shop)->where('fk_id_ent', $ent)->exists()) throw new \InvalidArgumentException('Shop not found.');
+        $old = Settings::get($key . '@' . $shop, $ent, null);
+        Settings::set($key . '@' . $shop, $value, $ent, Context::userId());
+        Audit::log('sys_settings', null, 'UPDATE', ['choice' => $key, 'shop' => $shop, 'from' => $old ?? 'company default', 'to' => $value === '' ? 'company default' : $value], null, $ent);
     }
 
     public static function all(int $ent): array
@@ -61,7 +87,11 @@ class Choices
         foreach (self::LIST as $key => $row) {
             [$q, $why, $def, $opts] = $row; $fact = ! empty($row[4]);
             $cur = self::get($key, $ent); if (! isset($opts[$cur])) $cur = $def;
-            $out[] = ['key' => $key, 'question' => $q, 'why' => $why, 'value' => $cur, 'recommended' => $fact ? null : $def,
+            $shops = [];
+            if (in_array($key, self::PER_SHOP, true)) foreach (\Illuminate\Support\Facades\DB::table('t_branches')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name']) as $b) {
+                $v = Settings::get($key . '@' . $b->id, $ent, null); $shops[] = ['id' => $b->id, 'name' => $b->shop_name, 'value' => $v !== null && $v !== '' && isset($opts[$v]) ? (string) $v : ''];
+            }
+            $out[] = ['key' => $key, 'question' => $q, 'why' => $why, 'value' => $cur, 'recommended' => $fact ? null : $def, 'per_shop' => in_array($key, self::PER_SHOP, true), 'shops' => $shops,
                 'options' => array_map(fn ($v, $o) => ['value' => (string) $v, 'label' => $o[0], 'effect' => $o[1], 'recommended' => ! $fact && (string) $v === $def], array_keys($opts), $opts), 'fact' => $fact];
         }
         return $out;

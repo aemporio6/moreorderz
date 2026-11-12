@@ -185,8 +185,8 @@ class PrintService
         $job = DB::table('print_jobs')->insertGetId(['fk_id_ent' => $ent, 'job_code' => $code, 'entity_type' => $entityType, 'entity_ids' => json_encode($ids), 'fk_id_label_template' => $tpl->id,
             'fk_id_printer_profile' => $printer->id, 'copies' => $copies, 'print_trigger' => $opt['trigger'] ?? 'MANUAL', 'status' => 'QUEUED', 'error_text' => $note ? mb_substr($note, 0, 255) : null,
             'workstation' => $opt['workstation'] ?? null, 'requested_by' => $user, 'requested_at' => now()]);
-        if ($adapter !== 'DRIVER_PDF') {
-            return self::failJob($ent, $job, $printer, "Adapter $adapter is not installed yet. Set this printer to \"PDF through the printer driver\" for now.");
+        if ($adapter !== 'DRIVER_PDF' && ! in_array($adapter, PrintAdapters::DIRECT, true)) {
+            return self::failJob($ent, $job, $printer, "Adapter $adapter cannot print by itself: use its TSPL / ZPL / EPL emulation, or \"PDF through the printer driver\".");
         }
         try {
             $cal = DB::table('printer_calibrations')->where(['fk_id_printer_profile' => $printer->id, 'fk_id_label_media' => $media->id])->first();
@@ -201,9 +201,19 @@ class PrintService
             return self::failJob($ent, $job, $printer, 'The PDF could not be made: ' . $e->getMessage());
         }
 
-        // 5. log: one row per copy per record; the PDF handed to the driver is this adapter's "sent"
-        $file = "print/$code.pdf";
-        DB::table('print_jobs')->where('id', $job)->update(['status' => 'PRINTED', 'file_ref' => $file, 'printed_at' => now()]);
+        // 5. one-click adapters send the PDF themselves; DRIVER_PDF hands it to the browser (its "sent")
+        $file = "print/$code.pdf"; $status = 'PRINTED';
+        if ($adapter !== 'DRIVER_PDF') {
+            try {
+                $how = PrintAdapters::send($adapter, $printer, storage_path("app/$file"), $copies, $job, (float) $w, (float) $h);
+                if ($adapter === 'PRINT_AGENT') $status = 'AGENT';
+                $note = trim(($note ? $note . '. ' : '') . $how);
+            } catch (\RuntimeException $e) {
+                DB::table('print_jobs')->where('id', $job)->update(['file_ref' => $file]);
+                return self::failJob($ent, $job, $printer, $e->getMessage());
+            }
+        }
+        DB::table('print_jobs')->where('id', $job)->update(['status' => $status, 'file_ref' => $file, 'printed_at' => $status === 'PRINTED' ? now() : null, 'error_text' => $note ? mb_substr($note, 0, 255) : null]);
         if ($kind !== 'TEST') {
             $rows = [];
             foreach ($ids as $id) for ($c = 1; $c <= $copies; $c++) {
@@ -214,7 +224,7 @@ class PrintService
             EventBus::fire($before->isNotEmpty() ? 'LABEL_REPRINTED' : 'LABEL_PRINTED', 'print_jobs', $job, ['kind' => $kind, 'count' => count($ids), 'copies' => $copies, 'reason' => $reason], $ent);
             TaskEngine::close('WH_PRINT_FAILED', [$printer->id, date('Y-m-d')], 'A later job on this printer printed');
         }
-        return ['job' => $job, 'job_code' => $code, 'status' => 'PRINTED', 'printer' => $printer->name, 'media' => $media->name, 'file' => $file, 'note' => $note,
+        return ['job' => $job, 'job_code' => $code, 'status' => $status, 'adapter' => $adapter, 'printer' => $printer->name, 'media' => $media->name, 'file' => $file, 'note' => $note,
             'size_mm' => [$w, $h], 'rotated' => $rot, 'labels' => count($ids) * $copies];
     }
 

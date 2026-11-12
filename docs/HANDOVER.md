@@ -30,7 +30,7 @@ Never commit `.env`. The repository is public.
 | `mo:events` | every minute | waiting / failed events run again |
 | `mo:send-messages` | every minute | WhatsApp and e-mail outboxes; HELD until a channel exists; 3 tries then task SYS_WA_FAILING |
 | `mo:pull` | hourly at :17 | every marketplace API connection: orders 2 days back, money 14 days back; watched Drive folders |
-| `mo:nightly` | 02:30 | stock = ledger self-check per company, low stock, payment / shipment / bank / money-file / month-close tasks, SKU home refill tasks, overdue subscriptions, morning task digests |
+| `mo:nightly` | 02:30 | stock = ledger self-check per company, low stock, payment / shipment / bank / money-file / month-close tasks, SKU home refill tasks, overdue subscriptions, loan payments due, morning task digests |
 
 ## 4. Other commands
 | Command | Use |
@@ -58,7 +58,13 @@ After the import the Owner must: give opening lots their cost (Stock › Lots �
 **Server:** §1 and §2 done · cron line in · `APP_URL` https · backups of the database **and** `.env` (APP_KEY) · `php artisan test` green on a copy.
 **Data:** fresh export imported (§5) · lot costs set · supplier balances · opening bank balances · Setup page all green.
 **People:** each user has a role; Owner and Finance switch on two-step sign-in (Me › Two-step); allowed addresses (Sessions screen) if wanted.
-**Printers:** both real printers (MUNBYN label, KYOCERA A4) – test page passed at 100 % / actual size, routes set.
+**Printers:** both real printers (MUNBYN label, KYOCERA A4) – test page passed at 100 % / actual size, routes set. Choose per printer how jobs go (Printers › edit › "How the app sends jobs"):
+- *PDF through the driver* – works everywhere, the user presses Print.
+- *Network printer (IPP)* – e.g. the KYOCERA: network address `ipp://<printer-ip>:631/ipp/print`; the server must reach the printer (same network or VPN).
+- *Raw TSPL / ZPL / EPL* – a network label printer: address `<printer-ip>` (port 9100). The MUNBYN speaks TSPL.
+- *Print helper* – USB printers on the packing PC: add the connection "Print helper on the packing PC" with a long random token, copy `tools/print-agent` to the PC, fill `settings.ini` (server, token), run `python agent.py` (Windows also needs SumatraPDF). The printer's "Name on the computer" must be the PC's printer name.
+- *Cloud* – a PrintNode account: connection "PrintNode cloud printing" (API key), printer address = the PrintNode printer number.
+Print the test page after every change; one-click adapters are built to the protocols and tested against a simulated printer, **not yet on the real printers**.
 **Outside connections** (System › API connections; keys are typed once and kept encrypted; press **Test** after typing; then one **Pull** and compare with the marketplace's own screen). Every adapter except "Files only" and "Tracking link" is complete code written to the provider's published contract and tested with answers shaped like that contract – **none has talked to the real service yet**:
 
 | Connection | Keys to type | Settings | Check after Test |
@@ -80,35 +86,31 @@ After the import the Owner must: give opening lots their cost (Stock › Lots �
 ## 7. Roles
 OWNER, MANAGER, PARTNER, FINANCE, ACCOUNTANT, SOURCING, WAREHOUSE, TL, VA. Rights come from the menu screens' forms plus a role list in each controller. Warehouse never sees money. A PARTNER login is linked to its partner in `fin_partner_users` and sees only its own account and statements. Approvals are decided by Owner or Manager, never by the person who asked. Secrets: only roles allowed by the choice VAULT_REVEAL may reveal; every reveal and refusal is in the audit log. Connections: Owner only.
 
-## 8. Choices (Settings › Choices) – every option is built; the recommended one is the default
-PROFIT_SHARE_AFTER_OVERHEADS · CLOSE_FIRST_FILE_PARTIAL · LATE_LINES_LOCKED_MONTH · WH_UNSHIPPED_AT_CONFIRM · PRINT_FAILOVER · DEFAULT_PROFIT_ROUTE · LOT_OWNER_SHARE · TEMU_SALE_VALUE · MENU_NAMES · VAULT_REVEAL · STATEMENT_SEND · TASK_DIGEST · VAT_REGISTERED (a fact, no default mark).
+## 8. Choices (Settings › Choices) – every option is built
+Each choice has a **default** for the company (a dropdown; the recommended option is marked) and, where it makes sense, **its own value per shop** (several shops, several values; "Same as the default" switches a shop back). Settings key of a shop value: `<KEY>@<shop id>`.
+- Per shop and company: PROFIT_SHARE_AFTER_OVERHEADS · CLOSE_FIRST_FILE_PARTIAL · LATE_LINES_LOCKED_MONTH · WH_UNSHIPPED_AT_CONFIRM · DEFAULT_PROFIT_ROUTE · LOT_OWNER_SHARE (100 % · his agreement % · 90 … 10 %) · TEMU_SALE_VALUE (base / retail) · VA_SALARY_SOURCE (split rule · job history · booked expenses) · OUTPUT_VAT_MODE (the company / the marketplace pays the sales VAT) · STATEMENT_SEND.
+- Company only: STOCK_COST_LAYER (picked lot = one layer · oldest lot at Month confirm = two layers) · PRINT_FAILOVER · MENU_NAMES · VAULT_REVEAL · TASK_DIGEST · VAT_REGISTERED (a fact).
 
 ## 9. Where things are
-- Engines: `app/Services/*` – Registry, RecordService, Ledger, StockService, SkuHomes, BuyingService, SourcingExtras, SalesService, DispatchService, OrderFiles, CarrierLabels, PrintService, MoneyService, MarketplaceFiles, SettlementService, CashForecast, Approvals, ProfitService, CloseService, PartnerService, WaterfallService, ReportService, Vault, Access, Merges, Subscriptions, OldImport, Choices, SetupWizard; outside connections in `app/Services/Connect/*` (one adapter per service, `Connections`, `Messenger`, `DriveFolders`, `Hubs`).
+- Engines: `app/Services/*` – Registry, RecordService, Ledger, StockService, SkuHomes, BuyingService, SourcingExtras, SalesService, DispatchService, OrderFiles, CarrierLabels, PrintService, MoneyService, MarketplaceFiles, SettlementService, CashForecast, Approvals, ProfitService, CloseService, PartnerService, WaterfallService, ReportService, Vault, Access, Merges, Subscriptions, FinanceExtras (VAT return, loans, budgets, capital calls, statement answers), PrintAdapters, OldImport, Choices, SetupWizard; print helper for the packing PC in `tools/print-agent`; phone app files `public/manifest.webmanifest`, `public/sw.js`; outside connections in `app/Services/Connect/*` (one adapter per service, `Connections`, `Messenger`, `DriveFolders`, `Hubs`).
 - API: `routes/web.php` (`/api/*`; the WhatsApp webhook `/wa/inbound` is the only route without sign-in), controllers in `app/Http/Controllers`.
 - Front-end: `public/app/app.js` (one file, own router), `public/app/design.css`, `public/app/icons.js`.
-- Data rules: `database/meta/field_registry.csv`, `database/meta/06C_task_codes.csv`; schema `database/schema/baseline.sql` + `database/migrations` (000001–000016).
+- Data rules: `database/meta/field_registry.csv`, `database/meta/06C_task_codes.csv`; schema `database/schema/baseline.sql` + `database/migrations` (000001–000018).
 - Samples for checking readers: `docs/sample_money_files/`, `docs/sample_order_files/` (made up, no real data).
 - Invariants the tests hold everywhere: stock value (lots) = ledger account 1200; every journal balances; a locked month never changes.
 
 ## 10. Tests
-`php artisan test` – **175 tests, 1,720 checks**. A second database `moreorderz_test` (in `phpunit.xml`); the import tests need `GRANT ALL ON mo_old_test.*` for the test login (skipped with that message otherwise). `MO_TEST_FRESH=1 php artisan test` rebuilds the test database (after a new migration). The owner's real TikTok / Amazon files are not in the repository: `MO_TT_FILES=/folder` runs those tests. Outside services are never called by the tests (Http::fake with contract-shaped answers).
+`php artisan test` – **185 tests, 1,809 checks**. A second database `moreorderz_test` (in `phpunit.xml`); the import tests need `GRANT ALL ON mo_old_test.*` for the test login (skipped with that message otherwise). `MO_TEST_FRESH=1 php artisan test` rebuilds the test database (after a new migration). The owner's real TikTok / Amazon files are not in the repository: `MO_TT_FILES=/folder` runs those tests. Outside services are never called by the tests (Http::fake with contract-shaped answers).
 
 ## 11. Built, but with honest limits (details per part in PROGRESS.md)
-- **Outside connections:** built to contract, not run against the real services (§6).
-- **Printing:** the app makes the exact-size PDF and the user presses Print (adapter DRIVER_PDF). One-click printing adapters (print agent, raw ZPL / TSPL, IPP, cloud) are not built. Not yet tested on the real printers.
+- **Outside connections and one-click printing:** built to the providers' contracts / printer protocols and tested with simulated answers and a simulated printer – not yet run against the real services or the real printers (§6).
 - **Carrier label PDF:** one label per page only.
-- **VAT:** input VAT (fees, expenses, import VAT) only; output VAT and a VAT return are not built.
-- **Profit waterfall:** VA salary comes from the split rule, not from the job history; supplier dues / "what is left per person" are not built; returns / landed-cost changes after a lock are not moved forward by themselves (the partner adjustment is); partners cannot Accept / Ask on a statement.
-- **Money:** loans, budgets and capital-call engines are not built (their lists and forms work).
+- **VAT return:** the nine boxes are worked out from the books and booked / paid in the ledger; the tool does not file it with HMRC (no MTD connection) – file it in HMRC's software, then type the reference.
+- **Profit waterfall:** supplier dues / "what is left per person" screens are not built; returns / landed-cost changes after a lock are not moved forward by themselves (the partner adjustment is).
 - **Vault:** no second two-step question before a reveal; no re-seal step for an APP_KEY change.
-- **Sessions:** web sign-ins only; no phone app / device binding (there is no phone app – the web app works on phones).
-- **Marketplace money by API:** OnBuy and Temu publish no money API – their money stays by file.
+- **Phone app:** the web app installs on the phone (home-screen icon, full screen, offline message); it is not in the Play Store / App Store and it needs the internet to work.
+- **Two-layer stock (choice STOCK_COST_LAYER):** swaps lots between places at Month confirm so the oldest lots are sold; the lot × place list then shows lots where they stand in the books, not on the shelf.
 - **Not proven by anyone yet:** the real server, real printers, real users and volumes over months.
 
-## 12. Decisions waiting for the owner
-1. Design note D-1: one stock layer (lot × location) instead of the spec's two – confirm.
-2. Under the "lot profit" route a lot owner gets the share set in LOT_OWNER_SHARE (default 100 %) – confirm the default.
-3. If a VA's salary is also booked as an expense of the month, it is taken off twice (the screen warns) – choose one place.
-4. Temu sale value BASE (default) or RETAIL – confirm with a real Temu statement.
-5. A fresh full export before go-live.
+## 12. Decisions for the owner
+Every decision that was open is now a choice with all options built (§8): stock layer (STOCK_COST_LAYER), lot owner's share (LOT_OWNER_SHARE), where the VA salary comes from (VA_SALARY_SOURCE), Temu sale value (TEMU_SALE_VALUE), who pays sales VAT per shop (OUTPUT_VAT_MODE). The owner only picks; nothing has to be built. One thing stays outside the tool: a fresh full export of the old tool before go-live.

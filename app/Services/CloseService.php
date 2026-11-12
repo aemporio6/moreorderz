@@ -61,7 +61,7 @@ class CloseService
             foreach (['FILES_PRESENT', 'SETTLEMENT_COMPLETE', 'ORDERS_VS_TXN', 'HUB_TOTALS', 'PAYOUT_VS_BANK'] as $c) $set($c, 'NA', 'No money file has ever been loaded for this shop, so this check does not apply.');
         } else {
             // the shop's very first money file may start inside a month: that month counts from the file's first day
-            $first = DB::table('mo_settlement_periods')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->min('period_from'); $start = Choices::get('CLOSE_FIRST_FILE_PARTIAL', $ent) === '1' && $first && $first > $from && $first <= $to ? $first : $from;
+            $first = DB::table('mo_settlement_periods')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->min('period_from'); $start = Choices::get('CLOSE_FIRST_FILE_PARTIAL', $ent, $branchId) === '1' && $first && $first > $from && $first <= $to ? $first : $from;
             $covered = $periods->contains(fn ($p) => $p->period_from <= $start && $p->period_to >= min($to, date('Y-m-d')));
             $set('FILES_PRESENT', $covered ? 'GREEN' : 'RED', $covered ? ($start > $from ? "A money file covers the month from $start, the day this shop's first file starts." : 'A money file covering the whole month is loaded.') : 'No loaded money file covers the whole month (' . ($periods->isEmpty() ? 'none touches it' : $periods->map(fn ($p) => "{$p->period_from} – {$p->period_to}")->implode(', ')) . ').', $covered ? 0 : 1, '#/settlements?shop=' . $branchId);
             $part = $sts->where('f_rows_complete', 0)->count(); $unbooked = $sts->where('status', 'LOADED')->count();
@@ -128,7 +128,7 @@ class CloseService
         $st = DB::table('mo_settlements')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->whereBetween('statement_date', [$from, $to])->selectRaw('COALESCE(SUM(net_sales),0) n, COALESCE(SUM(fees),0) f, COALESCE(SUM(shipping),0) s, COALESCE(SUM(adjustments),0) a, COALESCE(SUM(payable),0) p, COUNT(*) c')->first();
         // overheads (expenses not given to a shop) are shared between the shops by their confirmed sales of the month (R-FIN-40 "fixed share")
         $over = (float) (collect($v['rows'])->firstWhere('key', 'ZZ')['expenses'] ?? 0); $all = (float) $v['total']['sales'];
-        $share = $over > 0 && $all > 0 ? round($over * (float) $r['sales'] / $all, 2) : 0.0; $after = Choices::get('PROFIT_SHARE_AFTER_OVERHEADS', $ent) === '1';
+        $share = $over > 0 && $all > 0 ? round($over * (float) $r['sales'] / $all, 2) : 0.0; $after = Choices::get('PROFIT_SHARE_AFTER_OVERHEADS', $ent, $branchId) === '1';
         return ['units' => (int) $r['units'], 'sales' => (float) $r['sales'], 'cost_of_goods' => (float) $r['cost'], 'gross' => (float) $r['gross'], 'marketplace_net' => (float) $r['mp_costs'], 'shop_expenses' => (float) $r['expenses'], 'profit' => (float) $r['profit'],
             'overheads_company' => round($over, 2), 'overhead_share' => $share, 'sales_share_pct' => $all > 0 ? round((float) $r['sales'] / $all * 100, 2) : 0.0, 'profit_after_overheads' => round((float) $r['profit'] - $share, 2), 'profit_to_share' => round((float) $r['profit'] - ($after ? $share : 0), 2), 'share_after_overheads' => $after,
             'statements' => (int) $st->c, 'settled_net_sales' => round((float) $st->n, 2), 'settled_fees' => round((float) $st->f, 2), 'settled_shipping' => round((float) $st->s, 2), 'settled_adjustments' => round((float) $st->a, 2), 'payouts' => round((float) $st->p, 2), 'base' => Fx::base($ent)];

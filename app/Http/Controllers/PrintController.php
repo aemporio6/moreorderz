@@ -165,4 +165,18 @@ class PrintController extends Controller
         $d = $r->validate(['kind' => 'required|string', 'printer' => 'required|integer', 'backup' => 'nullable|integer', 'media' => 'required|integer', 'copies' => 'nullable|integer|min:1|max:10']);
         return $this->run(function () use ($d) { Prints::setRoute((int) Context::ent(), $d['kind'], (int) $d['printer'], $d['backup'] ?? null, (int) $d['media'], (int) ($d['copies'] ?? 1)); return ['message' => 'Route saved']; });
     }
+
+    /** Print helper: the next job of its printers (header X-Agent-Token). */
+    public function agentNext(Request $r)
+    {
+        try { return ['job' => \App\Services\PrintAdapters::agentNext((string) $r->header('X-Agent-Token'))]; }
+        catch (\Illuminate\Auth\Access\AuthorizationException) { return response()->json(['message' => 'Unknown print helper.'], 403); }
+    }
+
+    public function agentDone(Request $r, int $id)
+    {
+        try { \App\Services\PrintAdapters::agentDone((string) $r->header('X-Agent-Token'), $id, $r->boolean('ok'), $r->input('error')); return ['ok' => true]; }
+        catch (\Illuminate\Auth\Access\AuthorizationException) { return response()->json(['message' => 'Unknown print helper.'], 403); }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+    }
 }
