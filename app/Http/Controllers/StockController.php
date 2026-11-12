@@ -229,4 +229,30 @@ class StockController extends Controller
             return $x + ['message' => ! empty($d['create']) ? 'Bins created' . (isset($x['print']) ? ' – bin labels are ready to print' : '') : 'Preview'];
         });
     }
+
+    // ───────────── SKU homes (R-H-9, R-H-43) ─────────────
+    public function homes(Request $r)
+    {
+        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER', 'WAREHOUSE', 'SOURCING', 'TL'], true), 403, 'Your role cannot see the SKU homes.');
+        return \App\Services\SkuHomes::page((int) Context::ent(), $r->query('q') ?: null);
+    }
+
+    public function homeSave(Request $r)
+    {
+        $d = $r->validate(['product' => 'nullable|integer', 'sku' => 'nullable|string|max:80', 'bin' => 'required|integer', 'role' => 'required|in:PRIMARY,OVERFLOW', 'min' => 'nullable|integer|min:0', 'max' => 'nullable|integer|min:0']);
+        return $this->run(function () use ($d) { $ent = (int) Context::ent(); $p = $d['product'] ?? \Illuminate\Support\Facades\DB::table('t_product_vendors')->where('fk_id_ent', $ent)->where('SKU_VENDOR', trim((string) ($d['sku'] ?? '')))->value('id') ?? throw new \InvalidArgumentException('No product with this SKU.');
+            return ['id' => \App\Services\SkuHomes::set($ent, (int) $p, (int) $d['bin'], $d['role'], $d['min'] ?? null, $d['max'] ?? null), 'message' => 'Home saved']; });
+    }
+
+    public function homeMove(Request $r)
+    {
+        $d = $r->validate(['product' => 'required|integer', 'bin' => 'required|integer', 'move_units' => 'nullable|boolean', 'keep_old' => 'nullable|boolean']);
+        return $this->run(function () use ($d) { $x = \App\Services\SkuHomes::move((int) Context::ent(), (int) $d['product'], (int) $d['bin'], ! empty($d['move_units']), ! empty($d['keep_old']));
+            return $x + ['message' => "Home moved from {$x['from']} to {$x['to']}" . ($x['units_moved'] ? " · {$x['units_moved']} unit(s) moved" : '') . ($x['labels_problem'] ? ' · shelf labels NOT queued: ' . $x['labels_problem'] : ' · 2 shelf labels are in the print queue')]; });
+    }
+
+    public function homeRemove(Request $r, int $id)
+    {
+        return $this->run(function () use ($id) { \App\Services\SkuHomes::remove((int) Context::ent(), $id); return ['message' => 'Home removed']; });
+    }
 }

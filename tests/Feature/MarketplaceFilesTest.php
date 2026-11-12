@@ -62,6 +62,7 @@ class MarketplaceFilesTest extends TestCase
     public function test_helpers_read_money_and_dates_of_every_style(): void
     {
         $this->assertSame([95.0, 1234.56, 1234.56, -3.5, 0.0, -7.25, 1200.0, 12.5], [MF::num('95,00'), MF::num('1.234,56'), MF::num('£1,234.56'), MF::num('-3.50'), MF::num('--'), MF::num('(7.25)'), MF::num('1,200'), MF::num('12,5')]);
+        $this->assertSame('2026-09-02', MF::day('2 Sept 2026 10:00:00 UTC'));
         $this->assertSame(['2026-04-30', '2026-09-16', '2026-10-01', '2026-09-28', '2026-03-05', '2026-10-31'], [MF::day('30 Apr 2026'), MF::day('2026-09-16 00:00:00 UTC'), MF::day('01.10.2026 00:00:11 UTC'), MF::day('Sep 28, 2026, 3:35 am PKT(UTC+5)'), MF::day('5th Mar 2026'), MF::day('31/10/2026')]);
     }
 
@@ -82,6 +83,43 @@ class MarketplaceFilesTest extends TestCase
         $this->assertTrue(Ledger::trialBalance(1)['balanced']);
         // the payout is found for the bank matching by its exact amount
         $this->assertCount(1, Settle::payoutCandidates(1, 4.14, 'GBP', '2026-09-16', 3));
+    }
+
+    private function amazonTxn(): string
+    {
+        $pre = "\"Includes Amazon Marketplace, Fulfilment by Amazon (FBA), and Amazon Webstore transactions\"\n\"All amounts in GBP, unless specified\"\n\"Definitions:\"\n\"Date/Time: Posted date/time of the transaction\"\n";
+        $h = '"date/time","settlement id","type","order id","sku","description","quantity","marketplace","fulfilment","order city","order state","order postal","tax collection model","product sales","product sales tax","postage credits","shipping credits tax","gift wrap credits","giftwrap credits tax","promotional rebates","promotional rebates tax","marketplace withheld tax","selling fees","fba fees","other transaction fees","other","total","Transaction status","Transaction Release Date"';
+        $row = fn (string $date, string $sid, string $type, string $order, string $desc, array $a, string $total) => '"' . implode('","', [$date, $sid, $type, $order, $order ? 'BOWL-01' : '', $desc, $order ? '1' : '', 'amazon.co.uk', 'Amazon', 'Town', '', 'AB1 2CD', '', ...array_map(fn ($k) => $a[$k] ?? '0', ['ps', 'pst', 'pc', 'sct', 'gw', 'gwt', 'pr', 'prt', 'mwt', 'sf', 'fba', 'otf', 'oth']), $total, 'Released', $date]) . '"';
+        return $pre . $h . "\n" . implode("\n", [
+            $row('1 Sept 2026 10:00:00 UTC', '5001', 'Order', 'AMZ-1', 'Dog bowl', ['ps' => '20.00', 'pc' => '2.00', 'pr' => '-2.00', 'sf' => '-3.06', 'fba' => '-2.50'], '14.44'),
+            $row('2 Sept 2026 10:00:00 UTC', '5001', 'Refund', 'AMZ-0', 'Dog bowl', ['ps' => '-10.00', 'sf' => '1.20'], '-8.80'),
+            $row('3 Sept 2026 10:00:00 UTC', '5001', 'FBA Inventory Fee', '', 'Fulfilment by Amazon (FBA) Inventory Storage Fee', ['oth' => '-1.00'], '-1.00'),
+            $row('3 Sept 2026 11:00:00 UTC', '5001', 'Adjustment', '', 'FBA Inventory Reimbursement - Lost:Warehouse', ['oth' => '6.00'], '6.00'),
+            $row('4 Sept 2026 10:00:00 UTC', '5001', 'Amazon Fees', '', 'Deal participation fee', ['otf' => '-4.00'], '-4.00'),
+            $row('5 Sept 2026 10:00:00 UTC', '5001', 'Service Fee', '', 'Subscription', ['oth' => '-30.00'], '-30.00'),
+            $row('8 Sept 2026 09:00:00 UTC', '5002', 'Transfer', '', 'To account ending with: 526', ['oth' => '23.36'], '23.36'),      // made up: settlement 5001 ends below zero, so its "payout" is money taken back
+            $row('8 Sept 2026 09:30:00 UTC', '5002', 'Order', 'AMZ-2', 'Dog bowl', ['ps' => '1,020.00', 'sf' => '-153.00', 'fba' => '-2.50'], '864.50'),
+            $row('9 Sept 2026 09:30:00 UTC', '5002', 'Mystery type', '', 'New thing', ['oth' => '-0.50'], '-0.50'),
+        ]) . "\n";
+    }
+
+    public function test_amazon_date_range_report_ties_each_payout_to_the_settlement_before_it(): void
+    {
+        $x = MF::read($this->file('CustomTransaction.csv', $this->amazonTxn()), 'csv');
+        $this->assertSame(['AMAZON_TXN', 2, [], ['Mystery type / other / New thing']], [$x['format'], count($x['statements']), $x['errors'], $x['unknown']]);
+        $this->assertSame(['2026-09-08', '*526', null], [$x['statements']['5001']['payout_date'], $x['statements']['5001']['bank'], $x['statements']['5002']['payout_date']], 'the Transfer line among the lines of 5002 pays settlement 5001 (−23.36 = its lines)');
+        $r = MF::import(1, $this->shop, $this->file('CustomTransaction.csv', $this->amazonTxn()), 'CustomTransaction.csv');
+        $a = DB::table('mo_settlements')->where('statement_id', '5001')->first(); $b = DB::table('mo_settlements')->where('statement_id', '5002')->first();
+        $this->assertSame(['-23.36', '10.00', '864.00', '1020.00', 'AMAZON_TRANSACTION'], [$a->payable, $a->net_sales, $b->payable, $b->net_sales, $a->report_type], '1,020.00 with a thousands comma is read right');
+        $this->assertFalse($r['all_ok']); $this->assertStringContainsString('1 of 2 settlement(s) are tied to a payout', $r['checks'][1]['detail']);
+        Settle::postAll(1, $this->shop);
+        $this->assertSame([840.64, 1.0, 4.0, -6.0, 5.0], [Ledger::balance(1, '1110', null, $this->shop), Ledger::balance(1, '5200') - 5.0, Ledger::balance(1, '5300', null, $this->shop), Ledger::balance(1, '4100'), Ledger::balance(1, '5200') - 1.0]);
+        $this->assertTrue(Ledger::trialBalance(1)['balanced']);
+        // the same settlement from the other Amazon report is refused, so nothing counts twice
+        $v2 = str_replace('777001', '5001', $this->amazon());
+        try { MF::import(1, $this->shop, $this->file('v2.txt', $v2), 'v2.txt'); $this->fail('twice'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('already loaded from another kind of report', $e->getMessage()); }
+        // a line that does not add up to its own total stops the whole file
+        try { MF::import(1, $this->shop, $this->file('bad.csv', str_replace('"14.44"', '"15.44"', $this->amazonTxn())), 'bad.csv'); $this->fail('sum'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('do not add up', $e->getMessage()); }
     }
 
     public function test_ebay_report_groups_by_payout_makes_refund_proposals_and_takes_late_lines_of_a_payout(): void

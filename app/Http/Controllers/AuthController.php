@@ -26,9 +26,13 @@ class AuthController extends Controller
         }
         $u = User::where('login_id', $data['login'])->where('f_active', 1)->first();
         if (! $u || ! $u->password_hash || ! Hash::check($data['password'], $u->password_hash)) {
-            RateLimiter::hit($key, 900);
+            RateLimiter::hit($key, 900); \App\Services\Access::attempt($data['login'], $r->ip(), false);
             Audit::log('t_users', $u?->id, 'LOGIN_FAIL', ['login' => $data['login']], null, $u?->fk_id_ent ?? 0);
             return back()->withErrors(['login' => 'Login or password is not right.'])->onlyInput('login');
+        }
+        if (! \App\Services\Access::ipAllowed((int) $u->fk_id_ent, (int) $u->id, $u->role_code, $r->ip())) {
+            \App\Services\Access::attempt($data['login'], $r->ip(), false); Audit::log('t_users', $u->id, 'LOGIN_FAIL', ['reason' => 'address not allowed', 'ip' => $r->ip()], null, $u->fk_id_ent ?? 0);
+            return back()->withErrors(['login' => 'Signing in from this network is not allowed for your login. Ask the Owner.'])->onlyInput('login');
         }
         RateLimiter::clear($key);
         if ($u->totp_secret) {      // 2-step sign-in: the password was right, now ask for the code of the phone app
@@ -66,6 +70,7 @@ class AuthController extends Controller
         Auth::login($u, $remember);
         $r->session()->regenerate();
         $r->session()->put('ent', $u->fk_id_ent);
+        \App\Services\Access::attempt((string) $u->login_id, $r->ip(), true); \App\Services\Access::start($r, $u);
         DB::table('t_users')->where('id', $u->id)->update(['last_login_at' => now()]);
         Audit::log('t_users', $u->id, 'LOGIN', [], null, $u->fk_id_ent ?? 0);
         return redirect()->intended('/');
@@ -73,7 +78,7 @@ class AuthController extends Controller
 
     public function logout(Request $r)
     {
-        if ($u = Auth::user()) Audit::log('t_users', $u->id, 'LOGOUT', [], null, $u->fk_id_ent ?? 0);
+        if ($u = Auth::user()) { Audit::log('t_users', $u->id, 'LOGOUT', [], null, $u->fk_id_ent ?? 0); \App\Services\Access::end($r); }
         Auth::logout();
         $r->session()->invalidate();
         $r->session()->regenerateToken();

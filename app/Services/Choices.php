@@ -29,6 +29,11 @@ class Choices
         'DEFAULT_PROFIT_ROUTE' => ['How is the profit of a shop paid out when the shop has no route of its own?', 'Every shop × month has exactly one route, so nobody is paid twice for the same units. A shop can get its own route from a chosen month (Partners › Profit routes).', 'LOT_PROFIT', [
             'LOT_PROFIT' => ['Lot profit', 'Lot owners earn the profit of the units sold from their own lots, then the agreements share the rest.'],
             'INVESTOR_INVOICING' => ['Investor invoicing', 'The four-way split rule: investor % to the lot owners by the cost of their units sold, plus owner, VA and handler %.']]],
+        'LOT_OWNER_SHARE' => ['Route "lot profit": how much of the profit of his own lots\' units does a lot owner get?', 'The rest of that profit goes on down the waterfall (agreements, then the company). Applies to months locked from now on.', '100', [
+            '100' => ['100 %', 'All the profit of the units sold from his own lots (after tax reserve and VA / handler shares).'], 'AGREEMENT' => ['The % of his own agreement', 'His PO agreement % for lots of that PO, else his pool / shop agreement %, else 100 %.'],
+            '90' => ['90 %', ''], '80' => ['80 %', ''], '75' => ['75 %', ''], '70' => ['70 %', ''], '60' => ['60 %', ''], '50' => ['50 %', ''], '40' => ['40 %', ''], '30' => ['30 %', ''], '25' => ['25 %', ''], '20' => ['20 %', ''], '10' => ['10 %', '']]],
+        'MENU_NAMES' => ['Which names does the menu show?', 'Only the words in the menu change; every screen stays where it is.', 'SIMPLE', [
+            'SIMPLE' => ['Short names', 'For example "Owner Home" – the part in brackets is left out.'], 'ORIGINAL' => ['Full names of the specification', 'For example "Owner Home ("Command Center")".']]],
         'VAT_REGISTERED' => ['Is the company registered for VAT?', 'This is a fact about the company, not a preference. It decides where the VAT inside fees and expenses goes.', '0', [
             '0' => ['No', 'VAT paid on fees and expenses is part of the cost.'],
             '1' => ['Yes', 'VAT on marketplace fees and on expenses is kept apart as VAT to claim back (account 1400) and shown in the VAT report.']], true],

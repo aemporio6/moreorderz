@@ -14,6 +14,7 @@ class SetContext
     {
         if ($u = Auth::user()) {
             if (! $u->f_active) { Auth::logout(); abort(401, 'This login is switched off.'); }
+            if ($request->hasSession() && ! app()->runningUnitTests() && ! \App\Services\Access::touch($request, $u)) { Auth::logout(); $request->session()->invalidate(); abort(401, 'This sign-in was ended. Sign in again.'); }
             $ent = (int) ($request->session()->get('ent') ?: $u->fk_id_ent);
             Context::set($ent ?: null, $u->id);
         }

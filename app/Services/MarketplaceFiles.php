@@ -41,7 +41,7 @@ class MarketplaceFiles
         'MP_OTHER' => ['5100', 'OTHER', 'Not recognised (booked as other)'],
     ];
 
-    public const FORMATS = ['TIKTOK' => 'TikTok Shop settlement workbook', 'AMAZON_V2' => 'Amazon settlement report (flat file V2)', 'EBAY' => 'eBay transaction report', 'MAPPED' => 'Table read by its column names'];
+    public const FORMATS = ['TIKTOK' => 'TikTok Shop settlement workbook', 'AMAZON_TXN' => 'Amazon date range report (transactions)', 'AMAZON_V2' => 'Amazon settlement report (flat file V2)', 'EBAY' => 'eBay transaction report', 'MAPPED' => 'Table read by its column names'];
     public const PLATFORMS = ['ONBUY' => 'OnBuy', 'TEMU' => 'Temu', 'AMAZON' => 'Amazon', 'EBAY' => 'eBay', 'OTHER' => 'Other marketplace'];
 
     // ---------- small helpers ----------
@@ -60,7 +60,7 @@ class MarketplaceFiles
     {
         $s = trim((string) $v); if ($s === '' || $s === '--') return null;
         if (is_numeric($s) && (float) $s > 30000 && (float) $s < 80000) return date('Y-m-d', (int) round(((float) $s - 25569) * 86400));   // Excel day number
-        $s = preg_replace('/\s+(UTC|GMT|BST|PST|PDT|PKT.*|[A-Z]{2,4}\(UTC[^)]*\))$/', '', $s); $s = preg_replace('/(\d)(st|nd|rd|th)\b/i', '$1', $s);
+        $s = preg_replace('/\s+(UTC|GMT|BST|PST|PDT|PKT.*|[A-Z]{2,4}\(UTC[^)]*\))$/', '', $s); $s = preg_replace('/\bSept\b/', 'Sep', $s); $s = preg_replace('/(\d)(st|nd|rd|th)\b/i', '$1', $s);
         foreach (['!Y-m-d H:i:s', '!Y-m-d\TH:i:sP', '!Y-m-d', '!d.m.Y H:i:s', '!d.m.Y', '!d/m/Y H:i:s', '!d/m/Y', '!j M Y', '!j M Y H:i:s', '!M j, Y', '!M j, Y, g:i a', '!M j, Y g:i:s A', '!Y/m/d', '!j F Y', '!d-m-Y', '!d-M-Y', '!d M Y'] as $f) {
             $d = \DateTime::createFromFormat($f, $s); $e = \DateTime::getLastErrors();
             if ($d && (! $e || ($e['warning_count'] === 0 && $e['error_count'] === 0))) return $d->format('Y-m-d');
@@ -94,6 +94,7 @@ class MarketplaceFiles
         $head = mb_strtolower(substr((string) file_get_contents($path, false, null, 0, 6000), 0, 6000));
         if (str_contains($head, "settlement-id\t") && str_contains($head, 'amount-description')) return 'AMAZON_V2';
         if (str_contains($head, 'transaction creation date') && str_contains($head, 'payout id')) return 'EBAY';
+        if (preg_match('/^"?date\/time"?,"?settlement id"?,/m', $head) && str_contains($head, 'selling fees')) return 'AMAZON_TXN';
         return 'MAPPED';
     }
 
@@ -146,6 +147,66 @@ class MarketplaceFiles
             'refunds' => $refund, 'unknown' => array_keys($unknown), 'skipped' => ['rows' => 0, 'amount' => 0.0], 'mapping' => [],
             'checks' => [['ok' => ! $errors, 'text' => 'The lines of each settlement add up to Amazon\'s total, to the penny', 'detail' => count($st) . ' settlement(s), ' . count($lines) . ' amount line(s)'],
                 ['ok' => ! $unknown, 'text' => 'Every amount type is known', 'detail' => $unknown ? 'Booked as "other": ' . implode('; ', array_slice(array_keys($unknown), 0, 8)) : '']]];
+    }
+
+    // ---------- Amazon: date range report (Payments › Reports repository › Transaction) ----------
+    /**
+     * Built on a real report of the owner (Jul–Sep 2026, 4,632 lines). One line per transaction, one column per amount group, a notes block on top.
+     * A statement = one settlement id. The line of type "Transfer" is the payout of the settlement BEFORE it (it stands among the lines of the next settlement),
+     * so a payout is tied to the settlement whose lines add up to exactly that amount. A settlement cut by the start or the end of the report has no payout in the file.
+     */
+    public static function readAmazonTxn(string $path): array
+    {
+        $rows = self::rows($path, 'csv'); $hi = null;
+        foreach (array_slice($rows, 0, 40, true) as $i => $r) if (self::key($r[0] ?? '') === 'date/time' && self::key($r[1] ?? '') === 'settlement id') { $hi = $i; break; }
+        if ($hi === null) throw new \InvalidArgumentException('This is not an Amazon date range report: the line starting with "date/time, settlement id" is missing.');
+        $h = array_map(fn ($x) => self::key($x), $rows[$hi]); $ix = array_flip($h);
+        foreach (['type', 'product sales', 'selling fees', 'total'] as $must) if (! isset($ix[$must])) throw new \InvalidArgumentException("The column \"$must\" is missing in the Amazon report.");
+        $g = fn (array $r, string $k) => trim((string) ($r[$ix[$k] ?? -1] ?? '')); $cur = preg_match('/All amounts in ([A-Z]{3})/', implode(' ', array_map(fn ($r) => (string) ($r[0] ?? ''), array_slice($rows, 0, $hi))), $m) ? $m[1] : 'GBP';
+        // every amount column before "selling fees" is money from / to the buyer (sales, credits, rebates and their taxes, tax withheld by the marketplace)
+        $colCode = []; for ($i = $ix['product sales']; $i < $ix['total']; $i++) { $n = $h[$i];
+            $colCode[$i] = $i < $ix['selling fees'] ? 'NET_SALES' : match (true) { $n === 'selling fees' => 'MP_COMMISSION', str_contains($n, 'fba') || str_contains($n, 'fulfil') => 'MP_FULFILMENT', $n === 'other transaction fees' => 'MP_OTHER_FEE', default => 'MP_OTHER' }; }
+        $typeCode = function (string $type, string $desc): ?string { $t = mb_strtolower($type); $d = mb_strtolower($desc);
+            return match (true) {
+                in_array($t, ['order', 'refund', 'order_retrocharge', 'refund_retrocharge', 'liquidations', 'liquidations adjustments'], true) => null,     // by column
+                $t === 'adjustment' => str_contains($d, 'reimburs') ? 'MP_REIMBURSEMENT' : 'MP_ADJUSTMENT',
+                str_contains($t, 'inventory fee') || str_contains($d, 'storage') || str_contains($d, 'removal') || str_contains($d, 'disposal') || str_contains($d, 'inbound') || str_contains($d, 'carrier shipment') || str_contains($d, 'return fee') => 'MP_STORAGE',
+                str_contains($d, 'deal') || str_contains($d, 'coupon') || str_contains($d, 'advertis') || str_contains($d, 'sponsored') || str_contains($d, 'vine') || str_contains($t, 'advertis') => 'MP_ADS',
+                str_contains($d, 'subscription') => 'MP_SUBSCRIPTION',
+                str_contains($t, 'chargeback') || str_contains($t, 'guarantee') || str_contains($t, 'claim') => 'MP_CHARGEBACK',
+                str_contains($t, 'fba') || str_contains($t, 'fulfil') => 'MP_STORAGE',
+                $t === 'amazon fees' || $t === 'service fee' || str_contains($t, 'fee') => 'MP_OTHER_FEE',
+                default => 'MP_OTHER',
+            }; };
+        $st = []; $lines = []; $refund = []; $unknown = []; $transfers = []; $bad = 0; $dates = []; $last = []; $sum = [];
+        foreach (array_slice($rows, $hi + 1) as $r) {
+            $type = $g($r, 'type'); $sid = $g($r, 'settlement id'); if ($type === '' && $sid === '') continue;
+            $date = self::day($g($r, 'date/time')); $total = self::num($g($r, 'total')); if ($date) $dates[] = $date;
+            if (mb_strtolower($type) === 'transfer') { $transfers[] = ['date' => $date, 'amount' => round(-$total, 2), 'bank' => preg_match('/(\d{3,4})\s*$/', $g($r, 'description'), $bm) ? '*' . $bm[1] : null, 'used' => false]; continue; }
+            if ($sid === '') $sid = 'NO-SETTLEMENT';
+            $st[$sid] ??= ['statement_id' => $sid, 'payout_id' => null, 'date' => $date, 'payout_date' => null, 'from' => $date, 'file_total' => null, 'currency' => $cur, 'bank' => null];
+            if ($date && $date > $st[$sid]['date']) $st[$sid]['date'] = $date; if ($date && $date < $st[$sid]['from']) $st[$sid]['from'] = $date;
+            $code0 = $typeCode($type, $g($r, 'description')); $order = $g($r, 'order id'); $parts = 0.0; $isRefund = mb_strtolower($type) === 'refund';
+            for ($i = $ix['product sales']; $i < $ix['total']; $i++) {
+                $v = self::num($r[$i] ?? ''); if ($v == 0.0) continue; $parts = round($parts + $v, 2);
+                $code = $code0 ?? $colCode[$i]; if ($code === 'MP_OTHER') $unknown[$type . ' / ' . $rows[$hi][$i] . ($g($r, 'description') !== '' ? ' / ' . mb_substr($g($r, 'description'), 0, 40) : '')] = true;
+                $lines[] = ['statement_id' => $sid, 'order_id' => $order, 'sku' => $g($r, 'sku'), 'qty' => (int) self::num($g($r, 'quantity')), 'txn' => $type, 'code' => $code, 'desc' => trim((string) $rows[$hi][$i] . ($code0 ? ' – ' . $g($r, 'description') : '')), 'amount' => $v, 'date' => $date];
+                if ($isRefund && $code === 'NET_SALES' && $order !== '') $refund[$sid . '|' . $order] = round(($refund[$sid . '|' . $order] ?? 0) + $v, 2);
+            }
+            if (abs(round($parts - $total, 2)) >= 0.005) $bad++;
+            $sum[$sid] = round(($sum[$sid] ?? 0) + $parts, 2);
+        }
+        if (! $st) throw new \InvalidArgumentException('The Amazon report has no transaction lines.');
+        $refund = array_filter($refund, fn ($v) => $v < 0);
+        // tie each payout to the settlement whose lines add up to exactly its amount and that ended before it
+        $paid = 0;
+        foreach ($st as $sid => &$s) { foreach ($transfers as &$t) { if (! $t['used'] && abs($t['amount'] - ($sum[$sid] ?? 0)) < 0.005 && $t['date'] >= $s['date']) { $t['used'] = true; $s['payout_date'] = $t['date']; $s['bank'] = $t['bank']; $paid++; break; } } unset($t); } unset($s);
+        $open = array_keys(array_filter($st, fn ($s) => ! $s['payout_date'])); $loose = count(array_filter($transfers, fn ($t) => ! $t['used']));
+        return ['format' => 'AMAZON_TXN', 'report_type' => 'AMAZON_TRANSACTION', 'currency' => $cur, 'period' => [min($dates), max($dates)], 'statements' => $st, 'lines' => $lines, 'errors' => $bad ? ["$bad line(s) of the report do not add up to their own total column."] : [], 'refunds' => $refund,
+            'unknown' => array_keys($unknown), 'skipped' => ['rows' => count($transfers), 'amount' => round(-array_sum(array_column($transfers, 'amount')), 2)], 'mapping' => [],
+            'checks' => [['ok' => $bad === 0, 'text' => 'Every line adds up to its own total, to the penny', 'detail' => count($lines) . ' amount line(s) in ' . count($st) . ' settlement(s)'],
+                ['ok' => ! $open, 'text' => 'Every settlement has its payout in the file', 'detail' => "$paid of " . count($st) . ' settlement(s) are tied to a payout of exactly their amount.' . ($open ? ' Without a payout here (cut by the start or the end of the report, or not paid yet): ' . implode(', ', array_slice($open, 0, 8)) . '. Load the report of the period before / after as well, then book them.' : '') . ($loose ? " $loose payout(s) in the file belong to settlements that are not whole in this file." : '')],
+                ['ok' => ! $unknown, 'text' => 'Every transaction type is known', 'detail' => $unknown ? 'Booked as "other": ' . implode('; ', array_slice(array_keys($unknown), 0, 8)) : '']]];
     }
 
     // ---------- eBay: transaction report ----------
@@ -248,8 +309,10 @@ class MarketplaceFiles
 
     public static function readMapped(string $path, string $ext, array $opt = []): array
     {
-        $rows = self::rows($path, $ext); $hi = null; $find = fn (array $h, string $what) => current(array_filter(array_keys($h), fn ($i) => in_array($h[$i], self::COLS[$what], true))) ;
-        foreach (array_slice($rows, 0, 40, true) as $i => $r) { $h = array_map(fn ($x) => self::key($x), $r); if (count(array_filter($h, fn ($x) => $x !== '')) >= 3 && $find($h, 'order') !== false) { $hi = $i; break; } }
+        $hi = null; $rows = []; $find = fn (array $h, string $what) => current(array_filter(array_keys($h), fn ($i) => in_array($h[$i], self::COLS[$what], true))) ;
+        // a workbook (Temu gives its statement as .xlsx) can hold several sheets: the first sheet with a usable header line is read
+        $sets = in_array($ext, ['xlsx', 'xls'], true) ? array_map(fn ($s) => $s->toArray(null, false, false, false), IOFactory::createReaderForFile($path)->setReadDataOnly(true)->load($path)->getAllSheets()) : [self::rows($path, $ext)];
+        foreach ($sets as $try) { foreach (array_slice($try, 0, 40, true) as $i => $r) { $h = array_map(fn ($x) => self::key($x), $r); if (count(array_filter($h, fn ($x) => $x !== '')) >= 3 && $find($h, 'order') !== false) { $hi = $i; $rows = $try; break 2; } } }
         if ($hi === null) throw new \InvalidArgumentException('No header line with an order number column was found in this file. The first lines must hold the column names (for example "Order ID", "Commission", "Total").');
         $h = array_map(fn ($x) => self::key($x), $rows[$hi]);
         if (in_array('order item id', $h, true) && in_array('order settlement status', $h, true)) throw new \InvalidArgumentException('This is Temu\'s order list (Orders › Export), not its money file: it has no fees and no payout. Load Temu\'s settlement / funds export here. Loading order lists of marketplaces as orders is not built yet.');
@@ -319,7 +382,7 @@ class MarketplaceFiles
     public static function read(string $path, string $ext, array $opt = []): array
     {
         $fmt = self::detect($path, $ext);
-        return match ($fmt) { 'AMAZON_V2' => self::readAmazon($path), 'EBAY' => self::readEbay($path), 'TIKTOK' => ['format' => 'TIKTOK'], default => self::readMapped($path, $ext, $opt) };
+        return match ($fmt) { 'AMAZON_V2' => self::readAmazon($path), 'AMAZON_TXN' => self::readAmazonTxn($path), 'EBAY' => self::readEbay($path), 'TIKTOK' => ['format' => 'TIKTOK'], default => self::readMapped($path, $ext, $opt) };
     }
 
     public static function import(int $ent, int $branchId, string $path, string $fileName, array $opt = []): array
@@ -333,6 +396,7 @@ class MarketplaceFiles
             $type = $x['report_type'];
             $batch = DB::table('fin_import_batches')->insertGetId(['report_type' => $type, 'company_id' => $ent, 'branch_id' => $shop->id, 'file_name' => mb_substr($fileName, 0, 200), 'file_hash' => sha1_file($path), 'period_from' => $x['period'][0], 'period_to' => $x['period'][1], 'imported_by' => Context::userId(), 'imported_at' => now()]);
             $have = DB::table('mo_settlements')->where('fk_id_branch', $shop->id)->whereIn('statement_id', array_column($x['statements'], 'statement_id'))->get()->keyBy('statement_id');
+            foreach ($have as $sid => $old) if ($old->report_type !== $type) throw new \InvalidArgumentException("Settlement $sid of this shop is already loaded from another kind of report ({$old->report_type}). One settlement is loaded from one kind of report only, otherwise it would count twice. Nothing was loaded.");
             $new = 0; $dup = 0; $seen = []; $touched = []; $latePaid = []; $byId = array_column($x['statements'], null, 'statement_id');
             foreach ($x['lines'] as $l) {
                 $sid = $l['statement_id'];

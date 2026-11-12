@@ -194,4 +194,69 @@ class AdminController extends Controller
             'journals' => DB::table('gl_journals')->where('fk_id_ent', $ent)->orderByDesc('id')->limit(50)->get(['id', 'journal_no', 'journal_date', 'source_type', 'memo', 'reverses_id', 'reversed_by_id']),
             'locked_up_to' => Settings::get('GL_LOCKED_UPTO', $ent, '')];
     }
+
+    // ───────────── sign-ins: sessions, tries, allowed addresses ─────────────
+    private function guard(callable $fn)
+    {
+        try { return $fn(); }
+        catch (\Illuminate\Database\QueryException $e) { report($e); return response()->json(['message' => 'Something went wrong on our side. Nothing was saved. The details are in the system log.'], 500); }
+        catch (\InvalidArgumentException|\RuntimeException $e) { return response()->json(['message' => $e->getMessage(), 'errors' => ['_form' => [$e->getMessage()]]], 422); }
+    }
+
+    public function sessions(Request $r)
+    {
+        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER'], true), 403, 'Only the Owner or a Manager sees the sign-ins.');
+        return \App\Services\Access::page((int) Context::ent(), $r->hasSession() ? \App\Services\Access::hash($r) : '') + ['my_ip' => $r->ip(), 'can_rules' => $r->user()->role_code === 'OWNER'];
+    }
+
+    public function endSession(Request $r)
+    {
+        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER'], true), 403, 'Only the Owner or a Manager ends a sign-in.');
+        $d = $r->validate(['session_id' => 'nullable|integer', 'user_id' => 'nullable|integer']);
+        return $this->guard(function () use ($d, $r) { $n = \App\Services\Access::endSessions((int) Context::ent(), $d['session_id'] ?? null, $d['user_id'] ?? null, isset($d['user_id']) && $r->hasSession() ? \App\Services\Access::hash($r) : null); return ['ended' => $n, 'message' => "$n sign-in(s) ended – that device must sign in again"]; });
+    }
+
+    public function ipRule(Request $r)
+    {
+        $this->owner($r);
+        $d = $r->validate(['scope' => 'required|in:ALL,ROLE,USER', 'role_code' => 'nullable|string|max:20', 'user_id' => 'nullable|integer', 'ip_cidr' => 'required|string|max:50', 'note' => 'nullable|string|max:150']);
+        return $this->guard(function () use ($d, $r) { return ['id' => \App\Services\Access::addRule((int) Context::ent(), $d, $r->ip()), 'message' => 'Allowed address added']; });
+    }
+
+    public function ipRuleRemove(Request $r, int $id)
+    {
+        $this->owner($r);
+        return $this->guard(function () use ($id) { \App\Services\Access::removeRule((int) Context::ent(), $id); return ['message' => 'Allowed address removed']; });
+    }
+
+    // ───────────── saved list views (per user; Owner / Manager can share one with everybody) ─────────────
+    public function views(Request $r, string $page)
+    {
+        $u = $r->user();
+        return ['views' => DB::table('sys_saved_views')->where('page_key', $page)->where(fn ($w) => $w->where('fk_id_account', $u->id)->orWhere('f_shared', 1))->orderByDesc('f_default')->orderBy('view_name')->get()
+            ->map(fn ($v) => ['id' => $v->id, 'name' => $v->view_name, 'state' => json_decode($v->filters_json, true) ?: [], 'default' => (bool) $v->f_default && (int) $v->fk_id_account === (int) $u->id, 'shared' => (bool) $v->f_shared, 'mine' => (int) $v->fk_id_account === (int) $u->id]), 'can_share' => in_array($u->role_code, ['OWNER', 'MANAGER'], true)];
+    }
+
+    public function saveView(Request $r)
+    {
+        $u = $r->user();
+        $d = $r->validate(['page' => 'required|string|max:60', 'name' => 'required|string|min:1|max:80', 'state' => 'present|array', 'default' => 'nullable|boolean', 'shared' => 'nullable|boolean']);
+        if (! empty($d['shared']) && ! in_array($u->role_code, ['OWNER', 'MANAGER'], true)) abort(403, 'Only the Owner or a Manager can share a view with everybody.');
+        $state = ['q' => (string) ($d['state']['q'] ?? ''), 'sort' => (string) ($d['state']['sort'] ?? ''), 'dir' => ($d['state']['dir'] ?? 'desc') === 'asc' ? 'asc' : 'desc', 'filter' => array_map('strval', array_filter((array) ($d['state']['filter'] ?? []), fn ($v) => is_scalar($v) && $v !== ''))];
+        return DB::transaction(function () use ($u, $d, $state) {
+            if (! empty($d['default'])) DB::table('sys_saved_views')->where('fk_id_account', $u->id)->where('page_key', $d['page'])->update(['f_default' => 0]);
+            $have = DB::table('sys_saved_views')->where('fk_id_account', $u->id)->where('page_key', $d['page'])->where('view_name', $d['name'])->value('id');
+            $row = ['filters_json' => json_encode($state), 'f_default' => empty($d['default']) ? 0 : 1, 'f_shared' => empty($d['shared']) ? 0 : 1];
+            if ($have) DB::table('sys_saved_views')->where('id', $have)->update($row); else $have = DB::table('sys_saved_views')->insertGetId($row + ['fk_id_account' => $u->id, 'page_key' => $d['page'], 'view_name' => $d['name'], 'created_at' => now()]);
+            return ['id' => $have, 'message' => 'View saved'];
+        });
+    }
+
+    public function deleteView(Request $r, int $id)
+    {
+        $u = $r->user(); $v = DB::table('sys_saved_views')->where('id', $id)->first() ?? abort(404);
+        abort_unless((int) $v->fk_id_account === (int) $u->id || ($v->f_shared && $u->role_code === 'OWNER'), 403, 'You can only remove your own views.');
+        DB::table('sys_saved_views')->where('id', $id)->delete();
+        return ['message' => 'View removed'];
+    }
 }

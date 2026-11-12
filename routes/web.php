@@ -48,6 +48,17 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('settings', [AdminController::class, 'settings']);
         Route::post('settings', [AdminController::class, 'saveSetting']);
         Route::get('audit', [AdminController::class, 'audit']);
+        Route::get('sessions', [AdminController::class, 'sessions']);
+        Route::post('sessions/end', [AdminController::class, 'endSession']);
+        Route::post('ip-rules', [AdminController::class, 'ipRule']);
+        Route::post('ip-rules/{id}/remove', [AdminController::class, 'ipRuleRemove'])->whereNumber('id');
+        Route::get('views/{page}', [AdminController::class, 'views'])->where('page', '[A-Za-z0-9_.:-]+');
+        Route::post('views', [AdminController::class, 'saveView']);
+        Route::post('views/{id}/remove', [AdminController::class, 'deleteView'])->whereNumber('id');
+        Route::get('sku-homes', [StockController::class, 'homes']);
+        Route::post('sku-homes', [StockController::class, 'homeSave']);
+        Route::post('sku-homes/move', [StockController::class, 'homeMove']);
+        Route::post('sku-homes/{id}/remove', [StockController::class, 'homeRemove'])->whereNumber('id');
         Route::get('health', [AdminController::class, 'health']);
         Route::post('health/retry', [AdminController::class, 'retryEvents']);
         Route::get('ledger', [AdminController::class, 'ledger']);

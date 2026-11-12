@@ -157,8 +157,11 @@ class PartnerService
             if ($ownerFixed + $ownerShare != 0.0) $roles[] = ['role' => 'OWNER', 'label' => 'Account owner' . ($ownerFixed ? ' fixed ' . number_format($ownerFixed, 2) : '') . ($ownerShare ? ' share ' . number_format($ownerShare, 2) : '') . ' – stays in the company', 'amount' => $r2($ownerFixed + $ownerShare), 'party' => null];
         } else {
             $k = $D > 0 ? $afterRoles / $D : 0.0; $net1 = fn (float $v) => ($v - max(0, $v) * $d['rate'] / 100) * $k;   // after the tax reserve and the VA / handler shares
-            $ownBy = []; foreach ($raw as $po => $byOwner) foreach ($byOwner as $ow => $v) if ($ow && $v > 0) { $ownBy[$ow][$po] = $net1($v); }
-            foreach ($ownBy as $ow => $pos2) foreach ($pos2 as $po => $v) $lines[] = $mk($ow, $po ? 'PO:' . $po : 'LOTS', 'OWN_LOT', 100.0, $v, $v);
+            // how much of his own units' profit a lot owner gets: a company choice (100 %, his agreement's %, or a fixed %)
+            $lo = Choices::get('LOT_OWNER_SHARE', $ent); $ownPct = function (int $ow, int $po) use ($lo, $ags, $branchId): float { if ($lo !== 'AGREEMENT') return (float) $lo;
+                $a = $ags->first(fn ($x) => (int) $x->investor_id === $ow && $x->scope === 'PO' && (int) $x->po_id === $po) ?? $ags->first(fn ($x) => (int) $x->investor_id === $ow && ($x->scope === 'POOL' || ($x->scope === 'MARKETPLACE' && (int) $x->branch_id === $branchId))); return $a ? (float) $a->profit_share_pct : 100.0; };
+            $ownBy = []; $ownFull = []; foreach ($raw as $po => $byOwner) foreach ($byOwner as $ow => $v) if ($ow && $v > 0) { $ownFull[$ow][$po] = $net1($v); $ownBy[$ow][$po] = $net1($v) * $ownPct($ow, $po) / 100; }
+            foreach ($ownBy as $ow => $pos2) foreach ($pos2 as $po => $v) $lines[] = $mk($ow, $po ? 'PO:' . $po : 'LOTS', 'OWN_LOT', $ownPct($ow, $po), $ownFull[$ow][$po], $v);
             $ownTotal = array_sum(array_map('array_sum', $ownBy)); $rest = $r2($afterRoles - $ownTotal);
             if ($ownTotal) $w[] = ['label' => 'Lot owners: profit of the units sold from their own lots', 'amount' => -$r2($ownTotal)];
             foreach ($ags as $a) {
@@ -167,6 +170,7 @@ class PartnerService
                     $po = (int) $a->po_id; if (! isset($raw[$po])) continue;
                     $own = (float) ($ownBy[(int) $a->investor_id][$po] ?? 0); $total = 0.0; foreach ($raw[$po] as $v) $total += $net1($v);
                     $ownsAny = DB::table('fin_lots')->where('company_id', $ent)->where('po_id', $po)->where('fk_id_owner', $a->investor_id)->exists();
+                    $own = (float) ($ownFull[(int) $a->investor_id][$po] ?? 0);   // the units that are his, whatever % of their profit he gets
                     [, $base, $cap] = WaterfallService::stack((string) ($a->stacking_rule ?: 'SPLIT_UNITS'), $own, $total - $own, $ownsAny, $a->stack_cap_pct !== null ? (float) $a->stack_cap_pct : null); $key = 'PO:' . $po;
                 } else { if ($a->scope === 'MARKETPLACE' && (int) $a->branch_id !== $branchId) continue; $base = $rest; $key = $a->scope === 'POOL' ? 'POOL' : 'MARKETPLACE:' . $branchId; }
                 $profit = $base > 0 ? round($base * $pct / 100, 2) : 0.0; if ($cap !== null) $profit = min($profit, $cap);

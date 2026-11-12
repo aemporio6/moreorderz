@@ -37,6 +37,7 @@ class AppController extends Controller
     public static function menu(string $role): array
     {
         $rows = DB::table('sidebar_modules')->where('e_status', 'ACTIVE')->orderBy('sort_order')->orderBy('id_module')->get();
+        if (\App\Services\Choices::get('MENU_NAMES', Context::ent()) === 'SIMPLE') foreach ($rows as $m) $m->module_name = self::simpleName((string) $m->module_name);
         $secs = [];
         foreach ($rows->whereNull('parent_id') as $s) $secs[$s->id_module] = ['id' => $s->id_module, 'name' => $s->module_name, 'icon' => $s->icon, 'items' => []];
         foreach ($rows->whereNotNull('parent_id') as $m) {
@@ -44,6 +45,13 @@ class AppController extends Controller
             $secs[$m->parent_id]['items'][] = ['id' => $m->id_module, 'no' => $m->screen_no, 'name' => $m->module_name, 'route' => self::route($m), 'forms' => array_values(array_filter(array_map(fn ($f) => trim(explode('(', $f)[0]), preg_split('/[;,\s]+/', (string) $m->forms, -1, PREG_SPLIT_NO_EMPTY)), fn ($k) => Registry::exists($k) && Registry::table($k)))];
         }
         return array_values(array_filter($secs, fn ($s) => $s['items']));
+    }
+
+    /** "Owner Home (\"Command Center\")" → "Owner Home"; "Partner Home (= My Partner Account)" → "Partner Home". Never empty. */
+    public static function simpleName(string $name): string
+    {
+        $s = trim(preg_replace('/\s*[\(\[][^\)\]]*[\)\]]/u', '', $name)); $s = trim(preg_split('/\s+[–—]\s+|\s+=\s+/u', $s)[0] ?? $s, " \t-–—:·");
+        return $s !== '' ? $s : $name;
     }
 
     private static function roleSees(?string $roles, string $role): bool
@@ -85,6 +93,8 @@ class AppController extends Controller
         if ($no === '7.4') return '#/print-queue';
         if ($no === '17.9') return '#/printers';
         if ($no === '17.15') return '#/users';
+        if ($no === '17.16') return '#/sessions';
+        if ($no === '4.5') return '#/sku-homes';
         if ($no === '17.17') return '#/audit';
         if ($no === '17.18') return '#/settings';
         if ($no === '17.20') return '#/health';
