@@ -58,6 +58,7 @@ class AppController extends Controller
         if (str_starts_with($no, '1.')) return '#/home';
         if ($no === '13.2') return '#/tasks?scope=all';
         if ($no === '13.3') return '#/tasks';
+        if ($no === '3.1' || $no === '3.3') return '#/buying';
         if ($no === '4.6') return '#/stock';
         if ($no === '4.7') return '#/stock/ledger';
         if ($no === '4.8') return '#/stock/lots';

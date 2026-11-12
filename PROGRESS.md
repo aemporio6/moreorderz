@@ -7,7 +7,7 @@ public repo (code only, never data or secrets) · old data = export of 18 Sep 20
 |---|---|---|
 | 1 | Foundation: install, registry, generic records, events, tasks, numbering, audit, double-entry ledger, login, 2-step, rights, shell, search, record page, admin screens | DONE (12 Nov) |
 | 2 | Products and Stock | DONE (12 Nov) |
-| 3 | Buying (Research → PO → GRN) | IN PROGRESS |
+| 3 | Buying (Research → PO → GRN) | DONE (12 Nov) |
 | 4 | Sales and Dispatch (orders, labels, printing) | – |
 | 5 | Money (bank, settlements, TikTok, profit views) | – |
 | 6 | Month close, Partners, Reports | – |
@@ -29,10 +29,10 @@ public repo (code only, never data or secrets) · old data = export of 18 Sep 20
 
 - 12 Nov 10:00 PKT – **Step 3, part 1: buying engine.** `BuyingService` + `Fx`: research margin (rule example 54.5 %), status flow with reasons, RES_STALE task; **GO** in one transaction (draft product, cycle, one RFQ per supplier candidate, new supplier names become suppliers; once only; low margin or risk flag needs a written reason; Manager / Partner / Owner only); accept quote; PO from the accepted quote; Confirm (FX rate of the PO date kept, 30 / 70 payment schedule, SRC_PAY_DUE tasks); supplier payment (advance 1300 ← bank 1000 at the payment-day rate; overpay refused; task closes); shipment (never ship more than ordered; arriving / overdue tasks); GRN draft → **post once** (lots through the stock service at provisional cost, goods value owed to the supplier 2000, advances used, short / damaged claim task, draft product goes live); landed cost run (freight by quantity, duty by value; lot cost updated; units already sold get their cost of sale corrected; FINAL cannot be changed); cycle workspace data with a step bar coloured from the data; buying dashboard numbers; nightly tasks; home cards. **67 tests pass**, incl. the whole road idea → 990 units on the shelf: bank −3,930.00, stock 4,653.00 = stock account, trial balance equal at every stop.
 
-## Step 3 – still to do
-- API + screens: research record (competitors, supplier candidates, margin chip, GO button), cycle workspace with step bar and action buttons, PO page, payments, shipments, GRN entry and post, landed cost form, buying dashboard; samples / production / QC / allocation / freight / customs as lists; quick buy and direct PO (repeat order); ICC reorder basics.
+- 12 Nov 10:50 PKT – **Step 3 done.** Screens + API: Buying dashboard (9 numbers from live data, open cycles with their step bar), research workspace (estimate with margin colour, competitors, supplier candidates, status buttons, GO), cycle workspace (step bar + one section per step with its action button: Accept quote → Make PO → Confirm → Pay → Add shipment → Receive → Post to stock → Landed cost), PO page (lines with shipped / received, payments with rates, shipments and GRNs, lots made), Direct PO and "Repeat this order", exchange rates screen. Roles: Sourcing buys but cannot pay or set rates; Finance pays; Warehouse receives but sees no prices; VA sees nothing. **68 tests pass.** Browser (desktop + phone), all through the real screens: new research → estimate 54.5 % → supplier → GO → accept → PO → confirm → pay deposit → shipment → receive (5 damaged) → post → landed cost FINAL → PO RECEIVED, 1 lot, accounts balanced, stock check passed; 139 menu routes open, 0 errors; 26 placeholders left.
 
 ## Carried to later steps (not forgotten)
+- Buying extras: quick buy (PO + GRN in one form), old purchase entry (with the data import, step 7), samples / production / QC / allocation / freight / customs engines (their lists and forms already work), supplier payment approval (approvals engine, step 5), PO PDF and send to supplier (with documents / printing, step 4)
 - SKU homes and the phone work screen (with Dispatch, step 4) · ICC reorder calculator (with Buying, step 3) · product family / variations import and bulk upload (with Import Center) · adjustments above ADJUST_APPROVAL_QTY need approval (with the approvals engine, step 5)
 - Approvals queue engine and screen (with Money, step 5) · saved list views · sessions & IP allow-list screen · first-time setup wizard (after the modules exist) · role-specific KPI cards (each module registers its own in its step).
 
