@@ -15,6 +15,8 @@ class Ledger
         '1000' => ['Bank accounts', 'ASSET', 'BANK'],
         '1050' => ['Cash and wallets', 'ASSET', 'BANK'],
         '1100' => ['Marketplace receivable (unsettled sales)', 'ASSET', 'SHOP'],
+        '1110' => ['Marketplace payouts on the way to the bank', 'ASSET', 'SHOP'],
+        '1120' => ['Marketplace reserve (held back)', 'ASSET', 'SHOP'],
         '1150' => ['Other receivables', 'ASSET', 'PARTY'],
         '1200' => ['Stock (at landed cost)', 'ASSET', null],
         '1210' => ['Goods in transit', 'ASSET', null],

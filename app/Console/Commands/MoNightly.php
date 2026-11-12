@@ -22,6 +22,7 @@ class MoNightly extends Command
             \App\Services\BuyingService::staleResearch((int) $ent);
             \App\Services\BuyingService::payDueTasks((int) $ent);
             \App\Services\BuyingService::shipmentTasks((int) $ent);
+            \App\Services\MoneyService::unmatchedTasks((int) $ent);
             $this->line("Company $ent: stock mismatches {$r['mismatch']}, negative balances {$r['negative_balances']}, value = ledger: " . ($r['value_matches_ledger'] ? 'yes' : 'NO') . ", low stock tasks open {$low['open']}");
         }
         Context::set(null, null);

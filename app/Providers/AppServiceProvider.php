@@ -17,6 +17,9 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         // Stock arrived (GRN posted, opening stock) → orders that were short get their units, oldest dispatch date first.
+        \App\Services\Approvals::handler('EXPENSE', function (object $a, bool $ok) {
+            if ($ok) { \Illuminate\Support\Facades\DB::table('fin_expenses')->where('id', $a->entity_id)->update(['f_active' => 1]); \App\Services\MoneyService::postExpense((int) $a->entity_id); }
+        });
         EventBus::listen('GRN_POSTED', function (array $e) {
             foreach (DB::table('fin_lots')->whereIn('id', $e['payload']['lots'] ?? [])->pluck('fk_id_product')->unique() as $pid) DispatchService::fillShorts((int) $pid);
         });
