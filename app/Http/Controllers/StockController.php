@@ -251,6 +251,17 @@ class StockController extends Controller
             return $x + ['message' => "Home moved from {$x['from']} to {$x['to']}" . ($x['units_moved'] ? " · {$x['units_moved']} unit(s) moved" : '') . ($x['labels_problem'] ? ' · shelf labels NOT queued: ' . $x['labels_problem'] : ' · 2 shelf labels are in the print queue')]; });
     }
 
+    public function homeRefill(Request $r, int $id)
+    {
+        return $this->run(function () use ($id) { $x = \App\Services\SkuHomes::refill((int) Context::ent(), $id); return $x + ['message' => "{$x['moved']} unit(s) of {$x['sku']} moved into {$x['bin']} ({$x['detail']})"]; });
+    }
+
+    public function homeSuggest(Request $r)
+    {
+        $d = $r->validate(['product' => 'required|integer', 'qty' => 'nullable|integer|min:0']);
+        return ['places' => \App\Services\SkuHomes::suggest((int) Context::ent(), (int) $d['product'], (int) ($d['qty'] ?? 0))];
+    }
+
     public function homeRemove(Request $r, int $id)
     {
         return $this->run(function () use ($id) { \App\Services\SkuHomes::remove((int) Context::ent(), $id); return ['message' => 'Home removed']; });

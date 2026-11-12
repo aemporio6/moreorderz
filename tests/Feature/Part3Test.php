@@ -110,6 +110,54 @@ class Part3Test extends TestCase
         $this->actingAs($wh)->getJson('/api/sku-homes?q=SKU-A')->assertOk()->assertJsonCount(3, 'homes');
     }
 
+    public function test_a_list_shows_the_chosen_columns_the_view_keeps_them_and_the_export_uses_them(): void
+    {
+        $this->asOwner(); $key = collect(['product', 'product_vendor', 'cat_marketplace'])->first(fn ($k) => \App\Services\Registry::exists($k) && \App\Services\Registry::table($k)) ?? $this->markTestSkipped('no list form');
+        $d = $this->getJson("/api/list/$key")->assertOk()->json(); $all = array_column($d['all_columns'], 'name');
+        $this->assertGreaterThanOrEqual(count($d['columns']), count($all)); $this->assertLessThanOrEqual(12, count($d['columns']));
+        $pick = [$all[count($all) - 1], $all[0]];                                     // the last column first, then the first
+        $d2 = $this->getJson("/api/list/$key?cols=" . implode(',', $pick) . ',no_such_column')->assertOk()->json();
+        $this->assertSame($pick, array_column($d2['columns'], 'name'), 'only real columns, in the order chosen');
+        $this->postJson('/api/views', ['page' => "list:$key", 'name' => 'Two columns', 'state' => ['q' => '', 'cols' => array_merge($pick, ['bad col; drop'])], 'default' => true])->assertOk();
+        $this->assertSame($pick, $this->getJson("/api/views/list:$key")->json('views.0.state.cols'));
+        $csv = $this->get("/api/export/$key?cols=" . implode(',', $pick))->assertOk()->streamedContent();
+        $this->assertCount(2, str_getcsv(explode("\n", ltrim($csv, "\xEF\xBB\xBF"))[0]), 'the export has the same two columns');
+    }
+
+    public function test_putaway_suggests_the_home_receiving_can_use_a_place_per_line_and_a_low_home_is_refilled(): void
+    {
+        $this->asOwner(); $f = fn ($t, $d) => DB::table($t)->insertGetId(RecordService::fillNotNull($t, $d));
+        $p = $f('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'SKU-A', 'product_name_vendor' => 'Thing A', 'stock' => 0, 'f_active' => 1, 'e_product_type' => 'pool']);
+        [$a1, $a2, $b1, $b2] = array_map(fn ($n) => $f('cat_inventory_locations', ['location_name' => $n, 'kind' => 'BIN', 'fk_id_ent' => 1, 'f_sellable' => 1, 'f_active' => 1, 'pick_seq' => (int) substr($n, -1)]), ['W1-A-1', 'W1-A-2', 'W1-B-3', 'W1-B-4']);
+        // no home yet: bins that hold the SKU, then empty bins
+        $this->assertSame(['empty bin', 'W1-A-1'], [SkuHomes::suggest(1, $p, 10)[0]['why'], SkuHomes::suggest(1, $p, 10)[0]['name']]);
+        SkuHomes::set(1, $p, $a1, 'PRIMARY', 20, 50); SkuHomes::set(1, $p, $a2, 'OVERFLOW', null, 100);
+        $s = SkuHomes::suggest(1, $p, 30);
+        $this->assertSame(['W1-A-1', 'main home', 50, true], [$s[0]['name'], $s[0]['why'], $s[0]['room'], $s[0]['fits']]);
+        Stock::receive(1, [['product' => $p, 'qty' => 45, 'location' => $a1, 'unit_cost' => 2.00]], 'GRN', 1);
+        $s = SkuHomes::suggest(1, $p, 30);
+        $main = collect($s)->firstWhere('name', 'W1-A-1');
+        $this->assertSame(['W1-A-2', 'overflow home', 5, false, 'main home'], [$s[0]['name'], $s[0]['why'], $main['room'], $main['fits'], end($s)['why']], 'the main home has room for 5 only: places with room come first, the overflow home leading');
+        $this->postJson('/api/choices', ['key' => 'MENU_NAMES', 'value' => 'SIMPLE']);   // unrelated switch must not disturb
+        DB::table('sys_settings')->updateOrInsert(['setting_key' => 'WH_STORAGE_MODE', 'fk_id_ent' => 1], RecordService::fillNotNull('sys_settings', ['setting_key' => 'WH_STORAGE_MODE', 'fk_id_ent' => 1, 'setting_value' => 'CHAOTIC'])); \App\Services\Settings::flush();
+        $this->assertSame('already holds this SKU', SkuHomes::suggest(1, $p, 5)[0]['why'], 'CHAOTIC: homes are not used');
+        DB::table('sys_settings')->where('setting_key', 'WH_STORAGE_MODE')->where('fk_id_ent', 1)->delete(); \App\Services\Settings::flush();
+        $this->getJson("/api/sku-homes/suggest?product=$p&qty=30")->assertOk()->assertJsonPath('places.0.name', 'W1-A-2');
+        // refill: sell the home down, stock sits in overflow and another bin
+        Stock::transfer(1, $p, 40, $a1, $a2, 'test'); Stock::transfer(1, $p, 10, $a2, $b1, 'test');    // home 5, overflow 30, other bin 10
+        $n = collect(SkuHomes::refillNeeds(1))->firstWhere('sku', 'SKU-A');
+        $this->assertSame([5, 20, 50, 40], [$n['in_bin'], $n['min'], $n['target'], $n['can_move']]);
+        $t = SkuHomes::tasks(1); $this->assertSame(1, $t['replen']);
+        $this->assertSame(1, DB::table('tasks')->where('dedupe_key', 'WH_REPLEN:0:SKU-A')->whereNotIn('status', ['DONE', 'APPROVED', 'CANCELLED'])->count());
+        $wh = $this->makeUser('WAREHOUSE'); $home = DB::table('t_product_locations')->where('fk_id_product', $p)->where('home_role', 'PRIMARY')->value('id');
+        $this->actingAs($this->makeUser('VA'))->postJson("/api/sku-homes/$home/refill")->assertStatus(422);
+        $x = $this->actingAs($wh)->postJson("/api/sku-homes/$home/refill")->assertOk()->json();
+        $this->assertSame([40, 45, 0, 0], [$x['moved'], Stock::balance($p, $a1), Stock::balance($p, $a2), Stock::balance($p, $b1)], 'overflow first, then the other bin, up to the largest quantity');
+        $this->assertSame(0, DB::table('tasks')->where('dedupe_key', 'WH_REPLEN:0:SKU-A')->whereNotIn('status', ['DONE', 'APPROVED', 'CANCELLED'])->count(), 'the task closes by itself');
+        $this->actingAs($wh)->postJson("/api/sku-homes/$home/refill")->assertStatus(422);
+        $this->assertSame(Stock::value(1), \App\Services\Ledger::balance(1, '1200'));
+    }
+
     public function test_lot_owner_share_is_a_company_choice_100_a_fixed_percent_or_his_agreement(): void
     {
         $this->asOwner(); $f = fn ($t, $d) => DB::table($t)->insertGetId(RecordService::fillNotNull($t, $d)); $m1 = date('Y-m', strtotime(date('Y-m-01') . ' -1 month'));

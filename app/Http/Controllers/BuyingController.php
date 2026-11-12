@@ -194,7 +194,7 @@ class BuyingController extends Controller
     public function grn(Request $r)
     {
         $this->can($r, self::RECEIVE);
-        $d = $r->validate(['shipment' => 'required|integer', 'location' => 'required|integer', 'date' => 'required|date', 'lines' => 'required|array|min:1', 'lines.*.po_line' => 'required|integer', 'lines.*.received' => 'required|integer|min:0', 'lines.*.damaged' => 'nullable|integer|min:0']);
+        $d = $r->validate(['shipment' => 'required|integer', 'location' => 'required|integer', 'date' => 'required|date', 'lines' => 'required|array|min:1', 'lines.*.po_line' => 'required|integer', 'lines.*.received' => 'required|integer|min:0', 'lines.*.damaged' => 'nullable|integer|min:0', 'lines.*.location' => 'nullable|integer']);
         return $this->run(fn () => ['id' => Buy::createGrn($d), 'message' => 'GRN saved as draft – check it and post']);
     }
 
@@ -202,7 +202,8 @@ class BuyingController extends Controller
     {
         $this->can($r, self::SEE);
         abort_unless(DB::table('t_src_shipments')->where('id', $id)->where('fk_id_ent', Context::ent())->exists(), 404);
-        return ['lines' => DB::table('t_src_shipment_po_link as k')->leftJoin('t_product_vendors as p', 'p.id', '=', 'k.fk_id_product')->where('k.fk_id_shipment', $id)->where('k.f_active', 1)->get(['k.fk_id_po_line as po_line', 'p.SKU_VENDOR as sku', 'p.product_name_vendor as name', 'k.actual_qty as qty'])];
+        return ['lines' => DB::table('t_src_shipment_po_link as k')->leftJoin('t_product_vendors as p', 'p.id', '=', 'k.fk_id_product')->where('k.fk_id_shipment', $id)->where('k.f_active', 1)->get(['k.fk_id_po_line as po_line', 'k.fk_id_product as product', 'p.SKU_VENDOR as sku', 'p.product_name_vendor as name', 'k.actual_qty as qty'])
+            ->map(function ($l) { $l->suggest = $l->product ? (\App\Services\SkuHomes::suggest((int) Context::ent(), (int) $l->product, (int) $l->qty)[0] ?? null) : null; return $l; })];
     }
 
     public function postGrn(Request $r, int $id)

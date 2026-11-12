@@ -274,6 +274,13 @@ class BuyingService
     }
 
     /** Draft GRN for a shipment. $d: shipment, location, date?, lines [{po_line, received, damaged?, missing?}] (default: everything planned, nothing damaged). */
+    private static function grnLoc(int $ent, mixed $id): ?int
+    {
+        if (! $id) return null;
+        if (! DB::table('cat_inventory_locations')->where('id', $id)->where('fk_id_ent', $ent)->where('f_active', 1)->exists()) throw new \InvalidArgumentException('A line points at a location that is not an active location of this company.');
+        return (int) $id;
+    }
+
     public static function createGrn(array $d): int
     {
         return DB::transaction(function () use ($d) {
@@ -289,7 +296,7 @@ class BuyingService
                 $r = (float) $l['received']; $dg = (float) ($l['damaged'] ?? 0); $ms = (float) ($l['missing'] ?? max(0, $link->actual_qty - $r));
                 if ($r < 0 || $dg < 0 || $dg > $r) throw new \InvalidArgumentException('Received and damaged quantities do not fit.');
                 DB::table('t_src_grn_lines')->insert(['fk_id_grn' => $gid, 'fk_id_po_line' => $l['po_line'], 'fk_id_product' => $link->fk_id_product, 'sku' => DB::table('t_product_vendors')->where('id', $link->fk_id_product)->value('SKU_VENDOR'),
-                    'expected_qty' => $link->actual_qty, 'received_qty' => $r, 'accepted_qty' => $r - $dg, 'damaged_qty' => $dg, 'missing_qty' => $ms, 'fk_id_location' => $d['location'], 'created_by' => Context::userId(), 'created_at' => now()]);
+                    'expected_qty' => $link->actual_qty, 'received_qty' => $r, 'accepted_qty' => $r - $dg, 'damaged_qty' => $dg, 'missing_qty' => $ms, 'fk_id_location' => self::grnLoc($ent, $l['location'] ?? null) ?? $d['location'], 'created_by' => Context::userId(), 'created_at' => now()]);
                 $exp += $link->actual_qty; $rec += $r; $dmg += $dg; $mis += $ms;
             }
             DB::table('t_src_grn')->where('id', $gid)->update(['expected_units' => $exp, 'units_received' => $rec, 'damaged_units' => $dmg, 'missing_units' => $mis, 'shortage_qty' => $mis, 'damage_pct' => $rec > 0 ? round($dmg / $rec * 100, 2) : 0]);

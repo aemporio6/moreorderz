@@ -19,7 +19,10 @@ class RecordService
         $table = Registry::table($formKey) ?? abort(404, "Form $formKey has no table.");
         $pk = Registry::pk($table);
         $fields = self::storedFields($formKey, $table);
-        $cols = array_slice(array_values(array_unique(array_map(fn ($f) => $f['column_name'], $fields))), 0, (int) ($p['max_cols'] ?? 12));
+        $allCols = array_slice(array_values(array_unique(array_map(fn ($f) => $f['column_name'], $fields))), 0, 80);
+        // the user's own choice of columns (a saved view keeps it); without one the first 12 show
+        $want = array_values(array_intersect(is_array($p['cols'] ?? null) ? $p['cols'] : array_filter(explode(',', (string) ($p['cols'] ?? ''))), $allCols));
+        $cols = $want ?: array_slice($allCols, 0, (int) ($p['max_cols'] ?? 12));
         $q = DB::table($table);
         self::scope($q, $table);
         if (! empty($p['q'])) {
@@ -41,7 +44,7 @@ class RecordService
         $rows = $q->orderBy($sort, ($p['dir'] ?? 'desc') === 'asc' ? 'asc' : 'desc')->offset(($page - 1) * $per)->limit($per)->get(array_merge([$pk . ' as id'], $cols));
         $labels = self::labels($fields, $rows);
         return [
-            'form_key' => $formKey, 'table' => $table, 'total' => $total, 'page' => $page, 'per_page' => $per,
+            'form_key' => $formKey, 'table' => $table, 'total' => $total, 'page' => $page, 'per_page' => $per, 'all_columns' => array_map(fn ($c) => ['name' => $c, 'label' => self::fieldByCol($fields, $c)['label']], $allCols),
             'columns' => array_map(fn ($c) => ['name' => $c, 'label' => self::fieldByCol($fields, $c)['label'], 'type' => self::fieldByCol($fields, $c)['type']], $cols),
             'rows' => $rows->map(function ($r) use ($labels) {
                 $a = (array) $r;

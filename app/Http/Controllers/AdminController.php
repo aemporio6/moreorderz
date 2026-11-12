@@ -242,7 +242,8 @@ class AdminController extends Controller
         $u = $r->user();
         $d = $r->validate(['page' => 'required|string|max:60', 'name' => 'required|string|min:1|max:80', 'state' => 'present|array', 'default' => 'nullable|boolean', 'shared' => 'nullable|boolean']);
         if (! empty($d['shared']) && ! in_array($u->role_code, ['OWNER', 'MANAGER'], true)) abort(403, 'Only the Owner or a Manager can share a view with everybody.');
-        $state = ['q' => (string) ($d['state']['q'] ?? ''), 'sort' => (string) ($d['state']['sort'] ?? ''), 'dir' => ($d['state']['dir'] ?? 'desc') === 'asc' ? 'asc' : 'desc', 'filter' => array_map('strval', array_filter((array) ($d['state']['filter'] ?? []), fn ($v) => is_scalar($v) && $v !== ''))];
+        $state = ['q' => (string) ($d['state']['q'] ?? ''), 'sort' => (string) ($d['state']['sort'] ?? ''), 'dir' => ($d['state']['dir'] ?? 'desc') === 'asc' ? 'asc' : 'desc', 'filter' => array_map('strval', array_filter((array) ($d['state']['filter'] ?? []), fn ($v) => is_scalar($v) && $v !== '')),
+            'cols' => array_values(array_filter(array_map('strval', array_filter((array) ($d['state']['cols'] ?? []), 'is_scalar')), fn ($c) => preg_match('/^[A-Za-z0-9_]{1,64}$/', $c)))];
         return DB::transaction(function () use ($u, $d, $state) {
             if (! empty($d['default'])) DB::table('sys_saved_views')->where('fk_id_account', $u->id)->where('page_key', $d['page'])->update(['f_default' => 0]);
             $have = DB::table('sys_saved_views')->where('fk_id_account', $u->id)->where('page_key', $d['page'])->where('view_name', $d['name'])->value('id');

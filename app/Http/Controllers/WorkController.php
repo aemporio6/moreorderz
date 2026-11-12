@@ -29,7 +29,7 @@ class WorkController extends Controller
     public function export(Request $r, string $key)
     {
         abort_unless(Rights::can(Context::role(), 'EXPORT', $key), 403, 'Your role cannot export this list.');
-        [$head, $rows] = RecordService::export($key, $r->only(['q', 'sort', 'dir', 'filter']));
+        [$head, $rows] = RecordService::export($key, $r->only(['q', 'sort', 'dir', 'filter', 'cols']));
         return response()->streamDownload(function () use ($head, $rows) {
             $o = fopen('php://output', 'w');
             fwrite($o, "\xEF\xBB\xBF");

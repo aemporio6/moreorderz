@@ -58,6 +58,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('sku-homes', [StockController::class, 'homes']);
         Route::post('sku-homes', [StockController::class, 'homeSave']);
         Route::post('sku-homes/move', [StockController::class, 'homeMove']);
+        Route::get('sku-homes/suggest', [StockController::class, 'homeSuggest']);
+        Route::post('sku-homes/{id}/refill', [StockController::class, 'homeRefill'])->whereNumber('id');
         Route::post('sku-homes/{id}/remove', [StockController::class, 'homeRemove'])->whereNumber('id');
         Route::get('health', [AdminController::class, 'health']);
         Route::post('health/retry', [AdminController::class, 'retryEvents']);

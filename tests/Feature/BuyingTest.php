@@ -110,7 +110,10 @@ class BuyingTest extends TestCase
         $line = (int) DB::table('t_src_po_lines')->where('fk_id_po', $po)->value('id');
 
         // 990 arrive, 10 of them damaged, 10 missing
-        $grn = Buy::createGrn(['shipment' => $ship, 'location' => $this->wh, 'date' => '2026-08-20', 'lines' => [['po_line' => $line, 'received' => 990, 'damaged' => 10]]]);
+        // the line carries its own place (the putaway suggestion); it wins over the place of the GRN head
+        $other = DB::table('cat_inventory_locations')->insertGetId(\App\Services\RecordService::fillNotNull('cat_inventory_locations', ['location_name' => 'OTHER-BIN', 'kind' => 'BIN', 'fk_id_ent' => 1, 'f_sellable' => 1, 'f_active' => 1]));
+        try { Buy::createGrn(['shipment' => $ship, 'location' => $other, 'date' => '2026-08-20', 'lines' => [['po_line' => $line, 'received' => 990, 'damaged' => 10, 'location' => 999999]]]); $this->fail('bad place'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('not an active location', $e->getMessage()); }
+        $grn = Buy::createGrn(['shipment' => $ship, 'location' => $other, 'date' => '2026-08-20', 'lines' => [['po_line' => $line, 'received' => 990, 'damaged' => 10, 'location' => $this->wh]]]);
         $this->assertSame(0, Stock::balance($go['product']), 'a draft GRN moves no stock');
         $res = Buy::postGrn($grn);
         $this->assertSame(3960.00, $res['value']);                      // 990 × 5.00 × 0.80 (the PO rate, provisional)

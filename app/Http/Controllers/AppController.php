@@ -143,7 +143,7 @@ class AppController extends Controller
     public function list(Request $r, string $key)
     {
         Rights::check('VIEW', $key);
-        return RecordService::list($key, $r->only(['q', 'page', 'per_page', 'sort', 'dir', 'filter']));
+        return RecordService::list($key, $r->only(['q', 'page', 'per_page', 'sort', 'dir', 'filter', 'cols']));
     }
 
     public function record(string $key, int $id)
