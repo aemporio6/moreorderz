@@ -1,8 +1,8 @@
-# MoreOrderz – results (12 Nov 2026)
+# MoreOrderz – results (12 Nov 2026, final)
 
-Automatic tests: **118 pass, 0 fail (1,051 checks)**. Two of them (the three TikTok owner files) run only where the files are present.
+Automatic tests: **175 pass, 0 fail (1,720 checks)** on a freshly built test database. Tests that need the owner's real files run only where the files are present. Round 1 (the 7 steps) ended at 118 tests; round 2 closed the gaps (below).
 
-## Per step
+## Round 1 – per step (limits as they were then; round 2 closed most of them)
 | Step | What | Tests | Checked in the browser | Main limits |
 |---|---|---|---|---|
 | 1 | Foundation: install, registry forms and lists, events, tasks, numbering, audit, double-entry ledger, login + 2-step, rights, search | pass | login, menu, Create, forms on desktop + phone | saved list views, sessions / IP screen, setup wizard not built |
@@ -45,8 +45,31 @@ Run through a logged-in browser session against the running app (the steps call 
 
 Found and fixed during this run: there was no way to give an opening lot its cost (built: Stock › Lots › Set cost); the Stock page total counted only the listed products.
 
+## Round 2 – closing the gaps
+| Part | What was built | Tests after | Honest state |
+|---|---|---|---|
+| 1a | Choices: every business decision with more than one way is a setting, all options built, recommended one default | 121 | – |
+| 1b | VAT on fees / expenses (input VAT), VAT report; part refunds, refunds of unconfirmed lines | 123 | output VAT / VAT return not built |
+| 1c | Money files of Amazon (flat file V2 + date range report), eBay transaction report, any table by column names | 128 | Amazon date range report checked on the owner's real file (4,632 lines, 21 settlements, all add up); eBay on its real layout; OnBuy / Temu by column names – need one real file each |
+| 2 | Profit waterfall (VA / handler / owner modes, loss carried forward, both routes, stacking rules), statement PDFs with versions, adjustment to a locked month | 131 | limits in HANDOVER §11 |
+| 3a / 3b | Saved list views + column picker, sessions & allowed addresses, SKU homes + putaway + refill, samples, QC, customs, quick buy, setup wizard | 144 | – |
+| 4 | Order files (eBay, Temu, any table), bank Excel, bank line split, cash forecast | 150 | – |
+| 5a | Carrier label PDF import, 14 more reports (25 in all) | 152 | one label per page |
+| 5b | Vault (secrets encrypted, cards 4 digits, CVV / PIN never), import id-clash fix, field-by-field import check, Accounts dashboard, 6 screens | 158 | real copy: 1,105 columns – OK 1,044, masked 55, DIFF 5 all explained |
+| 6 | Outside connections (eBay, Amazon, TikTok, OnBuy, Temu, Royal Mail ×2, WhatsApp, Google Drive), outboxes, webhook, hubs, Drive folders, subscriptions | 171 | **built to contract, not run against the real services** |
+| 7 | Final retest; first sign-in on an install without a company (crashed – fixed); tracking-upload layouts per marketplace profile (data, editable); merging look-alike people / suppliers / products by hand with Undo | 175 | – |
+
+## Final retest (part 7)
+| Check | Result |
+|---|---|
+| All automatic tests on a fresh test database | 175 pass, 0 fail |
+| `mo:install --fresh` on an empty database, new Owner, first sign-in | pass (after the fix above) |
+| Every one of the 146 menu screens opened as Owner, desktop 1440 px and phone 390 px | 146 / 146 open, 0 script errors, 0 placeholders, 0 sideways scroll, none slower than 3 s |
+| End-to-end on the imported real data (masked copy), 15 steps | 13 pass in the rerun; step 2 "set lot cost" refused because the first run had already set that cost (correct refusal), step 11 failed on the old script's text quantity – the corrected script passes the whole buying chain (PO received, lot 20 units, stock value = ledger 1200, trial balance balanced) |
+| `mo:nightly`, `mo:pull`, `mo:send-messages` on the dev, imported and fresh databases | run clean; stock = ledger for every company |
+
 ## How much of the spec works – an honest estimate, not a measurement
-- **The daily chain works end to end and is tested:** idea → purchase → shelf → order → courier → money → month close → partner share, on the owner's real data.
-- **Every registry form with a table (302 of 322) has a list and a generic form.** Tested: all 302 lists load without error and every Create entry opens its form; saving through the generic form engine was tested on a sample of forms, not on all 302. 113 of 129 menu screens open real screens, 16 are placeholders.
-- **Of the spec's rules (the engines), roughly half are built and tested.** Not built: all outside connections (marketplace, carrier, WhatsApp APIs), the generic Import Center, most of HR / VA pay, tax, documents, the accounts vault encryption, and the items listed in `PROGRESS.md` and `docs/HANDOVER.md` §6.
-- **Not proven:** anything on the real printers, on the real server, with real users and real volumes over time; field-by-field equality of the imported rows.
+- **The daily chain works end to end and is tested:** idea → purchase → shelf → order → courier → money → month close → partner share and statement, on the owner's real data (masked copy).
+- **All 146 menu screens are real screens** (no placeholders left). Every registry form with a table has a list and a generic form.
+- **Most engines of the spec are built and tested.** Still not built: one-click printing adapters, output VAT / VAT return, loans / budgets / capital-call engines, HR / VA pay from the job history, partner Accept / Ask on statements, a phone app – see HANDOVER §11.
+- **Not proven:** the outside services with real keys, the real printers, the real server, real users and volumes over months.

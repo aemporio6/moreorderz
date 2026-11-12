@@ -116,16 +116,55 @@ class OrdersController extends Controller
     }
 
     /** 7.6 Tracking upload: the file the marketplace needs back – one line per order with its tracking number and carrier. */
+    /**
+     * The file a marketplace needs back with the tracking numbers. Its columns come from a layout (mo_tracking_layouts) – the one the shop's
+     * marketplace profile names in tracking_upload_layout, or the one chosen on the screen; layouts are data and can be changed without code.
+     */
     public function trackingUpload(Request $r)
     {
         abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER', 'WAREHOUSE', 'TL', 'VA'], true), 403);
         $ent = (int) \App\Services\Context::ent(); $shop = (int) $r->query('shop', 0); $from = $r->query('from') ?: date('Y-m-d', strtotime('-7 day')); $to = $r->query('to') ?: date('Y-m-d');
-        $rows = DB::table('t_sales as s')->leftJoin('t_branches as b', 'b.id', '=', 's.fk_id_branch')->where('s.fk_id_ent', $ent)->where('s.sale_source', 'active')->whereNotNull('s.tracking_no')->where('s.tracking_no', '<>', '')->whereBetween('s.d_order', [$from, $to])
-            ->when($shop, fn ($q) => $q->where('s.fk_id_branch', $shop))->groupBy('b.shop_name', 's.order_no', 's.tracking_no', 's.carrier_service_text', 's.label_status')->orderBy('s.order_no')
-            ->selectRaw('b.shop_name shop, s.order_no, s.tracking_no, s.carrier_service_text service, s.label_status, MIN(s.d_order) d, SUM(s.qty) units')->get();
-        if ($r->query('csv') === '1') return response()->streamDownload(function () use ($rows) { $o = fopen('php://output', 'w'); fputcsv($o, ['order-id', 'tracking-number', 'carrier-service', 'ship-date']);
-            foreach ($rows as $x) fputcsv($o, [$x->order_no, $x->tracking_no, $x->service, date('Y-m-d')]); fclose($o); }, 'tracking_upload_' . date('Ymd') . '.csv', ['Content-Type' => 'text/csv']);
-        return ['rows' => $rows, 'shops' => DB::table('t_branches')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name as name']), 'from' => $from, 'to' => $to, 'shop' => $shop];
+        $layouts = DB::table('mo_tracking_layouts')->where('f_active', 1)->orderBy('id')->get();
+        $profileLayout = $shop ? DB::table('t_branches as b')->join('mp_profiles as p', 'p.id', '=', 'b.fk_id_mp_profile')->where('b.id', $shop)->value('p.tracking_upload_layout') : null;
+        $code = (string) ($r->query('layout') ?: ($profileLayout ?: 'GENERIC')); $L = $layouts->firstWhere('code', $code) ?? $layouts->firstWhere('code', 'GENERIC');
+        $rows = DB::table('t_sales as s')->leftJoin('t_branches as b', 'b.id', '=', 's.fk_id_branch')->leftJoin('t_product_listings as l', 'l.id', '=', 's.fk_id_listing')->leftJoin('t_product_vendors as pv', 'pv.id', '=', 's.fk_product_id')
+            ->leftJoin('t_carriers as c', 'c.id', '=', 'b.fk_id_default_carrier')   // the parcel's carrier: the shop's usual carrier
+            ->where('s.fk_id_ent', $ent)->where('s.sale_source', 'active')->whereNotNull('s.tracking_no')->where('s.tracking_no', '<>', '')->whereBetween('s.d_order', [$from, $to])
+            ->when($shop, fn ($q) => $q->where('s.fk_id_branch', $shop))->orderBy('s.order_no')
+            ->get(['b.shop_name as shop', 's.order_no', 's.tracking_no', 's.carrier_service_text as service', 's.label_status', 's.d_order as d', 's.qty as units', 'l.item_id', 'pv.SKU_VENDOR as sku', 'c.carrier_name as carrier', 's.updated_at']);
+        $cols = json_decode((string) $L->columns_json, true) ?: [];
+        $value = fn ($x, string $f) => match (true) { $f === 'order_no' => $x->order_no, $f === 'item_id' => $x->item_id, $f === 'sku' => $x->sku, $f === 'qty' => $x->units, $f === 'tracking_no' => $x->tracking_no,
+            $f === 'carrier' => $x->carrier, $f === 'service' => $x->service, $f === 'ship_date' => substr((string) ($x->updated_at ?: date('Y-m-d')), 0, 10), str_starts_with($f, 'text:') => substr($f, 5), default => '' };
+        // lines of one order: one line per order when the layout has no item / SKU / quantity column
+        $perItem = (bool) array_intersect(array_column($cols, 1), ['item_id', 'sku', 'qty']);
+        $out = $perItem ? $rows : $rows->unique(fn ($x) => $x->order_no . '|' . $x->tracking_no)->values();
+        if ($r->query('csv') === '1') return response()->streamDownload(function () use ($out, $cols, $value, $L) { $o = fopen('php://output', 'w'); $d = $L->delimiter === '\t' || $L->delimiter === "\t" ? "\t" : ($L->delimiter ?: ',');
+            fputcsv($o, array_column($cols, 0), $d); foreach ($out as $x) fputcsv($o, array_map(fn ($c) => $value($x, $c[1]), $cols), $d); fclose($o); },
+            'tracking_upload_' . strtolower($L->code) . '_' . date('Ymd') . ($L->delimiter === "\t" ? '.txt' : '.csv'), ['Content-Type' => 'text/csv']);
+        return ['rows' => $out, 'shops' => DB::table('t_branches')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name as name']), 'from' => $from, 'to' => $to, 'shop' => $shop,
+            'layout' => ['code' => $L->code, 'name' => $L->name, 'note' => $L->note, 'headers' => array_column($cols, 0), 'fields' => array_column($cols, 1), 'from_profile' => $profileLayout === $L->code], 'layouts' => $layouts->map(fn ($x) => ['code' => $x->code, 'name' => $x->name])];
+    }
+
+    /** Add or change a tracking-upload layout: one line per column, "Header = field". Owner / Manager. */
+    public function saveTrackingLayout(Request $r)
+    {
+        $this->can($r, ['OWNER', 'MANAGER']);
+        return $this->run(function () use ($r) {
+            $code = strtoupper(preg_replace('/[^A-Za-z0-9_]/', '_', trim((string) $r->input('code')))); $name = trim((string) $r->input('name'));
+            if ($code === '' || $name === '') throw new \InvalidArgumentException('Give the layout a code and a name.');
+            $ok = ['order_no', 'item_id', 'sku', 'qty', 'tracking_no', 'carrier', 'service', 'ship_date', 'blank']; $cols = [];
+            foreach (preg_split('/\r?\n/', (string) $r->input('columns')) as $line) {
+                if (trim($line) === '') continue;
+                if (! str_contains($line, '=')) throw new \InvalidArgumentException("Write each column as \"Header = field\": $line");
+                [$h, $f] = array_map('trim', explode('=', $line, 2));
+                if (! in_array($f, $ok, true) && ! str_starts_with($f, 'text:')) throw new \InvalidArgumentException("Unknown field \"$f\". Use one of: " . implode(', ', $ok) . ', or text:<fixed value>.');
+                $cols[] = [$h, $f];
+            }
+            if (! in_array('tracking_no', array_column($cols, 1), true) || ! in_array('order_no', array_column($cols, 1), true)) throw new \InvalidArgumentException('A layout needs at least the order number (order_no) and the tracking number (tracking_no).');
+            DB::table('mo_tracking_layouts')->updateOrInsert(['code' => $code], ['name' => mb_substr($name, 0, 120), 'columns_json' => json_encode($cols), 'delimiter' => $r->input('delimiter') === 'TAB' ? "\t" : ',', 'note' => mb_substr((string) $r->input('note'), 0, 255) ?: null, 'f_active' => 1]);
+            Audit::log('mo_tracking_layouts', 0, 'UPDATE', ['code' => $code, 'columns' => count($cols)]);
+            return ['code' => $code, 'message' => 'Layout saved. A marketplace profile uses it when its "tracking upload layout" is ' . $code . '.'];
+        });
     }
 
     public function cancel(Request $r, int $id)

@@ -50,7 +50,7 @@ class Choices
             '1' => ['Yes', 'VAT on marketplace fees and on expenses is kept apart as VAT to claim back (account 1400) and shown in the VAT report.']], true],
     ];
 
-    public static function get(string $key, int $ent): string
+    public static function get(string $key, ?int $ent): string   // no company yet (first sign-in after install): the global value or the default
     {
         return (string) (Settings::get($key, $ent, null) ?? self::LIST[$key][2]);
     }

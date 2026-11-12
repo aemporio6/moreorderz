@@ -201,8 +201,12 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('orders/import', [OrdersController::class, 'importFile']);
         Route::get('labels', [OrdersController::class, 'labels']);
         Route::get('tracking-upload', [OrdersController::class, 'trackingUpload']);
+        Route::post('tracking-layouts', [OrdersController::class, 'saveTrackingLayout']);
         Route::get('import-history', [AdminController::class, 'importHistory']);
         Route::get('merges', [AdminController::class, 'merges']);
+        Route::post('merges', [AdminController::class, 'mergeDo']);
+        Route::post('merges/{id}/undo', [AdminController::class, 'mergeUndo'])->whereNumber('id');
+        Route::post('merges/dismiss', [AdminController::class, 'mergeDismiss']);
         Route::get('registry', [AdminController::class, 'registry']);
         Route::post('labels/import', [OrdersController::class, 'labelImport']);
         Route::post('labels/{id}/pick', [OrdersController::class, 'labelPick'])->whereNumber('id');

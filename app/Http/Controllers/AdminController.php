@@ -328,7 +328,31 @@ class AdminController extends Controller
     public function merges(Request $r)
     {
         abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER'], true), 403);
-        return ['rows' => DB::table('sys_merge_map')->orderByDesc('id')->limit(500)->get()];
+        $e = (string) $r->query('entity', 'PARTY');
+        return ['rows' => DB::table('sys_merge_map')->orderByDesc('id')->limit(500)->get(), 'entity' => $e,
+            'entities' => array_map(fn ($k, $v) => ['code' => $k, 'label' => $v[1]], array_keys(\App\Services\Merges::ENTITIES), \App\Services\Merges::ENTITIES),
+            'suggestions' => \App\Services\Merges::suggestions($e)];
+    }
+
+    public function mergeDo(Request $r)
+    {
+        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER'], true), 403);
+        try { return \App\Services\Merges::merge((string) $r->input('entity'), (int) $r->input('keep'), (int) $r->input('fold'), (string) $r->input('reason')); }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage(), 'errors' => ['_form' => [$e->getMessage()]]], 422); }
+    }
+
+    public function mergeUndo(Request $r, int $id)
+    {
+        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER'], true), 403);
+        try { return \App\Services\Merges::undo($id); }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+    }
+
+    public function mergeDismiss(Request $r)
+    {
+        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER'], true), 403);
+        try { \App\Services\Merges::dismiss((string) $r->input('entity'), (int) $r->input('a'), (int) $r->input('b')); return ['ok' => true]; }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
     }
 
     public function registry(Request $r)
