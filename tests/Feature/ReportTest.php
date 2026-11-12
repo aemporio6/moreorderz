@@ -72,8 +72,8 @@ class ReportTest extends TestCase
         $po = $this->rep('purchases');
         $this->assertSame([1, 100, 400.0, 120.0, '280.00'], [count($po['rows']), (int) $po['totals']['ordered'], $po['totals']['total'], $po['totals']['paid'], $po['rows'][0]['open_cur']]);
         $this->assertSame(Ledger::balance(1, '1300'), $this->rep('suppliers')['totals']['advance']);
-        $pa = $this->rep('partners')['rows'][0];     // shop profit 100 − 20 = 80 → 25 % = 20
-        $this->assertSame([1000.0, 20.0, 20.0], [$pa['capital'], $pa['profit'], $pa['balance']]);
+        $pa = $this->rep('partners')['rows'][0];     // shop profit 100 − 20 = 80 less its overhead share 15 = 65 → 25 % = 16.25
+        $this->assertSame([1000.0, 16.25, 16.25], [$pa['capital'], $pa['profit'], $pa['balance']]);
         $cl = $this->rep('close');
         $this->assertSame([['Locked', 100.0, 80.0, 'First month.'], 'Open'], [[$cl['rows'][0]['status'], $cl['rows'][0]['sales'], $cl['rows'][0]['profit'], $cl['rows'][0]['note']], $cl['rows'][1]['status']]);
     }

@@ -108,7 +108,7 @@ class PartnerService
     public static function monthShares(int $ent, int $branchId, string $month): array
     {
         $from = $month . '-01'; $to = date('Y-m-t', strtotime($from));
-        $fig = CloseService::figures($ent, $branchId, $month); $d = self::distributable($ent, (float) $fig['profit']); $ags = self::activeOn($ent, $from);
+        $fig = CloseService::figures($ent, $branchId, $month); $d = self::distributable($ent, (float) $fig['profit_to_share']) + ['shop_profit' => (float) $fig['profit'], 'overhead_share' => $fig['share_after_overheads'] ? (float) $fig['overhead_share'] : 0.0]; $ags = self::activeOn($ent, $from);
         $bases = ['POOL' => $d['distributable'], 'MARKETPLACE:' . $branchId => $d['distributable']];
         // PO base: profit of the units that came out of that PO's lots (sale profit × units from the PO ÷ units of the line), less its tax reserve
         $pos = $ags->where('scope', 'PO')->pluck('po_id')->unique();

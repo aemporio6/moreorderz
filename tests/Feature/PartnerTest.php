@@ -119,4 +119,19 @@ class PartnerTest extends TestCase
         $this->actingAs($fin)->getJson('/api/partners')->assertOk()->assertJsonCount(2, 'partners');
         $tb = Ledger::trialBalance(1); $this->assertSame($tb['debit'], $tb['credit']);
     }
+
+    public function test_partners_share_the_profit_after_the_shops_share_of_the_overheads_and_the_setting_can_switch_it_off(): void
+    {
+        Partners::saveAgreement(1, ['investor_id' => $this->a, 'partner_type' => 'SLEEPING', 'scope' => 'POOL', 'effective_from' => $this->m1 . '-01', 'profit_share_pct' => 50]);
+        Sales::intake($this->shop, [['order_no' => 'ORD-1', 'd_order' => $this->m1 . '-05', 'sku' => 'BOWL-01', 'qty' => 10, 'sale_rate' => 30]]); Sales::confirmMonth($this->shop, $this->m1, true);   // shop profit 260
+        Money::addExpense(1, ['bank' => $this->bank, 'category' => 'SOFTWARE', 'amount' => 60, 'date' => $this->m1 . '-10']);                                          // overhead, no shop
+        Money::addExpense(1, ['bank' => $this->bank, 'category' => 'OFFICE', 'amount' => 10, 'date' => $this->m1 . '-11', 'branch' => $this->shop]);                     // the shop's own cost
+        $f = Close::figures(1, $this->shop, $this->m1);
+        $this->assertSame([250.0, 60.0, 100.0, 190.0], [$f['profit'], $f['overhead_share'], $f['sales_share_pct'], $f['profit_to_share']], 'the only shop with sales carries all the overheads');
+        $sh = Partners::monthShares(1, $this->shop, $this->m1);
+        $this->assertSame([190.0, 95.0, 60.0], [$sh['distributable'], $sh['lines'][0]['profit'], $sh['overhead_share']]);
+        $this->assertSame('GREEN', collect(Close::check(1, $this->shop, $this->m1)['checks'])->firstWhere('code', 'EXPENSES')['status']);
+        \App\Services\Settings::set('PROFIT_SHARE_AFTER_OVERHEADS', 0, 1);
+        $this->assertSame(125.0, Partners::monthShares(1, $this->shop, $this->m1)['lines'][0]['profit'], 'switched off: the share is on the shop profit before overheads');
+    }
 }

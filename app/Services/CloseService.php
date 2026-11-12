@@ -60,8 +60,10 @@ class CloseService
         if (! $hasFiles) {
             foreach (['FILES_PRESENT', 'SETTLEMENT_COMPLETE', 'ORDERS_VS_TXN', 'HUB_TOTALS', 'PAYOUT_VS_BANK'] as $c) $set($c, 'NA', 'No money file has ever been loaded for this shop, so this check does not apply.');
         } else {
-            $covered = $periods->contains(fn ($p) => $p->period_from <= $from && $p->period_to >= min($to, date('Y-m-d')));
-            $set('FILES_PRESENT', $covered ? 'GREEN' : 'RED', $covered ? 'A money file covering the whole month is loaded.' : 'No loaded money file covers the whole month (' . ($periods->isEmpty() ? 'none touches it' : $periods->map(fn ($p) => "{$p->period_from} – {$p->period_to}")->implode(', ')) . ').', $covered ? 0 : 1, '#/settlements?shop=' . $branchId);
+            // the shop's very first money file may start inside a month: that month counts from the file's first day
+            $first = DB::table('mo_settlement_periods')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->min('period_from'); $start = $first && $first > $from && $first <= $to ? $first : $from;
+            $covered = $periods->contains(fn ($p) => $p->period_from <= $start && $p->period_to >= min($to, date('Y-m-d')));
+            $set('FILES_PRESENT', $covered ? 'GREEN' : 'RED', $covered ? ($start > $from ? "A money file covers the month from $start, the day this shop's first file starts." : 'A money file covering the whole month is loaded.') : 'No loaded money file covers the whole month (' . ($periods->isEmpty() ? 'none touches it' : $periods->map(fn ($p) => "{$p->period_from} – {$p->period_to}")->implode(', ')) . ').', $covered ? 0 : 1, '#/settlements?shop=' . $branchId);
             $part = $sts->where('f_rows_complete', 0)->count(); $unbooked = $sts->where('status', 'LOADED')->count();
             $set('SETTLEMENT_COMPLETE', $part || $unbooked ? 'RED' : 'GREEN', $part || $unbooked ? trim(($part ? "$part statement(s) without all their rows. " : '') . ($unbooked ? "$unbooked statement(s) loaded but not booked." : '')) : $sts->count() . ' statement(s), all complete and booked.', $part + $unbooked, '#/settlements?shop=' . $branchId);
             $orders = DB::table('t_sales')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->where('sale_source', 'active')->whereIn('status', ['Pending', 'Confirmed'])->whereBetween('d_order', [$from, $to])->distinct()->pluck('order_no');
@@ -88,7 +90,8 @@ class CloseService
         $set('COST_PRESENT', $noCost ? 'RED' : 'GREEN', $noCost ? "$noCost sold line(s) without a cost (lot with no cost yet, or no lot used)." : 'Every sold unit has a cost.', $noCost, '#/stock/lots');
         $noFx = DB::table('t_sales')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->whereIn('status', ['Pending', 'Confirmed'])->whereBetween('d_order', [$from, $to])->whereNull('total_amount_gbp')->count();
         $set('FX_PRESENT', $noFx ? 'RED' : 'GREEN', $noFx ? "$noFx sale line(s) without an amount in the base currency." : 'Every amount has a rate.', $noFx, '#/fx');
-        $set('EXPENSES', 'NA', 'Shared-expense rules are not built yet; expenses without a shop are shown as overheads in the profit views.');
+        $noShop = DB::table('fin_expenses')->where('fk_id_ent', $ent)->where('f_active', 1)->whereNull('fk_id_branch')->whereBetween('d_expense', [$from, $to])->selectRaw('COUNT(*) n, COALESCE(SUM(amount_gbp),0) v')->first();
+        $set('EXPENSES', 'GREEN', (int) $noShop->n ? "{$noShop->n} expense(s) without a shop (" . number_format((float) $noShop->v, 2) . ') are shared between the shops by their confirmed sales of the month.' : 'Every expense of the month belongs to a shop.');
         // 12 stock (company-wide)
         $bad = DB::table('t_product_vendors as p')->where('p.fk_id_ent', $ent)->selectRaw('p.id, p.stock cached, (SELECT COALESCE(SUM(b.qty),0) FROM fin_lot_balances b JOIN fin_lots l ON l.id=b.fk_id_lot WHERE l.fk_id_product=p.id) units')->havingRaw('cached <> units')->get()->count();
         $value = StockService::value($ent); $gl = Ledger::balance($ent, '1200'); $tb = Ledger::trialBalance($ent); $vOk = abs($value - $gl) < 0.005; $tOk = abs($tb['debit'] - $tb['credit']) < 0.005;
@@ -121,7 +124,11 @@ class CloseService
         [$from, $to] = self::month($month);
         $v = ProfitService::view($ent, 'shop', $from, $to); $r = collect($v['rows'])->firstWhere('key', 'S' . $branchId) ?? ['units' => 0, 'sales' => 0.0, 'cost' => 0.0, 'mp_costs' => 0.0, 'expenses' => 0.0, 'gross' => 0.0, 'profit' => 0.0];
         $st = DB::table('mo_settlements')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->whereBetween('statement_date', [$from, $to])->selectRaw('COALESCE(SUM(net_sales),0) n, COALESCE(SUM(fees),0) f, COALESCE(SUM(shipping),0) s, COALESCE(SUM(adjustments),0) a, COALESCE(SUM(payable),0) p, COUNT(*) c')->first();
+        // overheads (expenses not given to a shop) are shared between the shops by their confirmed sales of the month (R-FIN-40 "fixed share")
+        $over = (float) (collect($v['rows'])->firstWhere('key', 'ZZ')['expenses'] ?? 0); $all = (float) $v['total']['sales'];
+        $share = $over > 0 && $all > 0 ? round($over * (float) $r['sales'] / $all, 2) : 0.0; $after = (int) Settings::get('PROFIT_SHARE_AFTER_OVERHEADS', $ent, 1) === 1;
         return ['units' => (int) $r['units'], 'sales' => (float) $r['sales'], 'cost_of_goods' => (float) $r['cost'], 'gross' => (float) $r['gross'], 'marketplace_net' => (float) $r['mp_costs'], 'shop_expenses' => (float) $r['expenses'], 'profit' => (float) $r['profit'],
+            'overheads_company' => round($over, 2), 'overhead_share' => $share, 'sales_share_pct' => $all > 0 ? round((float) $r['sales'] / $all * 100, 2) : 0.0, 'profit_after_overheads' => round((float) $r['profit'] - $share, 2), 'profit_to_share' => round((float) $r['profit'] - ($after ? $share : 0), 2), 'share_after_overheads' => $after,
             'statements' => (int) $st->c, 'settled_net_sales' => round((float) $st->n, 2), 'settled_fees' => round((float) $st->f, 2), 'settled_shipping' => round((float) $st->s, 2), 'settled_adjustments' => round((float) $st->a, 2), 'payouts' => round((float) $st->p, 2), 'base' => Fx::base($ent)];
     }
 

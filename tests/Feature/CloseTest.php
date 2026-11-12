@@ -126,4 +126,18 @@ class CloseTest extends TestCase
         $this->assertFalse(TaskEngine::isOpen('FIN_PERIOD_OPEN', [$this->shop . '-' . $this->m1]));
         $this->getJson('/api/close/month?shop=' . $this->shop . '&month=2026-13')->assertStatus(422);
     }
+
+    public function test_the_first_money_file_of_a_shop_may_start_inside_the_month(): void
+    {
+        $this->order('ORD-1', $this->m1 . '-20'); Sales::confirmMonth($this->shop, $this->m1, true);
+        $end = date('Y-m-t', strtotime($this->m1 . '-01'));
+        DB::table('mo_settlement_periods')->insert(['fk_id_ent' => 1, 'fk_id_branch' => $this->shop, 'report_type' => 'TIKTOK_SETTLEMENT', 'period_from' => $this->m1 . '-03', 'period_to' => $end, 'hub_check' => 'OK', 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('mo_settlements')->insert(['fk_id_ent' => 1, 'fk_id_branch' => $this->shop, 'report_type' => 'TIKTOK_SETTLEMENT', 'statement_id' => 'ST1', 'statement_date' => $this->m1 . '-25', 'currency' => 'GBP', 'status' => 'PAID', 'f_rows_complete' => 1]);
+        $c = collect(Close::check(1, $this->shop, $this->m1)['checks'])->firstWhere('code', 'FILES_PRESENT');
+        $this->assertSame('GREEN', $c['status']); $this->assertStringContainsString("first file starts", $c['detail']);
+        // a later file with a hole at the start of the next month is still red
+        DB::table('mo_settlement_periods')->insert(['fk_id_ent' => 1, 'fk_id_branch' => $this->shop, 'report_type' => 'TIKTOK_SETTLEMENT', 'period_from' => $this->m2 . '-05', 'period_to' => date('Y-m-t', strtotime($this->m2 . '-01')), 'hub_check' => 'OK', 'created_at' => now(), 'updated_at' => now()]);
+        $this->order('ORD-2', $this->m2 . '-10');
+        $this->assertSame('RED', collect(Close::check(1, $this->shop, $this->m2)['checks'])->firstWhere('code', 'FILES_PRESENT')['status']);
+    }
 }
