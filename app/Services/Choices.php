@@ -26,6 +26,9 @@ class Choices
             'ASK' => ['ask before using the backup printer', 'The person printing decides.'],
             'AUTO' => ['use the backup printer by itself', 'No stop at the packing desk.'],
             'OFF' => ['fail the job', 'Nothing prints anywhere else; a task is opened.']]],
+        'DEFAULT_PROFIT_ROUTE' => ['How is the profit of a shop paid out when the shop has no route of its own?', 'Every shop × month has exactly one route, so nobody is paid twice for the same units. A shop can get its own route from a chosen month (Partners › Profit routes).', 'LOT_PROFIT', [
+            'LOT_PROFIT' => ['Lot profit', 'Lot owners earn the profit of the units sold from their own lots, then the agreements share the rest.'],
+            'INVESTOR_INVOICING' => ['Investor invoicing', 'The four-way split rule: investor % to the lot owners by the cost of their units sold, plus owner, VA and handler %.']]],
         'VAT_REGISTERED' => ['Is the company registered for VAT?', 'This is a fact about the company, not a preference. It decides where the VAT inside fees and expenses goes.', '0', [
             '0' => ['No', 'VAT paid on fees and expenses is part of the cost.'],
             '1' => ['Yes', 'VAT on marketplace fees and on expenses is kept apart as VAT to claim back (account 1400) and shown in the VAT report.']], true],

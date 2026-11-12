@@ -59,8 +59,12 @@ class PartnerService
         if ($scope === 'MARKETPLACE' && ! DB::table('t_branches')->where('id', $d['branch_id'] ?? 0)->where('fk_id_ent', $ent)->exists()) throw new \InvalidArgumentException('Choose the shop for this agreement.');
         if ($scope === 'PO' && ! DB::table('t_src_po')->where('id', $d['po_id'] ?? 0)->where('fk_id_ent', $ent)->exists()) throw new \InvalidArgumentException('Choose the purchase order for this agreement.');
         if (! empty($d['effective_to']) && $d['effective_to'] < $d['effective_from']) throw new \InvalidArgumentException('The end date is before the start date.');
+        $stack = $scope === 'PO' ? ($d['stacking_rule'] ?? 'SPLIT_UNITS') : 'SPLIT_UNITS'; $cap = $stack === 'CAPPED' ? (float) ($d['stack_cap_pct'] ?? 0) : null;
+        if (! isset(WaterfallService::STACKING[$stack])) throw new \InvalidArgumentException('Choose how a share and own lots of the same PO go together.');
+        if ($stack === 'CAPPED' && ($cap <= 0 || $cap > 100)) throw new \InvalidArgumentException('Give the cap: the most the share may be, as a % of the PO profit.');
+        if ($stack === 'FULL_STACK' && Context::role() !== 'OWNER') throw new \InvalidArgumentException('Paying both in full needs the Owner.');
         $row = ['investor_id' => (int) $d['investor_id'], 'company_id' => $ent, 'partner_type' => $type, 'scope' => $scope, 'branch_id' => $scope === 'MARKETPLACE' ? (int) $d['branch_id'] : null, 'po_id' => $scope === 'PO' ? (int) $d['po_id'] : null,
-            'effective_from' => $d['effective_from'], 'effective_to' => $d['effective_to'] ?? null, 'capital_amount' => $d['capital_amount'] ?? 0, 'profit_share_pct' => $pct, 'management_fee_pct' => $fee, 'status' => 'ACTIVE'];
+            'effective_from' => $d['effective_from'], 'effective_to' => $d['effective_to'] ?? null, 'capital_amount' => $d['capital_amount'] ?? 0, 'profit_share_pct' => $pct, 'management_fee_pct' => $fee, 'status' => 'ACTIVE', 'stacking_rule' => $stack, 'stack_cap_pct' => $cap];
         if (! empty($d['id'])) {
             $old = DB::table('fin_investor_agreements')->where('id', $d['id'])->where('company_id', $ent)->first() ?? throw new \InvalidArgumentException('Agreement not found.');
             if (DB::table('fin_investor_ledger')->where('investor_id', $old->investor_id)->where('company_id', $ent)->where('type', 'PROFIT')->where('note', 'like', '%#' . $old->id . ' %')->exists()) throw new \InvalidArgumentException('A locked month already paid on this agreement. End it and make a new one from the date of the change.');
@@ -104,41 +108,95 @@ class PartnerService
         return $out;
     }
 
-    /** The shares of one shop × month, from the agreements active on its first day (never today's %). */
+    /**
+     * The waterfall and the shares of one shop × month (order and rules: WaterfallService). Agreements and the split rule are the ones valid for that month, never today's.
+     * Without a split rule, a lot owner or a loss to carry this is exactly "distributable × agreement %".
+     */
     public static function monthShares(int $ent, int $branchId, string $month): array
     {
-        $from = $month . '-01'; $to = date('Y-m-t', strtotime($from));
-        $fig = CloseService::figures($ent, $branchId, $month); $d = self::distributable($ent, (float) $fig['profit_to_share']) + ['shop_profit' => (float) $fig['profit'], 'overhead_share' => $fig['share_after_overheads'] ? (float) $fig['overhead_share'] : 0.0]; $ags = self::activeOn($ent, $from);
-        $bases = ['POOL' => $d['distributable'], 'MARKETPLACE:' . $branchId => $d['distributable']];
-        // PO base: profit of the units that came out of that PO's lots (sale profit × units from the PO ÷ units of the line), less its tax reserve
-        $pos = $ags->where('scope', 'PO')->pluck('po_id')->unique();
-        if ($pos->isNotEmpty()) {
+        $from = $month . '-01'; $to = date('Y-m-t', strtotime($from)); $r2 = fn ($v) => round((float) $v, 2);
+        $fig = CloseService::figures($ent, $branchId, $month); $net = (float) $fig['profit_to_share']; $ags = self::activeOn($ent, $from);
+        $split = WaterfallService::split($ent, $branchId, $to); $route = WaterfallService::route($ent, $branchId, $month);
+        $vaSalary = $split && $split->va_mode !== 'SHARE' ? (float) $split->va_salary_override : 0.0; $ownerFixed = $split && $split->owner_mode !== 'SHARE' ? (float) $split->owner_fixed : 0.0; $handlerFixed = $split && $split->handler_mode !== 'SHARE' ? (float) $split->handler_fixed : 0.0;
+        $final = $r2($net - $vaSalary - $ownerFixed - $handlerFixed); $lossBf = WaterfallService::lossBroughtForward($ent, $branchId, $month); $afterLoss = $r2($final - $lossBf);
+        $d = self::distributable($ent, $afterLoss) + ['shop_profit' => (float) $fig['profit'], 'overhead_share' => $fig['share_after_overheads'] ? (float) $fig['overhead_share'] : 0.0];
+        $D = (float) $d['distributable']; $pos = $D > 0; $lossCf = $pos ? 0.0 : $r2(-$D);
+        $vaShare = $pos && $split && $split->va_mode !== 'SALARY' ? $r2($D * (float) $split->va_pct / 100) : 0.0; $handlerShare = $pos && $split && $split->handler_mode !== 'FIXED' ? $r2($D * (float) $split->handler_pct / 100) : 0.0;
+        $ownerShare = $pos && $split && $split->owner_mode !== 'FIXED' ? $r2($D * (float) $split->owner_pct / 100) : 0.0;
+        $w = [];
+        if ($vaSalary) $w[] = ['label' => 'VA salary', 'amount' => -$vaSalary]; if ($ownerFixed) $w[] = ['label' => 'Account owner fixed fee', 'amount' => -$ownerFixed]; if ($handlerFixed) $w[] = ['label' => 'Handler fixed fee', 'amount' => -$handlerFixed];
+        if ($vaSalary || $ownerFixed || $handlerFixed) $w[] = ['label' => 'Final net profit', 'amount' => $final, 'total' => true];
+        if ($lossBf) $w[] = ['label' => 'Loss brought forward from earlier months', 'amount' => -$lossBf];
+        if ($d['tax_reserve']) $w[] = ['label' => 'Tax reserve (' . rtrim(rtrim(number_format($d['rate'], 2), '0'), '.') . '%)', 'amount' => -$d['tax_reserve']];
+        $w[] = ['label' => $pos ? 'Distributable' : 'Nothing to share this month', 'amount' => $D, 'total' => true];
+        if ($lossCf) $w[] = ['label' => 'Loss carried forward to the next month', 'amount' => $lossCf];
+        if ($vaShare) $w[] = ['label' => 'VA share ' . (float) $split->va_pct . '%', 'amount' => -$vaShare]; if ($handlerShare) $w[] = ['label' => 'Handler share ' . (float) $split->handler_pct . '%', 'amount' => -$handlerShare];
+
+        // profit of the units sold in the month, by PO and by lot owner (sale profit × units from that lot group ÷ units of the line), after the tax reserve
+        $raw = []; $costBy = [];
+        if ($pos) {
             $sales = DB::table('t_sales')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->where('sale_source', 'active')->where('status', 'Confirmed')->whereBetween('d_order', [$from, $to])->get(['id', 'qty', 'total_amount_gbp', 'order_no'])->keyBy('id');
-            $cons = DB::table('fin_lot_consumption as c')->join('fin_lots as l', 'l.id', '=', 'c.lot_id')->whereIn('c.fk_id_sale', $sales->keys())->groupBy('c.fk_id_sale', 'l.po_id')->selectRaw('c.fk_id_sale, l.po_id, SUM(c.qty) q, SUM(c.qty * c.unit_cost_gbp) cost')->get();
-            $cost = []; foreach ($cons as $c) $cost[$c->fk_id_sale] = ($cost[$c->fk_id_sale] ?? 0) + (float) $c->cost;
-            $fees = DB::table('fin_settlement_lines')->where('company_id', $ent)->where('branch_id', $branchId)->where('amount_type', '<>', 'NET_SALES')->whereIn('order_id', $sales->pluck('order_no'))->groupBy('order_id')->selectRaw('order_id, SUM(amount) v')->pluck('v', 'order_id');
-            foreach ($pos as $po) {
-                $raw = 0.0;
-                foreach ($cons->where('po_id', $po) as $c) { $s = $sales[$c->fk_id_sale]; if ((int) $s->qty <= 0) continue; $raw += ((float) $s->total_amount_gbp - ($cost[$s->id] ?? 0) + (float) ($fees[$s->order_no] ?? 0)) * ((float) $c->q / (int) $s->qty); }
-                if ($cons->where('po_id', $po)->isNotEmpty()) $bases['PO:' . $po] = round($raw - max(0, $raw) * $d['rate'] / 100, 2);
+            $cons = DB::table('fin_lot_consumption as c')->join('fin_lots as l', 'l.id', '=', 'c.lot_id')->whereIn('c.fk_id_sale', $sales->keys())->groupBy('c.fk_id_sale', 'l.po_id', 'l.fk_id_owner')->selectRaw('c.fk_id_sale, l.po_id, l.fk_id_owner, SUM(c.qty) q, SUM(c.qty * c.unit_cost_gbp) cost')->get();
+            if ($cons->whereNotNull('fk_id_owner')->isNotEmpty() || $ags->where('scope', 'PO')->isNotEmpty()) {
+                $cost = []; foreach ($cons as $c) $cost[$c->fk_id_sale] = ($cost[$c->fk_id_sale] ?? 0) + (float) $c->cost;
+                $fees = DB::table('fin_settlement_lines')->where('company_id', $ent)->where('branch_id', $branchId)->where('amount_type', '<>', 'NET_SALES')->whereIn('order_id', $sales->pluck('order_no'))->groupBy('order_id')->selectRaw('order_id, SUM(amount) v')->pluck('v', 'order_id');
+                foreach ($cons as $c) { $s = $sales[$c->fk_id_sale]; if ((int) $s->qty <= 0) continue; $po = (int) $c->po_id; $ow = (int) $c->fk_id_owner;
+                    $raw[$po][$ow] = ($raw[$po][$ow] ?? 0) + ((float) $s->total_amount_gbp - ($cost[$s->id] ?? 0) + (float) ($fees[$s->order_no] ?? 0)) * ((float) $c->q / (int) $s->qty); $costBy[$ow] = ($costBy[$ow] ?? 0) + (float) $c->cost; }
+            } else foreach ($cons as $c) $costBy[(int) $c->fk_id_owner] = ($costBy[(int) $c->fk_id_owner] ?? 0) + (float) $c->cost;
+        }
+        $lines = []; $roles = [];
+        if ($vaSalary + $vaShare != 0.0) $roles[] = ['role' => 'VA', 'label' => 'VA' . ($vaSalary ? ' salary ' . number_format($vaSalary, 2) : '') . ($vaShare ? ($vaSalary ? ' + ' : ' ') . 'share ' . number_format($vaShare, 2) : ''), 'amount' => $r2($vaSalary + $vaShare), 'party' => null];
+        if ($handlerFixed + $handlerShare != 0.0) $roles[] = ['role' => 'HANDLER', 'label' => 'Handler' . ($split->fk_id_handler_party ? ' (' . self::name((int) $split->fk_id_handler_party) . ')' : ' (the company itself)'), 'amount' => $r2($handlerFixed + $handlerShare), 'party' => (int) $split->fk_id_handler_party ?: null];
+        $mk = fn (int $partner, string $scope, string $kind, float $pct, float $base, float $profit, float $fee = 0.0, int $ag = 0, float $feePct = 0.0, string $type = 'SLEEPING') => ['agreement' => $ag, 'partner' => $partner, 'scope' => $scope, 'kind' => $kind, 'pct' => $pct, 'fee_pct' => $feePct, 'type' => $type, 'base' => $r2($base), 'profit' => $r2($profit), 'fee' => $r2($fee)];
+        $afterRoles = $r2($D - $vaShare - $handlerShare);
+        if ($pos && $route === 'INVESTOR_INVOICING' && $split) {
+            // the old four-way split: investor % of the distributable, to the lot owners by the cost of their units sold; units of the company's own lots stay with the company
+            $pool = $r2($D * (float) $split->investor_pct / 100); $totalCost = array_sum($costBy);
+            $w[] = ['label' => 'Investors ' . (float) $split->investor_pct . '%', 'amount' => -$pool]; if ($ownerShare) $w[] = ['label' => 'Account owner share ' . (float) $split->owner_pct . '% (stays in the company)', 'amount' => -$ownerShare];
+            foreach ($costBy as $ow => $c) if ($ow && $totalCost > 0 && $c > 0) $lines[] = $mk($ow, 'LOTS', 'OWN_LOT', round($c / $totalCost * 100, 3), $pool, $pool * $c / $totalCost);
+            if ($ownerFixed + $ownerShare != 0.0) $roles[] = ['role' => 'OWNER', 'label' => 'Account owner' . ($ownerFixed ? ' fixed ' . number_format($ownerFixed, 2) : '') . ($ownerShare ? ' share ' . number_format($ownerShare, 2) : '') . ' – stays in the company', 'amount' => $r2($ownerFixed + $ownerShare), 'party' => null];
+        } else {
+            $k = $D > 0 ? $afterRoles / $D : 0.0; $net1 = fn (float $v) => ($v - max(0, $v) * $d['rate'] / 100) * $k;   // after the tax reserve and the VA / handler shares
+            $ownBy = []; foreach ($raw as $po => $byOwner) foreach ($byOwner as $ow => $v) if ($ow && $v > 0) { $ownBy[$ow][$po] = $net1($v); }
+            foreach ($ownBy as $ow => $pos2) foreach ($pos2 as $po => $v) $lines[] = $mk($ow, $po ? 'PO:' . $po : 'LOTS', 'OWN_LOT', 100.0, $v, $v);
+            $ownTotal = array_sum(array_map('array_sum', $ownBy)); $rest = $r2($afterRoles - $ownTotal);
+            if ($ownTotal) $w[] = ['label' => 'Lot owners: profit of the units sold from their own lots', 'amount' => -$r2($ownTotal)];
+            foreach ($ags as $a) {
+                $pct = (float) $a->profit_share_pct; $feePct = $a->partner_type === 'WORKING' ? (float) $a->management_fee_pct : 0.0; $cap = null;
+                if ($a->scope === 'PO') {
+                    $po = (int) $a->po_id; if (! isset($raw[$po])) continue;
+                    $own = (float) ($ownBy[(int) $a->investor_id][$po] ?? 0); $total = 0.0; foreach ($raw[$po] as $v) $total += $net1($v);
+                    $ownsAny = DB::table('fin_lots')->where('company_id', $ent)->where('po_id', $po)->where('fk_id_owner', $a->investor_id)->exists();
+                    [, $base, $cap] = WaterfallService::stack((string) ($a->stacking_rule ?: 'SPLIT_UNITS'), $own, $total - $own, $ownsAny, $a->stack_cap_pct !== null ? (float) $a->stack_cap_pct : null); $key = 'PO:' . $po;
+                } else { if ($a->scope === 'MARKETPLACE' && (int) $a->branch_id !== $branchId) continue; $base = $rest; $key = $a->scope === 'POOL' ? 'POOL' : 'MARKETPLACE:' . $branchId; }
+                $profit = $base > 0 ? round($base * $pct / 100, 2) : 0.0; if ($cap !== null) $profit = min($profit, $cap);
+                $lines[] = $mk((int) $a->investor_id, $key, 'SHARE', $pct, $base, $profit, $base > 0 ? round($base * $feePct / 100, 2) : 0.0, (int) $a->id, (float) $a->management_fee_pct, $a->partner_type);
             }
         }
-        $lines = self::shareLines($ags, $bases); foreach ($lines as &$l) { $l['partner_name'] = self::name($l['partner']); $l['scope_name'] = self::scopeName($ent, $l['scope']); } unset($l);
+        foreach ($lines as &$l) { $l['partner_name'] = self::name($l['partner']); $l['scope_name'] = $l['scope'] === 'LOTS' ? 'Own lots' : self::scopeName($ent, $l['scope']); } unset($l);
         $paid = round(array_sum(array_column($lines, 'profit')) + array_sum(array_column($lines, 'fee')), 2);
-        return $d + ['lines' => $lines, 'to_partners' => $paid, 'left_for_company' => round($d['distributable'] - $paid, 2), 'agreements' => $ags->count()];
+        if ($paid) $w[] = ['label' => 'Partners and investors', 'amount' => -$paid];
+        $left = $pos ? $r2($afterRoles - $paid) : 0.0; $w[] = ['label' => 'Left in the company', 'amount' => $left, 'total' => true];
+        return $d + ['lines' => $lines, 'to_partners' => $paid, 'left_for_company' => $pos ? $left : $r2($D), 'agreements' => $ags->count(), 'route' => $route, 'route_name' => WaterfallService::ROUTES[$route] ?? $route, 'split' => $split ? (int) $split->id : null,
+            'loss_bf' => $lossBf, 'loss_cf' => $lossCf, 'final_net' => $final, 'roles' => $roles, 'waterfall' => $w];
     }
 
-    /** Called inside the month lock: write the PROFIT / MANAGEMENT_FEE rows once. */
+    /** Called inside the month lock: write the PROFIT / MANAGEMENT_FEE rows once, and what is owed to the VA and to an outside handler. */
     public static function postMonth(int $ent, int $branchId, string $month, object $run): array
     {
         $sh = self::monthShares($ent, $branchId, $month); $end = date('Y-m-t', strtotime($month . '-01')); $n = 0;
         foreach ($sh['lines'] as $l) foreach ([['PROFIT', $l['profit'], $l['pct']], ['MANAGEMENT_FEE', $l['fee'], $l['fee_pct']]] as [$type, $amount, $pct]) {
             if ($amount == 0.0) continue;
             $id = DB::table('fin_investor_ledger')->insertGetId(['investor_id' => $l['partner'], 'company_id' => $ent, 'period_id' => $run->id, 'entry_date' => $end, 'type' => $type, 'amount' => $amount, 'reference_no' => 'CLS ' . $run->run_code,
-                'note' => mb_substr("#{$l['agreement']} {$l['scope_name']} " . rtrim(rtrim(number_format($pct, 3), '0'), '.') . '%', 0, 255), 'created_by' => Context::userId(), 'created_at' => now()]);
+                'note' => mb_substr(($l['agreement'] ? "#{$l['agreement']} " : '') . (($l['kind'] ?? '') === 'OWN_LOT' ? 'Own lots · ' : '') . "{$l['scope_name']} " . rtrim(rtrim(number_format($pct, 3), '0'), '.') . '%', 0, 255), 'created_by' => Context::userId(), 'created_at' => now()]);
             Ledger::post($ent, $end, 'PARTNER_SHARE', $id, [['account' => '7000', 'debit' => $amount, 'ref_id' => $l['partner']], ['account' => '2100', 'credit' => $amount, 'ref_id' => $l['partner']]], ['memo' => ($type === 'PROFIT' ? 'Profit share ' : 'Management fee ') . $l['partner_name'] . ' · ' . $month]);
             $n++;
         }
+        foreach ($sh['roles'] as $r) {
+            if ($r['role'] === 'VA') Ledger::post($ent, $end, 'WATERFALL_VA', (int) $run->id, [['account' => '6100', 'debit' => $r['amount']], ['account' => '2300', 'credit' => $r['amount']]], ['memo' => "VA salary / share · $month", 'allow_no_ref' => true]);
+            if ($r['role'] === 'HANDLER' && $r['party']) Ledger::post($ent, $end, 'WATERFALL_HANDLER', (int) $run->id, [['account' => '6000', 'debit' => $r['amount']], ['account' => '2000', 'credit' => $r['amount'], 'ref_id' => $r['party']]], ['memo' => "Handler fee / share · $month"]);
+        }
+        DB::table('aud_runs')->where('id', $run->id)->update(['loss_brought_forward' => $sh['loss_bf'], 'profit_route' => $sh['route']]);
         return $sh + ['rows' => $n];
     }
 
@@ -200,7 +258,7 @@ class PartnerService
             $ags = DB::table('fin_investor_agreements')->where('company_id', $ent)->where('investor_id', $id)->orderByDesc('id')->get();
             return ['id' => (int) $id, 'name' => self::name((int) $id)] + self::account($ent, (int) $id) + ['agreements' => $ags->map(fn ($a) => ['id' => (int) $a->id, 'type' => $a->partner_type, 'scope' => $a->scope, 'branch_id' => $a->branch_id, 'po_id' => $a->po_id,
                 'scope_name' => self::scopeName($ent, $a->scope === 'POOL' ? 'POOL' : ($a->scope === 'MARKETPLACE' ? 'MARKETPLACE:' . $a->branch_id : 'PO:' . $a->po_id)), 'pct' => (float) $a->profit_share_pct, 'fee_pct' => (float) $a->management_fee_pct, 'from' => $a->effective_from, 'to' => $a->effective_to,
-                'capital' => $a->capital_amount, 'live' => $a->status === 'ACTIVE' && $a->effective_from <= $today && (! $a->effective_to || $a->effective_to >= $today), 'ended_reason' => $a->ended_reason])->all()];
+                'capital' => $a->capital_amount, 'stacking_rule' => $a->stacking_rule, 'stack_cap_pct' => $a->stack_cap_pct, 'live' => $a->status === 'ACTIVE' && $a->effective_from <= $today && (! $a->effective_to || $a->effective_to >= $today), 'ended_reason' => $a->ended_reason])->all()];
         })->all();
     }
 

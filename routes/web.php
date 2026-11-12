@@ -95,6 +95,12 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('reports/{key}', [ReportController::class, 'show'])->where('key', '[a-z_]+');
         Route::get('reports/{key}/csv', [ReportController::class, 'csv'])->where('key', '[a-z_]+');
         Route::get('partners', [PartnerController::class, 'index']);
+        Route::get('partners/waterfall', [PartnerController::class, 'waterfall']);
+        Route::post('partners/split', [PartnerController::class, 'split']);
+        Route::post('partners/split/{id}/retire', [PartnerController::class, 'retireSplit'])->whereNumber('id');
+        Route::post('partners/route', [PartnerController::class, 'route']);
+        Route::post('partners/adjust', [PartnerController::class, 'adjust']);
+        Route::get('statements/{id}/pdf', [PartnerController::class, 'statementPdf'])->whereNumber('id');
         Route::get('partners/{id}', [PartnerController::class, 'show'])->whereNumber('id');
         Route::post('partners/agreement', [PartnerController::class, 'agreement']);
         Route::post('partners/agreement/{id}/end', [PartnerController::class, 'endAgreement'])->whereNumber('id');
