@@ -10,7 +10,7 @@ public repo (code only, never data or secrets) · old data = export of 18 Sep 20
 | 3 | Buying (Research → PO → GRN) | DONE (12 Nov) |
 | 4 | Sales and Dispatch (orders, labels, printing) | DONE (12 Nov) – carrier label PDF import carried, see below |
 | 5 | Money (bank, settlements, TikTok, profit views) | DONE (12 Nov) – carried items listed below |
-| 6 | Month close, Partners, Reports | – |
+| 6 | Month close, Partners, Reports | IN PROGRESS – month close done (12 Nov) |
 | 7 | Import old data + reconciliation report + full test | – |
 
 ## Log
@@ -59,6 +59,16 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
   - Night checks: FIN_BANK_STALE (no new bank line for bank_overdue_days) and FIN_SETTLEMENT_OVERDUE (no new money file for settlement_overdue_days), only for accounts / shops loaded at least once; both close by themselves.
   - **104 tests pass (877 assertions).** Browser run desktop + phone: Money, Profit views (all three views), Refunds open with 0 errors and no sideways overflow; 133 menu routes open, 18 placeholders.
   - **Honest limits:** refund accept handles FULL refunds of confirmed orders only (partial refunds and not-yet-confirmed orders are not automated); profit by product can only link marketplace costs to a product when the order is in the tool (the rest is shown as "Not linked to a product"); VA share / investor share are not in the profit view yet (Step 6); the refund and approval flows were tested through the API, not clicked through in the browser (the demo has one user and no refund data).
+
+- 12 Nov – **Step 6, part 1: month close (R-FIN-45 … 47).** The month is shop × calendar month, stored as a run in `aud_runs` with its checks in `aud_checks` and waivers in `aud_check_waivers` (migration 000006 adds the owner note, the frozen figures and the check time).
+  - `CloseService`: the **17 checks in the spec's order**, each GREEN / RED / WAIVED / N/A with a plain text of what was found and a Fix link. Working now (11): FILES_PRESENT, SETTLEMENT_COMPLETE, ORDERS_VS_TXN, HUB_TOTALS, PAYOUT_VS_BANK, BANK_ALL_CATEGORISED, SALES_CONFIRMED, COST_PRESENT, FX_PRESENT, STOCK_ROLL (products = lots, stock value = ledger 1200, trial balance balanced), PREVIOUS_LOCKED, ONE_PROFIT_ROUTE (12 with the route). The first five are N/A for a shop that never had a money file.
+  - Statuses OPEN → CHECKED (nothing red) → LOCKED. Waiver: only the five checks the spec marks, only the Owner, reason kept on the month. Lock: Owner only, month must have ended, one-line owner note mandatory, nothing red; the month's figures and check results are frozen in a snapshot. **A locked month is never reopened** (spec B40) – this replaces the "reopen with a reason" idea in my earlier plan note.
+  - Ledger lock: GL_LOCKED_UPTO moves to the last month in which every shop with activity is locked; a back-dated booking into it is refused. A late sale line of a locked month is confirmed **forward** (journal dated today); the frozen figures do not move.
+  - Tasks: FIN_CLOSE_CHECK while a check is red, FIN_PERIOD_OPEN (night) when a month is still open `period_open_days` after its end.
+  - Screens: Month close overview (#/close: months × shops) and the shop-month page (figures, 17 checks, Fix, Waive, Run the checks, Lock). Menu 10.2.
+  - Also fixed: API errors could show database text to the user – all controllers now answer with a plain sentence and write the detail to the log.
+  - **108 tests pass (921 assertions).** Browser desktop + phone: overview, run checks, waive through the screen; 0 errors; 133 menu routes.
+  - **Honest limits:** 5 of the 17 checks are N/A because their part is not built: PURCHASE_VS_SUPPLIER (dropship audit), EXPENSES (shared-expense rules), SHARES_LE_100 and SPLIT_RULES (partners – next chunk), OPENING_LOCKED (Step 7). Lock does not yet post PROFIT / MANAGEMENT_FEE partner rows (next chunk). Forward corrections exist for late sale lines only, not the general "adjustment to a locked month" form. A CHECKED month goes back to OPEN at the next run of the checks, not at the moment a record changes. FILES_PRESENT wants a money file that covers the whole month. The Lock button was not clicked in the browser (the demo months cannot pass their checks) – the lock is covered by the API tests.
 
 ## Step 5 – carried forward
 - Payables & cash forecast screen (the dashboard lists payments to make; no forecast yet) · loans, budgets, capital calls, withdrawals (lists and forms work; no engines) · bank line split · bank file in Excel format · FIN_PAYOUT_DIFF · VAT return logic · money files of other marketplaces (Import Center) · partial refunds.
