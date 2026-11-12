@@ -30,7 +30,9 @@ class RecordService
         }
         foreach (($p['filter'] ?? []) as $col => $val) {
             if ($val === '' || $val === null || ! Registry::hasColumn($table, $col)) continue;
-            is_array($val) ? $q->whereIn($col, $val) : $q->where($col, $val);
+            if (is_array($val)) $q->whereIn($col, $val);
+            elseif (in_array(self::fieldByCol($fields, $col)['type'], ['text', 'textarea', 'email', 'phone', 'link'], true)) $q->where($col, 'like', "%$val%");
+            else $q->where($col, $val);
         }
         $total = (clone $q)->count();
         $sort = Registry::hasColumn($table, (string) ($p['sort'] ?? '')) ? $p['sort'] : $pk;
@@ -138,9 +140,77 @@ class RecordService
                 Audit::log($table, $id, 'INSERT', $data, null, $ent);
                 $created = true;
             }
+            SearchIndex::put($formKey, $table, $id, $ent);
             if (! empty($opt['event'])) EventBus::fire($opt['event'], $table, $id, ['form' => $formKey, 'created' => $created], $ent);
             return ['id' => $id, 'created' => $created];
         });
+    }
+
+    /** Record page: values shown as words, parents (links out), children (links in), tasks and history. */
+    public static function page(string $formKey, int $id): array
+    {
+        $table = Registry::table($formKey) ?? abort(404);
+        $row = self::get($formKey, $id);
+        $sections = []; $parents = [];
+        foreach (Registry::fields($formKey) as $f) {
+            $c = $f['column_name'];
+            if (! $c || ! array_key_exists($c, $row) || ! Registry::visible($f, Context::role())) continue;
+            $v = $row[$c]; $label = null;
+            if ($v !== null && $v !== '' && in_array($f['type'], ['select', 'multiselect'], true) && $f['source']) {
+                foreach (Registry::options($f, Context::ent(), null, 2000) as [$ov, $ol]) if ((string) $ov === (string) $v) { $label = $ol; break; }
+                [$kind, $arg] = array_pad(explode(':', (string) $f['source'], 2), 2, '');
+                if ($label !== null && in_array($kind, ['table', 'party'], true)) {
+                    $pt = $kind === 'party' ? 't_account' : explode('?', $arg)[0];
+                    $pf = self::formOfTable($pt);
+                    if ($pf) $parents[] = ['label' => $f['label'], 'title' => $label, 'url' => "#/rec/$pf/$v"];
+                }
+            }
+            $sections[$f['section'] ?: 'Details'][] = ['label' => $f['label'], 'type' => $f['type'], 'value' => $v, 'shown' => $label];
+        }
+        $children = [];
+        $pk = Registry::pk($table);
+        $refs = DB::table('sys_registry')->where('source', 'like', "table:$table%")->whereNotNull('column_name')->get(['form_key', 'form_title', 'table_name', 'column_name']);
+        foreach ($refs as $r) {
+            $ct = Registry::baseTable($r->table_name);
+            if (! $ct || $ct === $table || isset($children[$ct]) || ! Registry::hasColumn($ct, $r->column_name) || Registry::table($r->form_key) !== $ct) continue;
+            $n = DB::table($ct)->where($r->column_name, $id)->count();
+            if ($n) $children[$ct] = ['form_key' => $r->form_key, 'title' => $r->form_title, 'count' => $n, 'url' => "#/list/{$r->form_key}?f[{$r->column_name}]=$id"];
+        }
+        $tasks = DB::table('tasks')->where('linked_module', $table)->where('linked_record_id', $id)->orderByDesc('id')->limit(20)->get(['id', 'title', 'status', 'priority', 'due_at', 'rule_code'])->all();
+        $hist = DB::table('sys_audit_log as a')->leftJoin('t_users as u', 'u.id', '=', 'a.user_id')->where('a.table_name', $table)->where('a.record_id', $id)
+            ->orderByDesc('a.id')->limit(50)->get(['a.action', 'a.changes_json', 'a.reason', 'a.created_at', 'u.display_name'])
+            ->map(fn ($h) => ['action' => $h->action, 'at' => $h->created_at, 'by' => $h->display_name ?: 'System', 'reason' => $h->reason, 'changes' => $h->action === 'UPDATE' ? json_decode($h->changes_json ?: '[]', true) : null])->all();
+        $lc = Registry::labelColumn($table);
+        return ['form_key' => $formKey, 'id' => $id, 'form_title' => Registry::fields($formKey)[0]['form_title'], 'title' => (string) ($row[$lc] ?? "#$id"),
+            'sections' => $sections, 'parents' => $parents, 'children' => array_values($children), 'tasks' => $tasks, 'history' => $hist];
+    }
+
+    /** The form that owns a table (the master form with the most fields on it). */
+    public static function formOfTable(string $table): ?string
+    {
+        static $map = null;
+        if ($map === null) {
+            $map = [];
+            foreach (DB::table('sys_registry')->whereNotNull('table_name')->selectRaw('form_key, table_name, COUNT(*) n, MAX(is_master) m')->groupBy('form_key', 'table_name')->orderByDesc('m')->orderByDesc('n')->get() as $r) {
+                $map[Registry::baseTable($r->table_name)] ??= $r->form_key;
+            }
+        }
+        return $map[$table] ?? null;
+    }
+
+    /** All rows of a list for export (same filters), max 50,000. Returns [header, rows]. */
+    public static function export(string $formKey, array $p = []): array
+    {
+        $out = []; $head = [];
+        $p['per_page'] = 200; $page = 1;
+        do {
+            $d = self::list($formKey, $p + ['page' => $page, 'max_cols' => 60]);
+            $head = array_map(fn ($c) => $c['label'], $d['columns']);
+            foreach ($d['rows'] as $r) $out[] = array_map(fn ($c) => $r[$c['name'] . '__label'] ?? $r[$c['name']], $d['columns']);
+            $page++;
+        } while (count($d['rows']) === 200 && count($out) < 50000);
+        Audit::log(Registry::table($formKey), 0, 'EXPORT', ['rows' => count($out), 'form' => $formKey]);
+        return [$head, $out];
     }
 
     // ---- helpers ----

@@ -19,8 +19,10 @@ public repo (code only, never data or secrets) · old data = export of 18 Sep 20
 
 - 12 Nov 05:40 PKT – Web layer: login (hashed passwords, lock after 5 wrong tries, login log), company switch, boot API (menu in work order filtered by role, + Create catalogue from sys_forms), generic form / list / record / options / suggestions API. Screen shell uses the approved design's stylesheet and components: top bar, side menu, + Create with search, registry forms with Quick / Full, Back, Undo, Redo, Fill from last, suggestion chips, plain-word errors. Own codes (RES-, PO-, …) are numbered by the system. **27 tests pass** (incl. every one of the 302 data forms lists, every + Create entry opens). Browser test on desktop and phone: login → menu → list → Create → form → validation → save → list → edit: OK.
 
+- 12 Nov 06:30 PKT – Added: search everything (index refreshed on every save, company-safe, `mo:reindex`), record page (Details · Linked records both ways · Tasks · History), Tasks screen (mine / everyone, late and urgent counts, rule tasks cannot be ticked by hand), list filters per column, CSV export (allowed roles only, logged, formula-safe), "+ Add" inside dropdowns (saves to the list and selects it). **31 tests pass.** Browser: all 140 menu routes open on desktop and phone with 0 errors; 108 show real lists / pages, 32 are special screens still to build in their steps.
+
 ## Step 1 – still to do
-- Global search (sys_search_index), record page with Linked / Tasks / Documents / History tabs, Tasks screen, role homes, 2FA (TOTP), users & rights screen, dropdown "+ Add" inside forms, saved views / column filters / export on lists.
+- Role homes (Owner, Manager, Warehouse, Finance …), users & rights screen, 2FA (TOTP), saved list views, approvals queue.
 
 ## Notes for the next session
 - Packages were installed from GitHub sources because packagist is blocked in the build workspace; `composer.json` / `composer.lock` are standard, the developer runs a normal `composer install`.

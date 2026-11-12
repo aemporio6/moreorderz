@@ -40,7 +40,7 @@ class AppController extends Controller
         foreach ($rows->whereNull('parent_id') as $s) $secs[$s->id_module] = ['id' => $s->id_module, 'name' => $s->module_name, 'icon' => $s->icon, 'items' => []];
         foreach ($rows->whereNotNull('parent_id') as $m) {
             if (! isset($secs[$m->parent_id]) || ! self::roleSees($m->roles, $role)) continue;
-            $secs[$m->parent_id]['items'][] = ['id' => $m->id_module, 'no' => $m->screen_no, 'name' => $m->module_name, 'route' => self::route($m), 'forms' => array_values(array_filter(array_map('trim', explode(';', (string) $m->forms))))];
+            $secs[$m->parent_id]['items'][] = ['id' => $m->id_module, 'no' => $m->screen_no, 'name' => $m->module_name, 'route' => self::route($m), 'forms' => array_values(array_filter(array_map(fn ($f) => trim(explode('(', $f)[0]), preg_split('/[;,\s]+/', (string) $m->forms, -1, PREG_SPLIT_NO_EMPTY)), fn ($k) => Registry::exists($k) && Registry::table($k)))];
         }
         return array_values(array_filter($secs, fn ($s) => $s['items']));
     }
@@ -54,11 +54,15 @@ class AppController extends Controller
     /** A menu item opens the list of its first data form; special screens get their own route as they are built. */
     private static function route(object $m): string
     {
-        foreach (array_filter(array_map('trim', preg_split('/[;,]/', (string) $m->forms))) as $f) {
+        $no = (string) $m->screen_no;
+        if (str_starts_with($no, '1.')) return '#/home';
+        if ($no === '13.2') return '#/tasks?scope=all';
+        if ($no === '13.3') return '#/tasks';
+        foreach (preg_split('/[;,\s]+/', (string) $m->forms, -1, PREG_SPLIT_NO_EMPTY) as $f) {
             $key = trim(explode('(', $f)[0], " `");
             if ($key && Registry::exists($key) && Registry::table($key)) return '#/list/' . $key;
         }
-        return '#/screen/' . $m->screen_no;
+        return '#/screen/' . $no;
     }
 
     /** + Create: every active entry of sys_forms the role may add, grouped by department. New modules appear by themselves. */

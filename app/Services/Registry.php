@@ -89,6 +89,7 @@ class Registry
                 'add_form' => $f['add_form'], 'secret' => (bool) $f['secret'], 'auto_correct' => $f['auto_correct'],
                 'has_options' => in_array($f['type'], ['select', 'multiselect'], true),
                 'numbered' => str_starts_with((string) $f['default_rule'], 'numbering:'),
+                'add_preset' => str_starts_with((string) $f['source'], 'ref:') ? ['fk_reference_id' => DB::table('cat_references')->where('ref_code', substr($f['source'], 4))->value('id')] : null,
             ];
         }
         ksort($sections);

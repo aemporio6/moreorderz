@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AppController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\WorkController;
 use App\Http\Middleware\SetContext;
 use Illuminate\Support\Facades\Route;
 
@@ -20,5 +21,10 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('list/{key}', [AppController::class, 'list']);
         Route::get('record/{key}/{id}', [AppController::class, 'record'])->whereNumber('id');
         Route::post('record/{key}/{id?}', [AppController::class, 'save'])->whereNumber('id');
+        Route::get('page/{key}/{id}', [WorkController::class, 'page'])->whereNumber('id');
+        Route::get('search', [WorkController::class, 'search']);
+        Route::get('export/{key}', [WorkController::class, 'export']);
+        Route::get('tasks', [WorkController::class, 'tasks']);
+        Route::post('tasks/{id}/status', [WorkController::class, 'taskStatus'])->whereNumber('id');
     });
 });
