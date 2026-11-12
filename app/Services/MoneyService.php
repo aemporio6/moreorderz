@@ -72,6 +72,16 @@ class MoneyService
     // ───────────── statement import ─────────────
 
     /** Read a bank CSV by its profile. Lines already loaded are skipped (bank's own id, or date + amount + text + position among equals). */
+    /** A bank file from Excel (.xlsx / .xls): the first sheet becomes the same text as a CSV download, dates as Excel day numbers (read above). */
+    public static function excelToCsv(string $path): string
+    {
+        $sheet = \PhpOffice\PhpSpreadsheet\IOFactory::createReaderForFile($path)->setReadDataOnly(true)->load($path)->getSheet(0);
+        $h = fopen('php://memory', 'r+');
+        foreach ($sheet->toArray(null, true, false, false) as $row) if (array_filter($row, fn ($v) => $v !== null && $v !== '')) fputcsv($h, array_map(fn ($v) => is_float($v) ? rtrim(rtrim(sprintf('%.6F', $v), '0'), '.') : (string) $v, $row), ',', '"', '');
+        rewind($h); $out = stream_get_contents($h); fclose($h);
+        return $out;
+    }
+
     public static function importStatement(int $ent, int $bankId, int $profileId, string $csv, string $fileName = 'statement.csv'): array
     {
         $bank = self::bank($ent, $bankId);
@@ -98,7 +108,9 @@ class MoneyService
             $batch = DB::table('fin_import_batches')->insertGetId(['report_type' => 'BANK_STATEMENT', 'company_id' => $ent, 'bank_account_id' => $bank->id, 'file_name' => mb_substr($fileName, 0, 200), 'file_hash' => sha1($csv), 'imported_by' => Context::userId(), 'imported_at' => now()]);
             foreach (array_slice($rows, $hi + 1) as $n => $r) {
                 $line = $hi + 2 + $n;
-                $d = \DateTime::createFromFormat('!' . $p->date_format, trim((string) ($r[$cDate] ?? '')));
+                $raw = trim((string) ($r[$cDate] ?? ''));
+                $d = \DateTime::createFromFormat('!' . $p->date_format, $raw);
+                if (! $d && is_numeric($raw) && (float) $raw > 30000 && (float) $raw < 80000) $d = new \DateTime(date('Y-m-d', (int) round(((float) $raw - 25569) * 86400)));   // an Excel day number
                 if (! $d) { $errors[] = "Row $line: date \"" . ($r[$cDate] ?? '') . "\" is not in the form {$p->date_format}"; continue; }
                 $amt = round($two ? $num($r[$cIn] ?? 0) - abs($num($r[$cOut] ?? 0)) : $num($r[$cAmt] ?? 0), 2);
                 if ($amt == 0.0) { $errors[] = "Row $line: no amount"; continue; }
@@ -184,6 +196,72 @@ class MoneyService
         });
     }
 
+    /**
+     * One bank line paid for several things (R-B_SOURCING-59, R-FIN-70): the parts must add up to the line, to the penny.
+     * Part kinds: CATEGORY (any category; a cost becomes an expense, VAT inside kept apart when VAT-registered), CUSTOMS (duty → goods on the way 1210,
+     * import VAT → 1400; the customs row becomes PAID), SUPPLIER (a payment term of a PO in the same currency as the line → supplier advance 1300).
+     * One journal; undo takes every part back.
+     */
+    public static function split(int $ent, int $lineId, array $parts): array
+    {
+        return DB::transaction(function () use ($ent, $lineId, $parts) {
+            $l = DB::table('fin_bank_transactions')->where('id', $lineId)->where('company_id', $ent)->lockForUpdate()->first() ?? throw new \InvalidArgumentException('Bank line not found.');
+            if ($l->match_status !== 'UNMATCHED') throw new \InvalidArgumentException('This line is already matched. Undo the match first.');
+            $parts = array_values(array_filter($parts, fn ($p) => round((float) ($p['amount'] ?? 0), 2) != 0.0));
+            if (count($parts) < 2) throw new \InvalidArgumentException('A split has at least two parts. For one part use "What is it?".');
+            $line = round(abs((float) $l->amount), 2); $sum = round(array_sum(array_map(fn ($p) => abs((float) $p['amount']), $parts)), 2);
+            if (abs($sum - $line) >= 0.005) throw new \InvalidArgumentException('The parts add up to ' . number_format($sum, 2) . ', the bank line is ' . number_format($line, 2) . '. They must be equal.');
+            $in = (float) $l->amount > 0; $base = abs((float) $l->amount_gbp); $rate = $line > 0 ? $base / $line : 1.0; $left = $base; $lines = [['account' => '1000', $in ? 'debit' : 'credit' => $base, 'ref_id' => (int) $l->bank_account_id, 'amount_cur' => (float) $l->amount]];
+            $vatOn = Choices::get('VAT_REGISTERED', $ent) === '1'; $rows = []; $n = count($parts);
+            foreach ($parts as $i => $p) {
+                $amt = round(abs((float) $p['amount']), 2); $b = $i === $n - 1 ? round($left, 2) : round($amt * $rate, 2); $left -= $b; $kind = strtoupper((string) ($p['kind'] ?? 'CATEGORY'));
+                $row = ['fk_id_bank_line' => $l->id, 'split_no' => $i + 1, 'target_type' => $kind, 'amount' => $amt, 'amount_gbp' => $b, 'note' => mb_substr((string) ($p['note'] ?? ''), 0, 255) ?: null, 'created_by' => Context::userId(), 'created_at' => now()];
+                if ($kind === 'CATEGORY') {
+                    $cat = DB::table('fin_categories')->where('code', $p['category'] ?? '')->where('f_active', 1)->first() ?? throw new \InvalidArgumentException('Part ' . ($i + 1) . ': choose a category.');
+                    if (isset(self::NOT_BY_HAND[$cat->code])) throw new \InvalidArgumentException('Part ' . ($i + 1) . ': ' . self::NOT_BY_HAND[$cat->code]);
+                    if ($cat->direction !== 'BOTH' && ($cat->direction === 'IN') !== $in) throw new \InvalidArgumentException('Part ' . ($i + 1) . ": \"{$cat->name}\" is for money " . ($cat->direction === 'IN' ? 'in' : 'out') . '.');
+                    $acc = self::accountFor($cat->code); $sub = DB::table('gl_accounts')->where('code', $acc)->value('sub_ledger'); $ref = null;
+                    if ($sub === 'SHOP') { $ref = (int) ($p['branch'] ?? 0); if (! DB::table('t_branches')->where('id', $ref)->where('fk_id_ent', $ent)->exists()) throw new \InvalidArgumentException('Part ' . ($i + 1) . ': choose the shop.'); }
+                    $isCost = ! $in && in_array($cat->profit_role, ['FIXED', 'VARIABLE', 'COGS'], true); $vat = $isCost && $vatOn ? round(min((float) ($p['vat_amount'] ?? 0), $amt) * $rate, 2) : 0.0;
+                    if ($isCost) $row['fk_id_expense'] = DB::table('fin_expenses')->insertGetId(['fk_id_ent' => $ent, 'd_expense' => $l->txn_date, 'category_code' => $cat->code, 'fk_id_branch' => $p['branch'] ?? null, 'amount' => $amt, 'fk_id_currency' => self::currencyId($l->currency, $ent),
+                        'exchange_rate' => round($rate, 6), 'amount_gbp' => $b, 'vat_amount' => $p['vat_amount'] ?? null, 'fk_id_paid_from' => $l->bank_account_id, 'fk_id_bank_line' => $l->id, 'source' => 'BANK_SPLIT', 'note' => $row['note'] ?? mb_substr((string) $l->description, 0, 200), 'f_active' => 1, 'created_by' => Context::userId(), 'created_at' => now()]);
+                    $lines[] = ['account' => $acc, $in ? 'credit' : 'debit' => round($b - $vat, 2), 'ref_id' => $ref, 'memo' => $cat->name]; if ($vat > 0) $lines[] = ['account' => '1400', 'debit' => $vat, 'memo' => 'VAT to claim back'];
+                    $row['category_code'] = $cat->code;
+                } elseif ($kind === 'CUSTOMS') {
+                    if ($in) throw new \InvalidArgumentException('Customs is paid with money going out.');
+                    $c = DB::table('t_src_customs')->where('id', $p['customs'] ?? 0)->where('fk_id_ent', $ent)->lockForUpdate()->first() ?? throw new \InvalidArgumentException('Part ' . ($i + 1) . ': choose the customs entry.');
+                    if ($c->pay_status === 'PAID') throw new \InvalidArgumentException("Customs entry {$c->customs_code} is already paid.");
+                    $vatPart = round(min(abs((float) ($p['import_vat'] ?? 0)), $amt), 2); $vatB = round($vatPart * $rate, 2); $dutyB = round($b - $vatB, 2);
+                    if ($dutyB > 0) $lines[] = ['account' => '1210', 'debit' => $dutyB, 'memo' => "Customs duty {$c->customs_code}"]; if ($vatB > 0) $lines[] = ['account' => '1400', 'debit' => $vatB, 'memo' => "Import VAT {$c->customs_code}"];
+                    DB::table('t_src_customs')->where('id', $c->id)->update(['pay_status' => 'PAID', 'paid_date' => $l->txn_date, 'fk_id_bank_line' => $l->id, 'paid_base_amount' => $dutyB, 'status' => 'CLEARED', 'clearance_date' => $c->clearance_date ?: $l->txn_date, 'updated_at' => now()]);
+                    $row['fk_id_customs'] = $c->id;
+                } elseif ($kind === 'SUPPLIER') {
+                    if ($in) throw new \InvalidArgumentException('A supplier is paid with money going out.');
+                    $t = DB::table('t_src_payment_terms')->where('id', $p['term'] ?? 0)->where('fk_id_ent', $ent)->lockForUpdate()->first() ?? throw new \InvalidArgumentException('Part ' . ($i + 1) . ': choose the payment term.');
+                    $po = DB::table('t_src_po')->where('id', $t->fk_id_po)->first(); $cur = Fx::code($po->fk_id_currency, $ent);
+                    if (strtoupper($cur) !== strtoupper((string) $l->currency)) throw new \InvalidArgumentException("Part " . ($i + 1) . ": PO {$po->po_number} is in $cur, the bank line in {$l->currency}. Pay it on its own from the purchase order.");
+                    if ($amt > (float) $t->remaining_amount + 0.009) throw new \InvalidArgumentException('Part ' . ($i + 1) . ': more than the ' . number_format((float) $t->remaining_amount, 2) . ' still open on this term.');
+                    $pid = DB::table('t_src_payments')->insertGetId(['fk_id_ent' => $ent, 'payment_code' => Numbering::next('PAY', $ent, $l->txn_date), 'fk_id_cycle' => $po->fk_id_cycle, 'fk_id_po' => $po->id, 'fk_id_supplier' => $po->fk_id_supplier, 'fk_id_term' => $t->id, 'payment_type' => $t->milestone, 'payment_method' => 'BANK',
+                        'payment_amount' => $amt, 'fk_id_currency' => $po->fk_id_currency, 'exchange_rate' => round($rate, 6), 'base_amount' => $b, 'payment_date' => $l->txn_date, 'status' => 'PAID', 'created_by' => Context::userId(), 'f_active' => 1, 'created_at' => now(), 'paid_via' => 'BANK', 'fk_id_bank_line' => $l->id, 'notes' => 'Part of a split bank line']);
+                    $paid = round((float) $t->paid_amount + $amt, 2); $rem = round((float) $t->planned_amount - $paid, 2);
+                    DB::table('t_src_payment_terms')->where('id', $t->id)->update(['paid_amount' => $paid, 'remaining_amount' => max(0, $rem), 'status' => $rem <= 0.009 ? 'PAID' : 'PART_PAID']);
+                    $lines[] = ['account' => '1300', 'debit' => $b, 'ref_id' => (int) $po->fk_id_supplier, 'memo' => "Supplier payment {$po->po_number}"];
+                    $row['note'] = $row['note'] ?? "PAY:$pid";
+                } else throw new \InvalidArgumentException('Part ' . ($i + 1) . ': unknown kind.');
+                $rows[] = $row;
+            }
+            $jid = Ledger::post($ent, $l->txn_date, 'BANK_SPLIT', (int) $l->id, $lines, ['memo' => 'Split bank line · ' . mb_substr((string) $l->description, 0, 80), 'currency' => $l->currency, 'allow_no_ref' => true]);
+            foreach ($rows as $row) DB::table('fin_bank_line_splits')->insert(RecordService::fillNotNull('fin_bank_line_splits', $row));
+            foreach (DB::table('t_src_payment_terms')->whereIn('id', array_filter(array_map(fn ($p) => $p['term'] ?? null, $parts)))->get() as $t) {
+                if ($t->status === 'PAID') TaskEngine::close('SRC_PAY_DUE', [$t->id], 'Term paid');
+                BuyingService::applyAdvances($ent, (int) DB::table('t_src_po')->where('id', $t->fk_id_po)->value('fk_id_supplier'), $l->txn_date);
+            }
+            self::link($l, 'SPLIT', (int) $l->id, 'BY_HAND', 'MANUAL');
+            Audit::log('fin_bank_transactions', $l->id, 'UPDATE', ['split' => array_map(fn ($r) => [$r['target_type'], $r['amount']], $rows)], null, $ent);
+            return ['journal' => $jid, 'parts' => count($rows)];
+        });
+    }
+
     /** A person picks which booked marketplace payout this money-in line is (when the tool could not be sure). */
     public static function matchPayout(int $ent, int $lineId, int $branchId, string $payKey): void
     {
@@ -242,6 +320,19 @@ class MoneyService
                     else DB::table('fin_expenses')->where('id', $l->matched_to_id)->update(['fk_id_bank_line' => null]);
                     break;
                 case 'CATEGORY': $rev('BANK_LINE', (int) $l->id); break;
+                case 'SPLIT':
+                    $rev('BANK_SPLIT', (int) $l->id);
+                    foreach (DB::table('fin_bank_line_splits')->where('fk_id_bank_line', $l->id)->get() as $s) {
+                        if ($s->fk_id_expense) DB::table('fin_expenses')->where('id', $s->fk_id_expense)->update(['f_active' => 0, 'fk_id_bank_line' => null]);
+                        if ($s->fk_id_customs) DB::table('t_src_customs')->where('id', $s->fk_id_customs)->update(['pay_status' => 'UNPAID', 'paid_date' => null, 'fk_id_bank_line' => null, 'paid_base_amount' => null, 'status' => 'DECLARED']);
+                        if ($s->target_type === 'SUPPLIER' && preg_match('/PAY:(\d+)/', (string) $s->note, $m) && ($pay = DB::table('t_src_payments')->where('id', $m[1])->first())) {
+                            $t = DB::table('t_src_payment_terms')->where('id', $pay->fk_id_term)->first(); $paid = round((float) $t->paid_amount - (float) $pay->payment_amount, 2);
+                            DB::table('t_src_payment_terms')->where('id', $t->id)->update(['paid_amount' => $paid, 'remaining_amount' => round((float) $t->planned_amount - $paid, 2), 'status' => $paid > 0 ? 'PART_PAID' : 'DUE']);
+                            DB::table('t_src_payments')->where('id', $pay->id)->update(['status' => 'CANCELLED', 'f_active' => 0]);
+                        }
+                    }
+                    DB::table('fin_bank_line_splits')->where('fk_id_bank_line', $l->id)->delete();
+                    break;
                 case 'PAYOUT': SettlementService::unpaid((int) $l->matched_to_id); break;
                 case 'TRANSFER':
                     $j = DB::table('gl_journals')->where('id', $l->matched_to_id)->first();

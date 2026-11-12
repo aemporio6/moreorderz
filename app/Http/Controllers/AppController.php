@@ -97,6 +97,7 @@ class AppController extends Controller
         if ($no === '17.9') return '#/printers';
         if ($no === '17.15') return '#/users';
         if ($no === '17.16') return '#/sessions';
+        if ($no === '9.10') return '#/forecast';
         if ($no === '17.1') return '#/setup';
         if ($no === '4.5') return '#/sku-homes';
         if ($no === '17.17') return '#/audit';

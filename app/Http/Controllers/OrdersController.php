@@ -63,6 +63,18 @@ class OrdersController extends Controller
         });
     }
 
+    /** Load a marketplace's order list (eBay orders report, Temu order list, or any order table). */
+    public function importFile(Request $r)
+    {
+        $r->validate(['shop' => 'required|integer', 'file' => 'required|file|max:20480', 'currency' => 'nullable|string|size:3']);
+        $f = $r->file('file');
+        abort_unless(in_array(strtolower($f->getClientOriginalExtension()), ['csv', 'txt', 'tsv', 'xlsx', 'xls'], true), 422, 'Choose the order file the marketplace gave you (.csv or .xlsx).');
+        try { $x = \App\Services\OrderFiles::import((int) \App\Services\Context::ent(), (int) $r->input('shop'), $f->getRealPath(), $f->getClientOriginalName(), array_filter(['currency' => $r->input('currency')]));
+            return $x + ['message' => "{$x['format_name']}: {$x['orders']} order(s) · {$x['new']} new line(s)" . ($x['updated'] ? ", {$x['updated']} updated" : '') . ($x['locked'] ? ", {$x['locked']} already confirmed – not changed" : '') . ($x['unmatched'] ? " · {$x['unmatched']} with an unknown SKU" : '') . ($x['skipped'] ? ' · ' . count($x['skipped']) . ' skipped (cancelled or empty)' : '')]; }
+        catch (\Illuminate\Database\QueryException $e) { report($e); return response()->json(['message' => 'Something went wrong on our side. Nothing was saved. The details are in the system log.'], 500); }
+        catch (\InvalidArgumentException|\RuntimeException $e) { return response()->json(['message' => $e->getMessage(), 'errors' => ['_form' => [$e->getMessage()]]], 422); }
+    }
+
     public function cancel(Request $r, int $id)
     {
         $this->can($r, self::ENTER);

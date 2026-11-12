@@ -428,6 +428,7 @@ class BuyingService
             ['key' => 'lc', 'name' => 'Landed cost', 'state' => $done((bool) array_filter($lcs, fn ($l) => $l->landed_status === 'FINAL' && ! $l->superseded_by), (bool) $lcs)],
         ];
         $research = $c->fk_id_research ? DB::table('src_research')->where('id', $c->fk_id_research)->first(['id', 'research_code', 'title', 'est_margin_pct']) : null;
+        foreach ($pos as $p) $p->duty_paid = SourcingExtras::dutyPaidForPo((int) $c->fk_id_ent, (int) $p->id);
         return ['cycle' => ['id' => $c->id, 'code' => $c->cycle_code, 'name' => $c->product_name, 'type' => $c->cycle_type, 'status' => $c->status, 'target_qty' => (float) $c->target_qty, 'date' => $c->sourcing_date],
             'research' => $research, 'products' => DB::table('t_src_cycle_products as cp')->leftJoin('t_product_vendors as p', 'p.id', '=', 'cp.fk_id_product')->where('cp.fk_id_cycle', $cycleId)->get(['cp.fk_id_product as id', 'p.SKU_VENDOR as sku', 'cp.product_name as name', 'cp.target_qty'])->all(),
             'steps' => $steps, 'rfqs' => $rfqs, 'pos' => $pos, 'terms' => $terms, 'shipments' => $ships, 'grns' => $grns, 'landed' => $lcs];

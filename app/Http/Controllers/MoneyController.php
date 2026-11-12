@@ -114,10 +114,34 @@ class MoneyController extends Controller
         return $this->run(fn () => ['id' => Money::createBank((int) Context::ent(), array_filter($d, fn ($v) => $v !== null)), 'message' => 'Bank account added']);
     }
 
+    public function split(Request $r, int $id)
+    {
+        $this->can($r, self::EDIT);
+        $d = $r->validate(['parts' => 'required|array|min:2', 'parts.*.kind' => 'required|in:CATEGORY,CUSTOMS,SUPPLIER', 'parts.*.amount' => 'required|numeric', 'parts.*.category' => 'nullable|string|max:40', 'parts.*.branch' => 'nullable|integer',
+            'parts.*.vat_amount' => 'nullable|numeric|min:0', 'parts.*.customs' => 'nullable|integer', 'parts.*.import_vat' => 'nullable|numeric|min:0', 'parts.*.term' => 'nullable|integer', 'parts.*.note' => 'nullable|string|max:255']);
+        return $this->run(function () use ($id, $d) { $x = Money::split((int) Context::ent(), $id, $d['parts']); return $x + ['message' => "Bank line split into {$x['parts']} parts"]; });
+    }
+
+    public function splitTargets(Request $r)
+    {
+        $this->can($r, self::EDIT); $ent = (int) Context::ent();
+        return ['customs' => DB::table('t_src_customs')->where('fk_id_ent', $ent)->where('f_active', 1)->where(fn ($w) => $w->whereNull('pay_status')->orWhere('pay_status', '<>', 'PAID'))->orderByDesc('id')->limit(100)->get(['id', 'customs_code', 'base_amount', 'import_vat', 'declaration_number']),
+            'terms' => DB::table('t_src_payment_terms as t')->join('t_src_po as p', 'p.id', '=', 't.fk_id_po')->leftJoin('cat_currency as c', 'c.id', '=', 'p.fk_id_currency')->where('t.fk_id_ent', $ent)->where('t.f_active', 1)->where('t.remaining_amount', '>', 0)->whereIn('p.status', ['CONFIRMED', 'SHIPPED', 'RECEIVED'])->orderByDesc('t.id')->limit(100)
+                ->get(['t.id', 'p.po_number', 't.milestone', 't.remaining_amount', 'c.currency_code as currency'])];
+    }
+
+    public function forecast(Request $r)
+    {
+        $this->can($r, ['OWNER', 'MANAGER', 'FINANCE', 'ACCOUNTANT', 'PARTNER']);
+        return \App\Services\CashForecast::build((int) Context::ent(), (int) $r->query('weeks', 8));
+    }
+
     public function bankImport(Request $r, int $id)
     {
         $this->can($r, self::EDIT);
-        $d = $r->validate(['profile' => 'required|integer', 'csv' => 'required|string|max:5000000', 'file_name' => 'nullable|string|max:200']);
+        $d = $r->validate(['profile' => 'required|integer', 'csv' => 'required_without:file|nullable|string|max:5000000', 'file' => 'nullable|file|max:20480', 'file_name' => 'nullable|string|max:200']);
+        if ($r->hasFile('file')) { $f = $r->file('file'); abort_unless(in_array(strtolower($f->getClientOriginalExtension()), ['xlsx', 'xls', 'csv', 'txt'], true), 422, 'Choose the bank file (.csv or .xlsx).');
+            $d['csv'] = in_array(strtolower($f->getClientOriginalExtension()), ['xlsx', 'xls'], true) ? Money::excelToCsv($f->getRealPath()) : (string) file_get_contents($f->getRealPath()); $d['file_name'] = $f->getClientOriginalName(); }
         return $this->run(function () use ($id, $d) {
             $x = Money::importStatement((int) Context::ent(), $id, (int) $d['profile'], $d['csv'], $d['file_name'] ?? 'statement.csv');
             return $x + ['message' => "{$x['new']} new line(s), {$x['matched']} matched by the tool" . ($x['duplicates'] ? ", {$x['duplicates']} were already loaded" : '') . ($x['errors'] ? ', ' . count($x['errors']) . ' row(s) could not be read' : '')];

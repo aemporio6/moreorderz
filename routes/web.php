@@ -114,6 +114,9 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('customs', [BuyingController::class, 'customs']);
         Route::post('customs/{id}/pay', [BuyingController::class, 'customsPay'])->whereNumber('id');
         Route::post('quick-buy', [BuyingController::class, 'quickBuy']);
+        Route::post('bank-lines/{id}/split', [MoneyController::class, 'split'])->whereNumber('id');
+        Route::get('split-targets', [MoneyController::class, 'splitTargets']);
+        Route::get('cash-forecast', [MoneyController::class, 'forecast']);
         Route::post('grn/{id}/post', [BuyingController::class, 'postGrn'])->whereNumber('id');
         Route::match(['get', 'post'], 'fx', [BuyingController::class, 'fx']);
         Route::get('reports', [ReportController::class, 'index']);
@@ -170,6 +173,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('print-routes', [PrintController::class, 'route']);
         Route::get('orders', [OrdersController::class, 'board']);
         Route::post('orders', [OrdersController::class, 'enter']);
+        Route::post('orders/import', [OrdersController::class, 'importFile']);
         Route::post('orders/{id}/cancel', [OrdersController::class, 'cancel'])->whereNumber('id');
         Route::post('pick-lists', [OrdersController::class, 'buildPick']);
         Route::get('pick-lists/{id}', [OrdersController::class, 'pickList'])->whereNumber('id');

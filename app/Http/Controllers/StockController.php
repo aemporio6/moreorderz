@@ -72,10 +72,12 @@ class StockController extends Controller
         if ($v = $r->query('q')) $q->where(fn ($w) => $w->where('l.sku', 'like', "%$v%")->orWhere('l.lot_code', 'like', "%$v%"));
         if ($r->query('nocost') === '1') $q->where('l.unit_cost_gbp', '<=', 0);
         $money = in_array($r->user()->role_code, self::MONEY, true);
-        $cols = ['l.id', 'l.lot_code', 'l.sku', 'p.id as product_id', 'p.product_name_vendor as name', 'l.source', 'l.received_date', 'l.qty', 'l.qty_left', 'l.visibility', 'l.landed_status', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as owner")];
+        $cols = ['l.id', 'l.lot_code', 'l.sku', 'p.id as product_id', 'p.product_name_vendor as name', 'l.source', 'l.received_date', 'l.qty', 'l.qty_left', 'l.visibility', 'l.landed_status', 'l.po_id', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as owner")];
         if ($money) $cols[] = 'l.unit_cost_gbp';
         $noCost = DB::table('fin_lots')->where('company_id', Context::ent())->where('qty_left', '>', 0)->where('unit_cost_gbp', '<=', 0)->count();
-        return ['rows' => $q->orderBy('l.received_date')->orderBy('l.id')->limit(500)->get($cols), 'show_value' => $money, 'no_cost' => $noCost, 'can_cost' => in_array($r->user()->role_code, ['OWNER', 'MANAGER', 'FINANCE'], true)];
+        $rows = $q->orderBy('l.received_date')->orderBy('l.id')->limit(500)->get($cols); $qc = \App\Services\SourcingExtras::qcOfPos($rows->pluck('po_id')->filter()->unique()->values()->all());
+        foreach ($rows as $l) $l->qc = $l->po_id ? ($qc[$l->po_id] ?? null) : null;   // R-B_SOURCING-65: the lot shows the latest QC of its PO
+        return ['rows' => $rows, 'show_value' => $money, 'no_cost' => $noCost, 'can_cost' => in_array($r->user()->role_code, ['OWNER', 'MANAGER', 'FINANCE'], true)];
     }
 
     public function lotCost(Request $r, int $id)

@@ -61,13 +61,17 @@ class MarketplaceFiles
         $s = trim((string) $v); if ($s === '' || $s === '--') return null;
         if (is_numeric($s) && (float) $s > 30000 && (float) $s < 80000) return date('Y-m-d', (int) round(((float) $s - 25569) * 86400));   // Excel day number
         $s = preg_replace('/\s+(UTC|GMT|BST|PST|PDT|PKT.*|[A-Z]{2,4}\(UTC[^)]*\))$/', '', $s); $s = preg_replace('/\bSept\b/', 'Sep', $s); $s = preg_replace('/(\d)(st|nd|rd|th)\b/i', '$1', $s);
-        foreach (['!Y-m-d H:i:s', '!Y-m-d\TH:i:sP', '!Y-m-d', '!d.m.Y H:i:s', '!d.m.Y', '!d/m/Y H:i:s', '!d/m/Y', '!j M Y', '!j M Y H:i:s', '!M j, Y', '!M j, Y, g:i a', '!M j, Y g:i:s A', '!Y/m/d', '!j F Y', '!d-m-Y', '!d-M-Y', '!d M Y'] as $f) {
+        if (preg_match('/^\d{1,2}-[A-Za-z]{3}-\d{2}$/', $s) && ($d = \DateTime::createFromFormat('!d-M-y', $s))) return $d->format('Y-m-d');   // eBay orders report: 30-Apr-26
+        if (preg_match('/^\d{1,2}-[A-Za-z]{3}-\d{4}$/', $s) && ($d = \DateTime::createFromFormat('!d-M-Y', $s))) return $d->format('Y-m-d');
+        foreach (['!Y-m-d H:i:s', '!Y-m-d\TH:i:sP', '!Y-m-d', '!d.m.Y H:i:s', '!d.m.Y', '!d/m/Y H:i:s', '!d/m/Y', '!j M Y', '!j M Y H:i:s', '!M j, Y', '!M j, Y, g:i a', '!M j, Y g:i:s A', '!Y/m/d', '!j F Y', '!d-m-Y', '!d M Y'] as $f) {
             $d = \DateTime::createFromFormat($f, $s); $e = \DateTime::getLastErrors();
             if ($d && (! $e || ($e['warning_count'] === 0 && $e['error_count'] === 0))) return $d->format('Y-m-d');
         }
         $t = strtotime($s);
         return $t ? date('Y-m-d', $t) : null;
     }
+
+    public static function keyOf(mixed $h): string { return self::key($h); }
 
     private static function key(mixed $h): string { return trim(preg_replace('/\s+/', ' ', str_replace(['–', '—', '_', "\u{FEFF}", '’', "\u{00A0}"], ['-', '-', ' ', '', "'", ' '], mb_strtolower((string) $h)))); }
 
