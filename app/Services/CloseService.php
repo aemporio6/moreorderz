@@ -193,6 +193,7 @@ class CloseService
             $shares = PartnerService::postMonth($ent, $branchId, $month, $run);
             DB::table('aud_runs')->where('id', $run->id)->update(['snapshot_json' => json_encode($snap + ['shares' => $shares])]);
             WaterfallService::makeStatements($ent, (int) $run->id);
+            \App\Services\Connect\Messenger::statementsOfRun($ent, (int) $run->id);   // choice STATEMENT_SEND: queued to the partners (sent when a channel exists)
             Audit::log('aud_runs', $run->id, 'LOCK', ['shop' => $branchId, 'month' => $month, 'profit' => $fig['profit']], $note, $ent);
             EventBus::fire('MONTH_LOCKED', 'aud_runs', $run->id, ['shop' => $branchId, 'month' => $month], $ent);
             TaskEngine::close('FIN_PERIOD_OPEN', [$branchId . '-' . $month], 'Month locked');

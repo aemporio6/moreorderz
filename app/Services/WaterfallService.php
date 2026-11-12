@@ -214,6 +214,7 @@ class WaterfallService
             $name = PartnerService::name($partner);
             Ledger::post($ent, $date, 'PARTNER_ADJUST', $id, [['account' => '7000', $amount > 0 ? 'debit' : 'credit' => abs($amount), 'ref_id' => $partner], ['account' => '2100', $amount > 0 ? 'credit' : 'debit' => abs($amount), 'ref_id' => $partner]], ['memo' => "Adjustment to {$run->period_month} · $name"]);
             $st = self::makeStatement($ent, $run, $partner, 'Adjustment of ' . self::m($amount) . ' booked on ' . $date . ': ' . trim($note));
+            if (Choices::get('STATEMENT_SEND', $ent) === 'AUTO') { try { \App\Services\Connect\Messenger::statement($ent, $st); } catch (\InvalidArgumentException) {} }
             Audit::log('aud_runs', $run->id, 'UPDATE', ['adjustment' => $amount, 'partner' => $partner, 'booked_on' => $date], $note, $ent);
             EventBus::fire('STATEMENT_READY', 'fin_statements', $st, ['partner' => $partner, 'run' => $run->id, 'updated' => true], $ent);
             return ['ledger_id' => $id, 'booked_on' => $date, 'statement' => $st, 'version' => (int) DB::table('fin_statements')->where('id', $st)->value('version')];

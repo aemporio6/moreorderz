@@ -5,6 +5,7 @@ use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BuyingController;
 use App\Http\Controllers\CloseController;
+use App\Http\Controllers\ConnectController;
 use App\Http\Controllers\MoneyController;
 use App\Http\Controllers\OrdersController;
 use App\Http\Controllers\PartnerController;
@@ -20,6 +21,9 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::get('/login/code', [AuthController::class, 'codeForm']);
 Route::post('/login/code', [AuthController::class, 'code']);
 Route::post('/logout', [AuthController::class, 'logout']);
+// WhatsApp webhook: no sign-in, no CSRF; only bodies signed with the app secret of a WhatsApp connection are read
+Route::get('/wa/inbound', [ConnectController::class, 'waVerify']);
+Route::post('/wa/inbound', [ConnectController::class, 'waInbound'])->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class])->middleware('throttle:120,1');
 
 Route::middleware(['auth', SetContext::class])->group(function () {
     Route::get('/', [AppController::class, 'shell']);
@@ -53,6 +57,25 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('setup/tick', [AdminController::class, 'setupTick']);
         Route::get('sessions', [AdminController::class, 'sessions']);
         Route::get('accounts-dash', [AdminController::class, 'accounts']);
+        Route::get('connections', [ConnectController::class, 'connections']);
+        Route::post('connections/{id?}', [ConnectController::class, 'saveConnection'])->whereNumber('id');
+        Route::post('connections/{id}/test', [ConnectController::class, 'testConnection'])->whereNumber('id');
+        Route::post('connections/{id}/switch', [ConnectController::class, 'switchConnection'])->whereNumber('id');
+        Route::post('connections/{id}/pull', [ConnectController::class, 'pull'])->whereNumber('id');
+        Route::get('track/{carrier}/{no}', [ConnectController::class, 'track'])->whereNumber('carrier');
+        Route::post('labels-buy', [ConnectController::class, 'buyLabels']);
+        Route::get('hubs', [ConnectController::class, 'hubs']);
+        Route::get('messages', [ConnectController::class, 'messages']);
+        Route::post('messages/send', [ConnectController::class, 'sendNow']);
+        Route::post('messages/{kind}/{id}/retry', [ConnectController::class, 'retryMessage'])->whereIn('kind', ['wa', 'mail'])->whereNumber('id');
+        Route::post('statements/{id}/send', [ConnectController::class, 'sendStatement'])->whereNumber('id');
+        Route::get('drive', [ConnectController::class, 'drive']);
+        Route::post('drive/link', [ConnectController::class, 'driveLink']);
+        Route::post('drive/make', [ConnectController::class, 'driveMake']);
+        Route::post('drive/check', [ConnectController::class, 'driveCheck']);
+        Route::post('drive/load/{id}', [ConnectController::class, 'driveLoad'])->whereNumber('id');
+        Route::get('subscriptions', [ConnectController::class, 'subscriptions']);
+        Route::post('subscriptions/{id}/paid', [ConnectController::class, 'subscriptionPaid'])->whereNumber('id');
         Route::post('sessions/end', [AdminController::class, 'endSession']);
         Route::post('ip-rules', [AdminController::class, 'ipRule']);
         Route::post('ip-rules/{id}/remove', [AdminController::class, 'ipRuleRemove'])->whereNumber('id');

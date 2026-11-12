@@ -39,6 +39,12 @@ class Choices
         'VAULT_REVEAL' => ['Who may reveal a secret (passwords, memorable answers, full account numbers)?', 'Every reveal and every refusal is written to the audit log with the user, the record and the field – never the value.', 'OWNER', [
             'OWNER' => ['Owner only', 'Everybody else sees ••••; the Owner opens a value when it is needed.'],
             'OWNER_MANAGER' => ['Owner and Manager', 'A Manager who may open the record may also reveal its secrets.']]],
+        'STATEMENT_SEND' => ['How do partners get their statement when a month is locked?', 'WhatsApp and / or e-mail to the partner\'s own number and address in People & companies. Nothing goes out until a WhatsApp connection or an e-mail server is set up – it waits and leaves then.', 'AUTO', [
+            'AUTO' => ['Sent by themselves at the lock', 'Every partner gets the new statement as soon as the month is locked (and every new version).'],
+            'BUTTON' => ['Only when someone presses Send', 'The statement waits on the partner page until the Owner or Finance sends it.']]],
+        'TASK_DIGEST' => ['Morning WhatsApp of late and urgent tasks?', 'One message a day per person who has late or urgent tasks, to the WhatsApp number of the person.', 'WHATSAPP', [
+            'WHATSAPP' => ['Yes, by WhatsApp', 'Each morning, only to people with something late or urgent.'],
+            'OFF' => ['No', 'People see their tasks only in the tool.']]],
         'VAT_REGISTERED' => ['Is the company registered for VAT?', 'This is a fact about the company, not a preference. It decides where the VAT inside fees and expenses goes.', '0', [
             '0' => ['No', 'VAT paid on fees and expenses is part of the cost.'],
             '1' => ['Yes', 'VAT on marketplace fees and on expenses is kept apart as VAT to claim back (account 1400) and shown in the VAT report.']], true],

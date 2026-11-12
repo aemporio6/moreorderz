@@ -97,7 +97,7 @@ class AppController extends Controller
         if ($no === '17.9') return '#/printers';
         if ($no === '17.15') return '#/users';
         if ($no === '17.16') return '#/sessions';
-        $map = ['4.1' => '#/stock', '10.1' => '#/close', '13.1' => '#/tasks?scope=all', '6.1' => '#/orders', '5.7' => '#/reports/price_log', '15.1' => '#/import', '15.2' => '#/import-history', '7.6' => '#/tracking-upload', '6.9' => '#/calculator', '17.14' => '#/registry', '12.9' => '#/merges', '12.1' => '#/accounts'];
+        $map = ['4.1' => '#/stock', '10.1' => '#/close', '13.1' => '#/tasks?scope=all', '6.1' => '#/orders', '5.7' => '#/reports/price_log', '15.1' => '#/import', '15.2' => '#/import-history', '7.6' => '#/tracking-upload', '6.9' => '#/calculator', '17.14' => '#/registry', '12.9' => '#/merges', '12.1' => '#/accounts', '15.5' => '#/connections', '6.4' => '#/hubs', '13.6' => '#/messages', '14.2' => '#/drive', '15.3' => '#/drive?tab=watched', '12.7' => '#/subscriptions'];
         if (isset($map[$no])) return $map[$no];
         if ($no === '9.10') return '#/forecast';
         if ($no === '17.1') return '#/setup';

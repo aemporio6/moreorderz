@@ -28,6 +28,9 @@ class MoNightly extends Command
             \App\Services\SkuHomes::tasks((int) $ent);
             $this->line("Company $ent: stock mismatches {$r['mismatch']}, negative balances {$r['negative_balances']}, value = ledger: " . ($r['value_matches_ledger'] ? 'yes' : 'NO') . ", low stock tasks open {$low['open']}");
         }
+        $subs = \App\Services\Subscriptions::nightly();
+        $dig = \App\Services\Connect\Messenger::digests();
+        $this->line("Subscriptions overdue: $subs new task(s) · task digests queued: $dig");
         Context::set(null, null);
         $this->line(EventBus::runQueue() . ' waiting events processed');
         return 0;
