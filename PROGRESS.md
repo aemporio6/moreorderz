@@ -9,7 +9,7 @@ public repo (code only, never data or secrets) · old data = export of 18 Sep 20
 | 2 | Products and Stock | DONE (12 Nov) |
 | 3 | Buying (Research → PO → GRN) | DONE (12 Nov) |
 | 4 | Sales and Dispatch (orders, labels, printing) | DONE (12 Nov) – carrier label PDF import carried, see below |
-| 5 | Money (bank, settlements, TikTok, profit views) | IN PROGRESS – part 1 done (12 Nov) |
+| 5 | Money (bank, settlements, TikTok, profit views) | DONE (12 Nov) – carried items listed below |
 | 6 | Month close, Partners, Reports | – |
 | 7 | Import old data + reconciliation report + full test | – |
 
@@ -51,8 +51,17 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
   - **99 tests pass (828 assertions).** Browser run desktop + phone: real Shop B file uploaded through the screen, booked, bank CSV loaded, payout matched by the tool, line categorised, expense added; 0 errors; 133 menu routes open.
   - **Honest limits:** only the TikTok money file is built (other marketplaces come with the Import Center); VAT on fees goes to fees (no VAT return logic yet); refund proposals are made but there is no screen to accept / reject them yet; approvals are wired for expenses only (supplier payments, stock adjustments, withdrawals still to wire); bank line split, bank file in Excel format, FIN_PAYOUT_DIFF / FIN_SETTLEMENT_OVERDUE / FIN_BANK_STALE night checks, and the approval flow in the browser (needs a second demo user; covered by API tests) are not done.
 
-## Step 5 – still to do
-- Profit views (dropdown: by shop / product / month, from the ledger and lots), Money dashboard (9.1), refund proposal screen, approvals for supplier payments / stock adjustments, payables & cash forecast, night checks for money, then mark Step 5 DONE.
+- 12 Nov – **Step 5, part 2: profit views, money dashboard, refunds, more approvals, night checks.**
+  - `ProfitService` + screen Profit views (#/profit, dropdown: by shop / by product / by month, date range): sales and cost of goods from confirmed order lines and the lots they used; marketplace fees and shipping from booked money files; other costs from expenses. A row with sales but no booked money file is marked "before marketplace costs"; order lines not confirmed yet are counted and shown as not in the figures; the ledger's profit for the same dates is shown beside the total as the control figure (equal in the tests).
+  - Money dashboard (#/money, menu 9.1): cash, sales not settled, payouts on the way, stock at cost, supplier advances / payables, expenses this month, a "To do" list (bank lines, statements to book, approvals, refund proposals, overdue supplier payments), bank accounts with their state, supplier payments to make.
+  - Refund proposals (#/refunds, menu 6.6): accept → Dr 5400 / Cr 1100 for the booked sale and the line is marked refunded; reject needs a reason; an order not confirmed yet is refused with what to do first.
+  - Approvals now also cover supplier payments over APPROVAL_LIMIT_PAYMENT (default 2,000 base) and stock adjustments of more than ADJUST_APPROVAL_QTY units (50): nothing is paid / moved until a second person approves; one waiting payment per term.
+  - Night checks: FIN_BANK_STALE (no new bank line for bank_overdue_days) and FIN_SETTLEMENT_OVERDUE (no new money file for settlement_overdue_days), only for accounts / shops loaded at least once; both close by themselves.
+  - **104 tests pass (877 assertions).** Browser run desktop + phone: Money, Profit views (all three views), Refunds open with 0 errors and no sideways overflow; 133 menu routes open, 18 placeholders.
+  - **Honest limits:** refund accept handles FULL refunds of confirmed orders only (partial refunds and not-yet-confirmed orders are not automated); profit by product can only link marketplace costs to a product when the order is in the tool (the rest is shown as "Not linked to a product"); VA share / investor share are not in the profit view yet (Step 6); the refund and approval flows were tested through the API, not clicked through in the browser (the demo has one user and no refund data).
+
+## Step 5 – carried forward
+- Payables & cash forecast screen (the dashboard lists payments to make; no forecast yet) · loans, budgets, capital calls, withdrawals (lists and forms work; no engines) · bank line split · bank file in Excel format · FIN_PAYOUT_DIFF · VAT return logic · money files of other marketplaces (Import Center) · partial refunds.
 
 ## Step 4 – carried forward
 - Carrier shipping-label PDF import (crop, match by tracking pattern, print unchanged) and carrier service rules – with the Import Center work; product / FBA carton labels; MANIFEST PDF stored on the session is done, signature image is not; LABEL_REPRINT_ALERT; SKU homes (and the "exactly two bin labels on a home change" rule); per-workstation printer defaults screen (routes by user / workstation work in the engine, the screen sets company routes only).
