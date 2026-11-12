@@ -85,6 +85,10 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('grn', [BuyingController::class, 'grn']);
         Route::post('grn/{id}/post', [BuyingController::class, 'postGrn'])->whereNumber('id');
         Route::match(['get', 'post'], 'fx', [BuyingController::class, 'fx']);
+        Route::get('money', [MoneyController::class, 'dashboard']);
+        Route::get('profit', [MoneyController::class, 'profit']);
+        Route::get('refunds', [MoneyController::class, 'refunds']);
+        Route::post('refunds/{id}', [MoneyController::class, 'refundDecide'])->whereNumber('id');
         Route::get('bank', [MoneyController::class, 'bank']);
         Route::post('bank', [MoneyController::class, 'bankCreate']);
         Route::post('bank/{id}/import', [MoneyController::class, 'bankImport'])->whereNumber('id');

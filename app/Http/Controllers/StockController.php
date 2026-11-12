@@ -105,7 +105,14 @@ class StockController extends Controller
     {
         $this->can($r, self::CHANGE);
         $d = $r->validate(['product' => 'required|integer', 'location' => 'required|integer', 'qty' => 'required|integer|not_in:0', 'reason' => 'required|string|min:3|max:255', 'unit_cost' => 'nullable|numeric|min:0'], ['qty.not_in' => 'The change cannot be zero.', 'reason.required' => 'Give the reason for the adjustment.']);
-        return $this->run(function () use ($d) { $x = StockService::adjust((int) Context::ent(), $d['product'], $d['location'], $d['qty'], $d['reason'], array_filter(['unit_cost' => $d['unit_cost'] ?? null], fn ($v) => $v !== null)); return ['message' => 'Stock adjusted', 'value' => $x['value']]; });
+        return $this->run(function () use ($d, $r) {
+            $ent = (int) Context::ent(); $limit = (int) \App\Services\Settings::get('ADJUST_APPROVAL_QTY', $ent, 50);
+            if ($r->user()->role_code !== 'OWNER' && abs((int) $d['qty']) > $limit) {   // a large change waits for a second person; stock does not move until then
+                $p = \Illuminate\Support\Facades\DB::table('t_product_vendors')->where('id', $d['product'])->where('fk_id_ent', $ent)->first() ?? abort(404);
+                \App\Services\Approvals::request($ent, 'STOCK_ADJUST', 't_product_vendors', (int) $p->id, 0, ['category' => "Stock adjustment {$p->SKU_VENDOR}: " . ((int) $d['qty'] > 0 ? '+' : '') . (int) $d['qty'] . ' units', 'note' => $d['reason'], 'adjust' => $d], "Approve stock adjustment {$p->SKU_VENDOR}: " . (int) $d['qty'] . ' units');
+                return ['message' => "More than $limit units – the adjustment waits for approval and stock has not changed yet", 'status' => 'WAITING'];
+            }
+            $x = StockService::adjust($ent, $d['product'], $d['location'], $d['qty'], $d['reason'], array_filter(['unit_cost' => $d['unit_cost'] ?? null], fn ($v) => $v !== null)); return ['message' => 'Stock adjusted', 'value' => $x['value']]; });
     }
 
     public function ownership(Request $r)

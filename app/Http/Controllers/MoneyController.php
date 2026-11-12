@@ -35,6 +35,54 @@ class MoneyController extends Controller
             'shops' => DB::table('t_branches')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name as name'])];
     }
 
+    // ---- dashboard and profit ----
+    public function dashboard(Request $r)
+    {
+        $this->can($r, self::SEE);
+        $ent = (int) Context::ent(); $banks = Money::banks($ent); $shops = Settle::shopBalances($ent); $m = date('Y-m');
+        $due = DB::table('t_src_payment_terms as t')->join('t_src_po as p', 'p.id', '=', 't.fk_id_po')->leftJoin('t_src_suppliers as s', 's.id', '=', 'p.fk_id_supplier')->leftJoin('cat_currency as c', 'c.id', '=', 'p.fk_id_currency')
+            ->where('t.fk_id_ent', $ent)->where('t.f_active', 1)->where('t.status', '<>', 'PAID')->whereIn('p.status', ['CONFIRMED', 'SHIPPED', 'RECEIVED'])->where('t.remaining_amount', '>', 0)->orderByRaw('t.due_date IS NULL, t.due_date')->limit(15)
+            ->get(['t.id', 'p.id as po_id', 'p.po_number', 's.supplier_name as supplier', 't.milestone', 't.remaining_amount', 'c.currency_code as currency', 't.due_date']);
+        $today = date('Y-m-d');
+        return ['base' => Fx::base($ent), 'banks' => $banks, 'cash' => round(array_sum(array_column($banks, 'books_base')), 2), 'shops' => $shops,
+            'unsettled' => round(array_sum(array_column($shops, 'unsettled')), 2), 'on_the_way' => round(array_sum(array_column($shops, 'on_the_way')), 2), 'held_back' => round(array_sum(array_column($shops, 'held_back')), 2),
+            'due' => $due, 'overdue' => $due->filter(fn ($d) => $d->due_date && $d->due_date < $today)->count(),
+            'expenses_month' => round((float) DB::table('fin_expenses')->where('fk_id_ent', $ent)->where('f_active', 1)->whereRaw("DATE_FORMAT(d_expense, '%Y-%m') = ?", [$m])->sum('amount_gbp'), 2), 'month' => $m,
+            'approvals' => DB::table('sys_approvals')->where('fk_id_ent', $ent)->where('status', 'PENDING')->count(), 'unmatched' => array_sum(array_column($banks, 'unmatched')),
+            'to_book' => DB::table('mo_settlements')->where('fk_id_ent', $ent)->where('status', 'LOADED')->count(), 'refunds' => $this->refundRows($ent)->count(),
+            'stock' => \App\Services\Ledger::balance($ent, '1200'), 'supplier_advances' => \App\Services\Ledger::balance($ent, '1300'), 'supplier_payables' => -1 * \App\Services\Ledger::balance($ent, '2000')];
+    }
+
+    public function profit(Request $r)
+    {
+        $this->can($r, self::SEE);
+        $d = $r->validate(['by' => 'nullable|in:shop,product,month', 'from' => 'nullable|date', 'to' => 'nullable|date']);
+        return \App\Services\ProfitService::view((int) Context::ent(), $d['by'] ?? 'shop', $d['from'] ?? date('Y-m-01', strtotime('-2 month')), $d['to'] ?? date('Y-m-d'));
+    }
+
+    // ---- refund proposals ----
+    private function refundRows(int $ent)
+    {
+        return DB::table('t_sale_refund_proposals as p')->join('t_sales as s', 's.id', '=', 'p.fk_id_sale')->leftJoin('t_branches as b', 'b.id', '=', 's.fk_id_branch')->where('s.fk_id_ent', $ent)->where('p.status', 'PROPOSED')->orderBy('p.id')
+            ->get(['p.id', 'p.refund_kind', 'p.amount', 'p.created_at', 's.order_no', 's.sku', 's.qty', 's.total_amount_gbp', 's.status as sale_status', 's.d_order', 'b.shop_name as shop']);
+    }
+
+    public function refunds(Request $r)
+    {
+        $this->can($r, self::SEE);
+        $ent = (int) Context::ent();
+        return ['rows' => $this->refundRows($ent), 'base' => Fx::base($ent), 'can_edit' => in_array($r->user()->role_code, ['OWNER', 'MANAGER', 'FINANCE'], true),
+            'decided' => DB::table('t_sale_refund_proposals as p')->join('t_sales as s', 's.id', '=', 'p.fk_id_sale')->leftJoin('t_users as u', 'u.id', '=', 'p.decided_by')->where('s.fk_id_ent', $ent)->where('p.status', '<>', 'PROPOSED')->orderByDesc('p.decided_at')->limit(30)
+                ->get(['p.id', 'p.status', 'p.reject_reason', 'p.decided_at', 's.order_no', 's.sku', 's.total_amount_gbp', 'u.display_name as by'])];
+    }
+
+    public function refundDecide(Request $r, int $id)
+    {
+        $this->can($r, ['OWNER', 'MANAGER', 'FINANCE']);
+        $d = $r->validate(['accept' => 'required|boolean', 'reason' => 'nullable|string|max:300']);
+        return $this->run(function () use ($id, $d) { Settle::decideRefund((int) Context::ent(), $id, (bool) $d['accept'], $d['reason'] ?? null); return ['message' => $d['accept'] ? 'Refund booked' : 'Proposal rejected']; });
+    }
+
     // ---- bank ----
     public function bank(Request $r)
     {

@@ -184,6 +184,20 @@ class BuyingService
      * Pay a supplier against a PO term. $d: term, amount (PO currency), date, bank (fin_bank_accounts id), method?, txn_ref?.
      * Ledger: supplier advance (1300) up, bank (1000) down, in base currency at the rate of the payment date.
      */
+    /** Pay now, or – over the limit (setting APPROVAL_LIMIT_PAYMENT, base currency) and not entered by the Owner – ask a second person first. Nothing is booked while it waits. */
+    public static function payOrAsk(array $d): array
+    {
+        $ent = (int) Context::ent();
+        $t = DB::table('t_src_payment_terms')->where('id', $d['term'])->where('fk_id_ent', $ent)->first() ?? throw new \RuntimeException('Payment term not found.');
+        $po = self::po((int) $t->fk_id_po); $cur = Fx::code($po->fk_id_currency, $ent); $base = round((float) $d['amount'] * Fx::rate($cur, $d['date'] ?? date('Y-m-d'), $ent), 2);
+        if (! Approvals::needed($ent, 'PAYMENT', $base, 2000)) return ['status' => 'PAID', 'id' => self::pay($d)];
+        if ((float) $d['amount'] > $t->remaining_amount + 0.009) throw new \RuntimeException('This is more than the ' . number_format($t->remaining_amount, 2) . ' still open on this term.');
+        DB::table('fin_bank_accounts')->where('id', $d['bank'])->where('company_id', $ent)->where('is_active', 1)->first() ?? throw new \RuntimeException('Choose a bank account of this company.');
+        if (DB::table('sys_approvals')->where('fk_id_ent', $ent)->where('action_code', 'PAYMENT')->where('entity_id', $t->id)->where('status', 'PENDING')->exists()) throw new \RuntimeException('A payment for this term is already waiting for approval.');
+        $a = Approvals::request($ent, 'PAYMENT', 't_src_payment_terms', (int) $t->id, $base, ['category' => "Supplier payment {$po->po_number} · {$t->milestone}", 'amount' => (float) $d['amount'], 'currency' => $cur, 'pay' => $d], "Approve supplier payment {$po->po_number}: " . number_format((float) $d['amount'], 2) . " $cur");
+        return ['status' => 'WAITING', 'approval' => $a];
+    }
+
     public static function pay(array $d): int
     {
         return DB::transaction(function () use ($d) {

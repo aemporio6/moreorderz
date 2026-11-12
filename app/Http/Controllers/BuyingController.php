@@ -180,7 +180,7 @@ class BuyingController extends Controller
     {
         $this->can($r, self::PAY);
         $d = $r->validate(['term' => 'required|integer', 'amount' => 'required|numeric|gt:0', 'date' => 'required|date', 'bank' => 'required|integer', 'txn_ref' => 'nullable|string|max:255']);
-        return $this->run(fn () => ['id' => Buy::pay($d), 'message' => 'Payment posted to the ledger']);
+        return $this->run(function () use ($d) { $x = Buy::payOrAsk($d); return $x + ['message' => $x['status'] === 'WAITING' ? 'Over the limit – the payment waits for approval and is not booked yet' : 'Payment posted to the ledger']; });
     }
 
     public function shipment(Request $r)

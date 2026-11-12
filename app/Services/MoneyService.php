@@ -309,6 +309,21 @@ class MoneyService
             ?? DB::table('cat_currency')->insertGetId(['fk_id_ent' => $ent, 'currency_code' => $code, 'currency_name' => $code, 'f_active' => 1, 'created_at' => now()]));
     }
 
+    /** Nightly: a bank account with no new line, or a shop with no new money file, for longer than the settings allow. Only accounts / shops that were loaded at least once. */
+    public static function staleTasks(int $ent): array
+    {
+        $bd = (int) (Settings::get('bank_overdue_days', $ent, 8) ?: 8); $sd = (int) (Settings::get('settlement_overdue_days', $ent, 17) ?: 17); $n = ['bank' => 0, 'shop' => 0];
+        foreach (DB::table('fin_bank_accounts as b')->join('fin_bank_transactions as t', 't.bank_account_id', '=', 'b.id')->where('b.company_id', $ent)->where('b.is_active', 1)->groupBy('b.id', 'b.account_label')->selectRaw('b.id, b.account_label, MAX(t.txn_date) last')->get() as $b) {
+            if ($b->last < date('Y-m-d', strtotime("-$bd day"))) { TaskEngine::open('FIN_BANK_STALE', [$b->id], "No new bank lines for {$b->account_label} since {$b->last} – load the bank file", ['ent' => $ent, 'module' => 'fin_bank_accounts', 'record_id' => $b->id, 'fix_url' => '#/bank']); $n['bank']++; }
+            else TaskEngine::close('FIN_BANK_STALE', [$b->id], 'Bank lines are up to date');
+        }
+        foreach (DB::table('mo_settlements as m')->join('t_branches as s', 's.id', '=', 'm.fk_id_branch')->where('m.fk_id_ent', $ent)->where('s.f_active', 1)->groupBy('s.id', 's.shop_name')->selectRaw('s.id, s.shop_name, MAX(m.statement_date) last')->get() as $s) {
+            if ($s->last < date('Y-m-d', strtotime("-$sd day"))) { TaskEngine::open('FIN_SETTLEMENT_OVERDUE', [$s->id], "No money file for {$s->shop_name} since {$s->last} – load the marketplace's file", ['ent' => $ent, 'module' => 't_branches', 'record_id' => $s->id, 'fix_url' => '#/settlements']); $n['shop']++; }
+            else TaskEngine::close('FIN_SETTLEMENT_OVERDUE', [$s->id], 'Money file is up to date');
+        }
+        return $n;
+    }
+
     /** Nightly: one task per bank line that stays unmatched longer than BANK_UNMATCHED_DAYS. */
     public static function unmatchedTasks(int $ent): int
     {

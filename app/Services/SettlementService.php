@@ -273,6 +273,31 @@ class SettlementService
         DB::table('mo_settlements')->where('payout_journal_id', $s->payout_journal_id)->update(['status' => 'POSTED', 'payout_journal_id' => null, 'fk_id_bank_line' => null, 'updated_at' => now()]);
     }
 
+    /**
+     * A person decides a refund proposal. Accept (confirmed sale): the booked sale is taken out of what the shop owes us – Dr 5400 refunds / Cr 1100.
+     * The goods coming back are a separate step (Returns). Reject needs a reason.
+     */
+    public static function decideRefund(int $ent, int $proposalId, bool $accept, ?string $reason = null): void
+    {
+        DB::transaction(function () use ($ent, $proposalId, $accept, $reason) {
+            $p = DB::table('t_sale_refund_proposals')->where('id', $proposalId)->lockForUpdate()->first() ?? throw new \InvalidArgumentException('Refund proposal not found.');
+            $s = DB::table('t_sales')->where('id', $p->fk_id_sale)->where('fk_id_ent', $ent)->first() ?? throw new \InvalidArgumentException('Refund proposal not found.');
+            if ($p->status !== 'PROPOSED') throw new \InvalidArgumentException('This proposal was already decided.');
+            if (! $accept) {
+                if (! trim((string) $reason)) throw new \InvalidArgumentException('Give the reason for rejecting.');
+                DB::table('t_sale_refund_proposals')->where('id', $p->id)->update(['status' => 'REJECTED', 'reject_reason' => $reason, 'decided_by' => Context::userId(), 'decided_at' => now()]);
+                return;
+            }
+            if ($s->refunded_at) throw new \InvalidArgumentException('This order line is already refunded.');
+            if ($s->status !== 'Confirmed') throw new \InvalidArgumentException("Order {$s->order_no} is not confirmed yet. Confirm its month first (Selling › Month confirm), or cancel the line if it never shipped – then decide this refund.");
+            $amount = round((float) $s->total_amount_gbp, 2);
+            if ($amount > 0) Ledger::post($ent, date('Y-m-d'), 'REFUND', (int) $s->id, [['account' => '5400', 'debit' => $amount, 'ref_id' => (int) $s->fk_id_branch], ['account' => '1100', 'credit' => $amount, 'ref_id' => (int) $s->fk_id_branch]], ['memo' => "Full refund of order {$s->order_no}"]);
+            DB::table('t_sales')->where('id', $s->id)->update(['refunded_at' => now(), 'refunded_by' => Context::userId(), 'refund_loss_nature' => 'FULL', 'refund_loss_amount' => $amount, 'refund_reason' => 'Marketplace money file', 'fk_id_refund_proposal' => $p->id]);
+            DB::table('t_sale_refund_proposals')->where('id', $p->id)->update(['status' => 'ACCEPTED', 'decided_by' => Context::userId(), 'decided_at' => now()]);
+            Audit::log('t_sales', $s->id, 'UPDATE', ['refund' => 'FULL', 'amount' => $amount], 'Refund proposal accepted', $ent);
+        });
+    }
+
     /** Per shop: sales booked but not settled (1100), payouts on the way (1110), held back (1120). */
     public static function shopBalances(int $ent): array
     {
