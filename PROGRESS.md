@@ -10,7 +10,7 @@ public repo (code only, never data or secrets) · old data = export of 18 Sep 20
 | 3 | Buying (Research → PO → GRN) | DONE (12 Nov) |
 | 4 | Sales and Dispatch (orders, labels, printing) | DONE (12 Nov) – carrier label PDF import carried, see below |
 | 5 | Money (bank, settlements, TikTok, profit views) | DONE (12 Nov) – carried items listed below |
-| 6 | Month close, Partners, Reports | IN PROGRESS – month close done (12 Nov) |
+| 6 | Month close, Partners, Reports | IN PROGRESS – month close and partners done (12 Nov); reports next |
 | 7 | Import old data + reconciliation report + full test | – |
 
 ## Log
@@ -69,6 +69,16 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
   - Also fixed: API errors could show database text to the user – all controllers now answer with a plain sentence and write the detail to the log.
   - **108 tests pass (921 assertions).** Browser desktop + phone: overview, run checks, waive through the screen; 0 errors; 133 menu routes.
   - **Honest limits:** 5 of the 17 checks are N/A because their part is not built: PURCHASE_VS_SUPPLIER (dropship audit), EXPENSES (shared-expense rules), SHARES_LE_100 and SPLIT_RULES (partners – next chunk), OPENING_LOCKED (Step 7). Lock does not yet post PROFIT / MANAGEMENT_FEE partner rows (next chunk). Forward corrections exist for late sale lines only, not the general "adjustment to a locked month" form. A CHECKED month goes back to OPEN at the next run of the checks, not at the moment a record changes. FILES_PRESENT wants a money file that covers the whole month. The Lock button was not clicked in the browser (the demo months cannot pass their checks) – the lock is covered by the API tests.
+
+- 12 Nov – **Step 6, part 2: partners and investors (R-FIN-13, 41, 43, 46).**
+  - `PartnerService`: agreements (partner = a person in People & Accounts; scope Pool / one shop / the goods of one PO; share %, management fee % for a working partner only; from / until). Share totals per scope; over 100 % is saved with the spec's warning and turns the close check SHARES_LE_100 red. SPLIT_RULES is now live too (green with no agreements at all: "all profit stays with the company"; red when agreements exist but none covers the shop-month).
+  - Share of a shop × month: profit of the shop-month − tax reserve (max(0, net) × (VAT rate + corporation tax rate) from the company settings) = distributable; agreements active on the **first day of the month** (never today's %): Pool and shop agreements get distributable × %, a PO agreement gets the profit of the units that left that PO's lots; working partner + fee; a loss pays nothing. **The spec's example passes: net 2,600, CT 19 % → reserve 494.00, distributable 2,106.00; Pool 40 % → 842.40; working fee 5 % → 105.30.**
+  - At the month lock the PROFIT / MANAGEMENT_FEE rows are written once to the partner ledger and the books (Dr 7000 / Cr 2100 per partner), and frozen with the month. An agreement that already paid cannot be edited (end it, make a new one).
+  - Partner account: capital in (Dr bank / Cr 2150), profit to date, withdrawn, balance. Withdrawal: never more than the balance less what already waits; paid at once when the Owner enters it, otherwise after approval (Approvals action WITHDRAWAL; reject frees the amount); Dr 2100 / Cr bank. Statement per locked shop-month on screen (share lines, account at month end, owner's note).
+  - A PARTNER login (linked in `fin_partner_users`) sees only his own account and can only ask for his own withdrawal.
+  - Screens: Partners (#/partners: share totals today, list, new agreement) and the partner page (account, agreements, statements, account lines, withdrawals); partner shares card on the Month close page. Menu 11.1 / 11.2 / 11.4 / 11.5 / 11.6.
+  - **112 tests pass (965 assertions).** Browser desktop + phone: agreement, 110 % warning, end agreement, capital in, refused withdrawal through the screens; 0 errors; 129 menu routes, 17 placeholders.
+  - **Honest limits – parts of the spec's waterfall (PHASE_06 §6.3) that are NOT built:** VA share and salary, handler share, investors earning on their own lots (lot-owner split, "no stacking" – the spec itself marks this "owner to confirm"), owner modes, loss carried forward, the INVESTOR_INVOICING route, tax-reserve ledger. Not built either: statement as PDF with versions, accept / query by the partner, WhatsApp / e-mail, reinvest, the "adjustment to a locked month" form. The profit that is shared is the **shop's profit before overheads** (expenses without a shop are not deducted) – owner to confirm whether overheads should be shared out first. Pay-out to partners was tested with one shop per month; with a Pool agreement every shop-month pays on its own distributable.
 
 ## Step 5 – carried forward
 - Payables & cash forecast screen (the dashboard lists payments to make; no forecast yet) · loans, budgets, capital calls, withdrawals (lists and forms work; no engines) · bank line split · bank file in Excel format · FIN_PAYOUT_DIFF · VAT return logic · money files of other marketplaces (Import Center) · partial refunds.
