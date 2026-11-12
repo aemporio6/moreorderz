@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\DB;
 class StockService
 {
     /** Movement types that never change value in the ledger accounts (a move between places of the same owner). */
-    private const NOT_SELLABLE = ['DAMAGED', 'RETURNS', 'PRODUCTION', 'TRANSIT', 'WRITTEN_OFF', 'QUARANTINE', 'MISSING', 'SUPPLIER', 'CUSTOMER', 'SHIPPED'];
+    private const NOT_SELLABLE = ['DAMAGED', 'RETURNS', 'PRODUCTION', 'TRANSIT', 'WRITTEN_OFF', 'QUARANTINE', 'MISSING', 'SUPPLIER', 'CUSTOMER', 'SHIPPED', 'DISPATCH', 'RECEIVING'];
 
     /**
      * Receive units: one lot per line. Called by GRN post (step 3) and by the opening stock entry.
@@ -77,7 +77,7 @@ class StockService
         return DB::transaction(function () use ($ent, $productId, $qty, $fromLoc, $toLoc, $reason, $opt) {
             $p = self::product($productId, $ent);
             self::location($toLoc, $ent);
-            $picks = self::pick($productId, $fromLoc, $qty, $opt['owner'] ?? null, null);
+            $picks = self::pick($productId, $fromLoc, $qty, $opt['owner'] ?? null, $opt['rule'] ?? null);      // rule POOL / PRIVATE for units leaving the shelf for a sale
             $pair = null; $out = [];
             foreach ($picks as $pk) {
                 self::addBalance($pk['lot'], $fromLoc, -$pk['qty']);
@@ -251,7 +251,7 @@ class StockService
     {
         $sellable = (int) DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->join('cat_inventory_locations as c', 'c.id', '=', 'b.fk_id_location')
             ->where('l.fk_id_product', $productId)->where(fn ($w) => $w->whereNull('c.kind')->orWhereNotIn('c.kind', self::NOT_SELLABLE))->where(fn ($w) => $w->whereNull('c.f_sellable')->orWhere('c.f_sellable', 1))->sum('b.qty');
-        $reserved = (int) DB::table('wh_reservations')->where('fk_id_product', $productId)->whereIn('status', ['OPEN', 'ACTIVE', 'RESERVED', 'PICKING'])->sum(DB::raw('qty - COALESCE(qty_picked,0)'));
+        $reserved = (int) DB::table('wh_reservations')->where('fk_id_product', $productId)->whereIn('status', ['OPEN', 'ALLOCATED'])->sum(DB::raw('qty - COALESCE(qty_picked,0)'));       // picked units already left the sellable bins
         return max(0, $sellable - $reserved);
     }
 
@@ -385,7 +385,7 @@ class StockService
     {
         $id = DB::table('cat_inventory_locations')->where('fk_id_ent', $ent)->where('kind', $kind)->orderBy('id')->value('id');
         if ($id) return (int) $id;
-        $names = ['DAMAGED' => 'Damaged', 'RETURNS' => 'Returns', 'WRITTEN_OFF' => 'Written off', 'QUARANTINE' => 'Quarantine', 'TRANSIT' => 'In transit', 'MISSING' => 'Missing'];
+        $names = ['DISPATCH' => 'Dispatch area', 'SHIPPED' => 'Shipped (awaiting month confirm)', 'DAMAGED' => 'Damaged', 'RETURNS' => 'Returns', 'WRITTEN_OFF' => 'Written off', 'QUARANTINE' => 'Quarantine', 'TRANSIT' => 'In transit', 'MISSING' => 'Missing'];
         return (int) DB::table('cat_inventory_locations')->insertGetId(['location_name' => $names[$kind] ?? ucfirst(strtolower($kind)), 'fk_id_location_type' => 0, 'f_active' => 1, 'created_at' => now(),
             'fk_id_ent' => $ent, 'location_code' => substr($kind, 0, 30), 'kind' => $kind, 'f_sellable' => 0]);
     }
