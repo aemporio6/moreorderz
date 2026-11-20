@@ -20,10 +20,33 @@ class WorkController extends Controller
         return ['results' => SearchIndex::find((string) $r->query('q'), Context::ent())];
     }
 
-    public function page(string $key, int $id)
+    /** Search everything: screens, actions, create, reports, settings, fields, rights, records – only what this person may open. */
+    public function find(Request $r)
+    {
+        $q = (string) $r->query('q', '');
+        // a barcode scan (fast keys + Enter) asks for the one exact record
+        if ($r->boolean('scan')) return ['q' => $q, 'exact' => \App\Services\Finder::scan($q, $r->user())];
+        return \App\Services\Finder::find($q, $r->user(), 6, (string) $r->query('scope', 'all'));
+    }
+
+    public function findOpened(Request $r)
+    {
+        $d = $r->validate(['kind' => 'required|string|max:20', 'title' => 'required|string|max:255', 'sub' => 'nullable|string|max:255', 'url' => 'required|string|max:255', 'pin' => 'nullable|boolean', 'q' => 'nullable|string|max:200', 'count' => 'nullable|integer']);
+        if ($d['kind'] === 'search') { \App\Services\Finder::pinSearch($r->user(), $d['title'], (bool) ($d['pin'] ?? false)); return ['ok' => true]; }
+        if (! empty($d['q'])) { $m = []; preg_match('~^#/rec/([\w-]+)/(\d+)~', $d['url'], $m); \App\Services\Finder::remember($r->user(), $d['q'], max(1, (int) ($d['count'] ?? 1)), $m[1] ?? null, isset($m[2]) ? (int) $m[2] : null); }
+        if (array_key_exists('pin', $d) && $d['pin'] !== null) \App\Services\Finder::pin($r->user(), $d['url'], (bool) $d['pin'], $d['kind'], $d['title'], $d['sub'] ?? null);
+        else \App\Services\Finder::opened($r->user(), $d['kind'], $d['title'], $d['sub'] ?? null, $d['url']);
+        return ['ok' => true];
+    }
+
+    public function page(Request $r, string $key, int $id)
     {
         Rights::check('VIEW', $key);
-        return RecordService::page($key, $id);
+        $page = RecordService::page($key, $id);
+        // remembered for "Opened lately" in search
+        $ix = DB::table('sys_search_index')->where('url', "#/rec/$key/$id")->first(['title', 'subtitle']);
+        \App\Services\Finder::opened($r->user(), 'record', $ix->title ?? (\App\Services\Registry::fields($key)[0]['form_title'] . " #$id"), $ix->subtitle ?? null, "#/rec/$key/$id");
+        return $page;
     }
 
     public function export(Request $r, string $key)

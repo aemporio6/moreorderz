@@ -42,6 +42,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('reveal/{key}/{id}', [AppController::class, 'reveal'])->whereNumber('id');
         Route::get('page/{key}/{id}', [WorkController::class, 'page'])->whereNumber('id');
         Route::get('search', [WorkController::class, 'search']);
+        Route::get('find', [WorkController::class, 'find']);
+        Route::post('find/opened', [WorkController::class, 'findOpened']);
         Route::get('export/{key}', [WorkController::class, 'export']);
         Route::get('home', [AdminController::class, 'home']);
         Route::get('users', [AdminController::class, 'users']);

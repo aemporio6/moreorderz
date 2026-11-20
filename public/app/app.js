@@ -269,19 +269,65 @@
     $$('#main [data-ts]').forEach(b => b.onclick = async () => { try { await api(`tasks/${b.dataset.id}/status`, { method: 'POST', body: { status: b.dataset.ts } }); toast(b.dataset.ts === 'DONE' ? 'Task done' : 'Task started'); S.boot = await api('boot'); drawTop(); pageTasks(scope); } catch (e) { toast(e.message, 'err'); } });
   }
 
-  // ---------- search everything ----------
-  function wireSearch() {
-    const inp = $('#q'); let box = null, timer;
-    const hide = () => { box && box.remove(); box = null; };
-    inp.oninput = () => { clearTimeout(timer); timer = setTimeout(async () => { const q = inp.value.trim(); if (q.length < 2) return hide();
-      let r = []; try { r = (await api('search?q=' + encodeURIComponent(q))).results; } catch (e) {}
-      hide(); box = document.createElement('div'); box.className = 'card'; box.id = 'sres';
-      box.style.cssText = 'position:fixed;z-index:60;max-height:60vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.18)'; const rc = $('#sbox').getBoundingClientRect(); box.style.left = rc.left + 'px'; box.style.top = (rc.bottom + 4) + 'px'; box.style.width = Math.max(rc.width, 300) + 'px';
-      box.innerHTML = r.length ? r.map(x => `<a href="${esc(x.url)}" style="display:block;padding:9px 12px;border-bottom:1px solid var(--line);text-decoration:none;color:inherit"><div style="font-weight:600">${esc(x.title)}</div><div class="small muted">${esc(x.subtitle)}</div></a>`).join('') : `<div class="empty">Nothing found for “${esc(q)}”.</div>`;
-      document.body.appendChild(box); box.onclick = () => { hide(); inp.value = ''; }; }, 220); };
-    inp.onkeydown = e => { if (e.key === 'Escape') { hide(); inp.blur(); } if (e.key === 'Enter' && box) { const a = box.querySelector('a'); a && a.click(); } };
-    document.addEventListener('click', e => { if (box && !e.target.closest('#sres') && e.target !== inp) hide(); });
+  // ---------- search everything (Ctrl+K or /): screens, actions, create, reports, settings, fields, rights, records ----------
+  const DO = { 'orders:new': '#oNew', 'orders:file': '#oFile', 'orders:pick': '#oPick', 'settlements:file': '#stLoad', 'expenses:new': '#exAdd', 'refunds:new': '#rfNew' };
+  const KIND_IC = { screen: 'panel', action: 'bolt', create: 'plus', report: 'reports', setting: 'setup', right: 'lock', field: 'wand', record: 'file', search: 'search' };
+  function openFound(x, q, count) {
+    if (x.url.startsWith('q:')) return openPalette(x.url.slice(2));
+    api('find/opened', { method: 'POST', body: { kind: x.kind, title: x.title, sub: x.sub || null, url: x.url, q: q || null, count: count || null } }).catch(() => {});
+    if (x.url.startsWith('new:')) return openForm(x.url.slice(4), null, { fromCreate: true });
+    if (x.url.startsWith('field:')) { const [, form, field] = x.url.split(':');          // the form opens with that field focused
+      return openForm(form, null, { fromCreate: true, focus: field }); }
+    const [base, doWhat] = x.url.split('?do=');
+    go(base);
+    if (doWhat) { const sel = DO[base.replace('#/', '') + ':' + doWhat]; let n = 0; const t = setInterval(() => { const b = sel && $(sel); if (b && !b.disabled) { clearInterval(t); b.click(); } else if (++n > 40) clearInterval(t); }, 100); }
   }
+  const SCOPE_NAMES = { all: 'All', pages: 'Pages', products: 'Products', orders: 'Orders', people: 'People', money: 'Money', tasks: 'Tasks' };
+  function openPalette(first = '') {
+    if ($('#pal')) { $('#palQ').value = first || $('#palQ').value; $('#palQ').focus(); return $('#palQ').dispatchEvent(new Event('input')); }
+    const ov = document.createElement('div'); ov.className = 'overlay'; ov.id = 'pal'; ov.style.alignItems = 'flex-start';
+    ov.innerHTML = `<div class="modal" style="margin-top:8vh;max-width:700px;width:calc(100% - 24px)"><div style="padding:12px 14px;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center">${ic('search')}
+      <input id="palQ" placeholder="Search everything – a screen, an action, a report, a field, an order, SKU, PO, person, amount…" autocomplete="off" style="flex:1;border:0;outline:0;background:transparent;font-size:16px;color:inherit"><span class="kbd">Esc</span></div>
+      <div id="palS" style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--line)"></div>
+      <div id="palR" style="max-height:58vh;overflow:auto"></div>
+      <div class="small muted" style="padding:8px 14px;border-top:1px solid var(--line);display:flex;gap:14px;flex-wrap:wrap"><span><span class="kbd">↑</span> <span class="kbd">↓</span> move</span><span><span class="kbd">Enter</span> open</span><span><span class="kbd">Ctrl</span>+<span class="kbd">P</span> pin / unpin</span><span>Typing mistakes are forgiven · scan a barcode to jump</span></div></div>`;
+    document.body.appendChild(ov);
+    const inp = $('#palQ'), box = $('#palR'); let flat = [], cur = 0, timer, seq = 0, scope = 'all', total = 0, keys = [];
+    const close = () => ov.remove();
+    const hl = (t, q) => { let h = esc(t); for (const w of q.split(/\s+/).filter(x => x.length > 1).slice(0, 6)) h = h.replace(new RegExp('(' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')(?![^<]*>)', 'ig'), '<mark style="background:rgba(245,158,11,.35);color:inherit;border-radius:2px">$1</mark>'); return h; };
+    const mark = () => { $$('[data-pi]', box).forEach((e, i) => { e.style.background = i === cur ? 'rgba(15,118,110,.10)' : ''; if (i === cur) e.scrollIntoView({ block: 'nearest' }); }); };
+    const chips = () => { $('#palS').innerHTML = Object.entries(SCOPE_NAMES).map(([k, l]) => `<button class="btn sm ${scope === k ? 'primary' : ''}" data-sc="${k}">${l}</button>`).join('');
+      $$('[data-sc]', ov).forEach(b => b.onclick = () => { scope = b.dataset.sc; chips(); run(); inp.focus(); }); };
+    const draw = d => { flat = []; cur = 0; total = d.count || 0; const q = inp.value.trim();
+      const row = x => { flat.push(x); return `<div data-pi="${flat.length - 1}" style="display:flex;gap:10px;align-items:center;padding:8px 14px;cursor:pointer"><span class="muted">${ic(KIND_IC[x.kind] || 'search')}</span><div style="flex:1;min-width:0"><div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${hl(x.title, q)}</div><div class="small muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(x.sub || '')}</div></div>${(x.actions || []).map(a => `<a class="btn sm" data-act="${esc(a.url)}">${esc(a.label)}</a>`).join('')}${x.pinned ? '<span class="chip accent plain">pinned</span>' : ''}</div>`; };
+      box.innerHTML = (d.groups || []).map(g => `<div class="small muted" style="padding:10px 14px 4px;font-weight:650;text-transform:uppercase;letter-spacing:.04em">${esc(g.name)}</div>` + g.items.map(row).join('')).join('')
+        || `<div class="empty" style="padding:22px 16px"><div>${esc(d.hint || 'Nothing found.')}</div>${(d.did_you_mean || []).length ? `<div style="margin-top:10px">Did you mean</div>` : ''}</div>` + (d.did_you_mean || []).map(row).join('');
+      mark(); $$('[data-pi]', box).forEach(e => { e.onclick = ev => { const act = ev.target.closest('[data-act]'); close(); if (act) return go(act.dataset.act); openFound(flat[+e.dataset.pi], q, total); }; e.onmousemove = () => { if (cur !== +e.dataset.pi) { cur = +e.dataset.pi; mark(); } }; }); };
+    const run = async () => { const my = ++seq; try { const d = await api('find?q=' + encodeURIComponent(inp.value.trim()) + '&scope=' + scope); if (my === seq && $('#pal')) draw(d); } catch (e) {} };
+    inp.oninput = () => { clearTimeout(timer); timer = setTimeout(run, 80); };
+    inp.onkeydown = async e => {
+      if (e.key.length === 1) { keys.push(Date.now()); if (keys.length > 40) keys.shift(); }
+      if (e.key === 'Escape') { e.stopPropagation(); return close(); }
+      if (e.key === 'ArrowDown') { e.preventDefault(); cur = Math.min(flat.length - 1, cur + 1); mark(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); cur = Math.max(0, cur - 1); mark(); }
+      else if (e.key === 'Enter') { e.preventDefault(); const q = inp.value.trim();
+        // a scanner types the whole code in a burst and presses Enter: jump to the one exact record
+        const burst = q.length >= 6 && keys.length >= q.length && (keys[keys.length - 1] - keys[keys.length - q.length]) < q.length * 35;
+        if (burst) { try { const r = await api('find?scan=1&q=' + encodeURIComponent(q)); if (r.exact) { close(); return openFound(r.exact, q, 1); } } catch (er) {} clearTimeout(timer); await run(); }
+        if (flat[cur]) { const x = flat[cur]; close(); openFound(x, q, total); } }
+      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p' && flat[cur]) { e.preventDefault(); const x = flat[cur];
+        try { await api('find/opened', { method: 'POST', body: { kind: x.kind, title: x.title, sub: x.sub || null, url: x.url, pin: !x.pinned } }); toast(x.pinned ? 'Unpinned' : 'Pinned – it shows first when you open search'); if (!inp.value.trim()) run(); else x.pinned = !x.pinned; } catch (er) { toast(er.message, 'err'); } }
+    };
+    ov.addEventListener('mousedown', e => { if (e.target === ov) close(); });
+    chips(); inp.value = first; inp.focus(); run();
+  }
+  MO.openPalette = openPalette;
+  function wireSearch() {
+    const inp = $('#q'); if (!inp) return;
+    inp.readOnly = true; inp.style.cursor = 'pointer'; inp.placeholder = 'Search everything – screen, action, report, order, SKU, person…  (Ctrl+K)';
+    inp.onfocus = () => { inp.blur(); openPalette(); }; inp.onclick = () => openPalette();
+  }
+  document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); if (S.boot) openPalette(); } });
 
   // ---------- small form in a modal (users, password, settings) ----------
   function miniForm(title, sub, fields, onSave, saveLabel = 'Save') {
@@ -1623,7 +1669,7 @@
   document.addEventListener('keydown', e => { const typing = /INPUT|TEXTAREA|SELECT/.test((e.target.tagName || ''));
     if (e.key === 'Escape') { const o = $$('.overlay').pop(); if (o) o.remove(); }
     else if (!typing && (e.key === 'n' || e.key === 'N') && !$('.overlay')) openCreate();
-    else if (!typing && e.key === '/') { e.preventDefault(); $('#q') && $('#q').focus(); } });
+    else if (!typing && e.key === '/') { e.preventDefault(); if (S.boot) openPalette(); } });
 
   // ---------- + Create: everything that can be created, grouped by department; new modules appear by themselves ----------
   let lastCreateQ = '';
@@ -1647,7 +1693,8 @@
     try { def = await api('form/' + key); if (id) { vinfo = await api(`record/${key}/${id}`); rec = vinfo.values; } else rec = def.blank; } catch (e) { busy(false); return toast(e.message, 'err'); }
     busy(false);
     const flds = def.sections.flatMap(s => s.fields), hasQuick = flds.some(f => f.quick) && !id;
-    let mode = hasQuick ? 'quick' : 'full';
+    let mode = hasQuick && !opt.focus ? 'quick' : 'full';
+    if (opt.focus) { let n = 0; const t = setInterval(() => { const f = document.querySelector(`.overlay [data-w="${opt.focus}"] input, .overlay [data-w="${opt.focus}"] select, .overlay [data-w="${opt.focus}"] textarea`); if (f) { clearInterval(t); f.scrollIntoView({ block: 'center' }); f.focus(); } else if (++n > 40) clearInterval(t); }, 100); }
     const uid = 'f' + Math.random().toString(36).slice(2, 8), val = {}, undo = [], redo = [];
     flds.forEach(f => { val[f.name] = (opt.preset || {})[f.col] ?? (opt.preset || {})[f.name] ?? rec[f.name] ?? rec[f.col] ?? ''; });
     const { ov, close } = modal((id ? 'Edit · ' : 'New · ') + def.title, id ? 'Changes are kept in the history of this record.' : 'Saved in its own module; the list opens where it went.',

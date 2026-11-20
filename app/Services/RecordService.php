@@ -27,8 +27,10 @@ class RecordService
         self::scope($q, $table);
         if (! empty($p['q'])) {
             $text = array_filter($fields, fn ($f) => in_array($f['type'], ['text', 'textarea', 'email', 'phone', 'link'], true));
-            $q->where(function ($w) use ($text, $p) {
-                foreach ($text as $f) $w->orWhere($f['column_name'], 'like', '%' . $p['q'] . '%');
+            // the same search as the top box: every typed word must be somewhere in the row, in any order; synonyms count
+            $ws = array_slice(preg_split('/\s+/u', trim((string) $p['q']), -1, PREG_SPLIT_NO_EMPTY), 0, 8); [$alts] = Finder::synonyms((string) $p['q'], array_map('mb_strtolower', $ws));
+            foreach ($ws as $word) $q->where(function ($w) use ($text, $word, $alts) {
+                foreach ($text as $f) { $w->orWhere($f['column_name'], 'like', '%' . $word . '%'); foreach ($alts[mb_strtolower($word)] ?? [] as $alt) $w->orWhere($f['column_name'], 'like', '%' . $alt . '%'); }
             });
         }
         foreach (($p['filter'] ?? []) as $col => $val) {

@@ -34,7 +34,7 @@ class SearchIndex
             'title' => mb_substr(trim(($code && $code !== $title ? $code . ' · ' : '') . ($title ?? "#$id")), 0, 255),
             'subtitle' => mb_substr(Registry::fields($formKey)[0]['form_title'], 0, 255),
             'search_text' => mb_substr(implode(' ', array_unique(array_merge([$code], $parts))), 0, 4000),
-            'url' => "#/rec/$formKey/$id", 'updated_at' => now(), 'amount_value' => $amount, 'phone_norm' => $phone ? mb_substr($phone, 0, 30) : null, 'email_norm' => $email ? mb_substr($email, 0, 150) : null,
+            'url' => "#/rec/$formKey/$id", 'updated_at' => now(), 'fk_id_branch' => (int) ($row['fk_id_branch'] ?? $row['fk_id_shop'] ?? ($table === 't_branches' ? $id : 0)) ?: null, 'sound_key' => Finder::sound((string) ($title ?? '')), 'amount_value' => $amount, 'phone_norm' => $phone ? mb_substr($phone, 0, 30) : null, 'email_norm' => $email ? mb_substr($email, 0, 150) : null,
         ]);
     }
 

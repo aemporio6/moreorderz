@@ -204,3 +204,14 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - Register audit after this step: BUILT 210 of 1,433 (15 %) – one line moved to BUILT (MR-1247); MR-0036, MR-1286, R-G_CORE-61, R-FIN-1, R-A_SALES-47/82 stay PARTIAL with a shorter open list (see audit/verdicts).
 
 - 21 Nov – **Shop scope finished (step 1b).** `Perm::mine($query, $shopColumn)` narrows a screen query to the signed-in person's shops (no effect for a person with all shops, for the Owner, or in night jobs). Applied to: order board, tracking upload, returns, carrier label pages, profit views, sales reports, settlements, refund proposals, marketplace hubs, month close overview and every shop picker. A shop named in the request or in the route path that is not his → 403. Test: a Manager limited to Shop A sees Shop B nowhere. 196 tests pass. Register: BUILT 212 (MR-0036, MR-1286, R-A_SALES-47).
+
+## 21 Nov 2026 – Search everything (own-version plan, pillar 2)
+- New service `App\Services\Finder`, endpoints `GET /api/find?q=&scope=` (and `&scan=1`), `POST /api/find/opened`; table `mo_recent` (opened lately / pinned items, migration 000020); uses the spec's `sys_search_synonyms` and `sys_search_recent`.
+- One box (Ctrl+K, "/", or click the top search): Screens ("Section › Screen"), Actions (27 named actions, each with its right), Create, Reports, Settings (Choices), Rights (Owner), Fields ("Form › Field" – opens the form in full mode with that field focused), Records. A person only finds what he may open; record results respect his shops.
+- Matching: every typed word must be found; stems ("invoice" finds "Invoicing"); synonyms (alias / abbreviation / Roman Urdu, and a term that opens a page directly); sound key (metaphone) and one-or-two-letter typing mistakes; amount within 0.5 % or a range "1200-1300"; phone digits; e-mail.
+- Scope chips (All, Pages, Products, Orders, People, Money, Tasks); barcode scan (fast keys + Enter) jumps to the exact product / order / bin; record buttons by right (Stock, PO page, Cycle, Workspace).
+- Before typing: Pinned, Opened lately, Recent searches (kept per SEARCH_RECENT_KEEP, pinned stay), Try. Nothing found → guidance + "Did you mean"; the miss is kept for the synonym list.
+- The list search of every module now uses the same words-in-any-order + synonyms rule.
+- `SearchIndex::put` now fills the shop and the sound key; run `php artisan mo:reindex` once after deploy.
+- Tests: 202 pass (3,365 checks), new `tests/Feature/FinderTest.php` (6). Browser checked on desktop and phone width.
+- Honest open points: help topics do not exist; "Create PO for <product>" / "Print label for <order>" buttons; the spec's 200-real-queries acceptance test was not run (needs real data).

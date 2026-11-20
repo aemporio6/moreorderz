@@ -1,7 +1,7 @@
 MR-1257|P|function cycle|step bar on buying cycles + first-time setup steps; not a step guide in every module
 MR-1258|P|class OrderFiles|formats found from the file itself; one importer with a breakdown per folder / module not built
 MR-1259|P|function boot|universal + Create everywhere; cascades partly, multi-select not built
-MR-1260|P|function find|search of records; spelling tolerance, categories, suggestions, module functions not built
+MR-1260|B|class Finder|one search for every module: no exact spelling (stems, sound, typing mistakes, synonyms), results in categories with scope chips, suggestions from the first letter, records of every form (indexed on save), the same word search inside every list; FinderTest
 MR-1261|P|function list|filter on every column of every list
 MR-1262|M||importer that recommends "goes to X, could go to Y" not built
 MR-1263|P|function decideRefund|full / part refunds as proposals shown on the order; half-refund kind not built
@@ -93,7 +93,7 @@ MR-0016|P|function boot|clean pages with status colours
 MR-0018|P|MENU_NAMES|English, simple names
 MR-0019|B|class Numbering|numbering per type and company, never a row count
 MR-0020|B|class Audit|history on every save, events, History tab
-MR-0021|P|function find|universal search; no spelling tolerance
+MR-0021|B|function sound|universal search without exact spelling: codes, names, numbers, amounts, phone digits; FinderTest
 MR-0029|P|class HomeCards|Home per role with cards; "Needs action first" ranking partly
 MR-0030|M||sourcing dashboard with the cards of all modules not built
 MR-0031|M||ICC not built

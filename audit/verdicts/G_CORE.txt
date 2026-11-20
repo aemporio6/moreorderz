@@ -53,7 +53,7 @@
 53|P|class WhatsAppCloud|templates list + Meta provider; log provider, 360dialog not built
 54|P|messages|Messages screen (sent, e-mails, replies, retry); Messages tab per record, masking not built
 55|P|menu:|menu from the menu table, every item its own right that can be switched per role / person; open: "Soon" items and current-item rules not checked line by line
-56|P|function find|search everything (records); menu / page search with ranking not built
+56|B|function stem|Ctrl+K and "/": every menu leaf the person may see, stems, every word must match, rank start / contains / path, shorter first, max 30, "Section › Screen", highlight, 80 ms, keys, pages before records, lately opened pages higher; FinderTest
 57|F|form:menu_builder|form only
 58|B|sidebar_modules|146 menu screens seeded from the v1.7 menu tree, all open
 59|P|function reveal|secret reveal by right with audit; secure pages with 2FA re-ask not built
@@ -96,8 +96,8 @@
 96|P|label_print_log|printers, templates, one log row per copy, reprint needs a reason, carrier label import; inbound cartons not built
 97|M||rule-task snooze not built
 98|M||2FA re-ask after 60 min not built
-99|M||search of field names / screens / synonyms not built
-100|P|function find|search by code, phone digits, e-mail, amount; recent / pinned searches, actions, scan not built
+99|P|function synonyms|built: every registry field as "Form › Field" (help text, opens the form with the field focused), screens, reports, settings, synonyms from sys_search_synonyms (alias, abbreviation, Roman Urdu, direct page), sound + typing-mistake layer, by rights, secrets never; open: help topics do not exist yet, and "sku" lists screens before the field
+100|P|function amountRange|built: amount within 0.5 % and ranges, phone digits, e-mail, Enter / arrows / Esc, recent searches (SEARCH_RECENT_KEEP) and pinned, no-result guidance with "Did you mean", misses logged, scope chips, scan-to-search (SKU / EAN / UPC / tracking / order / bin), record buttons by right; open: the buttons "Create PO for <product>" and "Print label for <order>", and the 200-real-queries acceptance test
 101|P|function boot|top bar; Back / Forward / Recent pages, shortcut help, brand seal not built
 102|M||"All companies (added up)" view not built
 103|M||charts not built
