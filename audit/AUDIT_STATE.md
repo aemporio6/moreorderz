@@ -22,10 +22,18 @@ The register CSV itself is not in the repo (it is the project doc); to run the s
 | F_SETUP | 52 | F_SETUP.txt | yes |
 | G_CORE | 121 | G_CORE.txt | yes |
 | H_WAREHOUSE | 60 | H_WAREHOUSE.txt | yes |
-| Lines without a rule | 453 | NO_RULE.txt | no |
-| verify.py + build_result.py + result doc | – | – | no |
+| Lines without a rule | 453 | NO_RULE.txt | yes |
+| verify.py + build_result.py + result doc | – | docs/AUDIT_RESULT.md, audit/REGISTER_AUDIT.csv | yes |
+| Sample re-check of BUILT lines (so the audit does not grade itself) | – | – | no |
 
 ## Rule for whoever continues (any chat, any container)
 - `git clone https://github.com/aemporio6/moreorderz` → read `docs/START_HERE_MOREORDERZ.md`, then this file, then `docs/OWN_VERSION_PLAN.md` and `docs/MYTOOL_GAP.md`.
 - Continue with the first "no" row above. After every area: update this table, commit, push, and write this file to project doc `claude/AUDIT_STATE.md`.
 - Never mark BUILT without evidence that verify.py accepts.
+
+## Result (21 Nov 2026)
+1,434 lines that count: BUILT 209 (15 %) · PARTIAL 612 · FORM ONLY 261 · MISSING 352 · not applicable 113. Per area: docs/AUDIT_RESULT.md.
+Rules level: 631 rules – BUILT 78, PARTIAL 235, FORM ONLY 112, MISSING 206.
+
+## Next (build phase) – order agreed with the owner in docs/OWN_VERSION_PLAN.md
+Parity gate -> Permission engine -> Search -> Filters -> Smart fields -> Guidance -> Foundations -> then area by area, weakest first (Sales, Tasks, Accounts, Reports), each MISSING / PARTIAL / FORM ONLY line turned BUILT with a test; the verdict line is changed in the same commit.
