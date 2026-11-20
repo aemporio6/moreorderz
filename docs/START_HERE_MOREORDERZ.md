@@ -1,6 +1,6 @@
 # MoreOrderz – START HERE (for any new chat or session)
 
-Last updated: 21 Nov 2026, 01:50 PKT. If a chat is lost, the owner says "my MoreOrderz project" – read this file first, then the files it names. Nothing else is needed to continue.
+Last updated: 21 Nov 2026, 02:10 PKT. If a chat is lost, the owner says "my MoreOrderz project" – read this file first, then the files it names. Nothing else is needed to continue.
 
 ## 1. What it is
 Muhammad Aashiq's business tool "V-Commerce / MoreOrderz", rebuilt from scratch. The old tool was PHP CodeIgniter 3 + MariaDB (database towards3_store); it is no longer used as code – only its data is imported.
@@ -10,7 +10,7 @@ It covers the whole chain: research → buying (PO, payments, shipments, customs
 ## 2. Where everything is
 | What | Where |
 |---|---|
-| Code (whole tool, old + new together) | GitHub **https://github.com/aemporio6/moreorderz** (public, branch `main`), last commit **b02efeb**, 45 commits |
+| Code (whole tool, old + new together) | GitHub **https://github.com/aemporio6/moreorderz** (public, branch `main`), last commit **dbfa423** (see `git log`) |
 | Final hand-over ZIP | `moreorderz_FINAL.zip` (273 files, sha256 3bb0322e…68da4) – sent in the chat, and in Google Drive folder "MoreOrderz – project backup" |
 | Dated log of everything built + honest limits | `PROGRESS.md` in the repo = project doc `claude/CODE_PROGRESS.md` |
 | Install, .env, cron, commands, go-live checklist, choices | `docs/HANDOVER.md` = project doc `claude/CODE_HANDOVER.md` |
