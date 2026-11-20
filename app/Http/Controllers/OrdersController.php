@@ -26,6 +26,7 @@ class OrdersController extends Controller
     private function run(callable $fn)
     {
         try { return $fn(); }
+        catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface|\Illuminate\Http\Exceptions\HttpResponseException $e) { throw $e; }   // "not found" / "not allowed" keep their own status
         catch (\Illuminate\Database\QueryException $e) { report($e); return response()->json(['message' => 'Something went wrong on our side. Nothing was saved. The details are in the system log.'], 500); }   // never show database text to a user
         catch (\InvalidArgumentException|\RuntimeException $e) { return response()->json(['message' => $e->getMessage(), 'errors' => ['_form' => [$e->getMessage()]]], 422); }
     }
@@ -273,4 +274,26 @@ class OrdersController extends Controller
         $d = $r->validate(['code' => 'required|string|max:100', 'qty' => 'nullable|integer|min:1', 'condition' => 'nullable|in:SELLABLE,DAMAGED,QUARANTINE,MISSING', 'note' => 'nullable|string|max:500', 'op_id' => 'nullable|string|max:36']);
         return $this->run(function () use ($d) { $x = Dispatch::receiveReturn(array_filter($d, fn ($v) => $v !== null)); return $x + ['message' => $x['matched'] ? 'Return booked' . ($x['before_confirm'] ? '' : ' – the cost of the sale is reversed') : 'No order matches this code – saved for review']; });
     }
+
+    // ───────────── sales list and the actions on a line (RULES_A_SALES §5, §6) ─────────────
+    public function saleLines(Request $r)
+    {
+        $this->can($r, 'orders.SEE');
+        $f = $r->only(['marketplace', 'shop', 'batch', 'status', 'type', 'show', 'visibility', 'company', 'vendor', 'carrier', 'from', 'to', 'q', 'page', 'per_page']);
+        foreach (['from', 'to'] as $k) if (! empty($f[$k]) && ! preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $f[$k])) unset($f[$k]);
+        // the last marketplace, shop and dates are remembered for the person on the server (every device); the one-batch view never overwrites them
+        if (empty($f['batch']) && ! empty($f['marketplace']) && $r->boolean('remember', true)) \App\Services\ListExports::savePrefs($r->user(), 'sales_listing', ['scope' => array_intersect_key($f, array_flip(['marketplace', 'shop', 'from', 'to']))]);
+        return \App\Services\SaleLines::list($f, $r->user()) + ['scope' => \App\Services\ListExports::prefs($r->user(), 'sales_listing')['list']['scope'] ?? null];
+    }
+
+    public function saleEdit(Request $r, int $id) { return $this->run(fn () => \App\Services\SaleLines::edit($id, $r->only(['order_no', 'cust_name', 'cust_contacts', 'qty', 'sale_rate', 'total_amount']), ! $r->boolean('preview'))); }
+    public function saleCarrierOptions(Request $r, int $id) { $this->can($r, 'orders.SEE'); $s = DB::table('t_sales')->where('id', $id)->where('fk_id_ent', Context::ent())->first() ?? abort(404); return \App\Services\SaleLines::carrierOptions($s) + ['current' => ['fk_id_car_pkg_svc' => (int) $s->fk_id_car_pkg_svc, 'fk_id_packing' => (int) $s->fk_id_packing]]; }
+    public function saleCarrier(Request $r, int $id) { return $this->run(fn () => \App\Services\SaleLines::carrierPacking($id, $r->only(['fk_id_car_pkg_svc', 'fk_id_packing']), ! $r->boolean('preview'))); }
+    public function saleRefundInfo(Request $r, int $id) { $this->can($r, 'orders.SEE'); return \App\Services\SaleLines::refundInfo($id); }
+    public function saleRefund(Request $r, int $id) { return $this->run(fn () => \App\Services\SaleLines::refund($id, $r->only(['sale_rate', 'total_amount', 'nature', 'loss_amount', 'reason']))); }
+    public function saleDelete(Request $r, int $id) { return $this->run(fn () => \App\Services\SaleLines::deleteLine($id)); }
+    public function saleLog(Request $r, int $id) { $this->can($r, 'orders.SEE'); return ['rows' => \App\Services\SaleLines::history($id)]; }
+    public function saleMonthInfo(Request $r) { $this->can($r, 'orders.saleDeleteMonth'); $i = \App\Services\SaleLines::monthInfo((int) $r->query('shop'), (string) $r->query('month')); return ['lines' => $i['lines'], 'confirmed' => $i['confirmed'], 'text' => $i['text'], 'month_name' => $i['month_name']]; }
+    public function saleDeleteMonth(Request $r) { return $this->run(fn () => \App\Services\SaleLines::deleteMonth((int) $r->input('shop'), (string) $r->input('month'))); }
+    public function saleRestore(Request $r) { return $this->run(fn () => \App\Services\SaleLines::restore((string) $r->input('undo'))); }
 }

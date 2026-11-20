@@ -32,6 +32,7 @@ class MoNightly extends Command
         $loans = \App\Services\FinanceExtras::loanTasks(); if ($loans) $this->line("Loan payments due: $loans new task(s)");
         $dig = \App\Services\Connect\Messenger::digests();
         $this->line("Subscriptions overdue: $subs new task(s) · task digests queued: $dig");
+        \App\Services\SaleLines::purgeBin();   // the recycle bin keeps deleted sale lines for 30 days
         $exp = \App\Services\ListExports::runScheduled(); if ($exp) $this->line("Scheduled exports queued: $exp");
         Context::set(null, null);
         $this->line(EventBus::runQueue() . ' waiting events processed');

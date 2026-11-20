@@ -41,10 +41,13 @@ class SalesService
                     'fk_id_batch' => $batch, 'line_status' => 'OPEN', 'fulfilment_channel' => $l['fulfilment_channel'] ?? ($shop->fulfilment_channel ?: 'SELF'), 'fk_id_sell_location' => $shop->fk_id_main_location,
                     'tracking_no' => $l['tracking_no'] ?? null, 'ship_to_name' => $l['ship_to_name'] ?? ($l['cust_name'] ?? null), 'ship_to_phone' => $l['ship_to_phone'] ?? null, 'ship_to_address' => $l['ship_to_address'] ?? null,
                     'ship_to_city' => $l['ship_to_city'] ?? null, 'ship_to_postcode' => $l['ship_to_postcode'] ?? null, 'ship_to_country_code' => isset($l['ship_to_country_code']) ? strtoupper(substr($l['ship_to_country_code'], 0, 2)) : null, 'dispatch_by' => $l['dispatch_by'] ?? null];
+                // expected cost of an own-stock line on its order date: raw, carrier, packing, where it came from; one formula for buy amount and profit (R-A_SALES-27 / 28)
+                if ($product) $row = array_merge($row, SaleLines::intakeCost($product, $shop, (string) $l['d_order'], $row['qty'], (float) $row['sale_rate'], $total, $ent));
                 $old = DB::table('t_sales')->where('fk_id_ent', $ent)->where('fk_id_branch', $shop->id)->where('order_no', $row['order_no'])->where('sku', $sku)->lockForUpdate()->first();
                 if ($old) {
                     if ($old->status !== 'Pending' || $old->f_locked) return ['id' => (int) $old->id, 'kind' => 'locked'];
                     DB::table('t_sales')->where('id', $old->id)->update(array_intersect_key($row, array_flip(['qty', 'sale_rate', 'total_amount', 'total_amount_gbp', 'tracking_no', 'ship_to_name', 'ship_to_phone', 'ship_to_address', 'ship_to_city', 'ship_to_postcode', 'dispatch_by', 'fk_product_id', 'sale_source', 'fk_id_listing', 'fk_id_price_period', 'raw_price'])) + ['updated_at' => now(), 'f_edited' => 1]);
+                    if ($product) DB::table('t_sales')->where('id', $old->id)->update(array_intersect_key($row, array_flip(['raw_price', 'fk_id_car_pkg_svc', 'carrier_rate', 'fk_id_packing', 'packing_rate', 'cost_source', 'fk_id_price_period', 'buy_rate', 'buy_amount', 'profit'])));
                     $id = (int) $old->id; $kind = 'updated';
                 } else {
                     $id = (int) DB::table('t_sales')->insertGetId(RecordService::fillNotNull('t_sales', $row + ['created_by' => Context::userId(), 'created_at' => now()]));
@@ -157,6 +160,20 @@ class SalesService
                     } else {
                         $upd += ['f_stock_deducted' => 0, 'profit' => $s->sale_source === 'active' ? (float) $s->total_amount_gbp : 0];
                     }
+                }
+                elseif ($s->status === 'Refunded') {
+                    // a refunded line keeps its status; what is left of its total is revenue; its units leave stock unless the item came back (full refund, loss without the product)
+                    $revenue += (float) $s->total_amount_gbp;
+                    if (SaleLines::takesStock($s) && ($s->fulfilment_channel ?: 'SELF') === 'SELF') {
+                        $r = DB::table('wh_reservations')->where('fk_id_sale', $s->id)->orderByDesc('id')->first();
+                        $rule = ['rule' => ($r->owner_rule ?? 'POOL') === 'PRIVATE' ? 'PRIVATE' : 'POOL', 'owner' => ($r->fk_id_owner_seg ?? 0) ?: null];
+                        $miss = (int) $s->qty - max(0, (int) $s->qty_shipped - (int) $s->qty_returned_unconfirmed);
+                        if ($miss > 0) { DB::table('wh_reservations')->where('fk_id_sale', $s->id)->whereIn('status', ['OPEN', 'ALLOCATED', 'PICKED'])->update(['status' => 'SHIPPED', 'release_reason' => 'Booked as shipped at Month Confirm', 'updated_at' => now()]);
+                            foreach (self::shelfBins((int) $s->fk_product_id, $ent, $miss) as [$loc, $q]) StockService::transfer($ent, (int) $s->fk_product_id, $q, $loc, $shipped, 'Backfill at Month Confirm', $rule + ['source_type' => 'SHIP', 'source_id' => $s->id]);
+                            $upd['qty_shipped'] = (int) $s->qty_shipped + $miss; }
+                        $c = StockService::consumeForSale($ent, (int) $s->id, (int) $s->fk_product_id, (int) $s->qty, $shipped, $rule['owner'], ['date' => $postDate]);
+                        $upd += ['f_stock_deducted' => 1, 'cost_gbp' => $c['cost'], 'wh_status' => 'SHIPPED']; $units += (int) $s->qty; $cogs += $c['cost'];
+                    } else $upd += ['f_stock_deducted' => 0];
                 }
                 DB::table('t_sales')->where('id', $s->id)->update($upd);
             }

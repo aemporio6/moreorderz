@@ -130,6 +130,8 @@ class ListExports
         if (isset($d['widths'])) foreach ((array) $d['widths'] as $c => $w) if (preg_match('/^[A-Za-z0-9_]{1,64}$/', (string) $c) && (int) $w >= 40 && (int) $w <= 1200) $clean['widths'][$c] = (int) $w;
         if (isset($d['per'])) $clean['per'] = in_array((int) $d['per'], [25, 50, 100, 250], true) ? (int) $d['per'] : 100;
         if (isset($d['density'])) $clean['density'] = $d['density'] === 'compact' ? 'compact' : 'comfortable';
+        // a remembered scope (marketplace, shop, dates): only digits and ISO dates are kept
+        if (isset($d['scope']) && is_array($d['scope'])) { $sc = []; foreach ($d['scope'] as $k => $v) if (preg_match('/^[a-z_]{1,20}$/', (string) $k) && is_scalar($v) && preg_match('/^(\d{1,10}|\d{4}-\d{2}-\d{2})$/', (string) $v)) $sc[$k] = (string) $v; $clean['scope'] = $sc; }
         $w = ['fk_id_user' => $u->id, 'page_key' => mb_substr($page, 0, 50)];
         $old = json_decode((string) DB::table('t_user_column_prefs')->where($w)->value('prefs_json'), true) ?: [];
         DB::table('t_user_column_prefs')->updateOrInsert($w, ['prefs_json' => json_encode(array_merge($old, $clean)), 'hidden_columns' => '', 'updated_at' => now()]);

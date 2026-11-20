@@ -24,29 +24,29 @@
 24|M||not-matched reasons CSV not built
 25|M||Re-match not built
 26|M||match explanation popup not built
-27|P|class PriceService|price period on order date gives the price; carrier / packing split and cost-source tags not built
-28|M||line formula with carrier + packing not built (profit = sale - lot cost)
+27|P|function expectedCost|built: raw cost from the price period of the order date, then old-history, before-history, current marketplace price, product price; carrier / packing split; stored on the line with cost_source and its tag; "No price history" filter; tasks PRICE_HISTORY_MISSING and SAL_PRICE_MISMATCH; SaleLinesTest. Open: variation-child price tables, the import result count of lines on current / main price
+28|B|function calc|one line formula (product cost = raw x qty, postage once per line, buy amount, profit) used by intake, Edit Sale and Edit Carrier / Packing, shown in the carrier dialog and on hover; both examples of the rule pass; SaleLinesTest
 29|B|consumeForSale|actual lot cost booked at Month confirm
 30|P|transferOwnership|lot owners shown; visibility per line not built
 31|P|function vaSalary|VA share in the waterfall; not the frozen batch % of job history
 32|B|confirmPreview|preview, shortage block, all-or-nothing confirm; cover-from-pool / transfer buttons not built
-33|P|confirmMonth|stock lines take stock; refunded-line nature rules not built
+33|P|function takesStock|built: which refunded lines take stock (the three cases of the rule pass), Month confirm follows it, task SAL_RETURN_EXPECTED on a full refund without product loss; open: an end-to-end test of Confirm with refunded lines, write-off mark in the lot ledger
 34|P|periodLocked|confirmed lines locked, late lines forward; Owner unlock not built
 35|M||one-batch view not built
-36|P|orders/\{id\}/cancel|cancel only; no state table of actions
-37|M||Edit Sale form not built
-38|M||Edit carrier / packing not built
-39|P|function refundOrder|full / part refund by amount; no nature-of-loss, no loss amount
-40|P|orders/\{id\}/cancel|cancel a line; no month delete, no recycle bin
-41|M||row colours / badges of the spec not built
-42|P|views/\{page\}|generic filters + saved views; computed filters (loss, no price history, DS) not built
-43|P|views/\{page\}|default saved view per user; not "last scope remembered"
+36|B|function actions|one state table for the list and the server: Edit / Carrier / Refund / View Refund / Log / Delete / Open with the rule's messages; menu on the page body, flips up, closes on Esc / scroll / resize; SaleLinesTest
+37|B|function edit|Edit Sale: locked date and SKU, the rule's checks and messages, total auto-fill, Now / After preview, recalculation by kind of line, one log row per changed field plus the recalculated ones, f_edited and the pen; the rule's example gives 5 log rows; SaleLinesTest
+38|B|function carrierPacking|Edit Carrier / Packing on a Pending own-stock line: service and packing lists with labels and rates, current value kept, Now / After preview, the rule's messages and log texts, cheapest-service chip; example 4.74 → 3.64 passes; SaleLinesTest
+39|B|function refundInfo|refund of a Pending line: new rate / total, 7 natures with the suggested loss from the line's costs, reason, profit = − loss, Refunded with who / when, log "Refund Sale", t_sale_charges line Full / Partial, view mode, return-expected task; the rule's example passes; SaleLinesTest
+40|B|function deleteMonth|delete a line or a whole Pending month with the rule's messages and shop right; saved_rows goes down; rows go to the recycle bin (30 days) with Undo; the month can be imported again; SaleLinesTest
+41|P|DROP SHIPPING|built: row colours, status bar, status pill, visibility badge, out-of-period mark, shop under the order no, cost-source tag, carrier / packing names, pen, refund nature and loss, legend; open: the drop-ship cells (buyer, platform, quantity warning, eye) – they come with drop-ship matching
+42|P|function filtered|built: marketplace required, shops of the marketplace (inactive marked), one-batch view, status, loss / out-of-period / no-price-history, sale type, date range (current month by default), text with 400 ms, 20 / 50 / 100 / 200, newest first, Reset, presets with counts; carrier / visibility / company / vendor filters on the server; open: their controls on the screen, investor and DS platform filters
+43|B|sales_listing|the last marketplace, shop and dates are kept on the server per person (every device); the one-batch view never overwrites them; only digits and ISO dates are stored; SaleLinesTest
 44|P|form:sale_line|column picker on every list; no fixed / optional groups
 45|M||extra marketplace columns not built
 46|P|export/\{key\}|CSV export of the list; no PDF / Word with summary
 47|B|function mine|shop scope per person: order board, tracking, returns, labels, profit, sales reports, settlements, refunds, month close and every shop picker show own shops only; PermissionTest
-48|M||period chips not built
-49|M||keep page / scroll after action not verified
+48|B|function periods|six period chips as whole calendar months (the 29th–31st cannot skip a month), typed dates override, totals strip; "2 months ago" on 6 Nov 2026 = 1–30 Sep 2026; SaleLinesTest
+49|B|SL.y|after edit, carrier, refund or delete the list keeps its page, filters and scroll position and refreshes the rows and totals
 50|M||Annual Sale Report not built
 51|P|class ReportService|sales per month / shop reports; not the shops x months grid with PDF
 52|P|class OldImport|old sales copied as history lines; legacy profit columns / compare report per rule not built

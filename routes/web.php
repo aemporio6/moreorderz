@@ -250,6 +250,17 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('printers/{id}/replace', [PrintController::class, 'replace'])->whereNumber('id');
         Route::post('print-routes', [PrintController::class, 'route']);
         Route::get('orders', [OrdersController::class, 'board']);
+        Route::get('sales', [OrdersController::class, 'saleLines']);
+        Route::get('sales/month', [OrdersController::class, 'saleMonthInfo']);
+        Route::post('sales/month/delete', [OrdersController::class, 'saleDeleteMonth']);
+        Route::post('sales/restore', [OrdersController::class, 'saleRestore']);
+        Route::post('sales/{id}/edit', [OrdersController::class, 'saleEdit'])->whereNumber('id');
+        Route::get('sales/{id}/carrier', [OrdersController::class, 'saleCarrierOptions'])->whereNumber('id');
+        Route::post('sales/{id}/carrier', [OrdersController::class, 'saleCarrier'])->whereNumber('id');
+        Route::get('sales/{id}/refund', [OrdersController::class, 'saleRefundInfo'])->whereNumber('id');
+        Route::post('sales/{id}/refund', [OrdersController::class, 'saleRefund'])->whereNumber('id');
+        Route::post('sales/{id}/delete', [OrdersController::class, 'saleDelete'])->whereNumber('id');
+        Route::get('sales/{id}/log', [OrdersController::class, 'saleLog'])->whereNumber('id');
         Route::post('orders', [OrdersController::class, 'enter']);
         Route::post('orders/import', [OrdersController::class, 'importFile']);
         Route::get('labels', [OrdersController::class, 'labels']);
