@@ -1,0 +1,92 @@
+1|P|function intake|same order line never twice; no "replace batch" flow, no diff, no recycle bin
+2|P|class OrderFiles|shop chosen at import; no fee / marketplace / seller pre-checks with the spec messages
+3|M||shop + month from file name not built
+4|P|class OrderFiles|columns found by name; no per-marketplace Sale Columns mapping sets
+5|P|function detect|delimiter / header detection in the readers; no user override step
+6|P|SAL_ZERO|unknown SKU and zero value handled; no error table with spec texts, no proof line
+7|P|function num|money parser exists; not tested on all spec cases
+8|P|function day|date parser exists; fewer formats than the spec
+9|M||NOSKU line key not built
+10|P|function intake|duplicate order line blocked; no "Already imported in <month>" message
+11|P|out_of_period|flag stored; no keep / move choice
+12|P|SAL_UNMATCHED|own / unknown SKU, import never moves stock; no drop-ship kind
+13|M||schema self-check before import not built
+14|P|orders/import|import result shown; not the spec stats set
+15|M||fix-up grid for rows without SKU not built
+16|P|class OrderFiles|eBay orders report read; named fields (promoted, VAT, tracking) not all stored
+17|M||daily / period totals report type not built
+18|P|import-history|import history list; no pending-months register / shop x month grid
+19|M||drop-ship 5-matching rule not built
+20|M||own phone numbers rule not built
+21|M||DS assignment order not built
+22|M||DS match lock not built
+23|M||DS money rules not built
+24|M||not-matched reasons CSV not built
+25|M||Re-match not built
+26|M||match explanation popup not built
+27|P|class PriceService|price period on order date gives the price; carrier / packing split and cost-source tags not built
+28|M||line formula with carrier + packing not built (profit = sale - lot cost)
+29|B|consumeForSale|actual lot cost booked at Month confirm
+30|P|transferOwnership|lot owners shown; visibility per line not built
+31|P|function vaSalary|VA share in the waterfall; not the frozen batch % of job history
+32|B|confirmPreview|preview, shortage block, all-or-nothing confirm; cover-from-pool / transfer buttons not built
+33|P|confirmMonth|stock lines take stock; refunded-line nature rules not built
+34|P|periodLocked|confirmed lines locked, late lines forward; Owner unlock not built
+35|M||one-batch view not built
+36|P|orders/\{id\}/cancel|cancel only; no state table of actions
+37|M||Edit Sale form not built
+38|M||Edit carrier / packing not built
+39|P|function refundOrder|full / part refund by amount; no nature-of-loss, no loss amount
+40|P|orders/\{id\}/cancel|cancel a line; no month delete, no recycle bin
+41|M||row colours / badges of the spec not built
+42|P|views/\{page\}|generic filters + saved views; computed filters (loss, no price history, DS) not built
+43|P|views/\{page\}|default saved view per user; not "last scope remembered"
+44|P|form:sale_line|column picker on every list; no fixed / optional groups
+45|M||extra marketplace columns not built
+46|P|export/\{key\}|CSV export of the list; no PDF / Word with summary
+47|P|class Rights|rights per role; data scope "own shops only" not built
+48|M||period chips not built
+49|M||keep page / scroll after action not verified
+50|M||Annual Sale Report not built
+51|P|class ReportService|sales per month / shop reports; not the shops x months grid with PDF
+52|P|class OldImport|old sales copied as history lines; legacy profit columns / compare report per rule not built
+53|M||bulk delete with preview / approval not built
+54|M||Gen-1 SALE sheet type not built
+55|M||Etsy orders type not built
+56|M||supplier orders (BUY) file type not built
+57|M||sale <-> buy match summary not built
+58|M||Etsy audit header not built
+59|F|form:t_audit_main|form only; audit run logic not built
+60|F|form:orders_audit|form only; eBay audit import not built
+61|M||buy evidence parser (item note) not built
+62|M||eBay file vs sales 3 lists not built
+63|M||Amazon purchase audit not built
+64|M||GD supplier audit not built
+65|F|form:va_statement|form only; VA statement calculation / PDF / approval not built
+66|F|form:imp_mapping|form only; mapping sets not used by the readers
+67|F|form:marketplace_field|form only; field builder not built
+68|F|form:cat_marketplace|form + list; ISO checks, questions checklist not built
+69|F|form:t_carrier_pkg_svc|forms + lists; effective-dated rates not built
+70|M||preset matrix with gaps not built
+71|F|form:customer_case|form only; case flow / dedupe / SLA not built
+72|F|form:t_branch_reminders|form only; recurring monthly tasks not built
+73|F|form:t_shop_feedback|form only; health grid, increments, alerts not built
+74|M||admin / TL health view not built
+75|F|form:daily_order_entry|form only (orders come by file / API / New order); status + tracking flow partly in Dispatch
+76|M||search + date presets of the spec not built
+77|P|tracking-upload|tracking upload file per layout; not the 25-column carrier CSV
+78|F|form:csv_generator|form only; convert tool not built
+79|M||"Update existing data" import mode not built
+80|F|form:supplier_order_history|form only; 68-column Amazon Business import not built
+81|M||standard shop label component not built
+82|P|class Rights|rights by role and screen; the named rights list (sale.import ...) not built
+83|B|feeBucket|fee buckets + month totals from the money files; hub compare (SAL_HUB_MISMATCH task) not built
+84|P|fulfilment_channel|orders by file / API / hand with tracking + label; monthly merge and "Close daily orders" not built
+85|B|class CarrierLabels|carrier label PDF import, match, service map; one label per page only
+86|P|function decideRefund|refund proposals accept / reject; kinds Half / Outside, block of Confirm, unknown-SKU grid not built
+87|P|form:mp_profile|profile forms exist; readers do not take mappings / buckets from the profile (formats are code)
+88|P|SAL_STOCK_SHORT|SAL_UNMATCHED, SAL_ZERO, SAL_STOCK_SHORT built; other 11 sales task codes not built
+89|F|form:crm_customer|form only; customer record page / retention job not built
+90|M||case channel / carrier facts / returns window not built
+91|M||dropship minimum margin not built
+92|B|function readTikTok|TikTok settlement workbook: layout, buckets, 4 checks – verified on 3 real files

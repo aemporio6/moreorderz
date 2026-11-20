@@ -1,0 +1,50 @@
+1|F|form:t_account|form only; party type column / filter rule not built
+2|M||convert Managed <-> External with kind log not built
+3|P|form:external_contact|both forms are in + Create; the chooser that carries typed values not built
+4|F|form:t_account|account code format / suggestion / uniqueness not built
+5|F|form:t_account|required set from the registry only
+6|F|form:t_account|text safety rules not built as specified
+7|F|form:t_account_mobile|REACH group and contact checks not built
+8|P|class Merges|look-alike people found on the Merge screen; not checked at save with "Save anyway + reason"
+9|M||one-transaction quick save with status contract not built
+10|F|form:external_contact|quick form behaviour (roles pills, payment terms, bank rows) not built
+11|M||section navigator / live status not built
+12|M||derived defaults on person save not built
+13|F|form:cat_company_house|external company flag behaviour not built
+14|M||"+ New bank" reuse not built
+15|M||bank field validators (IBAN mod-97, SWIFT, sort code) not built
+16|M||roles saved as a difference with events not built
+17|M||"where used" guard and soft delete not built
+18|P|accounts-dash|Accounts dashboard with counts and expiring documents; header chips per person not built
+19|F|form:external_contact|list only
+20|M||own-item pickers (own: source) not built
+21|P|cascades_from|cascading dropdowns from the registry (26 fields); the person chains not all
+22|F|form:sys_security_question|form only
+23|B|class Vault|secrets sealed, CVV / PIN never stored, card last 4 only, reveal logged
+24|F|form:t_account_address|form only
+25|F|form:t_account_doc|form only; "submitted to" log not built
+26|F|form:t_account_mobile|form only; slot rule not built
+27|F|form:t_account_email|form only
+28|F|form:t_account_bank|form only (account numbers masked by the vault)
+29|F|form:t_account_credit_card|form only
+30|F|form:t_account_marketplace|form only
+31|F|form:t_account_marketplace|form only
+32|F|form:t_account_paypal|form only
+33|P|class Subscriptions|subscriptions screen with cost per month, Paid books the expense, due task; kind-driven pickers not built
+34|F|form:t_account_ipburger|form only
+35|F|form:t_account_pc|form only
+36|F|form:t_account_company_house|form only
+37|F|form:t_account_social_media|form only
+38|P|function options|option lists from the registry; loader rejection of placeholder lists not built
+39|F|form:t_account_job_history|form only; overlap guard / checks not built
+40|P|function vaSalary|VA salary from job history (choice VA_SALARY_SOURCE); VA % frozen on the batch not built
+41|F|form:t_account_branch|form only; shop assignment as the data scope not built
+42|M||linked shops by role panel not built
+43|F|form:cat_account_type|form only; role codes / flags not built
+44|P|users/\{id\}/two-step-off|users screen, hashed passwords, 2-step, no password column; reset link / login on the person record not built
+45|P|function users|users list; scope / last login columns not built
+46|P|ACC_SUBSCRIPTION_DUE|subscription due task and expiring documents on the dashboard; the due-source engine (11 sources) not built
+47|P|class Vault|secrets never in lists / exports; the 20 regression tests of the bug list not written
+48|P|whatsapp_number|WhatsApp number on the person used for messages; picker from own mobiles + uniqueness not built
+49|B|ip-rules|sessions screen, force logout, allowed addresses, lock-out guard
+50|P|class Vault|old secret columns never read by the import; the specific column handled by the vault rule

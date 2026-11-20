@@ -1,0 +1,70 @@
+1|P|cycle_type|types FULL / DIRECT / QUICK used; HISTORICAL (old entry) type and skipped-step map per type not built
+2|P|function createPo|Direct PO in one save with FX kept; "repeat from last PO" prefill partly ("Repeat this order")
+3|P|function confirmPo|30 / 70 schedule at confirm; cartons from units per carton not built
+4|M||repeat from cycle (copy products + RFQs) not built
+5|F|form:old_entry|form only; Old entry screen (4 sections, back-dated) not built – old purchases come by the data import
+6|P|line_type|product lines; FEE / COST / SAMPLE line types with their cost rows not built
+7|M||duplicate guard supplier + order reference not built
+8|F|form:old_entry_payment|form only
+9|M||old entry shipment and costs not built
+10|F|form:old_entry_receiving|form only
+11|M||old entry maker-checker not built
+12|M||name matching + save log not built
+13|M||historical CSV contract (35 columns) not built
+14|M||cycle CSV import not built
+15|P|function cycle|cycle workspace with a step bar and a section per step; 21 old tabs / sub-tabs not all present
+16|P|function cycle|step colour from the data; done / bad lists per step not complete
+17|M||skipped steps / gaps (SRC_STEP_MISSING) not built
+18|M||Save & Next with carried context not built
+19|M||"already exists" guard on Next not built
+20|M||step pager not built
+21|P|function cycle|supplier from the cycle's PO; SKU inherit partly
+22|P|function cycle|step lists scoped to the cycle on the workspace
+23|M||"[Saved: value] (re-select)" rule not built
+24|P|function cycle|cycle header with code, status, supplier; MOQ / chips not built
+25|P|function dashboard|buying dashboard numbers; the full Summary KPI set not built
+26|P|SRC_PAY_DUE|rule tasks SRC_PAY_DUE, SRC_SHIP_OVERDUE / ARRIVING, SRC_GRN_SHORT, SRC_LOT_NO_COST, SRC_QC_FAILED; SRC_QTY_MISMATCH, SRC_OVER_ALLOC, SRC_STEP_MISSING, SRC_DOC_MISSING, contacts panel not built
+27|P|function confirmPo|payment schedule at PO confirm; templates with lines / due rules not built
+28|M||"People on this cycle" card not built
+29|P|function shipmentTasks|shipments with ETA and overdue task; the shipments card with customs / GRN chips not built
+30|P|function pay|term paid / remaining / status; mixed-currency sum in PO currency partly
+31|P|function payOrAsk|overpay refused; reason + SRC_OVERPAY approval not built
+32|P|class Fx|rate of the date kept on the row; "rate table vs typed" difference, FX_MISSING task not built
+33|P|function landedCost|some computed fields; the full list of live formulas not built
+34|M||carton / packing figures (CBM, volumetric, cartons) not built
+35|B|class Numbering|codes from the numbering service under a lock
+36|F|form:t_src_freight_costs|form + list; cost type -> landed bucket map not built
+37|B|function postGrn|GRN lines per product; post creates lots through the stock service
+38|P|function createShipment|shipment lines per PO line, never more than ordered; "POs on this shipment" grid with reasons not built
+39|P|function cycle|quantities per step shown; Balanced / Mismatch chip and tasks not built
+40|P|function setLotCost|lots with cost and "no cost" filter; cost_source chip per lot not built
+41|P|health|failed events on System health; per-card load isolation not built
+42|P|function cycle|cycle products on the workspace; inline grid with Next not built
+43|P|function landedCost|freight + duty buckets; the 10 buckets not built
+44|P|function landedCost|freight by quantity, duty by value, sold units corrected; per-cost method choice, Weight / CBM, loss setting not built
+45|M||landed cost override with reason / approval not built
+46|P|function landedCost|run with FINAL lock; preview, PROVISIONAL re-run, versions not built
+47|M||PO documents roll-up not built
+48|M||cycle product documents not built
+49|M||link check / preview not built
+50|P|form:t_src_cycles|cycle list with generic filters; deep filters (bank ref, investor) not built
+51|P|class Settings|settings exist; the typed sourcing settings list (LC methods etc.) not complete
+52|P|form:cat_src_lov|lists from the registry; system-value lock not built
+53|F|form:t_src_suppliers|party roles behind the lists partly (supplier form)
+54|P|function save|required fields from the registry; the spec messages not all
+55|P|class Rights|Sourcing cannot pay / see rates; the named rights (sourcing.money ...) not built
+56|P|SRC_GRN_SHORT|short / damaged raises a claim task; claim section with amounts / credit not built
+57|P|function pay|one payment schedule; CREDIT_NOTE payments not built; bank line links to a term (split)
+58|B|function bookSample|sample cost in own currency, booked once, shared by 90-day sales – spec example passes
+59|B|function payCustoms|customs pay: duty to goods on the way, import VAT apart; bank line split across cost rows
+60|M||landed run versions / automatic FINAL / COGS correction after lock not built
+61|M||lot owner split at GRN by PO agreements not built (owner = one)
+62|P|requested_by|requested_by = logged-in user; product required on lines partly
+63|M||settled claim as negative cost / new landed version not built
+64|M||supplier share link not built
+65|B|function saveQc|QC checklist, photo on FAIL, computed result, QC chip on lots
+66|P|d_valid_until|some restored fields present; supplier profile fields form-only
+67|B|form:src_research|research record with competitors and supplier candidates
+68|B|function margin|margin estimate – spec example 54.5 % passes
+69|B|function go|GO starts product + cycle + RFQs in one transaction, once only
+70|P|function staleResearch|RES_STALE task, research linked; "real margin next to estimate" not verified
