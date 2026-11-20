@@ -302,7 +302,7 @@ class OrdersController extends Controller
     {
         $this->can($r, 'orders.saleImport'); $u = $r->user(); $ent = Context::ent();
         return \App\Services\SalesImport::register($u) + ['self_check' => \App\Services\SalesImport::selfCheckMessage(), 'can_columns' => \App\Services\Perm::has($u, 'orders.saleColumns'), 'can_delete' => \App\Services\Perm::has($u, 'orders.saleDeleteMonth'),
-            'marketplaces' => DB::table('cat_marketplaces')->whereIn('id', \App\Services\Perm::mine(DB::table('t_branches'), 'id')->where('fk_id_ent', $ent)->pluck('fk_id_marketplace'))->orderBy('marketplace_descr')->get(['id', DB::raw("COALESCE(NULLIF(marketplace_short,''), marketplace_descr) as name")]),
+            'marketplaces' => DB::table('cat_marketplaces')->whereIn('id', \App\Services\Perm::mine(DB::table('t_branches'), 'id')->where('fk_id_ent', $ent)->pluck('fk_id_marketplace'))->orderBy('marketplace_descr')->get(['id', DB::raw("COALESCE(NULLIF(marketplace_short,''), NULLIF(marketplace_descr,''), CONCAT('Marketplace ', id)) as name")]),
             'shops' => \App\Services\Perm::mine(DB::table('t_branches'), 'id')->where('fk_id_ent', $ent)->orderBy('shop_no')->get(['id', 'shop_no', 'shop_name', 'fk_id_marketplace as marketplace', 'f_active'])->map(fn ($s) => ['id' => $s->id, 'marketplace' => $s->marketplace, 'active' => (int) $s->f_active, 'name' => \App\Services\SalesImport::label($s)])];
     }
     public function saleImportName(Request $r) { $this->can($r, 'orders.saleImport'); return \App\Services\SalesImport::fileName((string) $r->query('name'), (int) $r->query('marketplace') ?: null); }

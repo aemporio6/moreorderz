@@ -67,6 +67,8 @@ class SalesImportTest extends TestCase
         $r = SalesImport::fileName('101A_july26.csv'); $this->assertSame([true, $this->shop, 7, 2026], [$r['ok'], $r['shop'], $r['month'], $r['year']]); $this->assertSame('Detected from file name 101A_july26 ✓', $r['detected']);
         $this->assertSame([9, 2025], array_values(array_intersect_key(SalesImport::fileName('101a_Sept-2025.csv'), ['month' => 1, 'year' => 1])));
         $this->assertFalse(SalesImport::fileName('orders.csv')['ok']);
+        $r = SalesImport::fileName('101A_july26 (1).csv'); $this->assertSame([$this->shop, 7, 2026], [$r['shop'], $r['month'], $r['year']]);
+        $this->assertSame('September 2025', SalesImport::fileName('202_Sept2025.csv')['month_name']); $this->assertArrayNotHasKey('month', SalesImport::fileName('X_ju26.csv'));      // only 2 letters → no month
         // two active shops with the same shop no: never guessed; the chosen marketplace narrows it
         $mp2 = DB::table('cat_marketplaces')->insertGetId($this->fill('cat_marketplaces', ['fk_id_ent' => 1, 'marketplace_short' => 'Temu', 'marketplace_descr' => 'Temu', 'f_active' => 1]));
         $s2 = DB::table('t_branches')->insertGetId($this->fill('t_branches', ['fk_id_ent' => 1, 'fk_id_marketplace' => $mp2, 'shop_no' => '101A', 'shop_name' => 'Toys', 'iso_branch' => 'P2', 'f_active' => 1]));
@@ -172,6 +174,11 @@ class SalesImportTest extends TestCase
         $id = SalesService::intake($this->shop, [['order_no' => 'D-1', 'd_order' => '2026-07-04', 'sku' => 'BOWL-01', 'qty' => 1, 'sale_rate' => 9, 'cust_name' => 'Ann']])['ids'][0];
         $r = $this->go($this->file([$this->row('D-1', '04/07/2026'), $this->row('D-2', '04/07/2026')]));
         $this->assertSame([2, 1], [$r['stats']['saved'], $r['stats']['merged']]); $this->assertSame(1, DB::table('t_sales')->where('order_no', 'D-1')->count()); $this->assertSame($r['batch'], (int) DB::table('t_sales')->where('id', $id)->value('fk_id_import'));
+        // a replace (and a delete of the import) never removes the line of the daily orders
+        DB::table('t_sales')->where('id', $id)->update(['created_at' => now()->subDay()]);
+        $r2 = $this->go($this->file([$this->row('D-2', '04/07/2026')]), ['replace' => true]); $this->assertTrue(DB::table('t_sales')->where('id', $id)->exists()); $this->assertSame(0, (int) DB::table('t_sales')->where('id', $id)->value('fk_id_import'));
+        $r3 = $this->go($this->file([$this->row('D-1', '04/07/2026'), $this->row('D-2', '04/07/2026')]), ['replace' => true]); $this->assertSame(1, $r3['stats']['merged']);
+        $del = SalesImport::deleteBatch($r3['batch'], $this->owner); $this->assertSame([1, 1], [$del['lines'], $del['kept']]); $this->assertTrue(DB::table('t_sales')->where('id', $id)->exists());
     }
 
     public function test_not_matched_lines_raise_one_task_and_the_fix_up_teaches_the_next_import(): void

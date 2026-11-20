@@ -54,7 +54,7 @@ Owner instruction (21 Nov 03:07): work without asking, resume by yourself with a
 | 9 | Vue screens, Intelligence, server go-live | todo | | |
 How to work each step: build → test → change the verdict lines in `audit/verdicts/` → `python3 audit/verify.py` → `python3 audit/build_result.py <register.csv>` → commit + push → update this table and project docs `claude/AUDIT_STATE.md`, `claude/CODE_PROGRESS.md`.
 | 7a | SALES batch 1 – sales list and line actions (rules 27, 28, 33, 36–43, 48, 49): `SaleLines`, screen #/sales, recycle bin | done, 231 tests | this commit | 251 (18 %), Sales 20 / 155 |
-| 7b | SALES batch 2 – NEXT: import (rules 1–18: replace batch, pre-checks, file-name shop + month, mapping sets, error table, NOSKU key, "Already imported", out-of-period keep / move, stats, fix-up grid, pending-months grid) + import undo (R-D-78) | NEXT | | |
-| 7c | SALES batch 3 – list columns / extra columns / PDF + Word export with summary (44, 45, 46), filter controls of 42, one-batch view (35), Owner unlock (34) | todo | | |
+| 7b | SALES batch 2 – monthly sales import (rules 1–18, 66): `SalesImport` + `Parse`, screen #/sales-import (Check → Import, replace question with diff, fix-up grid with SKU aliases, Sale Columns popup, Pending imports + shop × month grid, delete import with Undo), migration 000023 | done, 247 tests | this commit | 267 (19 %), Sales 25 / 155 |
+| 7c | NEXT → SALES batch 3 – list columns / extra columns / PDF + Word export with summary (44, 45, 46), filter controls of 42, one-batch view (35), Owner unlock (34) | todo | | |
 | 7d | SALES batch 4 – drop-ship matching (19–26), DS cells of 41 | todo | | |
 | 7e | SALES batch 5 – reports (50, 51), audits (57–64), VA statement (65), marketplace setup (66–70), cases / reminders / health (71–74), tools (77–81), v1.7 block (84–91) | todo | | |

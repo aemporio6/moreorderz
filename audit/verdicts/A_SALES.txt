@@ -1,21 +1,21 @@
-1|P|function intake|same order line never twice; no "replace batch" flow, no diff, no recycle bin
-2|P|class OrderFiles|shop chosen at import; no fee / marketplace / seller pre-checks with the spec messages
-3|M||shop + month from file name not built
-4|P|class OrderFiles|columns found by name; no per-marketplace Sale Columns mapping sets
-5|P|function detect|delimiter / header detection in the readers; no user override step
-6|P|SAL_ZERO|unknown SKU and zero value handled; no error table with spec texts, no proof line
-7|P|function num|money parser exists; not tested on all spec cases
-8|P|function day|date parser exists; fewer formats than the spec
-9|M||NOSKU line key not built
-10|P|function intake|duplicate order line blocked; no "Already imported in <month>" message
-11|P|out_of_period|flag stored; no keep / move choice
-12|P|SAL_UNMATCHED|own / unknown SKU, import never moves stock; no drop-ship kind
-13|M||schema self-check before import not built
-14|P|orders/import|import result shown; not the spec stats set
-15|M||fix-up grid for rows without SKU not built
-16|P|class OrderFiles|eBay orders report read; named fields (promoted, VAT, tracking) not all stored
-17|M||daily / period totals report type not built
-18|P|import-history|import history list; no pending-months register / shop x month grid
+1|B|confirm_overwrite|one batch per shop + month + kind; replace only after the question (lines, file, imported at/by, stock deducted); diff added/removed/changed shown at Check before the replace; old lines in the recycle bin 30 days; daily-order lines are never deleted (fromIntake); confirmed month refused. Tested with the rule's example
+2|P|function preCheck|all pre-checks in the rule's order with the rule's messages, on the server and on the screen, shop named as shop_no (shop_name). Missing: fix link per message; fee pre-filled from the marketplace money report (fee is typed and stored as fee_source=typed)
+3|P|function fileName|shop + month from SHOPNO_monthYY on screen and server, several shops never guessed, marketplace narrows, warning + "I'm sure" when the choice differs; rule's 3 file-name tests pass. Missing: seller id inside the file as the first detector
+4|B|function mapped|Sale Columns per marketplace: several headers per field, joined (name, contacts, product) or first with a value; missing required header = error that names it, missing optional = warning shown at Check. Tested with the rule's example
+5|B|header on line|delimiter, header row inside the first lines, Windows-1252 to UTF-8; "Detected: …" shown at Check and the user can override separator and header line (siRecheck). Tested with the rule's example
+6|B|function run|skip / error rules in the rule's order with its texts, error table with CSV line, derive rate / total, "no sale rows" message, proof line file rows = saved + errors + skipped and apply blocked when it does not add up. Tested: 100 rows → 96 / 2 / 2
+7|B|function money|shared Parse::money; all four examples of the rule tested
+8|P|function date|shared Parse::date; the rule's examples tested (d/m/Y, text date, Excel serial, bad date refused). Missing: detected format shown per date column and remembered per report type
+9|B|function noSku|NOSKU- + 12 hex key from order, title, qty, total; chip "no SKU"; Link to product saves the alias (TITLE) per marketplace; re-import = duplicate error. Tested
+10|B|Already imported in the|same order + SKU in another batch of the shop → error "Already imported in the Jun 2026 import" with a link to that import. Tested
+11|P|out_mode|line saved and flagged, out_of_period_rows counted; Check shows "n lines dated outside <month>" with keep / move to own month batch. Missing: the same question again at Month Close with a reason
+12|P|SALES_BATCH_STAGED|own line (cost resolved, reserved, never a stock movement) and not-matched line with reason; one SAL_UNMATCHED task per batch that closes at 0; counts per kind at Check. Missing: the drop-shipping kind (batch 7d)
+13|P|function selfCheck|tables / columns read before every import, import refused with the missing list, red banner on the Import page, never blocks when the schema cannot be read. Missing: banner on the Sales list, System › Health per module, names of the migration files
+14|P|unmatched_more|result = the rule's message, stats, warnings, first 100 errors, first 200 not-matched with CSV download, View these sales, Import another file, scroll to result; same counts before (Check) and after. Missing: best x/5 column and the Re-match advice (drop-shipping, batch 7d)
+15|B|function link|grid of lines without a product (no SKU and SKU not in inventory): live check 500 ms + on blur, ✓ Valid SKU / ✗ SKU not found, cleared after 1 s, search by SKU or title, saved into the same batch with cost, alias remembered per marketplace so the next import maps by itself. Tested with GRP-2-BR
+16|P|class OrderFiles|eBay orders report read; named fields (promoted, VAT, tracking) not all stored; not yet the 77-column pre-mapped type
+17|P|function totalsRow|daily totals file: one summary line per shop + date (sale, purchase, profit, typed fee), no stock movement, own batch kind; two shops same day = two lines (tested). Missing: shown apart in reports
+18|B|function register|Pending imports only, newest period first, max 200, all columns incl. DS tag, stock-deducted, VA %, status; errors popup (max 1000, rights check, "No errors."); Show these sales / Confirm / Delete; grid shop × 12 months; SAL_MONTH_MISSING after day 5, closed by the import. Tested
 19|M||drop-ship 5-matching rule not built
 20|M||own phone numbers rule not built
 21|M||DS assignment order not built
@@ -63,7 +63,7 @@
 63|M||Amazon purchase audit not built
 64|M||GD supplier audit not built
 65|F|form:va_statement|form only; VA statement calculation / PDF / approval not built
-66|F|form:imp_mapping|form only; mapping sets not used by the readers
+66|P|function saveColumns|three mapping sets per marketplace with the rule's cleaning (trim, empties, case-insensitive de-dup); Sale Columns drive the import. Missing: DS and 5-matching sets are saved but not yet read (batch 7d); extra columns; per-field notes
 67|F|form:marketplace_field|form only; field builder not built
 68|F|form:cat_marketplace|form + list; ISO checks, questions checklist not built
 69|F|form:t_carrier_pkg_svc|forms + lists; effective-dated rates not built

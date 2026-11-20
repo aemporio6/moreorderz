@@ -122,10 +122,16 @@ class SalesImport
 
     public static function noSku(string $order, string $info, mixed $qty, mixed $total): string { return 'NOSKU-' . substr(md5(mb_strtolower("$order|$info|$qty|$total")), 0, 12); }
 
-    /** The batch of a shop + month, if any. */
-    public static function batchOf(int $shopId, int $month, int $year): ?object
+    /** A line that was in the tool before the file came (daily orders): the monthly file was merged into it, so it is never deleted with the batch. */
+    private static function fromIntake(object $line, object $batch): bool
     {
-        return DB::table('t_sale_imports')->where('fk_id_ent', Context::ent())->where('fk_id_branch', $shopId)->where('period_month', $month)->where('period_year', $year)->orderByDesc('id')->first();
+        return $line->sale_source !== 'summary' && $line->created_at && $batch->imported_at && strtotime((string) $line->created_at) < strtotime((string) $batch->imported_at) - 1;
+    }
+
+    /** The batch of a shop + month, if any. */
+    public static function batchOf(int $shopId, int $month, int $year, ?string $nature = null): ?object
+    {
+        return DB::table('t_sale_imports')->where('fk_id_ent', Context::ent())->where('fk_id_branch', $shopId)->where('period_month', $month)->where('period_year', $year)->when($nature, fn ($q) => $nature === 'Totals' ? $q->where('import_nature', 'Totals') : $q->where('import_nature', '<>', 'Totals'))->orderByDesc('id')->first();
     }
 
     private static function productOf(int $ent, int $marketplaceId, string $sku, string $info, bool $nosku): ?object
@@ -154,9 +160,9 @@ class SalesImport
             if ($w && empty($d['sure'])) return ['name_mismatch' => $w, 'message' => implode('. ', $w) . '. Tick "I\'m sure" to continue.'];
             $warnings = array_merge($warnings, $w);
         }
-        $old = self::batchOf((int) $shop->id, $m, $y);
-        if ($old && $old->status !== 'Pending' || Ledger::periodLocked($ent, $period)) throw new \InvalidArgumentException("Shop $label - $mn is confirmed and saved permanently, so it can't be imported again.");
         $totals = ($d['nature'] ?? 'Normal') === 'Totals';
+        $old = self::batchOf((int) $shop->id, $m, $y, $totals ? 'Totals' : 'Normal');
+        if ($old && $old->status !== 'Pending' || Ledger::periodLocked($ent, $period)) throw new \InvalidArgumentException("Shop $label - $mn is confirmed and saved permanently, so it can't be imported again.");
         // read the file
         $cols = self::columns((int) $shop->fk_id_marketplace);
         if (! $totals) {
@@ -183,6 +189,7 @@ class SalesImport
             $replaced = 0; $diff = null; $oldKeys = [];
             if ($old) {      // replace: the old batch is undone first, in the same transaction
                 foreach (DB::table('t_sales')->where('fk_id_import', $old->id)->lockForUpdate()->get() as $s) { $oldKeys[mb_strtolower($s->order_no . '|' . $s->sku)] = [(float) $s->total_amount, (int) $s->qty]; $replaced++;
+                    if (self::fromIntake($s, $old)) { DB::table('t_sales')->where('id', $s->id)->update(['fk_id_import' => 0]); continue; }
                     DB::table('mo_recycle_bin')->insert(['fk_id_ent' => $ent, 'table_name' => 't_sales', 'row_id' => $s->id, 'label' => mb_substr("Order {$s->order_no} · {$s->sku}", 0, 255), 'group_key' => "batch:{$old->id}", 'row_json' => json_encode((array) $s), 'deleted_by' => $u->id ?? null, 'deleted_at' => now(), 'note' => 'Overwritten by a new import of the same month']);
                     if ($s->sale_source === 'active') DispatchService::release((int) $s->id, 'Overwritten by a new import of the same month'); }
                 DB::table('t_sales')->where('fk_id_import', $old->id)->delete(); DB::table('t_sale_import_errors')->where('fk_id_import', $old->id)->delete(); DB::table('t_sale_imports')->where('id', $old->id)->delete();
@@ -192,7 +199,7 @@ class SalesImport
             $st = ['saved' => 0, 'active' => 0, 'ds' => 0, 'unmatched' => 0, 'errors' => 0, 'skipped' => 0, 'out_of_period' => 0, 'moved' => 0, 'merged' => 0, 'qty' => 0, 'sale' => 0.0, 'buy' => 0.0, 'profit' => 0.0, 'cost_current' => 0, 'cost_product' => 0, 'file_rows' => count($csv['rows'])];
             $errors = []; $seen = []; $nosku = []; $newKeys = []; $unmatchedRows = [];
             $from = sprintf('%04d-%02d-01', $y, $m); $to = date('Y-m-t', strtotime($from)); $cur = Fx::code((int) $shop->fk_id_payout_currency ?: null, $ent);
-            $err = function (int $ln, string $order, string $sku, string $why, array $row) use (&$errors, &$st, $batch) { $st['errors']++; $errors[] = ['line' => $ln, 'order_no' => $order, 'sku' => $sku, 'reason' => $why];
+            $err = function (int $ln, string $order, string $sku, string $why, array $row, ?int $in = null) use (&$errors, &$st, $batch) { $st['errors']++; $errors[] = ['line' => $ln, 'order_no' => $order, 'sku' => $sku, 'reason' => $why, 'batch' => $in];
                 DB::table('t_sale_import_errors')->insert(['fk_id_import' => $batch, 'row_no' => $ln, 'order_no' => mb_substr($order, 0, 100), 'sku' => mb_substr($sku, 0, 100), 'reason' => mb_substr($why, 0, 255), 'raw_csv' => json_encode($row, JSON_UNESCAPED_UNICODE), 'f_resolved' => 0, 'f_unmatched' => 0, 'created_at' => now()]); };
             foreach ($csv['rows'] as [$ln, $row]) {
                 if ($totals) { self::totalsRow($batch, $shop, $ln, $row, $st, $err, $cur, $ent, $u); continue; }
@@ -218,10 +225,10 @@ class SalesImport
                 $seen[$key] = $ln;
                 // the same line in another batch of this shop → error that names the month; a line of the daily intake (no batch) is merged
                 $dup = DB::table('t_sales')->where('fk_id_ent', $ent)->where('fk_id_branch', $shop->id)->whereRaw('LOWER(order_no) = ?', [mb_strtolower($v['order_no'])])->whereRaw('LOWER(sku) = ?', [mb_strtolower($sku)])->where('sale_source', '<>', 'history')->first();
-                if ($dup && (int) $dup->fk_id_import && (int) $dup->fk_id_import !== $batch) { $ob = DB::table('t_sale_imports')->where('id', $dup->fk_id_import)->first(); $err($ln, $v['order_no'], $isNo ? '' : $sku, 'Already imported in the ' . ($ob ? date('M Y', mktime(0, 0, 0, (int) $ob->period_month, 1, (int) $ob->period_year)) : date('M Y', strtotime((string) $dup->d_order))) . ' import', $row); continue; }
+                if ($dup && (int) $dup->fk_id_import && (int) $dup->fk_id_import !== $batch) { $ob = DB::table('t_sale_imports')->where('id', $dup->fk_id_import)->first(); $err($ln, $v['order_no'], $isNo ? '' : $sku, 'Already imported in the ' . ($ob ? date('M Y', mktime(0, 0, 0, (int) $ob->period_month, 1, (int) $ob->period_year)) : date('M Y', strtotime((string) $dup->d_order))) . ' import', $row, (int) $dup->fk_id_import); continue; }
                 $out = $date < $from || $date > $to; $target = $batch; $flag = $out ? 1 : 0;
                 if ($out && ($d['out_mode'] ?? 'keep') === 'move') {      // into the batch of its own month, when that month can still take lines
-                    $om = (int) substr($date, 5, 2); $oy = (int) substr($date, 0, 4); $ob = self::batchOf((int) $shop->id, $om, $oy);
+                    $om = (int) substr($date, 5, 2); $oy = (int) substr($date, 0, 4); $ob = self::batchOf((int) $shop->id, $om, $oy, 'Normal');
                     if ((! $ob || $ob->status === 'Pending') && ! Ledger::periodLocked($ent, substr($date, 0, 7))) { $target = $ob ? (int) $ob->id : (int) DB::table('t_sale_imports')->insertGetId(RecordService::fillNotNull('t_sale_imports', ['fk_id_ent' => $ent, 'fk_id_branch' => $shop->id, 'fk_id_marketplace' => $shop->fk_id_marketplace, 'import_nature' => 'Normal', 'file_name' => mb_substr($fileName, 0, 255), 'period_month' => $om, 'period_year' => $oy, 'marketplace_fee' => 0, 'status' => 'Pending', 'imported_by' => $u->id ?? null, 'imported_at' => now()]));
                         $flag = 0; $st['moved']++; DB::table('t_sale_imports')->where('id', $target)->increment('saved_rows'); }
                 }
@@ -380,15 +387,16 @@ class SalesImport
         return DB::transaction(function () use ($id, $u) {
             $b = self::batch($id); Perm::need($u, 'orders.saleDeleteMonth'); $mn = self::monthName((int) $b->period_month, (int) $b->period_year);
             if ($b->status !== 'Pending' || DB::table('t_sales')->where('fk_id_import', $id)->where(fn ($w) => $w->where('status', 'Confirmed')->orWhere('f_locked', 1))->exists()) throw new \InvalidArgumentException("This month is confirmed and saved permanently, so it can't be deleted.");
-            $group = "batch:$id:" . time(); $n = 0;
-            foreach (DB::table('t_sales')->where('fk_id_import', $id)->lockForUpdate()->get() as $s) { $n++;
+            $group = "batch:$id:" . time(); $n = 0; $kept = 0;
+            foreach (DB::table('t_sales')->where('fk_id_import', $id)->lockForUpdate()->get() as $s) {
+                if (self::fromIntake($s, $b)) { DB::table('t_sales')->where('id', $s->id)->update(['fk_id_import' => 0]); $kept++; continue; } $n++;
                 DB::table('mo_recycle_bin')->insert(['fk_id_ent' => (int) $s->fk_id_ent, 'table_name' => 't_sales', 'row_id' => $s->id, 'label' => mb_substr("Order {$s->order_no} · {$s->sku}", 0, 255), 'group_key' => $group, 'row_json' => json_encode((array) $s), 'deleted_by' => $u->id ?? null, 'deleted_at' => now(), 'note' => "Sales for $mn deleted"]);
                 if ($s->sale_source === 'active') DispatchService::release((int) $s->id, "Sales for $mn deleted"); }
             DB::table('mo_recycle_bin')->insert(['fk_id_ent' => (int) $b->fk_id_ent, 'table_name' => 't_sale_imports', 'row_id' => $b->id, 'label' => "Import {$b->file_name}", 'group_key' => $group, 'row_json' => json_encode((array) $b), 'deleted_by' => $u->id ?? null, 'deleted_at' => now(), 'note' => "Sales for $mn deleted"]);
             DB::table('t_sales')->where('fk_id_import', $id)->delete(); DB::table('t_sale_import_errors')->where('fk_id_import', $id)->delete(); DB::table('t_sale_imports')->where('id', $id)->delete();
             TaskEngine::close('SAL_UNMATCHED', [$b->fk_id_branch, sprintf('%04d-%02d', $b->period_year, $b->period_month)], 'Month deleted');
             Audit::log('t_sale_imports', $id, 'DELETE', ['file' => $b->file_name, 'lines' => $n], "Sales for $mn deleted", (int) $b->fk_id_ent);
-            return ['message' => "Sales for $mn deleted.", 'lines' => $n, 'undo' => $group];
+            return ['message' => "Sales for $mn deleted." . ($kept ? " $kept line(s) from the daily orders were kept." : ''), 'lines' => $n, 'kept' => $kept, 'undo' => $group];
         });
     }
 
