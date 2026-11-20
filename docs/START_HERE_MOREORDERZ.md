@@ -1,6 +1,6 @@
 # MoreOrderz – START HERE (for any new chat or session)
 
-Last updated: 12 Nov 2026, 15:15 PKT. If a chat is lost, the owner says "my MoreOrderz project" – read this file first, then the files it names. Nothing else is needed to continue.
+Last updated: 21 Nov 2026, 01:50 PKT. If a chat is lost, the owner says "my MoreOrderz project" – read this file first, then the files it names. Nothing else is needed to continue.
 
 ## 1. What it is
 Muhammad Aashiq's business tool "V-Commerce / MoreOrderz", rebuilt from scratch. The old tool was PHP CodeIgniter 3 + MariaDB (database towards3_store); it is no longer used as code – only its data is imported.
@@ -36,7 +36,12 @@ The owner wants **his own version** of this same tool (not from zero), built wit
 - Server: a VPS (Hetzner / DigitalOcean) with Laravel Forge, or Laravel Cloud.
 - Needed from the owner before starting: (1) a new **private** GitHub repo (e.g. `moreorderz-own`), (2) server decision, (3) what first – Vue screens or AI features.
 - Only one version can be live on the real data in the end – the owner chooses later.
-Not started yet: waiting for the owner's go.
+Decisions of 21 Nov 2026 (owner):
+- Build the own version in the SAME account and repo: `aemporio6/moreorderz` (no new GitHub account; the account e-mail is now the company domain e-mail).
+- The repo stays **public** for now; it is made private when it goes to the server (check access then; switch back if access breaks).
+- The version handed to the developer is kept as branch **`handover-final`** (commit 194ecf9). New work goes on `main`.
+- Server: Hostinger KVM 2 (24 months), WITHOUT Forge – deploy by GitHub Actions (free) + one setup script. Domain DNS stays at A2 / hosting.com; `moreorders.<domain>` will point to the server. MyTool (GitHub Pages on `mytool.<domain>`) is not touched.
+- Building starts without the server: everything is built and tested in the cloud workspace (Laravel + MariaDB + Redis there); the server is needed only to go live.
 
 ## 5. How to continue in a new cloud session
 ```
