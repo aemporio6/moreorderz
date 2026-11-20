@@ -183,3 +183,11 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - Packages were installed from GitHub sources because packagist is blocked in the build workspace; `composer.json` / `composer.lock` are standard, the developer runs a normal `composer install`.
 - 20 registry forms are tools (no table) – listed in `tests/Feature/EngineTest.php`.
 - Local dev DB: database `moreorderz`, test database `moreorderz_test`.
+
+
+## 21 Nov 2026 – Google Drive: one main folder, never loose files
+- The tool now keeps everything in ONE main folder in Drive: the folder whose id is typed in the connection, or "MoreOrders" (made once, the only thing ever made in the Drive's root).
+- Fixed sub-folders inside it: Companies, Shops, Suppliers, Purchase orders, Products, Marketplace reports, Partner statements, Carrier labels, Exports and backups. A shop folder goes inside its company folder (or Shops), a PO inside its supplier folder (or Purchase orders).
+- "Set up the folders" button on the Drive screen (OWNER / MANAGER) makes missing folders and reuses existing ones (running it twice makes nothing new). Any other Drive can be connected later; the same layout is made there.
+- GoogleDrive::folder() refuses to make a folder without a parent.
+- Tests: 186 pass (1,828 checks). Commit eaf640e.

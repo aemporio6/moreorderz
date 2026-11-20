@@ -20,7 +20,7 @@ It covers the whole chain: research → buying (PO, payments, shipments, customs
 | Print helper for the packing PC | `tools/print-agent/` |
 
 ## 3. State (final)
-- **185 automated tests pass (1,809 checks)**. All 146 menu screens open on a fresh install, desktop and phone, 0 errors, 0 placeholders.
+- **186 automated tests pass (1,828 checks)**. All 146 menu screens open on a fresh install, desktop and phone, 0 errors, 0 placeholders.
 - Built in round 1 (7 steps) and round 2 (parts 1a–8): see PROGRESS.md. Round 2 part 8 (last): choices with company default + per-shop values, VA salary source, two-layer stock option, VAT return, loans, budgets, capital calls, partner Accept/Ask on statements, one-click printing (IPP, raw TSPL/ZPL/EPL, print helper, PrintNode), installable phone app.
 - Outside connections built to the providers' published contracts and tested with simulated answers – **not yet run with real keys**: eBay, Amazon SP-API, TikTok Shop, OnBuy, Temu, Royal Mail Click & Drop + Tracking, WhatsApp Cloud API, Google Drive, PrintNode. Real printers not yet tested.
 - Real owner files checked: 3 TikTok money workbooks, the Amazon date range report (Jul–Sep 2026), the eBay report layout. These real files are NOT in the repo.
@@ -41,6 +41,7 @@ Decisions of 21 Nov 2026 (owner):
 - The repo stays **public** for now; it is made private when it goes to the server (check access then; switch back if access breaks).
 - The version handed to the developer is kept as branch **`handover-final`** (commit 194ecf9). New work goes on `main`.
 - Server: Hostinger KVM 2 (24 months), WITHOUT Forge – deploy by GitHub Actions (free) + one setup script. Domain DNS stays at A2 / hosting.com; `moreorders.<domain>` will point to the server. MyTool (GitHub Pages on `mytool.<domain>`) is not touched.
+- Google Drive (21 Nov): everything goes in ONE main folder "MoreOrders" (or a typed main folder id) with fixed sub-folders; nothing loose in the Drive root; any Drive can be connected later.
 - Building starts without the server: everything is built and tested in the cloud workspace (Laravel + MariaDB + Redis there); the server is needed only to go live.
 
 ## 5. How to continue in a new cloud session
@@ -51,7 +52,7 @@ service mariadb start                 # or: (mysqld_safe --user=mysql &)
 # databases: moreorderz (dev), moreorderz_test (tests), user with rights on both; mo_old_test for import tests
 cp .env.example .env && php artisan key:generate
 php artisan mo:install && php artisan mo:user owner@demo.test --role=OWNER --name="Owner"
-MO_TEST_FRESH=1 php artisan test      # expect 185 pass
+MO_TEST_FRESH=1 php artisan test      # expect 186 pass
 php artisan serve --port=8123
 ```
 Old data: the owner's upload `towards3_store.sql` (18 Sep 2026) → load into a separate database → `php artisan mo:import-old --from=<db> --mask` (always `--mask` in a workspace) → `--transactions` → `mo:import-compare`.
