@@ -27,6 +27,9 @@ It covers the whole chain: research → buying (PO, payments, shipments, customs
 - Import of the real old export (18 Sep 2026): 200,117 rows accounted for; field-by-field check 1,105 columns, 5 explained differences. A fresh export is needed before go-live.
 - The hand-over to the developer is done (`moreorderz_FINAL.zip`).
 
+## 3a. Honest measure against the specification (audit of 21 Nov 2026)
+The 186 tests prove the rules that were built. Checked line by line against MASTER_REGISTER_v1.7 (1,547 lines): **BUILT 209 of 1,433 lines that count (15 %)**, PARTIAL 614, FORM ONLY 262 (form + list work, rule logic not built), MISSING 348. Strongest: printing, setup lists, stock / warehouse; weakest: sales rules of the old tool, tasks, people, reports. Files: `docs/AUDIT_RESULT.md`, `audit/REGISTER_AUDIT.csv`, `audit/AUDIT_STATE.md` (how to resume), `docs/OWN_VERSION_PLAN.md` (what is built next), `docs/MYTOOL_GAP.md` (34 functions to bring from MY TOOL).
+
 ## 4. What was planned next (owner, 12 Nov 14:43)
 The owner wants **his own version** of this same tool (not from zero), built with Claude in the cloud, in parallel to the developer's copy. Advice given and agreed in principle:
 - Keep **Laravel 13 backend + MariaDB** (all rules and tests stay).

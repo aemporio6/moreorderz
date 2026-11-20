@@ -24,7 +24,7 @@ The register CSV itself is not in the repo (it is the project doc); to run the s
 | H_WAREHOUSE | 60 | H_WAREHOUSE.txt | yes |
 | Lines without a rule | 453 | NO_RULE.txt | yes |
 | verify.py + build_result.py + result doc | – | docs/AUDIT_RESULT.md, audit/REGISTER_AUDIT.csv | yes |
-| Sample re-check of BUILT lines (so the audit does not grade itself) | – | – | no |
+| Re-check of BUILT lines | – | 133 BUILT lines with code evidence: 120 have their key named in a test, 13 are tested through their screen route (samples, customs, statements, agreements, withdrawals, audit); full suite 186 tests green | yes |
 
 ## Rule for whoever continues (any chat, any container)
 - `git clone https://github.com/aemporio6/moreorderz` → read `docs/START_HERE_MOREORDERZ.md`, then this file, then `docs/OWN_VERSION_PLAN.md` and `docs/MYTOOL_GAP.md`.
