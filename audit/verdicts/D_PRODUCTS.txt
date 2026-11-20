@@ -1,0 +1,86 @@
+1|F|form:t_product_vendor|form only; family coding / Add defaults as code rules not built
+2|M||SKU live check with look-alike warning not built (unique by the registry only)
+3|M||Parent / Alone switch guard not built
+4|F|form:product_variation|form only; variations grid with inheritance not built
+5|F|form:product_variation|colour / size lists as registry options
+6|M||variations panel + child-SKU search not built
+7|P|f_out_of_stock|out-of-stock flag read by stock; automatic set / clear events not built
+8|M||duplicate product action not built
+9|M||hide / soft delete / restore not built
+10|M||central inventory right (products.edit_central) not built
+11|F|form:t_product_vendor|supplier / cost fields on the form; landing price inherit rule partly (lot cost)
+12|F|form:t_product_vendor|form only
+13|F|form:cat_tags|form only; multi-tag field / chips not built
+14|P|form:t_product_vendor|product record with Stock and Prices buttons; the 11 tabs / deep links not built
+15|F|form:product_mp_value|form only
+16|P|function page|history tab per record (field old -> new); labels instead of ids partly
+17|P|class Rights|roles by code, one check; old id map not needed
+18|P|registry|Field registry screen (admin); record inspector / nightly schema self-check not built
+19|B|function available|on hand / sellable / available from the one stock service; pipeline never in stock
+20|F|form:product_visibility|form only; visibility per marketplace x shop not enforced
+21|M||"who sees which product" row scope not built
+22|F|form:product_mp_price|form only; Sale = Raw + carrier + packing formula / price guard not built
+23|F|form:product_mp_shipping|form only; 3PL fees defaults / PRD_FEE_MISSING not built
+24|M||primary marketplace read view not built
+25|M||ownership type chip not built
+30|B|class PriceService|price periods: new price closes the old one, late price fits in, sale date finds its price
+31|P|class PriceService|price found by date; price mismatch flag / task not built
+35|P|stock/on-hand|Stock on hand list with KPIs; the products list columns / pills of the spec not built
+36|P|form:t_product_vendor|generic filters; MP-id search, mode chips not built
+37|P|stock/on-hand|low filter by min level; ICC days-of-cover status not built
+38|M||WAC column not built (lot cost shown)
+39|P|views/\{page\}|saved views with columns; "saved export formats" not built
+40|B|class StockService|every stock change through the stock service under a lock, ledger with stock-after
+41|B|stock/opening|opening stock as lots with location, owner, cost
+42|P|function quickBuy|purchase booked with lot and payment (Quick buy); the product Logistics tab form not built
+43|M||void a purchase not built
+44|P|function productStock|units per location and lot from the ledger; bin notes / inactive-location warning not built
+45|F|form:inventory_setup|setup lists as forms; own-descendant parent check not built
+46|P|STK_LOW|low stock tasks nightly + low filter; the Stock alerts page with update / buy buttons not built
+47|B|function adjust|adjust with reason, location, never below 0, approval above ADJUST_APPROVAL_QTY
+48|P|function transfer|transfer between locations, lot and cost travel; two-step via TRANSIT with damaged / missing not built
+50|B|class CountService|stock count: blind count, second person approves, only differences posted; CSV count upload not built
+51|M||products bulk upload (34 columns) not built
+52|M||family link import not built
+53|M||parent + child staged import not built
+54|M||import wizard with named mappings not built
+55|P|tracking-upload|tracking upload layouts per marketplace; the 25-column shipping export not built
+58|F|form:t_products_shop_not_listed|form only; "not listed per shop" logic not built
+59|M||eBay active-listings import not built
+60|M||legacy per-shop rows -> listings not built
+62|F|form:car_preset|form only
+63|M||combination browser not built
+64|F|form:car_preset_group_item|form only
+65|M||carrier dropdown service not built
+66|M||virtual preset id migration not built
+68|M||protected default list items not built
+69|F|form:cat_brands|forms only
+70|F|form:cat_product_type|forms only
+71|F|form:cat_vendors|form only
+73|M||dropship upload step 1 not built
+74|P|function rows|forgiving CSV reader (BOM, separator, header row) in the money / order readers; UK / US date question not built
+75|M||DS column catalogue / guess not built
+76|M||DS row checks not built
+77|M||DS duplicates / joined lines not built
+78|P|import-history|import history; upload undo with restore not built
+79|P|function maskRow|masking of personal data in test copies and secrets; PII_BUYER class per role not built
+80|P|form:product_investor|lot owner is a party; old investor id mapping not built
+81|M||investor settlement line amounts not built (waterfall works on lots instead)
+82|P|class WaterfallService|month waterfall with split rules, loss carried forward, shares; the old "settle a sales month" flow with its messages not built
+83|M||investor documents (invoices, numbering) not built
+84|M||reopen / cancel / credit note / payments on invoices not built
+85|F|form:drp_inventory|form only
+86|F|form:drp_platform|form only
+87|P|sellable|location kinds with sellable flag; fulfilment-centre children, STK_FC_DIFF, channel default location partly
+88|P|function returnIn|return back into the same lot with cost reversed, damaged / missing to their place; condition -> location table, locked-month correction partly
+89|F|form:product_packaging|form only
+90|F|form:product_artwork_file|form only
+91|F|form:product_certificate|form only; expiry task not built
+92|F|form:label_regulation_profile|form only
+93|F|form:product_image|form only
+94|M||inventory sharing screen not built
+95|F|form:t_inv_settings|form only
+96|F|form:threepl_profile|form only
+97|F|form:dropship_supplier_profile|form only
+98|F|form:t_carriers|form only; carrier profile fields used by the label import partly
+99|F|form:cat_brand_registration|form only

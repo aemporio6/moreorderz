@@ -17,11 +17,11 @@ The register CSV itself is not in the repo (it is the project doc); to run the s
 | A_SALES | 92 | A_SALES.txt | yes |
 | B_SOURCING | 70 | B_SOURCING.txt | yes |
 | C_ACCOUNTS | 50 | C_ACCOUNTS.txt | yes |
-| D_PRODUCTS | 99 | D_PRODUCTS.txt | no |
-| E_FINANCE (R-FIN, R-INV, R-ACC, R-TAX) | 108 | E_FINANCE.txt | no |
-| F_SETUP | 52 | F_SETUP.txt | no |
-| G_CORE | 125 | G_CORE.txt | no |
-| H_WAREHOUSE | 56 | H_WAREHOUSE.txt | no |
+| D_PRODUCTS | 86 | D_PRODUCTS.txt | yes |
+| E_FINANCE (R-FIN, R-INV, R-ACC, R-TAX) | 109 | E_FINANCE.txt | yes |
+| F_SETUP | 52 | F_SETUP.txt | yes |
+| G_CORE | 121 | G_CORE.txt | yes |
+| H_WAREHOUSE | 60 | H_WAREHOUSE.txt | yes |
 | Lines without a rule | 453 | NO_RULE.txt | no |
 | verify.py + build_result.py + result doc | – | – | no |
 

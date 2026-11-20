@@ -1,0 +1,60 @@
+1|P|STOCK_COST_LAYER|one layer by default, two-layer option as a Choice
+2|P|form:location|location tree
+3|P|function systemLocation|system places per company (shipped, returns, damaged)
+4|P|class LocationGenerator|bin codes from the company format; live preview not built
+5|B|class LocationGenerator|bin generator, never a bin twice
+6|M||deactivate-never-delete / CSV import-export of locations not built
+7|M||simple mode -> full mode by settings not built
+8|P|class Context|one warehouse per company; many companies in one site not built
+9|B|class SkuHomes|SKU homes: one main home per site, overflow homes, min / max
+10|B|function suggest|storage modes FIXED / HYBRID / CHAOTIC in the putaway suggestion
+11|M||segregated owner stock not built
+12|B|class StockService|movement types, one writer
+13|B|function consumeForSale|negative stock blocked; warehouse moves never change owner
+14|P|stock/opening|old stock in as opening lots in one place
+15|B|function available|available = sellable minus reserved
+16|B|function reserve|reservation at intake
+17|B|function release|release and consume
+18|B|function fillShorts|short at intake, filled when stock arrives
+19|P|function intake|listing SKU with pack quantity; bundle components not built
+20|M||stock quantity per listing (outbound) not built
+21|P|function createGrn|receive with a place per line; phone receiving flow partly
+22|P|function quickBuy|receiving without a PO = quick buy / opening stock
+23|B|function suggest|putaway suggestion with reason
+24|M||dispatch deadline and priority not built
+25|B|function buildPickList|pick list in walking order
+26|B|function pick|picking on the phone (Work screen)
+27|B|function pick|short pick -> back in queue + count task
+28|M||partial / abandoned / reprinted pick lists not built
+29|P|function pack|pack only fully picked, once; weight / box / materials not built
+30|F|form:carrier_service_rule|form only
+31|P|function buyLabels|labels bought through the carrier connection / label PDF import; not tested on a real account
+32|P|function reprint|reprint with reason; void / address change not built
+33|P|tracking-upload|ready to dispatch + tracking upload file
+34|B|function openHandover|handover session per carrier with scan results
+35|B|function closeHandover|close = ship; unscanned parcels stay ready
+36|P|function closeHandover|exceptions task at close; lost parcels / carrier claims not built
+37|B|function confirmMonth|shipped awaiting confirm; Confirm consumes
+38|P|function receiveReturn|return before / after Confirm; cancel / refund around Confirm partly
+39|P|function receiveReturn|return intake with condition; scan intake partly
+40|P|function receiveReturn|unmatched return -> task
+41|P|function receiveReturn|refund review task; supplier claim not built
+42|B|function transfer|bin transfer; site transfer two-step not built
+43|B|function move|change a SKU's home, units moved, 2 labels queued
+44|B|function refill|refill of a main home + nightly WH_REPLEN task
+45|B|class CountService|count sessions with frozen system numbers
+46|P|function approve|second person approves the differences; recount step not built
+47|M||automatic counts not built
+48|B|function adjust|adjustments with reason codes
+49|F|form:fba_shipment|form only
+50|M||ABC classes / slotting not built
+51|B|work|one phone Work screen: Pick, Pack, Handover, Returns
+52|P|handover/\{id\}/scan|scan box on the Work screen; one resolver for every code type not built
+53|B|op_id|op id per scan so a repeat on poor Wi-Fi counts once; 6-process race test
+54|B|function selfCheck|nightly reconciliation: products = lots = ledger
+55|M||anomaly alerts not built
+56|B|function auto|print queue, auto-print, printers per job kind
+57|F|form:warehouse_settings|form only
+58|P|class Rights|Warehouse role limits (no money, no sales); rights per action partly
+59|P|class ReportService|3 warehouse reports; the full list not built
+60|M||edge-case register not tested line by line

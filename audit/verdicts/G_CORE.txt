@@ -1,0 +1,121 @@
+1|P|tasks/\{id\}/status|tasks with status, rule tasks close themselves and cannot be ticked by hand; the 7-status machine (rework, waiting approval) not built
+2|P|form:task|task form from the registry; SLA defaults, absence cover, pick-only record link not built
+3|P|form:task|priority field; notice rules per priority not built
+4|M||"I am stuck" not built
+5|M||Done gate (checklist, subtasks, proof) not built
+6|M||proof switch / partner-only fields not built
+7|M||who may approve (no self-approval) not built for tasks
+8|M||task score not built
+9|M||rework not built
+10|M||acknowledge not built
+11|M||dependencies not built
+12|M||subtasks not built
+13|M||due-date move limit not built
+14|M||reassign with reason not built
+15|M||cancel with reason / never delete not built as rule
+16|F|form:task_absence|form only
+17|F|form:task_delegation|form only
+18|M||workload limit not built
+19|P|function tasks|Mine / Everyone views; confidential / helper / cover visibility not built
+20|P|class Rights|roles from the rights list
+21|P|function tasks|late and urgent counts; the 9 health chips not built
+22|M||8 hard rules not built
+23|F|form:task_category|form only
+24|F|form:task_template|form only; create-from-template not built
+25|P|class TaskEngine|rule tasks from events, opened once, closed by the system; templates fired by events not built
+26|M||repeating tasks not built
+27|F|form:task_checklist_item|form only
+28|F|form:task_comment|form only
+29|F|form:task_evidence|form only
+30|P|function page|history per record
+31|B|function page|record page with Linked records, Tasks and History for every form
+32|M||send reminder now not built
+33|M||bulk actions on tasks not built
+34|F|form:task_import|form only
+35|P|schedule|scheduler jobs every minute / hour / night; one lock + run log line not built
+36|P|function tasks|My tasks list; tiles / waiting-on-me groups / score not built
+37|P|function tasks|tasks list with filters; chips with counts, export columns not built
+38|M||tasks dashboard not built
+39|M||needs-attention ranking not built
+40|M||Team & Settings page / leaderboard not built
+41|P|function page|task record page; action bar / banners not built
+42|M||built-in guide not built
+43|M||bell not built
+44|M||weekly task report not built
+45|P|function digests|morning digest of late / urgent tasks by WhatsApp; sections, team digest, preview not built
+46|P|class Messenger|WhatsApp + e-mail outboxes, never twice, 3 tries, HELD until a channel exists; one tm_messages table for every engine partly
+47|M||quiet hours not built
+48|P|whatsapp_number|WhatsApp number + e-mail per person; timezone, digest time, channel switches not built
+49|M||alert rules catalogue N1-N14 not built
+50|M||timed alerts not built
+51|M||alert thresholds not built
+52|P|function inbound|signed webhook, receipts, replies to an inbox, DONE closes a hand-made task; the full command set not built
+53|P|class WhatsAppCloud|templates list + Meta provider; log provider, 360dialog not built
+54|P|messages|Messages screen (sent, e-mails, replies, retry); Messages tab per record, masking not built
+55|P|class Rights|menu from the menu table filtered by role
+56|P|function find|search everything (records); menu / page search with ranking not built
+57|F|form:menu_builder|form only
+58|B|sidebar_modules|146 menu screens seeded from the v1.7 menu tree, all open
+59|P|function reveal|secret reveal by right with audit; secure pages with 2FA re-ask not built
+60|P|function boot|top bar with company switch, search, Create, user menu
+61|P|class Rights|rights per role; per-person GRANTED / REVOKED, request access not built
+62|P|class Rights|money removed for Warehouse; one Mask service for every field right not built
+63|M||data scope "own shops" not built
+64|B|function attempt|login: hashed password, lock after 5 wrong tries, login log, 2-step
+65|M||forgot password not built
+66|P|function list|lists with filters per column, column picker, saved views, CSV; totals row, (empty) filter, starts-with, date range not built
+67|B|function export|export follows the visible columns and filters, logged, formula-safe
+68|P|views/\{page\}|saved views (shared by Owner / Manager); named export templates with schedule not built
+69|M||bulk actions registry not built
+70|P|miniForm|confirm / mini-form popups with plain refusal reasons; Undo toast not built
+71|P|auto_correct|field types and auto-correct from the registry; month_year type not built
+72|P|class PrintService|PDF print service at exact size; DOCX export not built
+73|M||"Update a field" import mode not built
+74|M||product bulk upload not built
+75|M||temp file retention job not built
+76|F|form:t_branch|form only; owner cascade not built
+77|P|tracking-upload|tracking upload per marketplace layout
+78|P|class PriceService|expected price from the period on the order date
+79|P|function vaSalary|VA share in the waterfall; frozen batch % not built
+80|M||SALE_BUY_MATCH check not built
+81|M||supplier purchase audit not built
+82|M||data-quality checks not built
+83|F|form:t_shop_feedback|form only
+84|N||old SQL views – not carried
+85|P|class Choices|settings with history
+86|M||invoice portal not built
+87|P|function postGrn|lots only from posted GRNs; status lists partly
+88|N||old investor module cut-over step
+89|F|form:acc_settings|form only
+90|F|form:external_contact|form only
+91|M||typed HS code / carton CBM not built
+92|N||old database clean-up (the old plain password column is never read)
+93|N||documentation rule
+94|P|class TaskEngine|task codes with dedupe and auto-close; priority by money / owner order not built
+95|P|class EventBus|event bus with retry; name catalogue check not built
+96|P|label_print_log|printers, templates, one log row per copy, reprint needs a reason, carrier label import; inbound cartons not built
+97|M||rule-task snooze not built
+98|M||2FA re-ask after 60 min not built
+99|M||search of field names / screens / synonyms not built
+100|P|function find|search by code, phone digits, e-mail, amount; recent / pinned searches, actions, scan not built
+101|P|function boot|top bar; Back / Forward / Recent pages, shortcut help, brand seal not built
+102|M||"All companies (added up)" view not built
+103|M||charts not built
+104|M||calendar / kanban views not built
+105|P|views/\{page\}|column chooser saved per view; drag order / density not built
+106|P|function audit|audit log viewer with filters user / table / action; date presets not built
+107|F|form:playbook_step|form only
+108|M||data-quality score not built
+109|N||old tool key rotation – outside the new code
+110|P|job|job runs written by pulls; one job log for every scheduled job + Health "late" not built
+111|B|class PrintService|printer profiles as capabilities, statuses, add / edit
+112|B|function fit|template is a size; fit check, turn 90 degrees, refuse with reason
+113|B|class PrintAdapters|adapters DRIVER_PDF, IPP, RAW TSPL / ZPL / EPL, print helper, cloud
+114|P|function fit|loaded media checked at print; "switch media on the Work screen" not built
+115|B|function testPage|test page + calibration per printer x media, required before live jobs
+116|B|function replace|routes most-specific-wins, backup printer, replace printer in one step
+121|P|health|plain sentence to the user, detail in the log; 403 / 404 / 500 pages with E-id not built
+122|P|class OldImport|old logs copied as history tables; one time line on the record not built
+123|N||documentation index
+124|B|function boot|+ Create catalogue generated from the registry forms
+125|B|sidebar_modules|menu in workflow order, 17 sections, by role

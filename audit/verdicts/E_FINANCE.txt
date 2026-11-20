@@ -1,0 +1,109 @@
+FIN-1|P|class Rights|finance rights by role lists in the controllers; the permission matrix as data not built
+FIN-2|P|function partnerOfUser|a PARTNER login sees only his own account and asks only his own withdrawal; route-level whitelist of 12 actions not built
+FIN-3|M||partner onboarding gate (6 items) not built
+FIN-4|P|vat_rate|VAT rate + corporation tax rate per company used for the reserve; the full settings form with checks not built
+FIN-5|F|form:fin_marketplace_setting|form only
+FIN-6|P|class Settings|some finance settings (overdue days, limits); the full key list with help / min / max not built
+FIN-7|B|function createBank|bank accounts with opening balance booked, balance per account
+FIN-9|P|class Audit|every write audited; proof link per bank line not built
+FIN-10|P|class Messenger|one outbox per channel, never twice, statements sent; partner opt-out per kind not built
+FIN-11|P|class Rights|Warehouse never sees money; one Mask service removing keys for every role / export not built
+FIN-12|P|function overview|company switch; "All companies (added up)" and the Never-list tests partly
+FIN-8|B|function saveAgreement|agreements with scope, %, fee, dates; history kept, paid agreement cannot be edited; "Change share" versioning partly
+FIN-13|B|function scopeTotals|share total per scope, over 100 % warning + close check
+FIN-15|P|ended_reason|agreement end with reason; automatic end when the PO is sold out not verified
+FIN-16|P|function account|partner balance (capital, profit, withdrawn); annualised return not built
+FIN-17|B|function requestWithdrawal|withdrawal request -> approval -> paid, never above balance
+FIN-18|M||reinvest action not built (the ledger type exists only)
+FIN-14|B|function callNew|capital calls: ask partners, answer, money received = capital; WhatsApp OK / NO answer and auto-match MC not built
+FIN-19|P|function account|My Partner Account (own account, statements, withdraw); stock at cost x %, profit by product, view-as not built
+FIN-20|P|opening_balance|opening balance of bank accounts and opening lots; the wizard with types + lock not built
+FIN-21|N||legacy investor migration – old-tool cut-over step, not run (old investments copied as documents only)
+FIN-22|P|class MarketplaceFiles|money files of TikTok, Amazon (2 formats), eBay, any table + bank CSV / Excel with dedupe; ADS / FBA_STOCK / RETURNS / REIMB / STORAGE types not built
+FIN-23|B|function amazonCode|settlement line -> bucket rules (in code, not as data)
+FIN-24|P|function importStatement|upload -> check -> apply with dedupe; saved layouts per shop, dry-run screen, temp token not built
+FIN-25|P|hubs|Marketplace hubs card per shop; report status board per shop x type not built
+FIN-26|P|class Fx|exchange rates screen, latest rate on or before the date; missing-rate task not built
+FIN-27|P|function autoMatch|auto-match only when exactly one thing fits (supplier payment, expense, payout); rule codes M1-M5 / MC partly
+FIN-28|P|function unmatch|manual match with direction guard, undo; all targets (INVOICE, CLAIM, LOAN) not built
+FIN-29|P|function categorise|categories with cost / not-cost role; the full FIN_CATEGORY list with profit roles not verified
+FIN-30|M||category suggestion chips not built
+FIN-31|P|ledger|Ledger view (trial balance, P&L, journals) + bank lines list; the Accountant filters / totals not built
+FIN-32|P|schedule|scheduler with nightly / hourly / minute jobs; lock + run log table not built
+FIN-40|B|class ProfitService|profit of shop x month from confirmed lines, money files, expenses; golden month passes
+FIN-41|B|function distributable|tax reserve before sharing – spec example passes; reserve ledger / release not built
+FIN-42|B|consumeForSale|COGS only from Month confirm consumption; Finance never consumes
+FIN-43|B|function shareLines|shares by agreements active on the first day of the month; one profit route per shop-month
+FIN-44|P|class ProfitService|profit by product; spreading of unassigned fees by sales share partly
+FIN-45|B|class CloseService|17 close checks in order, waivers (5 checks, Owner), statuses OPEN / CHECKED / LOCKED – PURCHASE_VS_SUPPLIER N/A
+FIN-46|B|function lock|lock: Owner, owner note, nothing red, partner rows posted, figures frozen, statements made
+FIN-47|P|function adjust|locked month never reopened; partner adjustment + late sale lines forward; returns / landed-cost corrections forward not built
+FIN-48|B|function makeStatements|company + partner statements as PDF, versioned, never deleted
+FIN-49|B|function statementAnswer|Accept / Ask on a statement, question task, answer by WhatsApp
+FIN-50|P|FIN_SETTLEMENT_OVERDUE|overdue money-file task (auto-close); monthly partner summary not built
+FIN-51|M||nightly stock snapshot not built (stock read live from the ledger)
+FIN-52|N||pipeline rows replaced by sourcing records (v1.7 says no pipeline ledger)
+FIN-53|B|function postGrn|GRN post is the only lot creator
+FIN-36|P|valuation|stock valuation report (today); valuation at a past date not built
+FIN-54|P|class ProfitService|profit by product view; stock days / slow-dead flags in the same list not built
+FIN-60|B|class CashForecast|cash forecast by week with committed items – different formula from the spec's 30 / 60 / 90
+FIN-61|P|function payDueTasks|supplier terms + SRC_PAY_DUE task; schedule view in Finance partly (dashboard list)
+FIN-62|B|function loanNew|loans given / taken, payments, balance, due task
+FIN-63|P|function vatCalc|VAT return 9 boxes; quarters from the Accountancy Hub stagger not built
+FIN-64|P|function budgets|budgets per month and category; Bank & cash page parts partly
+FIN-65|P|money|Money dashboard tiles + to-do list; forecast tiles, partners table partly
+FIN-66|P|FIN_BANK_STALE|3 of the 10 finance alerts as rule tasks (bank stale, settlement overdue, loan due); FA1, FA2, FA5-FA8, FA10 not built
+FIN-67|M||alerts screen with on / off not built
+FIN-33|P|export/\{key\}|CSV export of lists; the accountant year export with proof links not built
+FIN-69|P|class MarketplaceFiles|money reports per marketplace placed in shop x month; mappings are code, not profile data
+FIN-70|P|function split|bank layouts, auto-match, split lines; M6 invoice match, sum matching, provider profiles not built
+FIN-71|P|class OldImport|opening lots + history import; cut-over date rules / go-live gate not built
+FIN-72|F|form:payment_provider_profile|form only
+FIN-73|P|function categorise|category codes exist; re-coding of old lines / withdrawal bank + date not built
+FIN-74|P|class ProfitService|profit by shop / product / month, totals equal the books; by lot / batch / investor views not built
+FIN-75|B|function stack|stacking rule per agreement – spec example 460 / 400 / 450 / 500 passes
+INV-1|M||settle a sales month (old invoicing) not built – the waterfall on the locked month is used instead
+INV-2|M||investor lines + hidden margin not built
+INV-3|M||hidden margin report not built
+INV-4|P|class Rights|cost columns hidden from Warehouse; field-level visible_to on prints partly
+INV-5|B|function saveSplit|profit split rules per shop: 4 % = 100, modes, retire
+INV-6|P|function vaSalary|split by month end, VA salary from job history, loss brought forward; one payable per VA not built
+INV-7|M||invoice documents generate / reopen not built
+INV-8|F|form:invoice_document|form only
+INV-9|M||invoice PDF not built
+INV-10|F|form:invoice_payment|form only
+INV-11|F|form:invoice_document|list only
+INV-12|M||who owes whom not built
+INV-13|M||month status side panel not built
+INV-14|M||invoice party print details not built
+INV-15|M||portal dashboard / my sales not built
+INV-16|M||portal exports not built
+INV-17|M||invoicing conventions (shop label) not built
+ACC-1|M||year end / accounts periods engine not built
+ACC-2|M||ACCOUNTS due date not built
+ACC-3|M||CT periods / payment / CT600 dates not built
+ACC-4|M||VAT return dates not built
+ACC-5|M||confirmation statement dates not built
+ACC-6|M||PAYE dates not built
+ACC-7|M||Self Assessment dates not built
+ACC-8|M||track_from / window not built
+ACC-9|M||schedule generation not built
+ACC-10|F|form:acc_obligation|form only; status machine not built
+ACC-11|F|form:acc_obligation_type|form only
+ACC-12|M||reminder digest not built
+ACC-13|M||overview / calendar not built
+ACC-14|F|form:acc_obligation|form only
+ACC-15|F|form:acc_document|form only
+ACC-16|P|class Vault|reveal with log exists (vault); Hub credentials wiring not built
+ACC-17|F|form:acc_company_settings|form only
+ACC-18|F|form:acc_person_settings|form only; UTR / NI encryption through the vault partly
+ACC-19|M||companies / personal tax lists not built
+ACC-20|F|form:acc_settings|form only
+ACC-21|M||company page links to Taxation not built
+ACC-22|P|class Messenger|outbox with retry; job-run log table and Hub reminder job not built
+TAX-1|F|form:tax_entry|forms only; accounts worksheet calculation not built
+TAX-2|M||Corporation Tax with marginal relief not built
+TAX-3|M||company size test not built
+TAX-4|F|form:tax_period|forms only
+TAX-5|M||deadlines from the Hub not built
+TAX-6|M||taxation form helpers not built

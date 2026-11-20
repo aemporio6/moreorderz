@@ -1,0 +1,52 @@
+1|P|class ReportService|reports catalogue (25) with date range + CSV; the 3-group hub with cycle / PO pickers not built
+2|M||Cycle Journey report not built
+3|P|function landedCost|landed cost report; all 10 buckets, variance vs target not built
+4|P|class ReportService|supplier balances + PO payments reports; ageing chips, Pay action, FX-correct grouping partly
+5|P|class ReportService|stock by location / on hand reports; channel allocation block, as-of date not built
+6|P|class ReportService|goods in transit report; transfers block / ledger TRANSIT check not built
+7|P|class ReportService|supplier performance report; on-time %, lead times, claims partly
+8|P|class ReportService|partner summary report; investor goods-in-hand / statement source partly
+9|P|po/\{id\}|PO page with payments and terms; link-unlinked-payment, totals warnings not built
+10|M||PO documents roll-up not built
+11|P|'Purchase order'|purchase order PDF from the print service; company header, schedule, bank, versions, send to supplier not built
+12|M||Cycle Summary PDF not built
+13|M||GRN PDF + carton label not built
+14|B|function payCustoms|import VAT never in landed cost (kept apart for the VAT return)
+15|M||widget isolation / per-card errors not built
+16|P|class Rights|money hidden from Warehouse; one see_money permission for every role / card not built
+17|B|class Context|every query scoped to the signed-in company
+18|P|function dashboard|open cycles on the buying dashboard; supplier / search / stage-tile filters not built
+19|P|function cycle|step bar from the data; 12-stage engine with missing / skipped / progress % not built
+20|P|SRC_PAY_DUE|needs-action as rule tasks (6 codes); the dashboard list with texts / chips partly
+21|P|function dashboard|supplier payments to make on the Money dashboard; base-currency box partly
+22|M||"Contact today" with WhatsApp messages not built
+23|M||shipments board not built
+24|M||quantity check (hard check blocking close) not built
+25|P|function setLotCost|lots with cost / no-cost filter; cost-source chip per lot not built
+26|P|class HomeCards|home cards per role from live data; the Sales card rows of the spec not built
+27|M||shared period component not built (date range only)
+28|P|STK_LOW|stock value + low stock cards and stock self-check nightly; the 6 health rows / tasks not built
+29|M||Invoicing / Profit card not built
+30|M||Investors card not built
+31|P|function dashboard|buying dashboard numbers
+32|P|function dashboard|sourcing numbers on Home / Buying
+33|M||team activity card not built
+34|P|function dashboard|rows open the real screen; two-tab layout not built
+35|F|form:cat_company_house|form only; typed-code checks, vault-only fields partly (vault seals secrets)
+36|M||director contact pickers cascade not built
+37|F|form:cat_company_house|list only
+38|M||director / owner picker rule not built
+39|F|form:cat_banks|forms only; live duplicate check messages not built
+40|F|form:cat_country|form only; pin order rule not built
+41|F|form:sys_security_question|form only
+42|M||locked system rows not built
+43|P|class Merges|merge duplicates with Undo (people, suppliers, products); reference headings merge / where-used block not built
+44|P|class Choices|settings global / company + choices per shop with history; module / parameter framework as forms only
+45|F|form:cat_ports|forms only
+46|M||Save & next step from catalog forms not built
+47|M||allocations feed ICC / transfers not built
+48|P|class OldImport|import with dry run, report, field compare; the per-company switch / rollback screen not built
+49|N||old dashboards / copy controllers do not exist in the new tool
+50|F|form:t_enterprise|form only
+51|F|form:acc_company_settings|option lists from the registry
+52|P|class OldImport|old export imported: 200,117 rows accounted, 0 failed; some tables as history only (not in the books)
