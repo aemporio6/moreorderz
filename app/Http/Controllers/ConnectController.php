@@ -14,9 +14,9 @@ use Illuminate\Support\Facades\DB;
 /** Outside connections (15.5), marketplace hubs (6.4), messages (13.6), Drive folders (14.2), subscriptions (12.7), WhatsApp webhook. */
 class ConnectController extends Controller
 {
-    private function can(Request $r, array $roles): void
+    private function can(Request $r, string $code): void
     {
-        abort_unless(in_array($r->user()->role_code, $roles, true), 403, 'Your role cannot do this here. Ask the Owner if you need it.');
+        \App\Services\Perm::need($r->user(), $code);
     }
 
     private function run(callable $fn)
@@ -28,7 +28,7 @@ class ConnectController extends Controller
 
     public function connections(Request $r)
     {
-        $this->can($r, ['OWNER', 'MANAGER']);
+        $this->can($r, 'connect.connections');
         $ent = (int) Context::ent();
         $rows = DB::table('api_connections as c')->leftJoin('t_branches as b', 'b.id', '=', 'c.fk_id_branch')->leftJoin('t_carriers as k', 'k.id', '=', 'c.fk_id_carrier')
             ->whereIn('c.fk_id_ent', [$ent, 0])->whereNotNull('c.adapter')->orderBy('c.adapter')->get(['c.*', 'b.shop_name as shop', 'k.carrier_name as carrier']);
@@ -45,33 +45,33 @@ class ConnectController extends Controller
 
     public function saveConnection(Request $r, ?int $id = null) { return $this->run(fn () => ['id' => Connections::save((array) $r->input(), $id), 'message' => 'Connection saved. Keys typed here are kept encrypted and are not shown again.']); }
 
-    public function testConnection(Request $r, int $id) { $this->can($r, ['OWNER', 'MANAGER']); return $this->run(fn () => Connections::test($id)); }
+    public function testConnection(Request $r, int $id) { $this->can($r, 'connect.testConnection'); return $this->run(fn () => Connections::test($id)); }
 
     public function switchConnection(Request $r, int $id)
     {
-        $this->can($r, ['OWNER']);
+        $this->can($r, 'connect.switchConnection');
         return $this->run(function () use ($id, $r) { $c = Connections::row($id); DB::table('api_connections')->where('id', $id)->update(['status' => $r->boolean('on') ? 'NEW' : 'OFF']); \App\Services\Audit::log('api_connections', $id, 'UPDATE', ['status' => [$c->status, $r->boolean('on') ? 'NEW' : 'OFF']]); return ['ok' => true]; });
     }
 
     public function pull(Request $r, int $id)
     {
-        $this->can($r, ['OWNER', 'MANAGER', 'TL', 'FINANCE']);
+        $this->can($r, 'connect.pull');
         return $this->run(fn () => Connections::pull($id, strtoupper((string) $r->input('what')), (string) ($r->input('from') ?: date('Y-m-d', strtotime('-7 days'))), (string) ($r->input('to') ?: date('Y-m-d'))));
     }
 
-    public function track(Request $r, int $carrier, string $no) { $this->can($r, ['OWNER', 'MANAGER', 'TL', 'VA', 'WAREHOUSE']); return $this->run(fn () => Connections::track($carrier, $no)); }
+    public function track(Request $r, int $carrier, string $no) { $this->can($r, 'connect.track'); return $this->run(fn () => Connections::track($carrier, $no)); }
 
     public function buyLabels(Request $r)
     {
-        $this->can($r, ['OWNER', 'MANAGER', 'WAREHOUSE']);
+        $this->can($r, 'connect.buyLabels');
         return $this->run(fn () => Connections::buyLabels((int) $r->input('connection'), (int) $r->input('shop'), array_map('intval', (array) $r->input('sales', []))));
     }
 
-    public function hubs(Request $r) { $this->can($r, ['OWNER', 'MANAGER', 'TL', 'VA', 'FINANCE']); return Hubs::page((int) Context::ent()); }
+    public function hubs(Request $r) { $this->can($r, 'connect.hubs'); return Hubs::page((int) Context::ent()); }
 
     public function messages(Request $r)
     {
-        $this->can($r, ['OWNER', 'MANAGER', 'TL', 'FINANCE']);
+        $this->can($r, 'connect.messages');
         $ent = (int) Context::ent(); $wa = DB::table('api_connections')->where('adapter', 'WHATSAPP_CLOUD')->whereIn('fk_id_ent', [$ent, 0])->first();
         $strip = fn ($b) => explode("\n\x1e", (string) $b, 2)[0];
         return ['whatsapp' => $wa ? ['status' => $wa->status, 'label' => $wa->label] : null, 'email' => Messenger::emailReady(),
@@ -86,29 +86,29 @@ class ConnectController extends Controller
 
     public function retryMessage(Request $r, string $kind, int $id)
     {
-        $this->can($r, ['OWNER', 'MANAGER']);
+        $this->can($r, 'connect.retryMessage');
         $t = $kind === 'mail' ? 'email_outbound' : 'wa_outbound';
         DB::table($t)->where('id', $id)->whereIn('status', ['FAILED', 'HELD'])->update(['status' => 'QUEUED', 'attempts' => 0, 'next_try_at' => null, 'error' => null]);
         return $this->run(fn () => Messenger::sendDue(20));
     }
 
-    public function sendNow(Request $r) { $this->can($r, ['OWNER', 'MANAGER']); return $this->run(fn () => Messenger::sendDue(100)); }
+    public function sendNow(Request $r) { $this->can($r, 'connect.sendNow'); return $this->run(fn () => Messenger::sendDue(100)); }
 
-    public function sendStatement(Request $r, int $id) { $this->can($r, ['OWNER', 'FINANCE']); return $this->run(fn () => ['queued' => Messenger::statement((int) Context::ent(), $id), 'message' => 'Queued to the partner. It goes out with the next send run.']); }
+    public function sendStatement(Request $r, int $id) { $this->can($r, 'connect.sendStatement'); return $this->run(fn () => ['queued' => Messenger::statement((int) Context::ent(), $id), 'message' => 'Queued to the partner. It goes out with the next send run.']); }
 
-    public function drive(Request $r) { $this->can($r, ['OWNER', 'MANAGER', 'TL', 'FINANCE', 'SOURCING']); return DriveFolders::page((string) $r->input('entity', 'SHOP'), (string) $r->input('q', '')); }
+    public function drive(Request $r) { $this->can($r, 'connect.drive'); return DriveFolders::page((string) $r->input('entity', 'SHOP'), (string) $r->input('q', '')); }
 
-    public function driveLink(Request $r) { $this->can($r, ['OWNER', 'MANAGER']); return $this->run(function () use ($r) { DriveFolders::setLink((string) $r->input('entity'), (int) $r->input('id'), (string) $r->input('url')); return ['ok' => true]; }); }
+    public function driveLink(Request $r) { $this->can($r, 'connect.driveLink'); return $this->run(function () use ($r) { DriveFolders::setLink((string) $r->input('entity'), (int) $r->input('id'), (string) $r->input('url')); return ['ok' => true]; }); }
 
-    public function driveMake(Request $r) { $this->can($r, ['OWNER', 'MANAGER']); return $this->run(fn () => DriveFolders::make((string) $r->input('entity'), (int) $r->input('id'))); }
+    public function driveMake(Request $r) { $this->can($r, 'connect.driveMake'); return $this->run(fn () => DriveFolders::make((string) $r->input('entity'), (int) $r->input('id'))); }
 
-    public function driveSetup(Request $r) { $this->can($r, ['OWNER', 'MANAGER']); return $this->run(fn () => DriveFolders::setup()); }
+    public function driveSetup(Request $r) { $this->can($r, 'connect.driveSetup'); return $this->run(fn () => DriveFolders::setup()); }
 
-    public function driveCheck(Request $r) { $this->can($r, ['OWNER', 'MANAGER', 'TL', 'FINANCE']); return $this->run(fn () => DriveFolders::check($r->input('watch') ? (int) $r->input('watch') : null)); }
+    public function driveCheck(Request $r) { $this->can($r, 'connect.driveCheck'); return $this->run(fn () => DriveFolders::check($r->input('watch') ? (int) $r->input('watch') : null)); }
 
-    public function driveLoad(Request $r, int $id) { $this->can($r, ['OWNER', 'MANAGER', 'TL', 'VA', 'FINANCE']); return $this->run(fn () => DriveFolders::load($id)); }
+    public function driveLoad(Request $r, int $id) { $this->can($r, 'connect.driveLoad'); return $this->run(fn () => DriveFolders::load($id)); }
 
-    public function subscriptions(Request $r) { $this->can($r, ['OWNER', 'MANAGER', 'FINANCE']); return Subscriptions::page((int) Context::ent()); }
+    public function subscriptions(Request $r) { $this->can($r, 'connect.subscriptions'); return Subscriptions::page((int) Context::ent()); }
 
     public function subscriptionPaid(Request $r, int $id) { return $this->run(fn () => Subscriptions::paid((int) Context::ent(), $id, (array) $r->input())); }
 

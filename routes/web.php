@@ -45,6 +45,16 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('export/{key}', [WorkController::class, 'export']);
         Route::get('home', [AdminController::class, 'home']);
         Route::get('users', [AdminController::class, 'users']);
+        Route::get('permissions', [AdminController::class, 'permissions']);
+        Route::post('permissions/role', [AdminController::class, 'permRole']);
+        Route::post('permissions/set', [AdminController::class, 'permSet']);
+        Route::post('permissions/user', [AdminController::class, 'permUser']);
+        Route::post('permissions/scope', [AdminController::class, 'permScope']);
+        Route::post('permissions/field', [AdminController::class, 'permField']);
+        Route::post('permissions/request', [AdminController::class, 'permRequest']);
+        Route::post('permissions/requests/{id}', [AdminController::class, 'permDecide'])->whereNumber('id');
+        Route::get('permissions/why', [AdminController::class, 'permWhy']);
+        Route::post('permissions/view-as', [AdminController::class, 'permViewAs']);
         Route::post('users/{id?}', [AdminController::class, 'saveUser'])->whereNumber('id');
         Route::post('users/{id}/two-step-off', [AdminController::class, 'twoStepOff'])->whereNumber('id');
         Route::post('me/password', [AdminController::class, 'password']);

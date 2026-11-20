@@ -16,11 +16,11 @@ class ReportController extends Controller
         return [$d['from'] ?? date('Y-m-01', strtotime('-2 month')), $d['to'] ?? date('Y-m-d')];
     }
 
-    public function index(Request $r) { return ['reports' => Reports::catalogue($r->user()->role_code)]; }
+    public function index(Request $r) { return ['reports' => array_values(array_filter(Reports::catalogue('OWNER'), fn ($x) => \App\Services\Perm::has($r->user(), 'report:' . $x['key'])))]; }
 
     public function show(Request $r, string $key)
     {
-        abort_unless(Reports::allowed($key, $r->user()->role_code), 403, 'Your role cannot open this report.');
+        \App\Services\Perm::need($r->user(), 'report:' . $key);
         [$from, $to] = $this->dates($r);
         try { return Reports::run((int) Context::ent(), $key, $from, $to, $r->user()->role_code); }
         catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
@@ -28,7 +28,7 @@ class ReportController extends Controller
 
     public function csv(Request $r, string $key)
     {
-        abort_unless(Reports::allowed($key, $r->user()->role_code), 403, 'Your role cannot open this report.');
+        \App\Services\Perm::need($r->user(), 'report:' . $key);
         [$from, $to] = $this->dates($r);
         $x = Reports::run((int) Context::ent(), $key, $from, $to, $r->user()->role_code);
         Audit::log('reports', null, 'EXPORT', ['report' => $key, 'from' => $from, 'to' => $to, 'rows' => count($x['rows'])], null, (int) Context::ent());

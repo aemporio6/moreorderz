@@ -41,7 +41,7 @@ class Approvals
         return DB::transaction(function () use ($approvalId, $approve, $reason) {
             $a = DB::table('sys_approvals')->where('id', $approvalId)->where('fk_id_ent', Context::ent())->lockForUpdate()->first() ?? throw new \InvalidArgumentException('Approval not found.');
             if ($a->status !== 'PENDING') throw new \InvalidArgumentException('This request was already decided.');
-            if (! in_array(Context::role(), self::APPROVERS, true)) throw new \InvalidArgumentException('Only the Owner or a Manager can decide this.');
+            if (! (($u = \Illuminate\Support\Facades\Auth::user()) ? Perm::has($u, 'money.approve') : in_array(Context::role(), self::APPROVERS, true))) throw new \InvalidArgumentException('Only the Owner or a Manager can decide this.');
             if ((int) $a->requested_by === (int) Context::userId()) throw new \InvalidArgumentException('You asked for this yourself – a second person must decide it.');
             if (! $approve && ! trim((string) $reason)) throw new \InvalidArgumentException('Give the reason for saying no.');
             DB::table('sys_approvals')->where('id', $a->id)->update(['status' => $approve ? 'APPROVED' : 'REJECTED', 'decided_by' => Context::userId(), 'decided_at' => now(), 'reason' => $reason]);

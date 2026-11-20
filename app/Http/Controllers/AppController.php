@@ -22,12 +22,13 @@ class AppController extends Controller
     public function boot()
     {
         $u = Auth::user();
-        $role = $u->role_code;
+        $role = $u->role_code; $va = \App\Services\Perm::viewing();
         $companies = DB::table('t_enterprise')->where('f_active', 1)->orderBy('id')->get(['id', 'ent_name as name', 'ent_short as short']);
         if ($role !== 'OWNER') $companies = $companies->where('id', $u->fk_id_ent)->values();
         return [
-            'user' => ['id' => $u->id, 'name' => $u->display_name ?: $u->login_id, 'role' => $role],
-            'ent' => Context::ent(), 'companies' => $companies, 'menu' => self::menu($role), 'create' => self::createCatalogue($role),
+            'user' => ['id' => $u->id, 'name' => $u->display_name ?: $u->login_id, 'role' => $va ? $va[0] : $role, 'role_name' => $va ? $va[1] : ($u->custom_role ?: $role)],
+            'view_as' => $va ? $va[1] : null,
+            'ent' => Context::ent(), 'companies' => $companies, 'menu' => self::menu($va ? $va[0] : $role), 'create' => self::createCatalogue($va ? $va[0] : $role),
             'setup_open' => $role === 'OWNER' && \App\Services\SetupWizard::open((int) Context::ent()),
             'tasks_open' => DB::table('tasks')->where('owner_user_id', $u->id)->whereNotIn('status', ['DONE', 'APPROVED', 'CANCELLED'])->count(),
             'product_form' => RecordService::formOfTable('t_product_vendors'), 'base_currency' => Settings::get('BASE_CURRENCY', Context::ent(), 'GBP'), 'today' => date('Y-m-d'),
@@ -42,7 +43,7 @@ class AppController extends Controller
         $secs = [];
         foreach ($rows->whereNull('parent_id') as $s) $secs[$s->id_module] = ['id' => $s->id_module, 'name' => $s->module_name, 'icon' => $s->icon, 'items' => []];
         foreach ($rows->whereNotNull('parent_id') as $m) {
-            if (! isset($secs[$m->parent_id]) || ! self::roleSees($m->roles, $role)) continue;
+            if (! isset($secs[$m->parent_id]) || ! \App\Services\Perm::has(Auth::user(), 'menu:' . $m->module_key)) continue;
             $secs[$m->parent_id]['items'][] = ['id' => $m->id_module, 'no' => $m->screen_no, 'name' => $m->module_name, 'route' => self::route($m), 'forms' => array_values(array_filter(array_map(fn ($f) => trim(explode('(', $f)[0]), preg_split('/[;,\s]+/', (string) $m->forms, -1, PREG_SPLIT_NO_EMPTY)), fn ($k) => Registry::exists($k) && Registry::table($k)))];
         }
         return array_values(array_filter($secs, fn ($s) => $s['items']));
@@ -95,7 +96,7 @@ class AppController extends Controller
         if ($no === '9.14') return '#/ledger';
         if ($no === '7.4') return '#/print-queue';
         if ($no === '17.9') return '#/printers';
-        if ($no === '17.15') return '#/users';
+        if ($no === '17.15') return '#/permissions';
         if ($no === '17.16') return '#/sessions';
         $map = ['4.1' => '#/stock', '10.1' => '#/close', '13.1' => '#/tasks?scope=all', '6.1' => '#/orders', '5.7' => '#/reports/price_log', '15.1' => '#/import', '15.2' => '#/import-history', '7.6' => '#/tracking-upload', '6.9' => '#/calculator', '17.14' => '#/registry', '12.9' => '#/merges', '12.1' => '#/accounts', '15.5' => '#/connections', '6.4' => '#/hubs', '13.6' => '#/messages', '14.2' => '#/drive', '15.3' => '#/drive?tab=watched', '12.7' => '#/subscriptions', '9.11' => '#/loans', '9.12' => '#/budgets', '9.7' => '#/capital-calls', '11.4' => '#/statement-questions'];
         if (isset($map[$no])) return $map[$no];
@@ -182,7 +183,7 @@ class AppController extends Controller
     {
         $id = (int) $r->input('ent');
         $u = Auth::user();
-        abort_unless($u->role_code === 'OWNER' || $id === (int) $u->fk_id_ent, 403, 'You cannot work in that company.');
+        abort_unless(\App\Services\Perm::has($u, 'app.company_owner') || $id === (int) $u->fk_id_ent, 403, 'You cannot work in that company.');
         abort_unless(DB::table('t_enterprise')->where('id', $id)->where('f_active', 1)->exists(), 404);
         $r->session()->put('ent', $id);
         return ['ent' => $id];

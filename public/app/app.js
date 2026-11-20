@@ -18,10 +18,21 @@
       body: opt.body ? JSON.stringify(opt.body) : undefined });
     if (res.status === 401 || res.status === 419) { location.href = '/login'; throw new Error('Signed out'); }
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) { const e = new Error(data.message || 'Something went wrong. Nothing was saved.'); e.status = res.status; e.errors = data.errors || {}; e.data = data; throw e; }
+    if (!res.ok) { const e = new Error(data.message || 'Something went wrong. Nothing was saved.'); e.status = res.status; e.errors = data.errors || {}; e.data = data;
+      if (res.status === 403 && data.perm && data.can_request) askAccess(data);   // never stuck: one click asks the Owner for this right
+      throw e; }
     return data;
   }
   MO.api = api;
+  let askOpen = '';
+  function askAccess(d) {
+    if (askOpen === d.perm) return; askOpen = d.perm;
+    const t = document.createElement('div'); t.className = 'toast warn'; t.style.cssText = 'display:block;max-width:420px';
+    t.innerHTML = `<div><b>You cannot do this yet</b></div><div class="small" style="margin:4px 0 8px">${esc(d.why || d.message)}</div><input class="q" placeholder="Why do you need it? (optional)" style="width:100%;margin-bottom:6px"><button class="btn sm primary">Ask the Owner</button> <button class="btn sm ghost">Close</button>`;
+    const done = () => { t.remove(); askOpen = ''; }; const [ask, cl] = t.querySelectorAll('button');
+    cl.onclick = done; ask.onclick = async () => { try { const r = await api('permissions/request', { method: 'POST', body: { code: d.perm, note: t.querySelector('input').value } }); done(); toast(r.message || 'Sent to the Owner.'); } catch (e) { done(); toast(e.message, 'err'); } };
+    $('#toasts').appendChild(t); setTimeout(done, 30000);
+  }
   const busy = on => { $('#loader').style.display = on ? 'flex' : 'none'; };
   const toast = (msg, kind = 'ok', link) => { const t = document.createElement('div'); t.className = 'toast ' + kind;
     t.innerHTML = `<span>${esc(msg)}</span>${link ? ` <a href="${esc(link)}">Open</a>` : ''}`; $('#toasts').appendChild(t); setTimeout(() => t.remove(), 6000); };
@@ -35,7 +46,15 @@
   document.addEventListener('click', e => { if (!document.body.classList.contains('side-open')) return; if (e.target.closest('#side') || e.target.closest('#btnSide')) return; document.body.classList.remove('side-open'); }, true);
 
   // ---------- top bar and menu ----------
+  function drawViewAs() {
+    let v = $('#viewAsBar'); if (v) v.remove(); if (!S.boot.view_as) return;
+    v = document.createElement('div'); v.id = 'viewAsBar'; v.style.cssText = 'position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:9000;background:#b45309;color:#fff;padding:8px 14px;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,.25);font-size:13px;display:flex;gap:10px;align-items:center';
+    v.innerHTML = `<span>Viewing as <b>${esc(S.boot.view_as)}</b> – nothing can be changed</span><button class="btn sm">Back to myself</button>`;
+    v.querySelector('button').onclick = async () => { await api('permissions/view-as', { method: 'POST', body: { role: '' } }); location.reload(); };
+    document.body.appendChild(v);
+  }
   function drawTop() {
+    drawViewAs();
     const b = S.boot, ini = b.user.name.split(/\s+/).map(x => x[0]).join('').slice(0, 2).toUpperCase();
     $('#top').innerHTML = `
       <button class="tb-btn icon" id="btnSide" title="Menu">${ic('menu')}</button>
@@ -135,6 +154,7 @@
       if (r === '#/printers') return await pagePrinters();
       if (r === '#/print-queue') return await pagePrintQueue();
       if (r === '#/users') return await pageUsers();
+      if (r === '#/permissions') return await pagePermissions();
       if (r === '#/choices') return await pageChoices();
       if (r === '#/settings') return await pageSettings();
       if (r.startsWith('#/audit')) return await pageAudit();
@@ -729,6 +749,108 @@
       { name: 'password', label: u ? 'New password' : 'Password', type: 'password', required: !u, help: 'At least 10 characters.' }, { name: 'f_active', label: 'Can sign in', type: 'check', value: u ? +u.f_active : 1 }],
       async v => { const r = await api('users' + (u ? '/' + u.id : ''), { method: 'POST', body: v }); pageUsers(); return r; });
     if (owner) { $('#uNew').onclick = () => edit(null); $$('#main tr[data-id]').forEach(tr => tr.onclick = () => edit(d.users.find(u => u.id == tr.dataset.id))); }
+  }
+
+
+  // ---------- roles and rights (permission engine) ----------
+  const PM = { tab: 'roles', q: '', group: '', role: '', only: '' };
+  async function pagePermissions() {
+    busy(true); let d; try { d = await api('permissions'); } finally { busy(false); }
+    const groups = [...new Set(d.rights.map(x => x.group))], roleOf = k => d.roles.find(r => r.code === k);
+    const shown = d.roles.filter(r => r.active && (!PM.role || r.code === PM.role));
+    const tabs = [['roles', 'Roles and rights'], ['people', 'People'], ['fields', 'Fields'], ['requests', `Requests${d.requests.filter(q => q.status === 'OPEN').length ? ' · ' + d.requests.filter(q => q.status === 'OPEN').length : ''}`], ['viewas', 'View as']];
+    const opt = (list, val, first) => (first ? `<option value="">${first}</option>` : '') + list.map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(val) ? 'selected' : ''}>${esc(l)}</option>`).join('');
+    let body = '';
+    if (PM.tab === 'roles') {
+      const ql = PM.q.toLowerCase();
+      const rows = d.rights.filter(x => (!PM.group || x.group === PM.group) && (!ql || (x.label + ' ' + x.group + ' ' + x.code).toLowerCase().includes(ql)) && (!PM.only || shown.some(r => d.matrix[r.code][x.code][1])));
+      let g = '';
+      body = `<div class="card"><div class="card-b" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input class="q" id="pmQ" placeholder="Search a right, screen or menu item…" value="${esc(PM.q)}" style="min-width:260px;flex:1">
+        <select class="q" id="pmG">${opt(groups.map(x => [x, x]), PM.group, 'All groups')}</select>
+        <select class="q" id="pmR">${opt(d.roles.filter(r => r.active).map(r => [r.code, r.label]), PM.role, 'All roles')}</select>
+        <label class="chk small"><input type="checkbox" id="pmO" ${PM.only ? 'checked' : ''}> Only changed</label>
+        <button class="btn primary" id="pmNew">${ic('plus')} New role</button></div>
+        <div class="small muted" style="padding:0 16px 10px">Tick = the role may do it. A <span class="chip warn plain">changed</span> box differs from the built-in default; click “reset” on it to go back. The Owner always has every right. ${rows.length} of ${d.rights.length} rights shown.</div>
+        <div class="tbl-wrap" style="max-height:68vh;overflow:auto"><table class="t"><thead><tr><th style="position:sticky;left:0;top:0;z-index:3;background:var(--card,#fff)">Right</th>${shown.map(r => `<th style="position:sticky;top:0;text-align:center" title="${esc(r.system ? 'Built-in role' : 'Made role, works like ' + r.like)}">${esc(r.label)}${r.system ? '' : `<div class="small muted">like ${esc(r.like)}</div>`}</th>`).join('')}</tr></thead><tbody>
+        ${rows.slice(0, 400).map(x => { const head = x.group !== g ? `<tr><td colspan="${shown.length + 1}" style="font-weight:650;background:rgba(0,0,0,.04)">${esc(g = x.group)}</td></tr>` : '';
+          return head + `<tr><td style="position:sticky;left:0;background:var(--card,#fff)" title="${esc(x.code)}">${esc(x.label)}</td>${shown.map(r => { const [on, ch] = d.matrix[r.code][x.code];
+            return `<td style="text-align:center;${ch ? 'background:rgba(245,158,11,.14)' : ''}"><input type="checkbox" data-pm="${esc(r.code)}|${esc(x.code)}" ${on ? 'checked' : ''} ${r.code === 'OWNER' ? 'disabled' : ''}>${ch ? ` <a href="#" class="small" data-pmr="${esc(r.code)}|${esc(x.code)}">reset</a>` : ''}</td>`; }).join('')}</tr>`; }).join('')}
+        </tbody></table></div>${rows.length > 400 ? '<div class="small muted" style="padding:8px 16px">Showing the first 400 – search or pick a group to narrow.</div>' : ''}</div>`;
+    }
+    if (PM.tab === 'people') {
+      body = `<div class="card"><div class="small muted" style="padding:12px 16px">A person normally has exactly the rights of his role. Here you give one person something extra, or take something away, with a reason and (if you want) an end date. You also choose which shops he works on – empty means all shops.</div>
+        <div class="tbl-wrap"><table class="t"><thead><tr><th>Person</th><th>Role</th><th>Own rights</th><th>Shops</th><th></th></tr></thead><tbody>
+        ${d.users.map(u => `<tr><td>${esc(u.name)}${u.active ? '' : ' <span class="chip lock">Off</span>'}</td><td><span class="chip accent plain">${esc((roleOf(u.role) || {}).label || u.role)}</span></td>
+          <td>${u.own.length ? u.own.map(p => `<div class="small"><span class="chip ${p.effect === 'GRANTED' ? 'done' : 'lock'}">${p.effect === 'GRANTED' ? 'Extra' : 'Taken away'}</span> ${esc(p.label)}${p.until ? ' · until ' + esc(String(p.until).slice(0, 10)) : ''}${p.reason ? ' · ' + esc(p.reason) : ''} <a href="#" data-pud="${u.id}|${esc(p.perm_code)}">remove</a></div>`).join('') : '<span class="muted small">Same as the role</span>'}</td>
+          <td>${u.shops.length ? u.shops.map(id => esc(((d.shops.find(s => s.id == id) || {}).name || id) + '')).join(', ') : '<span class="muted small">All shops</span>'}</td>
+          <td style="white-space:nowrap"><button class="btn sm" data-pua="${u.id}">Extra / take away</button> <button class="btn sm" data-pus="${u.id}">Shops</button> <button class="btn sm ghost" data-puw="${u.id}">Why?</button></td></tr>`).join('')}</tbody></table></div></div>`;
+    }
+    if (PM.tab === 'fields') {
+      body = `<div class="card"><div class="card-b" style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><div class="small muted">Hide one field from a role or a person, or let them see it but not change it (for example: cost price hidden from VAs).</div><button class="btn primary" id="pfNew">${ic('plus')} New field rule</button></div>
+        <div class="tbl-wrap"><table class="t"><thead><tr><th>Form</th><th>Field</th><th>For</th><th>Rule</th><th></th></tr></thead><tbody>
+        ${d.field_rules.length ? d.field_rules.map(f => `<tr><td>${esc((d.forms.find(x => x.form_key === f.form_key) || {}).title || f.form_key)}</td><td>${esc(f.field_name)}</td><td>${esc(f.user_id ? (f.display_name || 'Person ' + f.user_id) : 'Role ' + f.role_code)}</td><td><span class="chip ${f.mode === 'HIDDEN' ? 'lock' : f.mode === 'READONLY' ? 'warn' : 'done'}">${f.mode === 'HIDDEN' ? 'Hidden' : f.mode === 'READONLY' ? 'See only' : 'Can change'}</span></td><td><a href="#" data-pfd="${f.id}">remove</a></td></tr>`).join('') : '<tr><td colspan="5" class="muted">No field rules yet – every field follows the form.</td></tr>'}</tbody></table></div></div>`;
+    }
+    if (PM.tab === 'requests') {
+      body = `<div class="card"><div class="small muted" style="padding:12px 16px">When the tool refuses something, the person can press “Ask the Owner”. The requests land here. Granting gives that one right to that one person.</div><div class="tbl-wrap"><table class="t"><thead><tr><th>When</th><th>Person</th><th>Wants</th><th>Note</th><th>Status</th><th></th></tr></thead><tbody>
+        ${d.requests.length ? d.requests.map(q => `<tr><td>${esc(String(q.created_at || '').slice(0, 16))}</td><td>${esc(q.display_name || q.login_id)}</td><td>${esc(q.label)}</td><td>${esc(q.note || '')}</td><td><span class="chip ${q.status === 'OPEN' ? 'warn' : q.status === 'GRANTED' ? 'done' : 'lock'}">${q.status === 'OPEN' ? 'Waiting' : q.status === 'GRANTED' ? 'Granted' : 'Refused'}</span>${q.decided_note ? ' <span class="small muted">' + esc(q.decided_note) + '</span>' : ''}</td>
+          <td style="white-space:nowrap">${q.status === 'OPEN' ? `<button class="btn sm primary" data-pqg="${q.id}">Grant</button> <button class="btn sm" data-pqr="${q.id}">Refuse</button>` : ''}</td></tr>`).join('') : '<tr><td colspan="6" class="muted">No requests.</td></tr>'}</tbody></table></div></div>`;
+    }
+    if (PM.tab === 'viewas') {
+      body = `<div class="card"><div class="card-b"><p style="margin-top:0">See the tool exactly as a role sees it – menu, screens and buttons. While you view as another role <b>nothing can be changed</b>, so it is safe to click around.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select class="q" id="pvR">${opt(d.roles.filter(r => r.active && r.code !== 'OWNER').map(r => [r.code, r.label]), d.view_as ? d.view_as[1] : '')}</select><button class="btn primary" id="pvGo">View as this role</button>${d.view_as ? `<button class="btn" id="pvBack">Back to myself</button>` : ''}</div></div></div>`;
+    }
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/settings">Settings</a> ›</div><h1>Roles and rights</h1><div class="sub">${d.roles.filter(r => r.active).length} roles · ${d.rights.length} rights · ${d.users.length} people. Every change is written to the audit trail.</div></div>
+      <div class="actions"><a class="btn" href="#/users">Users</a></div></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${tabs.map(([k, l]) => `<button class="btn ${PM.tab === k ? 'primary' : ''}" data-pt="${k}">${esc(l)}</button>`).join('')}</div>${body}`;
+    const re = () => pagePermissions(), post = (path, b, msg) => act('permissions/' + path, b, re, msg || 'Saved');
+    $$('#main [data-pt]').forEach(b => b.onclick = () => { PM.tab = b.dataset.pt; re(); });
+    if (PM.tab === 'roles') {
+      let tm; $('#pmQ').oninput = e => { PM.q = e.target.value; clearTimeout(tm); tm = setTimeout(() => { re().then(() => { const i = $('#pmQ'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }); }, 350); };
+      $('#pmG').onchange = e => { PM.group = e.target.value; re(); }; $('#pmR').onchange = e => { PM.role = e.target.value; re(); }; $('#pmO').onchange = e => { PM.only = e.target.checked ? 1 : ''; re(); };
+      $$('#main [data-pm]').forEach(c => c.onchange = () => { const [role, code] = c.dataset.pm.split('|'); post('set', { role, code, allowed: c.checked }); });
+      $$('#main [data-pmr]').forEach(a => a.onclick = e => { e.preventDefault(); const [role, code] = a.dataset.pmr.split('|'); post('set', { role, code, allowed: null }, 'Back to the default'); });
+      $('#pmNew').onclick = () => miniForm('New role', 'A made role starts with the rights of a built-in role; then tick or untick what should differ.', [
+        { name: 'label', label: 'Name of the role', required: true, help: 'For example: Senior VA, Night warehouse, Listing team.' },
+        { name: 'like_role', label: 'Works like', required: true, value: 'VA', options: d.built_in.filter(r => r !== 'OWNER').map(r => [r, r]) },
+        { name: 'copy_from', label: 'Copy the changes of', value: '', options: [['', 'Nothing – start from the built-in role']].concat(d.roles.map(r => [r.code, r.label])) },
+        { name: 'notes', label: 'Notes' }],
+        async v => { v.role_code = v.label.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 30); const r = await api('permissions/role', { method: 'POST', body: v }); PM.role = r.role; re(); return r; });
+    }
+    if (PM.tab === 'people') {
+      $$('#main [data-pua]').forEach(b => b.onclick = () => { const u = d.users.find(x => x.id == b.dataset.pua);
+        miniForm('Own right for ' + u.name, 'Extra = he may, although his role may not. Take away = he may not, although his role may.', [
+          { name: 'code', label: 'Right', required: true, options: d.rights.map(x => [x.code, x.group + ' › ' + x.label]) },
+          { name: 'effect', label: 'What', required: true, value: 'GRANTED', options: [['GRANTED', 'Extra – allow'], ['REVOKED', 'Take away – do not allow']] },
+          { name: 'reason', label: 'Reason', required: true }, { name: 'until', label: 'Until (empty = no end)', type: 'date' }],
+          async v => { v.user_id = u.id; if (!v.until) delete v.until; const r = await api('permissions/user', { method: 'POST', body: v }); re(); return r; }); });
+      $$('#main [data-pud]').forEach(a => a.onclick = e => { e.preventDefault(); const [id, code] = a.dataset.pud.split('|'); post('user', { user_id: +id, code, effect: null }, 'Removed'); });
+      $$('#main [data-pus]').forEach(b => b.onclick = () => { const u = d.users.find(x => x.id == b.dataset.pus);
+        const { ov, close } = modal('Shops of ' + u.name, 'Tick the shops he works on. Nothing ticked = all shops.', `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px">${d.shops.map(s => `<label class="chk"><input type="checkbox" value="${s.id}" ${u.shops.includes(s.id) ? 'checked' : ''}> ${esc(s.name)}</label>`).join('') || '<span class="muted">No shops yet.</span>'}</div>`,
+          `<button class="btn" id="psAll">All shops</button><button class="btn primary" id="psSave">Save</button>`);
+        $('#psAll', ov).onclick = () => $$('input', ov).forEach(i => i.checked = false);
+        $('#psSave', ov).onclick = () => { close(); post('scope', { user_id: u.id, kind: 'SHOP', ids: $$('input:checked', ov).map(i => +i.value) }); }; });
+      $$('#main [data-puw]').forEach(b => b.onclick = () => { const u = d.users.find(x => x.id == b.dataset.puw);
+        miniForm('Why can or cannot ' + u.name + '…', 'Pick a right; the tool tells you the answer and where it comes from.', [{ name: 'code', label: 'Right', required: true, options: d.rights.map(x => [x.code, x.group + ' › ' + x.label]) }],
+          async v => { const r = await api('permissions/why?user_id=' + u.id + '&code=' + encodeURIComponent(v.code)); modal(r.allowed ? 'Yes – allowed' : 'No – not allowed', r.label, `<p>${esc(r.why)}</p>`, '', false); return r; }, 'Tell me'); });
+    }
+    if (PM.tab === 'fields') {
+      $('#pfNew').onclick = () => miniForm('New field rule', 'Type the field name as it shows in the field registry (Settings › Field registry).', [
+        { name: 'form_key', label: 'Form', required: true, options: d.forms.map(f => [f.form_key, f.title]) }, { name: 'field_name', label: 'Field name', required: true },
+        { name: 'who', label: 'For', required: true, options: d.roles.filter(r => r.code !== 'OWNER').map(r => ['R:' + r.code, 'Role ' + r.label]).concat(d.users.map(u => ['U:' + u.id, 'Person ' + u.name])) },
+        { name: 'mode', label: 'Rule', required: true, value: 'HIDDEN', options: [['HIDDEN', 'Hidden'], ['READONLY', 'See only'], ['EDIT', 'Can change']] }],
+        async v => { const b = { form_key: v.form_key, field_name: v.field_name, mode: v.mode }; v.who[0] === 'R' ? b.role = v.who.slice(2) : b.user_id = +v.who.slice(2); const r = await api('permissions/field', { method: 'POST', body: b }); re(); return r; });
+      $$('#main [data-pfd]').forEach(a => a.onclick = e => { e.preventDefault(); const f = d.field_rules.find(x => x.id == a.dataset.pfd); post('field', { form_key: f.form_key, field_name: f.field_name, role: f.role_code || undefined, user_id: f.user_id || undefined, mode: 'DEFAULT' }, 'Removed'); });
+    }
+    if (PM.tab === 'requests') {
+      $$('#main [data-pqg]').forEach(b => b.onclick = () => miniForm('Grant this right', 'The person gets this one right. Leave “Until” empty for no end date.', [{ name: 'until', label: 'Until', type: 'date' }, { name: 'note', label: 'Note to the person' }],
+        async v => { v.grant = true; if (!v.until) delete v.until; const r = await api('permissions/requests/' + b.dataset.pqg, { method: 'POST', body: v }); re(); return r; }, 'Grant'));
+      $$('#main [data-pqr]').forEach(b => b.onclick = () => miniForm('Refuse', '', [{ name: 'note', label: 'Reason', required: true }], async v => { v.grant = false; const r = await api('permissions/requests/' + b.dataset.pqr, { method: 'POST', body: v }); re(); return r; }, 'Refuse'));
+    }
+    if (PM.tab === 'viewas') {
+      const sw = async role => { busy(true); try { await api('permissions/view-as', { method: 'POST', body: { role } }); location.reload(); } catch (e) { toast(e.message, 'err'); } finally { busy(false); } };
+      $('#pvGo').onclick = () => sw($('#pvR').value); if ($('#pvBack')) $('#pvBack').onclick = () => sw('');
+    }
   }
 
   // ---------- my account: password, 2-step sign-in, sign out ----------

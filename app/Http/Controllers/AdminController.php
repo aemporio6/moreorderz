@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use App\Services\Audit;
 use App\Services\Context;
+use App\Services\Perm as P;
 use App\Services\EventBus;
 use App\Services\HomeCards;
 use App\Services\Ledger;
@@ -24,7 +25,7 @@ class AdminController extends Controller
 {
     private function owner(Request $r): void
     {
-        abort_unless($r->user()->role_code === 'OWNER', 403, 'Only the Owner can do this.');
+        \App\Services\Perm::need($r->user(), 'admin.owner');
     }
 
     public function home(Request $r)
@@ -39,10 +40,10 @@ class AdminController extends Controller
     // ---- users ----
     public function users(Request $r)
     {
-        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER'], true), 403, 'Only the Owner and Managers see users.');
+        \App\Services\Perm::need($r->user(), 'admin.users');
         return ['users' => DB::table('t_users as u')->leftJoin('t_enterprise as e', 'e.id', '=', 'u.fk_id_ent')->orderBy('u.id')
-            ->get(['u.id', 'u.login_id', 'u.display_name', 'u.role_code', 'u.fk_id_ent', 'e.ent_name as company', 'u.f_active', 'u.last_login_at', DB::raw('u.totp_secret IS NOT NULL as two_step'), DB::raw('u.password_hash IS NOT NULL as has_password')]),
-            'roles' => User::ROLES, 'companies' => DB::table('t_enterprise')->where('f_active', 1)->get(['id', 'ent_name as name'])];
+            ->get(['u.id', 'u.login_id', 'u.display_name', DB::raw('COALESCE(u.custom_role, u.role_code) as role_code'), 'u.fk_id_ent', 'e.ent_name as company', 'u.f_active', 'u.last_login_at', DB::raw('u.totp_secret IS NOT NULL as two_step'), DB::raw('u.password_hash IS NOT NULL as has_password')]),
+            'roles' => array_keys(array_filter(\App\Services\Perm::roles(), fn ($x) => $x['active'])), 'companies' => DB::table('t_enterprise')->where('f_active', 1)->get(['id', 'ent_name as name'])];
     }
 
     public function saveUser(Request $r, ?int $id = null)
@@ -50,7 +51,7 @@ class AdminController extends Controller
         $this->owner($r);
         $d = $r->validate([
             'login_id' => ['required', 'string', 'max:100', Rule::unique('t_users', 'login_id')->ignore($id)],
-            'display_name' => 'required|string|max:120', 'role_code' => ['required', Rule::in(User::ROLES)],
+            'display_name' => 'required|string|max:120', 'role_code' => ['required', Rule::in(array_keys(\App\Services\Perm::roles()))],
             'fk_id_ent' => 'required|integer|exists:t_enterprise,id', 'f_active' => 'boolean',
             'password' => [$id ? 'nullable' : 'required', 'string', 'min:10', 'max:200'],
         ], ['password.min' => 'The password needs at least 10 characters.', 'login_id.unique' => 'This login is already used.']);
@@ -58,8 +59,9 @@ class AdminController extends Controller
         if ($id && $u->id === $r->user()->id && (($d['role_code'] ?? 'OWNER') !== 'OWNER' || ! ($d['f_active'] ?? true))) {
             return response()->json(['message' => 'You cannot remove your own Owner role or switch yourself off.', 'errors' => ['role_code' => ['You cannot remove your own Owner role or switch yourself off.']]], 422);
         }
-        $before = $u->only(['login_id', 'display_name', 'role_code', 'fk_id_ent', 'f_active']);
-        $u->fill(['login_id' => $d['login_id'], 'display_name' => $d['display_name'], 'role_code' => $d['role_code'], 'fk_id_ent' => $d['fk_id_ent'], 'f_active' => (int) ($d['f_active'] ?? 1)]);
+        $before = $u->only(['login_id', 'display_name', 'role_code', 'custom_role', 'fk_id_ent', 'f_active']);
+        $made = \App\Services\Perm::roles()[$d['role_code']];   // a made role keeps the built-in role it copies in role_code
+        $u->fill(['login_id' => $d['login_id'], 'display_name' => $d['display_name'], 'role_code' => $made['like'], 'custom_role' => $made['system'] ? null : $made['code'], 'fk_id_ent' => $d['fk_id_ent'], 'f_active' => (int) ($d['f_active'] ?? 1)]);
         if (! empty($d['password'])) $u->password_hash = Hash::make($d['password']);
         $u->save();
         $changes = [];
@@ -142,7 +144,7 @@ class AdminController extends Controller
     // ---- audit log, health, ledger ----
     public function audit(Request $r)
     {
-        abort_unless(in_array($r->user()->role_code, ['OWNER', 'ACCOUNTANT'], true), 403, 'Only the Owner and the Accountant see the audit log.');
+        \App\Services\Perm::need($r->user(), 'admin.audit');
         $q = DB::table('sys_audit_log as a')->leftJoin('t_users as u', 'u.id', '=', 'a.user_id');
         if ($v = $r->query('action')) $q->where('a.action', $v);
         if ($v = $r->query('table')) $q->where('a.table_name', $v);
@@ -173,13 +175,13 @@ class AdminController extends Controller
 
     public function choices(Request $r)
     {
-        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER', 'FINANCE', 'ACCOUNTANT'], true), 403, 'Your role cannot see the company choices.');
-        return ['choices' => \App\Services\Choices::all((int) Context::ent()), 'can_edit' => $r->user()->role_code === 'OWNER'];
+        \App\Services\Perm::need($r->user(), 'admin.choices');
+        return ['choices' => \App\Services\Choices::all((int) Context::ent()), 'can_edit' => \App\Services\Perm::has($r->user(), 'admin.choices_owner')];
     }
 
     public function saveChoice(Request $r)
     {
-        abort_unless($r->user()->role_code === 'OWNER', 403, 'Only the Owner changes a company choice.');
+        \App\Services\Perm::need($r->user(), 'admin.saveChoice');
         $d = $r->validate(['key' => 'required|string|max:60', 'value' => 'nullable|string|max:30', 'shop' => 'nullable|integer']);
         try {
             if (! empty($d['shop'])) { \App\Services\Choices::setShop($d['key'], (int) $d['shop'], (string) ($d['value'] ?? ''), (int) Context::ent()); return ['message' => 'Saved for this shop – it applies from now on']; }
@@ -190,7 +192,7 @@ class AdminController extends Controller
 
     public function ledger(Request $r)
     {
-        abort_unless(in_array($r->user()->role_code, ['OWNER', 'FINANCE', 'ACCOUNTANT'], true), 403, 'Only Owner, Finance and Accountant see the ledger.');
+        \App\Services\Perm::need($r->user(), 'admin.ledger');
         $ent = (int) Context::ent();
         $from = $r->query('from', date('Y-m-01')); $to = $r->query('to', date('Y-m-d'));
         return ['trial' => Ledger::trialBalance($ent, $to), 'pl' => Ledger::profitAndLoss($ent, $from, $to), 'from' => $from, 'to' => $to,
@@ -208,13 +210,13 @@ class AdminController extends Controller
 
     public function sessions(Request $r)
     {
-        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER'], true), 403, 'Only the Owner or a Manager sees the sign-ins.');
-        return \App\Services\Access::page((int) Context::ent(), $r->hasSession() ? \App\Services\Access::hash($r) : '') + ['my_ip' => $r->ip(), 'can_rules' => $r->user()->role_code === 'OWNER'];
+        \App\Services\Perm::need($r->user(), 'admin.sessions');
+        return \App\Services\Access::page((int) Context::ent(), $r->hasSession() ? \App\Services\Access::hash($r) : '') + ['my_ip' => $r->ip(), 'can_rules' => \App\Services\Perm::has($r->user(), 'admin.sessions_owner')];
     }
 
     public function endSession(Request $r)
     {
-        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER'], true), 403, 'Only the Owner or a Manager ends a sign-in.');
+        \App\Services\Perm::need($r->user(), 'admin.endSession');
         $d = $r->validate(['session_id' => 'nullable|integer', 'user_id' => 'nullable|integer']);
         return $this->guard(function () use ($d, $r) { $n = \App\Services\Access::endSessions((int) Context::ent(), $d['session_id'] ?? null, $d['user_id'] ?? null, isset($d['user_id']) && $r->hasSession() ? \App\Services\Access::hash($r) : null); return ['ended' => $n, 'message' => "$n sign-in(s) ended – that device must sign in again"]; });
     }
@@ -237,14 +239,14 @@ class AdminController extends Controller
     {
         $u = $r->user();
         return ['views' => DB::table('sys_saved_views')->where('page_key', $page)->where(fn ($w) => $w->where('fk_id_account', $u->id)->orWhere('f_shared', 1))->orderByDesc('f_default')->orderBy('view_name')->get()
-            ->map(fn ($v) => ['id' => $v->id, 'name' => $v->view_name, 'state' => json_decode($v->filters_json, true) ?: [], 'default' => (bool) $v->f_default && (int) $v->fk_id_account === (int) $u->id, 'shared' => (bool) $v->f_shared, 'mine' => (int) $v->fk_id_account === (int) $u->id]), 'can_share' => in_array($u->role_code, ['OWNER', 'MANAGER'], true)];
+            ->map(fn ($v) => ['id' => $v->id, 'name' => $v->view_name, 'state' => json_decode($v->filters_json, true) ?: [], 'default' => (bool) $v->f_default && (int) $v->fk_id_account === (int) $u->id, 'shared' => (bool) $v->f_shared, 'mine' => (int) $v->fk_id_account === (int) $u->id]), 'can_share' => \App\Services\Perm::has($u, 'admin.views_may')];
     }
 
     public function saveView(Request $r)
     {
         $u = $r->user();
         $d = $r->validate(['page' => 'required|string|max:60', 'name' => 'required|string|min:1|max:80', 'state' => 'present|array', 'default' => 'nullable|boolean', 'shared' => 'nullable|boolean']);
-        if (! empty($d['shared']) && ! in_array($u->role_code, ['OWNER', 'MANAGER'], true)) abort(403, 'Only the Owner or a Manager can share a view with everybody.');
+        if (! empty($d['shared']) && ! \App\Services\Perm::has($u, 'admin.saveView_may')) abort(403, 'Only the Owner or a Manager can share a view with everybody.');
         $state = ['q' => (string) ($d['state']['q'] ?? ''), 'sort' => (string) ($d['state']['sort'] ?? ''), 'dir' => ($d['state']['dir'] ?? 'desc') === 'asc' ? 'asc' : 'desc', 'filter' => array_map('strval', array_filter((array) ($d['state']['filter'] ?? []), fn ($v) => is_scalar($v) && $v !== '')),
             'cols' => array_values(array_filter(array_map('strval', array_filter((array) ($d['state']['cols'] ?? []), 'is_scalar')), fn ($c) => preg_match('/^[A-Za-z0-9_]{1,64}$/', $c)))];
         return DB::transaction(function () use ($u, $d, $state) {
@@ -259,7 +261,7 @@ class AdminController extends Controller
     public function deleteView(Request $r, int $id)
     {
         $u = $r->user(); $v = DB::table('sys_saved_views')->where('id', $id)->first() ?? abort(404);
-        abort_unless((int) $v->fk_id_account === (int) $u->id || ($v->f_shared && $u->role_code === 'OWNER'), 403, 'You can only remove your own views.');
+        abort_unless((int) $v->fk_id_account === (int) $u->id || ($v->f_shared && \App\Services\Perm::has($u, 'admin.deleteView_owner')), 403, 'You can only remove your own views.');
         DB::table('sys_saved_views')->where('id', $id)->delete();
         return ['message' => 'View removed'];
     }
@@ -281,7 +283,7 @@ class AdminController extends Controller
     // ───────────── import hub, history, merges, field registry, calculator, tracking upload ─────────────
     public function importHistory(Request $r)
     {
-        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER', 'FINANCE', 'ACCOUNTANT'], true), 403);
+        \App\Services\Perm::need($r->user(), 'admin.importHistory');
         $ent = (int) Context::ent();
         return ['rows' => DB::table('fin_import_batches as b')->leftJoin('t_branches as s', 's.id', '=', 'b.branch_id')->leftJoin('t_users as u', 'u.id', '=', 'b.imported_by')->where('b.company_id', $ent)->orderByDesc('b.id')->limit(300)
             ->get(['b.id', 'b.report_type', 'b.file_name', 's.shop_name as shop', 'b.period_from', 'b.period_to', 'b.rows_total', 'b.rows_new', 'b.rows_duplicate', 'b.rows_error', 'b.imported_at', 'u.login_id as by'])
@@ -293,7 +295,7 @@ class AdminController extends Controller
     /** 12.1 Accounts dashboard: people, staff, companies, shops, bank accounts and cards; what expires soon; what is in the vault. */
     public function accounts(Request $r)
     {
-        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER'], true), 403);
+        \App\Services\Perm::need($r->user(), 'admin.accounts');
         $ent = \App\Services\Context::ent(); $has = fn ($t) => DB::getSchemaBuilder()->hasTable($t);
         $q = function (string $t) use ($ent, $has) { $x = DB::table($t); if ($ent && \App\Services\Registry::hasColumn($t, 'fk_id_ent')) $x->where('fk_id_ent', $ent); return $x; };
         $count = fn (string $t, ?string $active = 'f_active') => $has($t) ? (int) (($active && \App\Services\Registry::hasColumn($t, $active)) ? $q($t)->where($active, 1) : $q($t))->count() : 0;
@@ -330,7 +332,7 @@ class AdminController extends Controller
 
     public function merges(Request $r)
     {
-        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER'], true), 403);
+        \App\Services\Perm::need($r->user(), 'admin.merges');
         $e = (string) $r->query('entity', 'PARTY');
         return ['rows' => DB::table('sys_merge_map')->orderByDesc('id')->limit(500)->get(), 'entity' => $e,
             'entities' => array_map(fn ($k, $v) => ['code' => $k, 'label' => $v[1]], array_keys(\App\Services\Merges::ENTITIES), \App\Services\Merges::ENTITIES),
@@ -339,32 +341,127 @@ class AdminController extends Controller
 
     public function mergeDo(Request $r)
     {
-        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER'], true), 403);
+        \App\Services\Perm::need($r->user(), 'admin.mergeDo');
         try { return \App\Services\Merges::merge((string) $r->input('entity'), (int) $r->input('keep'), (int) $r->input('fold'), (string) $r->input('reason')); }
         catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage(), 'errors' => ['_form' => [$e->getMessage()]]], 422); }
     }
 
     public function mergeUndo(Request $r, int $id)
     {
-        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER'], true), 403);
+        \App\Services\Perm::need($r->user(), 'admin.mergeUndo');
         try { return \App\Services\Merges::undo($id); }
         catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
     }
 
     public function mergeDismiss(Request $r)
     {
-        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER'], true), 403);
+        \App\Services\Perm::need($r->user(), 'admin.mergeDismiss');
         try { \App\Services\Merges::dismiss((string) $r->input('entity'), (int) $r->input('a'), (int) $r->input('b')); return ['ok' => true]; }
         catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
     }
 
     public function registry(Request $r)
     {
-        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER'], true), 403);
+        \App\Services\Perm::need($r->user(), 'admin.registry');
         $q = trim((string) $r->query('q', ''));
         $forms = DB::table('sys_registry')->groupBy('form_key', 'form_title', 'form_kind')->selectRaw('form_key, form_title, form_kind, COUNT(*) fields, SUM(required = 1) required, MAX(table_name) tbl')->orderBy('form_key')->get();
         $fields = $q === '' ? [] : DB::table('sys_registry')->where(fn ($w) => $w->where('form_key', 'like', "%$q%")->orWhere('field_name', 'like', "%$q%")->orWhere('label', 'like', "%$q%")->orWhere('column_name', 'like', "%$q%"))->orderBy('form_key')->orderBy('section_no')->orderBy('field_no')->limit(300)
             ->get(['form_key', 'section', 'field_name', 'label', 'type', 'required', 'table_name', 'column_name', 'visible_to', 'secret']);
         return ['forms' => $forms, 'fields' => $fields, 'total_fields' => DB::table('sys_registry')->count()];
+    }
+
+    // ---- roles and rights (permission engine) ----
+    public function permissions(Request $r)
+    {
+        P::need($r->user(), 'admin.permissions');
+        $cat = P::catalogue(); $roles = P::roles(); $over = DB::table('mo_role_perms')->get()->groupBy('role_code');
+        $rights = [];
+        foreach ($cat as $code => [$label, $group, $def]) $rights[] = ['code' => $code, 'label' => $label, 'group' => $group];
+        foreach (DB::table('sidebar_modules as m')->leftJoin('sidebar_modules as s', 's.id_module', '=', 'm.parent_id')->where('m.e_status', 'ACTIVE')->whereNotNull('m.parent_id')->orderBy('m.sort_order')->get(['m.module_key', 'm.module_name', 'm.screen_no', 's.module_name as section']) as $m)
+            $rights[] = ['code' => 'menu:' . $m->module_key, 'label' => trim($m->screen_no . ' ' . AppController::simpleName((string) $m->module_name)), 'group' => 'Menu › ' . AppController::simpleName((string) $m->section)];
+        $matrix = [];
+        foreach ($roles as $key => $role) foreach ($rights as $x) {
+            $on = P::roleCan($role['like'], $key, $x['code']);
+            $matrix[$key][$x['code']] = [$on ? 1 : 0, isset($over[$key]) && $over[$key]->contains('perm_code', $x['code']) ? 1 : 0];
+        }
+        $users = DB::table('t_users')->orderBy('display_name')->get(['id', 'login_id', 'display_name', 'role_code', 'custom_role', 'f_active'])->map(fn ($u) => [
+            'id' => $u->id, 'name' => $u->display_name ?: $u->login_id, 'role' => $u->custom_role ?: $u->role_code, 'active' => (bool) $u->f_active,
+            'own' => DB::table('mo_user_perms')->where('user_id', $u->id)->get(['perm_code', 'effect', 'reason', 'until'])->map(fn ($p) => (array) $p + ['label' => P::label($p->perm_code)])->all(),
+            'shops' => DB::table('mo_user_scopes')->where(['user_id' => $u->id, 'kind' => 'SHOP'])->pluck('ref_id')->all()])->all();
+        return ['roles' => array_values($roles), 'built_in' => User::ROLES, 'rights' => $rights, 'matrix' => $matrix, 'users' => $users,
+            'shops' => DB::table('t_branches')->where('fk_id_ent', Context::ent())->orderBy('shop_no')->get(['id', DB::raw("CONCAT(COALESCE(shop_no,''),' ',COALESCE(shop_name,'')) as name")]),
+            'forms' => DB::table('sys_forms')->where('f_active', 1)->orderBy('title')->get(['form_key', 'title']),
+            'field_rules' => DB::table('mo_field_rules as f')->leftJoin('t_users as u', 'u.id', '=', 'f.user_id')->orderBy('f.form_key')->get(['f.id', 'f.role_code', 'f.user_id', 'u.display_name', 'f.form_key', 'f.field_name', 'f.mode']),
+            'requests' => DB::table('mo_access_requests as q')->join('t_users as u', 'u.id', '=', 'q.user_id')->orderByDesc('q.id')->limit(100)->get(['q.id', 'q.perm_code', 'q.note', 'q.status', 'q.decided_note', 'q.created_at', 'u.display_name', 'u.login_id'])
+                ->map(fn ($q) => (array) $q + ['label' => P::label($q->perm_code)]),
+            'view_as' => $r->hasSession() ? $r->session()->get('view_as') : null];
+    }
+
+    public function permRole(Request $r)
+    {
+        P::need($r->user(), 'admin.permissions');
+        $d = $r->validate(['role_code' => 'required|string|max:30', 'label' => 'nullable|string|max:80', 'like_role' => 'required|string', 'copy_from' => 'nullable|string', 'notes' => 'nullable|string|max:255']);
+        return $this->guard(fn () => ['role' => P::saveRole($d['role_code'], (string) ($d['label'] ?? ''), $d['like_role'], $d['copy_from'] ?? null, $d['notes'] ?? null, (int) $r->user()->id)]);
+    }
+
+    public function permSet(Request $r)
+    {
+        P::need($r->user(), 'admin.permissions');
+        $d = $r->validate(['role' => 'required|string', 'code' => 'required|string|max:120', 'allowed' => 'nullable|boolean']);
+        return $this->guard(function () use ($d, $r) { P::setRole($d['role'], $d['code'], array_key_exists('allowed', $d) && $d['allowed'] !== null ? (bool) $d['allowed'] : null, (int) $r->user()->id); return ['ok' => true]; });
+    }
+
+    public function permUser(Request $r)
+    {
+        P::need($r->user(), 'admin.permissions');
+        $d = $r->validate(['user_id' => 'required|integer', 'code' => 'required|string|max:120', 'effect' => 'nullable|in:GRANTED,REVOKED', 'reason' => 'nullable|string|max:255', 'until' => 'nullable|date']);
+        return $this->guard(function () use ($d, $r) { P::setUser((int) $d['user_id'], $d['code'], $d['effect'] ?? null, (string) ($d['reason'] ?? ''), $d['until'] ?? null, (int) $r->user()->id); return ['ok' => true]; });
+    }
+
+    public function permScope(Request $r)
+    {
+        P::need($r->user(), 'admin.permissions');
+        $d = $r->validate(['user_id' => 'required|integer|exists:t_users,id', 'kind' => 'required|in:SHOP,LOCATION', 'ids' => 'array', 'ids.*' => 'integer']);
+        return $this->guard(function () use ($d, $r) { P::setScope((int) $d['user_id'], $d['kind'], $d['ids'] ?? [], (int) $r->user()->id); return ['ok' => true]; });
+    }
+
+    public function permField(Request $r)
+    {
+        P::need($r->user(), 'admin.permissions');
+        $d = $r->validate(['role' => 'nullable|string', 'user_id' => 'nullable|integer', 'form_key' => 'required|string', 'field_name' => 'required|string|max:80', 'mode' => 'nullable|in:EDIT,READONLY,HIDDEN,DEFAULT']);
+        return $this->guard(function () use ($d, $r) { P::setField($d['role'] ?? null, isset($d['user_id']) ? (int) $d['user_id'] : null, $d['form_key'], $d['field_name'], $d['mode'] ?? null, (int) $r->user()->id); return ['ok' => true]; });
+    }
+
+    /** Anyone: ask the Owner for a right he was refused. */
+    public function permRequest(Request $r)
+    {
+        $d = $r->validate(['code' => 'required|string|max:120', 'note' => 'nullable|string|max:255']);
+        return $this->guard(fn () => ['id' => P::request($r->user(), $d['code'], $d['note'] ?? null), 'message' => 'Sent to the Owner.']);
+    }
+
+    public function permDecide(Request $r, int $id)
+    {
+        P::need($r->user(), 'admin.permissions');
+        $d = $r->validate(['grant' => 'required|boolean', 'note' => 'nullable|string|max:255', 'until' => 'nullable|date']);
+        return $this->guard(function () use ($d, $r, $id) { P::decide($id, (bool) $d['grant'], $d['note'] ?? null, $d['until'] ?? null, $r->user()); return ['ok' => true]; });
+    }
+
+    /** Why can (or cannot) a person do something – for the Owner, and for anyone about himself. */
+    public function permWhy(Request $r)
+    {
+        $d = $r->validate(['code' => 'required|string|max:120', 'user_id' => 'nullable|integer']);
+        $u = ! empty($d['user_id']) && (int) $d['user_id'] !== (int) $r->user()->id ? (P::need($r->user(), 'admin.permissions') ?? User::findOrFail($d['user_id'])) : $r->user();
+        return ['allowed' => P::has($u, $d['code']), 'why' => P::explain($u, $d['code']), 'label' => P::label($d['code'])];
+    }
+
+    /** The Owner looks at the tool as another role (read-only); empty role = back to himself. */
+    public function permViewAs(Request $r)
+    {
+        abort_unless($r->user()->role_code === 'OWNER', 403, 'Only the Owner can view as another role.');
+        $role = (string) $r->input('role', '');
+        if ($role === '' || $role === 'OWNER') { $r->session()->forget('view_as'); return ['view_as' => null]; }
+        $x = P::roles()[$role] ?? abort(422, 'Role not found.');
+        $r->session()->put('view_as', [$x['like'], $x['code']]);
+        return ['view_as' => [$x['like'], $x['code']]];
     }
 }

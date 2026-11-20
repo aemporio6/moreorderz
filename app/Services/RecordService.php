@@ -226,7 +226,8 @@ class RecordService
     private static function storedFields(string $formKey, string $table): array
     {
         return array_values(array_filter(Registry::fields($formKey), fn ($f) => $f['column_name'] && Registry::baseTable($f['table_name']) === $table
-            && Registry::hasColumn($table, $f['column_name']) && ! in_array($f['column_name'], self::BLOCKED, true) && Registry::visible($f, Context::role())));
+            && Registry::hasColumn($table, $f['column_name']) && ! in_array($f['column_name'], self::BLOCKED, true) && Registry::visible($f, Context::role())
+            && Perm::fieldMode(\Illuminate\Support\Facades\Auth::user(), $formKey, (string) $f['field_name']) !== 'READONLY'));
     }
 
     private static function fieldByCol(array $fields, string $col): array
@@ -238,6 +239,7 @@ class RecordService
     /** Company filter: a user only sees rows of the company he works in (plus shared rows). */
     private static function scope($q, string $table): void
     {
+        Perm::scopeQuery($q, $table, \Illuminate\Support\Facades\Auth::user(), $table);
         $ent = Context::ent();
         if (! $ent) return;
         if (Registry::hasColumn($table, 'fk_id_ent')) $q->where(fn ($w) => $w->where("$table.fk_id_ent", $ent)->orWhere("$table.fk_id_ent", 0)->orWhereNull("$table.fk_id_ent"));

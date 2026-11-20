@@ -83,7 +83,7 @@ class Registry
             $stored = $f['column_name'] && self::baseTable($f['table_name']) === $table && self::hasColumn($table, $f['column_name']);
             $sections[$f['section_no']]['fields'][] = [
                 'name' => $f['field_name'], 'col' => $f['column_name'], 'label' => $f['label'], 'type' => $f['type'], 'source' => $f['source'],
-                'required' => (bool) $f['required'] && ! str_starts_with((string) $f['default_rule'], 'numbering:'), 'quick' => (bool) $f['in_quick'], 'readonly' => (bool) $f['readonly'] || ! $stored,
+                'required' => (bool) $f['required'] && ! str_starts_with((string) $f['default_rule'], 'numbering:'), 'quick' => (bool) $f['in_quick'], 'readonly' => (bool) $f['readonly'] || ! $stored || Perm::fieldMode(\Illuminate\Support\Facades\Auth::user(), $formKey, (string) $f['field_name']) === 'READONLY',
                 'stored' => $stored, 'help' => $f['help'], 'step' => $f['step'], 'min' => $f['min'], 'max' => $f['max'],
                 'cascades_from' => $f['cascades_from'], 'show_if' => $f['show_if'], 'required_if' => $f['required_if'],
                 'add_form' => $f['add_form'], 'secret' => (bool) $f['secret'], 'auto_correct' => $f['auto_correct'],
@@ -98,6 +98,9 @@ class Registry
 
     public static function visible(array $f, ?string $role): bool
     {
+        $mode = Perm::fieldMode(\Illuminate\Support\Facades\Auth::user(), (string) ($f['form_key'] ?? ''), (string) ($f['field_name'] ?? ''));
+        if ($mode === 'HIDDEN') return false;
+        if ($mode === 'EDIT' || $mode === 'READONLY') return true;
         $v = $f['visible_to'] ?: 'all';
         if ($v === 'all' || $role === null || $role === 'OWNER') return true;
         return in_array($role, explode('_', $v), true) || in_array($role, array_map('trim', explode(',', $v)), true);

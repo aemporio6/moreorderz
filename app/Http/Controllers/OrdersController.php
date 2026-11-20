@@ -18,9 +18,9 @@ class OrdersController extends Controller
     private const CONFIRM = ['OWNER', 'MANAGER', 'TL'];
     private const MONEY = ['OWNER', 'MANAGER', 'TL', 'VA', 'FINANCE', 'ACCOUNTANT'];
 
-    private function can(Request $r, array $roles): void
+    private function can(Request $r, string $code): void
     {
-        abort_unless(in_array($r->user()->role_code, $roles, true), 403, 'Your role cannot do this here. Ask the Owner if you need it.');
+        \App\Services\Perm::need($r->user(), $code);
     }
 
     private function run(callable $fn)
@@ -38,7 +38,7 @@ class OrdersController extends Controller
 
     public function board(Request $r)
     {
-        $this->can($r, self::SEE);
+        $this->can($r, 'orders.SEE');
         $ent = (int) Context::ent(); $rows = Dispatch::board($ent);
         $count = fn (array $st) => count(array_filter($rows, fn ($x) => in_array($x->wh_status, $st, true)));
         return ['rows' => $rows, 'counts' => ['to_pick' => $count(['RESERVED']), 'short' => $count(['SHORT']), 'picking' => $count(['PICKING']), 'picked' => $count(['PICKED']), 'packed' => $count(['PACKED'])],
@@ -54,7 +54,7 @@ class OrdersController extends Controller
 
     public function enter(Request $r)
     {
-        $this->can($r, self::ENTER);
+        $this->can($r, 'orders.ENTER');
         $d = $r->validate(['branch' => 'required|integer', 'order_no' => 'required|string|max:100', 'd_order' => 'required|date', 'sku' => 'required|string|max:100', 'qty' => 'required|integer|min:1', 'sale_rate' => 'required|numeric|min:0',
             'cust_name' => 'nullable|string|max:150', 'ship_to_address' => 'nullable|string|max:300', 'ship_to_city' => 'nullable|string|max:100', 'ship_to_postcode' => 'nullable|string|max:20', 'ship_to_phone' => 'nullable|string|max:40', 'tracking_no' => 'nullable|string|max:60']);
         return $this->run(function () use ($d) {
@@ -85,7 +85,7 @@ class OrdersController extends Controller
 
     public function labels(Request $r)
     {
-        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER', 'WAREHOUSE', 'TL'], true), 403, 'Your role cannot see carrier labels.');
+        \App\Services\Perm::need($r->user(), 'orders.labels');
         return \App\Services\CarrierLabels::page((int) \App\Services\Context::ent());
     }
 
@@ -110,7 +110,7 @@ class OrdersController extends Controller
 
     public function labelFile(Request $r, int $id)
     {
-        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER', 'WAREHOUSE', 'TL'], true), 403);
+        \App\Services\Perm::need($r->user(), 'orders.labelFile');
         try { [$bytes, $name] = \App\Services\CarrierLabels::file((int) \App\Services\Context::ent(), $id); } catch (\InvalidArgumentException $e) { abort(404, $e->getMessage()); }
         return response($bytes, 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="' . $name . '"']);
     }
@@ -122,7 +122,7 @@ class OrdersController extends Controller
      */
     public function trackingUpload(Request $r)
     {
-        abort_unless(in_array($r->user()->role_code, ['OWNER', 'MANAGER', 'WAREHOUSE', 'TL', 'VA'], true), 403);
+        \App\Services\Perm::need($r->user(), 'orders.trackingUpload');
         $ent = (int) \App\Services\Context::ent(); $shop = (int) $r->query('shop', 0); $from = $r->query('from') ?: date('Y-m-d', strtotime('-7 day')); $to = $r->query('to') ?: date('Y-m-d');
         $layouts = DB::table('mo_tracking_layouts')->where('f_active', 1)->orderBy('id')->get();
         $profileLayout = $shop ? DB::table('t_branches as b')->join('mp_profiles as p', 'p.id', '=', 'b.fk_id_mp_profile')->where('b.id', $shop)->value('p.tracking_upload_layout') : null;
@@ -148,7 +148,7 @@ class OrdersController extends Controller
     /** Add or change a tracking-upload layout: one line per column, "Header = field". Owner / Manager. */
     public function saveTrackingLayout(Request $r)
     {
-        $this->can($r, ['OWNER', 'MANAGER']);
+        $this->can($r, 'orders.saveTrackingLayout');
         return $this->run(function () use ($r) {
             $code = strtoupper(preg_replace('/[^A-Za-z0-9_]/', '_', trim((string) $r->input('code')))); $name = trim((string) $r->input('name'));
             if ($code === '' || $name === '') throw new \InvalidArgumentException('Give the layout a code and a name.');
@@ -169,7 +169,7 @@ class OrdersController extends Controller
 
     public function cancel(Request $r, int $id)
     {
-        $this->can($r, self::ENTER);
+        $this->can($r, 'orders.ENTER');
         $d = $r->validate(['reason' => 'required|string|min:3|max:255'], ['reason.required' => 'Give the reason for cancelling.']);
         return $this->run(function () use ($id, $d) {
             $s = DB::table('t_sales')->where('id', $id)->where('fk_id_ent', Context::ent())->first() ?? throw new \RuntimeException('Order line not found.');
@@ -185,13 +185,13 @@ class OrdersController extends Controller
     // ---- pick ----
     public function buildPick(Request $r)
     {
-        $this->can($r, self::WAREHOUSE);
+        $this->can($r, 'orders.WAREHOUSE');
         return $this->run(function () { $id = Dispatch::buildPickList((int) Context::ent()); if (! $id) throw new \RuntimeException('Nothing is waiting to be picked.'); return ['id' => $id, 'message' => 'Pick list made']; });
     }
 
     public function pickList(Request $r, int $id)
     {
-        $this->can($r, self::SEE);
+        $this->can($r, 'orders.SEE');
         $t = DB::table('wh_pick_tasks')->where('id', $id)->where('fk_id_ent', Context::ent())->first(['id', 'task_code', 'status', 'created_at']) ?? abort(404);
         return ['task' => $t, 'lines' => DB::table('wh_pick_task_lines as l')->join('t_product_vendors as p', 'p.id', '=', 'l.fk_id_product')->leftJoin('cat_inventory_locations as c', 'c.id', '=', 'l.fk_id_from_location')->leftJoin('t_sales as s', 's.id', '=', 'l.fk_id_sale')
             ->where('l.fk_id_pick_task', $id)->orderBy('l.line_no')->get(['l.id', 'l.line_no', 'c.location_name as bin', 'p.SKU_VENDOR as sku', 'p.product_name_vendor as name', 'l.qty', 'l.qty_done', 'l.qty_short', 'l.line_status', 's.order_no']), 'rights' => $this->rights($r)];
@@ -199,7 +199,7 @@ class OrdersController extends Controller
 
     public function pick(Request $r, int $lineId)
     {
-        $this->can($r, self::WAREHOUSE);
+        $this->can($r, 'orders.WAREHOUSE');
         $d = $r->validate(['qty' => 'nullable|integer|min:0']);
         abort_unless(DB::table('wh_pick_task_lines as l')->join('wh_pick_tasks as t', 't.id', '=', 'l.fk_id_pick_task')->where('l.id', $lineId)->where('t.fk_id_ent', Context::ent())->exists(), 404);
         return $this->run(fn () => Dispatch::pick($lineId, $d['qty'] ?? null) + ['message' => 'Picked']);
@@ -208,7 +208,7 @@ class OrdersController extends Controller
     // ---- pack ----
     public function pack(Request $r)
     {
-        $this->can($r, self::WAREHOUSE);
+        $this->can($r, 'orders.WAREHOUSE');
         $d = $r->validate(['order_no' => 'required|string|max:100', 'branch' => 'required|integer', 'carrier' => 'nullable|integer', 'box' => 'nullable|integer', 'weight_g' => 'nullable|integer|min:1', 'tracking_no' => 'nullable|string|max:60']);
         return $this->run(function () use ($d) { $id = Dispatch::pack(array_filter($d, fn ($v) => $v !== null));
             $pj = \App\Services\PrintService::auto((int) Context::ent(), 'WH_AUTOPRINT_PACKING_SLIP', 'PACKING_SLIP', [$id], 'AUTO_PACK');
@@ -218,21 +218,21 @@ class OrdersController extends Controller
     // ---- handover ----
     public function openHandover(Request $r)
     {
-        $this->can($r, self::WAREHOUSE);
+        $this->can($r, 'orders.WAREHOUSE');
         $d = $r->validate(['carrier' => 'required|integer']);
         return $this->run(fn () => ['id' => Dispatch::openHandover((int) $d['carrier']), 'message' => 'Handover started']);
     }
 
     public function scan(Request $r, int $id)
     {
-        $this->can($r, self::WAREHOUSE);
+        $this->can($r, 'orders.WAREHOUSE');
         $d = $r->validate(['code' => 'required|string|max:100', 'op_id' => 'nullable|string|max:36']);
         return $this->run(fn () => Dispatch::scan($id, $d['code'], $d['op_id'] ?? null));
     }
 
     public function closeHandover(Request $r, int $id)
     {
-        $this->can($r, self::WAREHOUSE);
+        $this->can($r, 'orders.WAREHOUSE');
         $d = $r->validate(['driver' => 'nullable|string|max:120']);
         return $this->run(function () use ($id, $d) { $x = Dispatch::closeHandover($id, $d['driver'] ?? null);
             $pj = \App\Services\PrintService::auto((int) Context::ent(), 'WH_AUTOPRINT_MANIFEST', 'MANIFEST', [$id], 'AUTO_MANIFEST');
@@ -243,17 +243,17 @@ class OrdersController extends Controller
     // ---- month confirm ----
     public function confirmPreview(Request $r)
     {
-        $this->can($r, self::SEE);
+        $this->can($r, 'orders.SEE');
         $d = $r->validate(['branch' => 'required|integer', 'month' => ['required', 'regex:/^\d{4}-\d{2}$/']]);
         abort_unless(DB::table('t_branches')->where('id', $d['branch'])->where('fk_id_ent', Context::ent())->exists(), 404);
         $p = Sales::confirmPreview((int) $d['branch'], $d['month']);
-        if (! in_array($r->user()->role_code, self::MONEY, true)) unset($p['sales_total']);
+        if (! \App\Services\Perm::has($r->user(), 'orders.MONEY')) unset($p['sales_total']);
         return $p + ['rights' => $this->rights($r)];
     }
 
     public function confirm(Request $r)
     {
-        $this->can($r, self::CONFIRM);
+        $this->can($r, 'orders.CONFIRM');
         $d = $r->validate(['branch' => 'required|integer', 'month' => ['required', 'regex:/^\d{4}-\d{2}$/'], 'book_unshipped' => 'boolean']);
         abort_unless(DB::table('t_branches')->where('id', $d['branch'])->where('fk_id_ent', Context::ent())->exists(), 404);
         return $this->run(function () use ($d) { $x = Sales::confirmMonth((int) $d['branch'], $d['month'], (bool) ($d['book_unshipped'] ?? false)); return $x + ['message' => "Month confirmed: {$x['lines']} line(s), {$x['units']} unit(s) taken out of stock"]; });
@@ -262,14 +262,14 @@ class OrdersController extends Controller
     // ---- returns ----
     public function returns(Request $r)
     {
-        $this->can($r, self::SEE);
+        $this->can($r, 'orders.SEE');
         return ['rows' => DB::table('wh_return_intakes as i')->leftJoin('t_sales as s', 's.id', '=', 'i.fk_id_sale')->leftJoin('t_users as u', 'u.id', '=', 'i.received_by')->where('i.fk_id_ent', Context::ent())->orderByDesc('i.id')->limit(200)
             ->get(['i.id', 'i.intake_code', 'i.scanned_code', 'i.status', 'i.qty', 'i.grade', 'i.received_at', 's.order_no', 's.sku', 'u.display_name as by']), 'rights' => $this->rights($r)];
     }
 
     public function receiveReturn(Request $r)
     {
-        $this->can($r, self::WAREHOUSE);
+        $this->can($r, 'orders.WAREHOUSE');
         $d = $r->validate(['code' => 'required|string|max:100', 'qty' => 'nullable|integer|min:1', 'condition' => 'nullable|in:SELLABLE,DAMAGED,QUARANTINE,MISSING', 'note' => 'nullable|string|max:500', 'op_id' => 'nullable|string|max:36']);
         return $this->run(function () use ($d) { $x = Dispatch::receiveReturn(array_filter($d, fn ($v) => $v !== null)); return $x + ['message' => $x['matched'] ? 'Return booked' . ($x['before_confirm'] ? '' : ' – the cost of the sale is reversed') : 'No order matches this code – saved for review']; });
     }

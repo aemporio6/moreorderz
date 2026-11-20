@@ -45,7 +45,7 @@ class WorkController extends Controller
         $q = DB::table('tasks as t')->leftJoin('t_users as u', 'u.id', '=', 't.owner_user_id')->leftJoin('task_categories as c', 'c.id', '=', 't.category_id')
             ->where(fn ($w) => $w->where('t.fk_id_ent', Context::ent())->orWhere('t.fk_id_ent', 0)->orWhereNull('t.fk_id_ent'));
         $scope = $r->query('scope', 'mine');
-        if ($scope === 'mine' || ! in_array($u->role_code, ['OWNER', 'MANAGER', 'TL'], true)) $q->where('t.owner_user_id', $u->id);
+        if ($scope === 'mine' || ! \App\Services\Perm::has($u, 'work.tasks_may')) $q->where('t.owner_user_id', $u->id);
         if ($r->query('status', 'open') === 'open') $q->whereNotIn('t.status', ['DONE', 'APPROVED', 'CANCELLED']);
         if ($s = $r->query('q')) $q->where('t.title', 'like', "%$s%");
         $rows = $q->orderByRaw("FIELD(t.priority,'URGENT','HIGH','NORMAL','LOW')")->orderBy('t.due_at')->limit(300)
@@ -59,7 +59,7 @@ class WorkController extends Controller
         $data = $r->validate(['status' => 'required|in:TODO,DOING,STUCK,DONE', 'note' => 'nullable|string|max:500']);
         $t = DB::table('tasks')->where('id', $id)->first() ?? abort(404);
         $u = $r->user();
-        abort_unless((int) $t->owner_user_id === $u->id || in_array($u->role_code, ['OWNER', 'MANAGER', 'TL'], true), 403, 'This task belongs to someone else.');
+        abort_unless((int) $t->owner_user_id === $u->id || \App\Services\Perm::has($u, 'work.taskStatus_may'), 403, 'This task belongs to someone else.');
         if ($data['status'] === 'DONE' && $t->source === 'RULE') {
             return response()->json(['message' => 'This task was opened by a rule. It closes by itself when the problem is fixed' . ($t->fix_url ? ' – use the Fix link.' : '.')], 422);
         }

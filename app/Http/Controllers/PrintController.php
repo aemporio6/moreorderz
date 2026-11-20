@@ -13,15 +13,12 @@ use Illuminate\Support\Facades\DB;
 class PrintController extends Controller
 {
     private const SETUP = ['OWNER', 'MANAGER'];
-    private const KIND_ROLES = [
-        'PACKING_SLIP' => ['OWNER', 'MANAGER', 'WAREHOUSE', 'TL'], 'PICK_SHEET' => ['OWNER', 'MANAGER', 'WAREHOUSE', 'TL'], 'MANIFEST' => ['OWNER', 'MANAGER', 'WAREHOUSE', 'TL'],
-        'LOCATION' => ['OWNER', 'MANAGER', 'WAREHOUSE'], 'PO' => ['OWNER', 'MANAGER', 'SOURCING', 'FINANCE', 'ACCOUNTANT'],
-    ];
+    private const KIND_ROLES = \App\Services\Perm::PRINT_KINDS;
     private const QUEUE = ['OWNER', 'MANAGER', 'WAREHOUSE', 'TL', 'SOURCING', 'FINANCE', 'ACCOUNTANT'];
 
-    private function can(Request $r, array $roles): void
+    private function can(Request $r, string $code): void
     {
-        abort_unless(in_array($r->user()->role_code, $roles, true), 403, 'Your role cannot do this here. Ask the Owner if you need it.');
+        \App\Services\Perm::need($r->user(), $code);
     }
 
     private function run(callable $fn)
@@ -43,16 +40,16 @@ class PrintController extends Controller
     {
         $d = $r->validate(['kind' => 'required|string|in:' . implode(',', array_keys(self::KIND_ROLES)), 'ids' => 'required|array|min:1|max:2000', 'ids.*' => 'integer', 'copies' => 'nullable|integer|min:1|max:20',
             'reason' => 'nullable|string|max:30', 'use_backup' => 'boolean', 'printer' => 'nullable|integer', 'start_cell' => 'nullable|integer|min:1|max:200', 'workstation' => 'nullable|string|max:80']);
-        $this->can($r, self::KIND_ROLES[$d['kind']]);
+        $this->can($r, 'print.kind_' . $d['kind']);
         return $this->run(fn () => $this->answer(Prints::print((int) Context::ent(), $d['kind'], $d['ids'], array_filter($d, fn ($v) => $v !== null))));
     }
 
     // ---- queue ----
     public function queue(Request $r)
     {
-        $this->can($r, self::QUEUE);
+        $this->can($r, 'print.QUEUE');
         $ent = (int) Context::ent(); $rows = Prints::queue($ent);
-        if (! in_array($r->user()->role_code, self::KIND_ROLES['PO'], true)) $rows = array_values(array_filter($rows, fn ($j) => $j->kind !== 'PO'));
+        if (! \App\Services\Perm::has($r->user(), 'print.kind_PO')) $rows = array_values(array_filter($rows, fn ($j) => $j->kind !== 'PO'));
         return ['rows' => $rows, 'reasons' => Prints::REASONS, 'failed' => count(array_filter($rows, fn ($j) => $j->status === 'FAILED')),
             'printers' => DB::table('printer_profiles')->whereIn('fk_id_ent', [0, $ent])->where('f_active', 1)->where('printer_status', 'ACTIVE')->where('code', 'not like', 'EX\_%')->get(['id', 'name'])];
     }
@@ -60,7 +57,7 @@ class PrintController extends Controller
     private function job(Request $r, int $id): object
     {
         $j = DB::table('print_jobs as j')->leftJoin('label_templates as t', 't.id', '=', 'j.fk_id_label_template')->where('j.id', $id)->where('j.fk_id_ent', Context::ent())->first(['j.*', 't.label_kind']) ?? abort(404);
-        $this->can($r, self::KIND_ROLES[$j->label_kind] ?? ['OWNER', 'MANAGER', 'WAREHOUSE']);   // test pages: whoever may test a printer
+        $this->can($r, isset(self::KIND_ROLES[$j->label_kind]) ? 'print.kind_' . $j->label_kind : 'print.testPage');   // test pages: whoever may test a printer
         return $j;
     }
 
@@ -89,8 +86,8 @@ class PrintController extends Controller
     // ---- printers ----
     public function printers(Request $r)
     {
-        $this->can($r, self::QUEUE);
-        return Prints::setup((int) Context::ent()) + ['can_edit' => in_array($r->user()->role_code, self::SETUP, true),
+        $this->can($r, 'print.QUEUE');
+        return Prints::setup((int) Context::ent()) + ['can_edit' => \App\Services\Perm::has($r->user(), 'print.SETUP'),
             'kinds' => ['THERMAL' => 'Thermal label printer', 'LASER' => 'Laser printer', 'INKJET' => 'Inkjet printer', 'OTHER' => 'Other'],
             'defaults' => ['THERMAL' => ['dpi' => 203, 'max_print_width_mm' => 108, 'max_print_length_mm' => 300, 'min_media_width_mm' => 40, 'max_media_width_mm' => 110, 'paper_format' => '100X150_MM'],
                 'LASER' => ['dpi' => 600, 'max_print_width_mm' => 210, 'max_print_length_mm' => 297, 'min_media_width_mm' => 100, 'max_media_width_mm' => 216, 'paper_format' => 'A4'],
@@ -100,7 +97,7 @@ class PrintController extends Controller
 
     public function savePrinter(Request $r)
     {
-        $this->can($r, self::SETUP);
+        $this->can($r, 'print.SETUP');
         $d = $r->validate(['id' => 'nullable|integer', 'name' => 'required|string|max:120', 'printer_kind' => 'required|in:THERMAL,LASER,INKJET,OTHER', 'brand_text' => 'nullable|string|max:60', 'model_text' => 'nullable|string|max:120',
             'connection' => 'required|in:USB,NETWORK,BLUETOOTH,WIFI', 'os_printer_name' => 'nullable|string|max:120', 'network_address' => 'nullable|string|max:120', 'dpi' => 'nullable|integer|min:72|max:2400',
             'max_print_width_mm' => 'required|numeric|min:20|max:1200', 'max_print_length_mm' => 'nullable|numeric|min:20|max:5000', 'min_media_width_mm' => 'nullable|numeric|min:10', 'max_media_width_mm' => 'nullable|numeric|min:10',
@@ -125,7 +122,7 @@ class PrintController extends Controller
 
     public function status(Request $r, int $id)
     {
-        $this->can($r, ['OWNER', 'MANAGER', 'WAREHOUSE']);
+        $this->can($r, 'print.status');
         $d = $r->validate(['status' => 'required|in:ACTIVE,OFFLINE,REPAIR']);
         $ent = (int) Context::ent();
         $p = DB::table('printer_profiles')->where('id', $id)->whereIn('fk_id_ent', [0, $ent])->first() ?? abort(404);
@@ -137,14 +134,14 @@ class PrintController extends Controller
 
     public function test(Request $r, int $id)
     {
-        $this->can($r, ['OWNER', 'MANAGER', 'WAREHOUSE']);
+        $this->can($r, 'print.test');
         $d = $r->validate(['media' => 'required|integer']);
         return $this->run(fn () => $this->answer(Prints::testPage((int) Context::ent(), $id, (int) $d['media'])));
     }
 
     public function testResult(Request $r, int $id)
     {
-        $this->can($r, ['OWNER', 'MANAGER', 'WAREHOUSE']);
+        $this->can($r, 'print.testResult');
         $d = $r->validate(['media' => 'required|integer', 'ok' => 'required|boolean', 'offset_x_mm' => 'nullable|numeric', 'offset_y_mm' => 'nullable|numeric', 'scale_pct' => 'nullable|numeric', 'rotate_deg' => 'nullable|integer']);
         return $this->run(function () use ($id, $d) {
             Prints::calibrate((int) Context::ent(), $id, (int) $d['media'], (bool) $d['ok'], array_filter($d, fn ($v) => $v !== null));
@@ -154,14 +151,14 @@ class PrintController extends Controller
 
     public function replace(Request $r, int $id)
     {
-        $this->can($r, self::SETUP);
+        $this->can($r, 'print.SETUP');
         $d = $r->validate(['new' => 'required|integer']);
         return $this->run(function () use ($id, $d) { $n = Prints::replace((int) Context::ent(), $id, (int) $d['new']); return ['routes' => $n, 'message' => "$n route(s) moved to the new printer. Print its test page before the first job."]; });
     }
 
     public function route(Request $r)
     {
-        $this->can($r, self::SETUP);
+        $this->can($r, 'print.SETUP');
         $d = $r->validate(['kind' => 'required|string', 'printer' => 'required|integer', 'backup' => 'nullable|integer', 'media' => 'required|integer', 'copies' => 'nullable|integer|min:1|max:10']);
         return $this->run(function () use ($d) { Prints::setRoute((int) Context::ent(), $d['kind'], (int) $d['printer'], $d['backup'] ?? null, (int) $d['media'], (int) ($d['copies'] ?? 1)); return ['message' => 'Route saved']; });
     }

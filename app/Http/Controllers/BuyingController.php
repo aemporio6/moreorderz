@@ -20,9 +20,9 @@ class BuyingController extends Controller
     private const COST = ['OWNER', 'MANAGER', 'FINANCE'];
     private const MONEY = ['OWNER', 'MANAGER', 'SOURCING', 'FINANCE', 'ACCOUNTANT', 'PARTNER'];
 
-    private function can(Request $r, array $roles): void
+    private function can(Request $r, string $code): void
     {
-        abort_unless(in_array($r->user()->role_code, $roles, true), 403, 'Your role cannot do this here. Ask the Owner if you need it.');
+        \App\Services\Perm::need($r->user(), $code);
     }
 
     private function run(callable $fn)
@@ -41,19 +41,19 @@ class BuyingController extends Controller
 
     public function dashboard(Request $r)
     {
-        $this->can($r, self::SEE);
+        $this->can($r, 'buying.SEE');
         $ent = (int) Context::ent();
         $cycles = DB::table('t_src_cycles')->where('fk_id_ent', $ent)->where('f_active', 1)->whereNotIn('status', ['CLOSED', 'CANCELLED'])->orderByDesc('id')->limit(30)->get(['id', 'cycle_code', 'product_name', 'cycle_type', 'sourcing_date']);
         $rows = [];
         foreach ($cycles as $c) { $w = Buy::cycle($c->id); $rows[] = ['id' => $c->id, 'code' => $c->cycle_code, 'name' => $c->product_name, 'type' => $c->cycle_type, 'date' => $c->sourcing_date, 'steps' => $w['steps']]; }
         $d = Buy::dashboard($ent);
-        if (! in_array($r->user()->role_code, self::MONEY, true)) unset($d['pay_due_base'], $d['supplier_advances'], $d['supplier_payables']);
+        if (! \App\Services\Perm::has($r->user(), 'buying.MONEY')) unset($d['pay_due_base'], $d['supplier_advances'], $d['supplier_payables']);
         return ['kpi' => $d, 'cycles' => $rows, 'rights' => $this->rights($r)];
     }
 
     public function pick(Request $r)
     {
-        $this->can($r, self::SEE);
+        $this->can($r, 'buying.SEE');
         $ent = Context::ent();
         return ['banks' => DB::table('fin_bank_accounts')->where('company_id', $ent)->where('is_active', 1)->get(['id', DB::raw("CONCAT(bank_name, ' · ', account_label) as name"), 'currency']),
             'locations' => DB::table('cat_inventory_locations')->where('fk_id_ent', $ent)->where(fn ($w) => $w->where('f_active', 1)->orWhereNull('f_active'))->whereNotIn('kind', ['DAMAGED', 'RETURNS', 'WRITTEN_OFF', 'QUARANTINE', 'MISSING', 'TRANSIT'])->orderBy('location_name')->limit(500)->get(['id', 'location_name as name']),
@@ -65,7 +65,7 @@ class BuyingController extends Controller
     // ---- research ----
     public function research(Request $r, int $id)
     {
-        $this->can($r, self::SEE);
+        $this->can($r, 'buying.SEE');
         $x = DB::table('src_research')->where('id', $id)->where('fk_id_ent', Context::ent())->first() ?? abort(404);
         try { $margin = Buy::refreshMargin($id); } catch (\Throwable $e) { $margin = $x->est_margin_pct; }
         $cycle = $x->fk_id_cycle ? DB::table('t_src_cycles')->where('id', $x->fk_id_cycle)->first(['id', 'cycle_code']) : null;
@@ -77,7 +77,7 @@ class BuyingController extends Controller
 
     public function researchNumbers(Request $r, int $id)
     {
-        $this->can($r, self::BUY);
+        $this->can($r, 'buying.BUY');
         $d = $r->validate(['sell' => 'required|numeric|min:0', 'cost' => 'required|numeric|min:0', 'freight' => 'nullable|numeric|min:0', 'fee_pct' => 'nullable|numeric|min:0|max:100', 'ad_pct' => 'nullable|numeric|min:0|max:100', 'units' => 'nullable|integer|min:0']);
         $x = DB::table('src_research')->where('id', $id)->where('fk_id_ent', Context::ent())->first() ?? abort(404);
         abort_if($x->status === 'GO', 422, 'This research already started sourcing.');
@@ -88,7 +88,7 @@ class BuyingController extends Controller
 
     public function researchChild(Request $r, int $id, string $kind)
     {
-        $this->can($r, self::BUY);
+        $this->can($r, 'buying.BUY');
         abort_unless(DB::table('src_research')->where('id', $id)->where('fk_id_ent', Context::ent())->exists(), 404);
         if ($kind === 'competitor') {
             $d = $r->validate(['listing_url' => 'required|url|max:500', 'seller_name' => 'nullable|string|max:120', 'price' => 'nullable|numeric|min:0', 'est_monthly_sold' => 'nullable|integer|min:0', 'review_count' => 'nullable|integer|min:0', 'rating' => 'nullable|numeric|min:0|max:5']);
@@ -104,7 +104,7 @@ class BuyingController extends Controller
 
     public function researchStatus(Request $r, int $id)
     {
-        $this->can($r, self::BUY);
+        $this->can($r, 'buying.BUY');
         $d = $r->validate(['status' => 'required|string', 'reason' => 'nullable|string|max:1000']);
         return $this->run(function () use ($d, $id) { Buy::researchStatus($id, $d['status'], $d['reason'] ?? null); return ['message' => 'Status: ' . $d['status']]; });
     }
@@ -118,21 +118,21 @@ class BuyingController extends Controller
     // ---- cycle, RFQ, PO ----
     public function cycle(Request $r, int $id)
     {
-        $this->can($r, self::SEE);
+        $this->can($r, 'buying.SEE');
         $w = Buy::cycle($id);
-        if (! in_array($r->user()->role_code, self::MONEY, true)) { foreach (['rfqs' => ['price'], 'pos' => ['po_total'], 'landed' => ['freight_cost', 'customs_duty', 'other_cost', 'total_cost', 'landed_cost_per_unit']] as $k => $cols) foreach ($w[$k] as $row) foreach ($cols as $c) unset($row->$c); $w['terms'] = []; }
+        if (! \App\Services\Perm::has($r->user(), 'buying.MONEY')) { foreach (['rfqs' => ['price'], 'pos' => ['po_total'], 'landed' => ['freight_cost', 'customs_duty', 'other_cost', 'total_cost', 'landed_cost_per_unit']] as $k => $cols) foreach ($w[$k] as $row) foreach ($cols as $c) unset($row->$c); $w['terms'] = []; }
         return $w + ['rights' => $this->rights($r)];
     }
 
     public function acceptRfq(Request $r, int $id)
     {
-        $this->can($r, self::BUY);
+        $this->can($r, 'buying.BUY');
         return $this->run(function () use ($id) { Buy::acceptRfq($id); return ['message' => 'Quote accepted']; });
     }
 
     public function createPo(Request $r)
     {
-        $this->can($r, self::BUY);
+        $this->can($r, 'buying.BUY');
         $d = $r->validate(['rfq' => 'nullable|integer', 'repeat_from' => 'nullable|integer', 'supplier' => 'nullable|integer', 'currency' => 'nullable|string|size:3', 'product' => 'nullable|integer', 'qty' => 'required|numeric|min:1', 'unit_price' => 'nullable|numeric|min:0', 'date' => 'nullable|date', 'deposit_pct' => 'nullable|numeric|min:0|max:100']);
         return $this->run(function () use ($d) {
             if (! empty($d['repeat_from'])) {      // direct PO: same supplier, last price, no research
@@ -151,10 +151,10 @@ class BuyingController extends Controller
 
     public function po(Request $r, int $id)
     {
-        $this->can($r, self::SEE);
+        $this->can($r, 'buying.SEE');
         $po = DB::table('t_src_po as p')->leftJoin('t_src_suppliers as s', 's.id', '=', 'p.fk_id_supplier')->leftJoin('cat_currency as c', 'c.id', '=', 'p.fk_id_currency')->where('p.id', $id)->where('p.fk_id_ent', Context::ent())
             ->first(['p.id', 'p.po_number', 'p.po_date', 'p.status', 'p.po_total', 'p.exchange_rate', 'p.deposit_pct', 'p.fk_id_cycle', 'p.fk_id_supplier', 'p.f_paid_in_full', 's.supplier_name as supplier', 'c.currency_code as currency']) ?? abort(404);
-        $money = in_array($r->user()->role_code, self::MONEY, true);
+        $money = \App\Services\Perm::has($r->user(), 'buying.MONEY');
         $lines = DB::table('t_src_po_lines as l')->leftJoin('t_product_vendors as p', 'p.id', '=', 'l.fk_id_product')->where('l.fk_id_po', $id)->where('l.f_active', 1)
             ->get(['l.id', 'l.fk_id_product as product_id', 'l.sku', 'p.product_name_vendor as name', 'l.qty_confirmed as qty', 'l.unit_price', 'l.line_total',
                 DB::raw('(SELECT COALESCE(SUM(k.actual_qty),0) FROM t_src_shipment_po_link k JOIN t_src_shipments s ON s.id=k.fk_id_shipment WHERE k.fk_id_po_line=l.id AND k.f_active=1 AND s.f_active=1) as shipped'),
@@ -173,34 +173,34 @@ class BuyingController extends Controller
 
     public function confirmPo(Request $r, int $id)
     {
-        $this->can($r, self::BUY);
+        $this->can($r, 'buying.BUY');
         return $this->run(fn () => Buy::confirmPo($id) + ['message' => 'PO confirmed: payment schedule made']);
     }
 
     public function pay(Request $r)
     {
-        $this->can($r, self::PAY);
+        $this->can($r, 'buying.PAY');
         $d = $r->validate(['term' => 'required|integer', 'amount' => 'required|numeric|gt:0', 'date' => 'required|date', 'bank' => 'required|integer', 'txn_ref' => 'nullable|string|max:255']);
         return $this->run(function () use ($d) { $x = Buy::payOrAsk($d); return $x + ['message' => $x['status'] === 'WAITING' ? 'Over the limit – the payment waits for approval and is not booked yet' : 'Payment posted to the ledger']; });
     }
 
     public function shipment(Request $r)
     {
-        $this->can($r, self::BUY);
+        $this->can($r, 'buying.BUY');
         $d = $r->validate(['po' => 'required|integer', 'eta' => 'required|date', 'etd' => 'nullable|date', 'mode' => 'nullable|string|max:60']);
         return $this->run(fn () => ['id' => Buy::createShipment($d), 'message' => 'Shipment saved']);
     }
 
     public function grn(Request $r)
     {
-        $this->can($r, self::RECEIVE);
+        $this->can($r, 'buying.RECEIVE');
         $d = $r->validate(['shipment' => 'required|integer', 'location' => 'required|integer', 'date' => 'required|date', 'lines' => 'required|array|min:1', 'lines.*.po_line' => 'required|integer', 'lines.*.received' => 'required|integer|min:0', 'lines.*.damaged' => 'nullable|integer|min:0', 'lines.*.location' => 'nullable|integer']);
         return $this->run(fn () => ['id' => Buy::createGrn($d), 'message' => 'GRN saved as draft – check it and post']);
     }
 
     public function shipmentLines(Request $r, int $id)
     {
-        $this->can($r, self::SEE);
+        $this->can($r, 'buying.SEE');
         abort_unless(DB::table('t_src_shipments')->where('id', $id)->where('fk_id_ent', Context::ent())->exists(), 404);
         return ['lines' => DB::table('t_src_shipment_po_link as k')->leftJoin('t_product_vendors as p', 'p.id', '=', 'k.fk_id_product')->where('k.fk_id_shipment', $id)->where('k.f_active', 1)->get(['k.fk_id_po_line as po_line', 'k.fk_id_product as product', 'p.SKU_VENDOR as sku', 'p.product_name_vendor as name', 'k.actual_qty as qty'])
             ->map(function ($l) { $l->suggest = $l->product ? (\App\Services\SkuHomes::suggest((int) Context::ent(), (int) $l->product, (int) $l->qty)[0] ?? null) : null; return $l; })];
@@ -208,20 +208,20 @@ class BuyingController extends Controller
 
     public function postGrn(Request $r, int $id)
     {
-        $this->can($r, self::RECEIVE);
+        $this->can($r, 'buying.RECEIVE');
         return $this->run(fn () => Buy::postGrn($id) + ['message' => 'GRN posted: the units are in stock']);
     }
 
     public function landed(Request $r, int $id)
     {
-        $this->can($r, self::COST);
+        $this->can($r, 'buying.COST');
         $d = $r->validate(['freight' => 'nullable|numeric|min:0', 'duty' => 'nullable|numeric|min:0', 'other' => 'nullable|numeric|min:0', 'final' => 'boolean']);
         return $this->run(fn () => Buy::landedCost($id, $d) + ['message' => ! empty($d['final']) ? 'Landed cost is FINAL' : 'Landed cost saved (provisional)']);
     }
 
     public function fx(Request $r)
     {
-        $this->can($r, ['OWNER', 'FINANCE', 'ACCOUNTANT']);
+        $this->can($r, 'buying.fx');
         if ($r->isMethod('get')) return ['rates' => DB::table('fin_fx_rates')->orderByDesc('rate_date')->orderBy('currency')->limit(200)->get(), 'base' => Fx::base(Context::ent())];
         $d = $r->validate(['currency' => 'required|string|size:3', 'date' => 'required|date', 'rate' => 'required|numeric|gt:0']);
         return $this->run(function () use ($d) { Fx::set($d['currency'], $d['date'], (float) $d['rate']); Audit::log('fin_fx_rates', 0, 'UPDATE', [$d['currency'] . ' ' . $d['date'] => [null, $d['rate']]]); return ['message' => 'Rate saved']; });
@@ -230,7 +230,7 @@ class BuyingController extends Controller
     // ───────────── samples, QC, customs, quick buy (SourcingExtras) ─────────────
     public function extras(Request $r, int $id)
     {
-        $this->can($r, self::SEE);
+        $this->can($r, 'buying.SEE');
         return \App\Services\SourcingExtras::page((int) Context::ent(), $id);
     }
 
@@ -260,7 +260,7 @@ class BuyingController extends Controller
 
     public function qcPhotoShow(Request $r, int $id)
     {
-        $this->can($r, self::SEE);
+        $this->can($r, 'buying.SEE');
         $doc = DB::table('sys_documents')->where('id', $id)->where('fk_id_ent', Context::ent())->where('tags', 'qc')->first() ?? abort(404);
         abort_unless(\Illuminate\Support\Facades\Storage::disk('local')->exists($doc->stored_name), 404);
         return response(\Illuminate\Support\Facades\Storage::disk('local')->get($doc->stored_name), 200, ['Content-Type' => $doc->mime ?: 'image/jpeg', 'Cache-Control' => 'private, max-age=3600']);
