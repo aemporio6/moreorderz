@@ -27,7 +27,7 @@ MR-1282|B|class EventBus|events with retry, follow-up by listeners
 MR-1283|P|function cycle|steps shown on buying cycles and month close; not every process
 MR-1284|P|function defaultValue|defaults and pickers from the registry; "nothing typed twice" not everywhere
 MR-1285|M||click any figure down to its record, file and row not built
-MR-1286|P|function shopAllowed|page and button rights on every request, company scope, shop named in a request is checked; open: summary screens not yet narrowed to the person's shops
+MR-1286|B|function shopAllowed|page and button rights on every request; company scope; shop scope: lists and summary screens narrowed, a request naming another shop refused; PermissionTest
 MR-1287|N||build constraint replaced by the owner's decision: Laravel + MariaDB
 MR-1288|N||build constraint replaced (own front end)
 MR-1289|N||build constraint replaced
@@ -97,7 +97,7 @@ MR-0021|P|function find|universal search; no spelling tolerance
 MR-0029|P|class HomeCards|Home per role with cards; "Needs action first" ranking partly
 MR-0030|M||sourcing dashboard with the cards of all modules not built
 MR-0031|M||ICC not built
-MR-0036|P|class Perm|built: role x right matrix as data (screens, forms See/Add/Change/Delete/Export, approve rights, menu, reports), made roles, per-person extra / taken away with reason and end date, field rules hidden / see only, view-as; open: shop scope is enforced on registry lists and on any request that names a shop, but the summary screens are not yet narrowed to the person's shops
+MR-0036|B|function mine|role x right matrix as data (screens, forms See/Add/Change/Delete/Export, approve rights, menu, reports), made roles, per-person extra / taken away with reason and end date, field rules, shop scope on lists and summary screens, view-as; PermissionTest
 MR-0037|P|visible_to|field visibility from the registry; Owner / HR-only on save not verified
 MR-0038|M||maker-checker for supplier bank / ownership / price floor / settings not built
 MR-0039|P|APPROVAL_LIMIT|approval limits per action (expense, payment, adjustment, withdrawal); tiers per role not built

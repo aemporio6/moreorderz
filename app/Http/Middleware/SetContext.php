@@ -19,7 +19,7 @@ class SetContext
             Context::set($ent ?: null, $u->id);
             // shop scope: a person limited to some shops cannot name another shop on any screen
             foreach (['shop', 'shop_id', 'branch', 'branch_id', 'fk_id_branch', 'fk_id_shop'] as $k) {
-                $v = $request->input($k);
+                $v = $request->input($k) ?? $request->route($k);
                 if (is_scalar($v) && ctype_digit((string) $v) && ! \App\Services\Perm::shopAllowed($u, (int) $v)) abort(response()->json(['message' => 'This shop is not one of your shops. Ask the Owner if you need it.'], 403));
             }
             // "View as": the Owner looks at the tool as another role – read-only

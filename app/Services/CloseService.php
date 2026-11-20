@@ -237,7 +237,7 @@ class CloseService
     /** Overview: the last $months months × shops with their state. */
     public static function overview(int $ent, int $months = 6): array
     {
-        $shops = DB::table('t_branches')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name as name']); $out = [];
+        $shops = \App\Services\Perm::mine(DB::table('t_branches'), 'id')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name as name']); $out = [];
         for ($i = 0; $i < $months; $i++) {
             $m = date('Y-m', strtotime(date('Y-m-01') . " -$i month")); $from = $m . '-01'; $to = date('Y-m-t', strtotime($from)); $cells = [];
             foreach ($shops as $s) { $run = self::run($ent, (int) $s->id, $m); $act = self::hasActivity($ent, (int) $s->id, $from, $to);

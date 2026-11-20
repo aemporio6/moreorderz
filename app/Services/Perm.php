@@ -332,6 +332,13 @@ class Perm
         return $shops === null || $shopId <= 0 || in_array($shopId, $shops, true);
     }
 
+    /** Narrow a screen query to the shops of the signed-in person ($col = the shop column). Nothing happens for a person with all shops, or outside a request. */
+    public static function mine($q, string $col)
+    {
+        $shops = self::shops(\Illuminate\Support\Facades\Auth::user());
+        return $shops === null ? $q : $q->whereIn($col, $shops);
+    }
+
     public static function scopeQuery($q, string $table, ?object $u, string $alias = ''): void
     {
         $shops = self::shops($u); if ($shops === null) return;

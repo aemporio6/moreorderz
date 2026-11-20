@@ -14,7 +14,7 @@ class Hubs
     public static function page(int $ent): array
     {
         $month = date('Y-m-01');
-        $shops = DB::table('t_branches as b')->leftJoin('cat_marketplaces as m', 'm.id', '=', 'b.fk_id_marketplace')->leftJoin('mp_profiles as p', 'p.id', '=', 'b.fk_id_mp_profile')
+        $shops = \App\Services\Perm::mine(DB::table('t_branches as b'), 'b.id')->leftJoin('cat_marketplaces as m', 'm.id', '=', 'b.fk_id_marketplace')->leftJoin('mp_profiles as p', 'p.id', '=', 'b.fk_id_mp_profile')
             ->where('b.fk_id_ent', $ent)->where('b.f_active', 1)->orderBy('m.marketplace_short')->orderBy('b.shop_name')
             ->get(['b.id', 'b.shop_name', 'm.marketplace_short as marketplace', 'p.code as profile', 'p.name as profile_name', 'p.overdue_days', 'p.seller_portal_url']);
         $ids = $shops->pluck('id')->all();

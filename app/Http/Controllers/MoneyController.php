@@ -33,7 +33,7 @@ class MoneyController extends Controller
     {
         return ['categories' => DB::table('fin_categories')->where('f_active', 1)->whereNotIn('code', ['SUPPLIER_PAYMENT', 'SPLIT', 'OWN_TRANSFER_IN', 'OWN_TRANSFER_OUT'])->orderBy('sort_no')->orderBy('name')->get(['code', 'name', 'direction'])
                 ->map(fn ($c) => ['code' => $c->code, 'name' => $c->name, 'direction' => $c->direction, 'needs_shop' => in_array(Money::ACCOUNTS[$c->code] ?? '', ['1100', '5100', '5300', '5400'], true)]),
-            'shops' => DB::table('t_branches')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name as name'])];
+            'shops' => \App\Services\Perm::mine(DB::table('t_branches'), 'id')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name as name'])];
     }
 
     // ---- dashboard and profit ----
@@ -50,7 +50,7 @@ class MoneyController extends Controller
             'due' => $due, 'overdue' => $due->filter(fn ($d) => $d->due_date && $d->due_date < $today)->count(),
             'expenses_month' => round((float) DB::table('fin_expenses')->where('fk_id_ent', $ent)->where('f_active', 1)->whereRaw("DATE_FORMAT(d_expense, '%Y-%m') = ?", [$m])->sum('amount_gbp'), 2), 'month' => $m,
             'approvals' => DB::table('sys_approvals')->where('fk_id_ent', $ent)->where('status', 'PENDING')->count(), 'unmatched' => array_sum(array_column($banks, 'unmatched')),
-            'to_book' => DB::table('mo_settlements')->where('fk_id_ent', $ent)->where('status', 'LOADED')->count(), 'refunds' => $this->refundRows($ent)->count(),
+            'to_book' => \App\Services\Perm::mine(DB::table('mo_settlements'), 'fk_id_branch')->where('fk_id_ent', $ent)->where('status', 'LOADED')->count(), 'refunds' => $this->refundRows($ent)->count(),
             'stock' => \App\Services\Ledger::balance($ent, '1200'), 'supplier_advances' => \App\Services\Ledger::balance($ent, '1300'), 'supplier_payables' => -1 * \App\Services\Ledger::balance($ent, '2000')];
     }
 
@@ -64,7 +64,7 @@ class MoneyController extends Controller
     // ---- refund proposals ----
     private function refundRows(int $ent)
     {
-        return DB::table('t_sale_refund_proposals as p')->join('t_sales as s', 's.id', '=', 'p.fk_id_sale')->leftJoin('t_branches as b', 'b.id', '=', 's.fk_id_branch')->where('s.fk_id_ent', $ent)->where('p.status', 'PROPOSED')->orderBy('p.id')
+        return \App\Services\Perm::mine(DB::table('t_sale_refund_proposals as p'), 's.fk_id_branch')->join('t_sales as s', 's.id', '=', 'p.fk_id_sale')->leftJoin('t_branches as b', 'b.id', '=', 's.fk_id_branch')->where('s.fk_id_ent', $ent)->where('p.status', 'PROPOSED')->orderBy('p.id')
             ->get(['p.id', 'p.refund_kind', 'p.amount', 'p.created_at', 's.order_no', 's.sku', 's.qty', 's.total_amount_gbp', 's.status as sale_status', 's.d_order', 'b.shop_name as shop']);
     }
 
@@ -73,7 +73,7 @@ class MoneyController extends Controller
         $this->can($r, 'money.SEE');
         $ent = (int) Context::ent();
         return ['rows' => $this->refundRows($ent), 'base' => Fx::base($ent), 'shops' => $this->lists($ent)['shops'], 'can_edit' => \App\Services\Perm::has($r->user(), 'money.refunds_may'),
-            'decided' => DB::table('t_sale_refund_proposals as p')->join('t_sales as s', 's.id', '=', 'p.fk_id_sale')->leftJoin('t_users as u', 'u.id', '=', 'p.decided_by')->where('s.fk_id_ent', $ent)->where('p.status', '<>', 'PROPOSED')->orderByDesc('p.decided_at')->limit(30)
+            'decided' => \App\Services\Perm::mine(DB::table('t_sale_refund_proposals as p'), 's.fk_id_branch')->join('t_sales as s', 's.id', '=', 'p.fk_id_sale')->leftJoin('t_users as u', 'u.id', '=', 'p.decided_by')->where('s.fk_id_ent', $ent)->where('p.status', '<>', 'PROPOSED')->orderByDesc('p.decided_at')->limit(30)
                 ->get(['p.id', 'p.status', 'p.reject_reason', 'p.decided_at', 's.order_no', 's.sku', 's.total_amount_gbp', 'u.display_name as by'])];
     }
 
@@ -228,13 +228,13 @@ class MoneyController extends Controller
     {
         $this->can($r, 'money.SEE');
         $ent = (int) Context::ent(); $shop = (int) $r->query('shop', 0);
-        $q = DB::table('mo_settlements as s')->join('t_branches as b', 'b.id', '=', 's.fk_id_branch')->where('s.fk_id_ent', $ent)->when($shop, fn ($x) => $x->where('s.fk_id_branch', $shop));
+        $q = \App\Services\Perm::mine(DB::table('mo_settlements as s'), 's.fk_id_branch')->join('t_branches as b', 'b.id', '=', 's.fk_id_branch')->where('s.fk_id_ent', $ent)->when($shop, fn ($x) => $x->where('s.fk_id_branch', $shop));
         $counts = (clone $q)->groupBy('s.status')->selectRaw('s.status, COUNT(*) n, SUM(s.payable) v')->get()->keyBy('status');
         return ['rows' => $q->orderByDesc('s.statement_date')->orderByDesc('s.id')->limit(300)->get(['s.id', 'b.shop_name as shop', 's.statement_id', 's.payout_id', 's.statement_date', 's.payout_date', 's.currency', 's.total', 's.net_sales', 's.shipping', 's.fees', 's.adjustments', 's.reserve', 's.payable', 's.status', 's.rows_count', 's.f_rows_complete']),
             'counts' => $counts, 'shop' => $shop, 'balances' => Settle::shopBalances($ent), 'base' => Fx::base($ent), 'can_edit' => \App\Services\Perm::has($r->user(), 'money.EDIT'), 'shops' => $this->lists($ent)['shops'],
             'periods' => DB::table('mo_settlement_periods as p')->join('t_branches as b', 'b.id', '=', 'p.fk_id_branch')->where('p.fk_id_ent', $ent)->orderByDesc('p.period_to')->limit(50)->get(['p.id', 'b.shop_name as shop', 'p.fk_id_branch', 'p.period_from', 'p.period_to', 'p.total', 'p.net_sales', 'p.shipping', 'p.fees', 'p.adjustments', 'p.hub_check', 'p.checks_json'])
                 ->map(function ($p) { $p->checks = array_values(json_decode($p->checks_json ?: '[]', true)); unset($p->checks_json); return $p; }),
-            'refunds' => DB::table('t_sale_refund_proposals')->where('status', 'PROPOSED')->whereIn('fk_id_sale', DB::table('t_sales')->where('fk_id_ent', $ent)->select('id'))->count()];
+            'refunds' => DB::table('t_sale_refund_proposals')->where('status', 'PROPOSED')->whereIn('fk_id_sale', \App\Services\Perm::mine(DB::table('t_sales'), 'fk_id_branch')->where('fk_id_ent', $ent)->select('id'))->count()];
     }
 
     public function settlementImport(Request $r)

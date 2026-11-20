@@ -155,11 +155,11 @@ class CarrierLabels
 
     public static function page(int $ent): array
     {
-        return ['set_aside' => DB::table('mo_label_pages as p')->leftJoin('t_branches as b', 'b.id', '=', 'p.fk_id_branch')->where('p.fk_id_ent', $ent)->where('p.status', 'SET_ASIDE')->orderByDesc('p.id')->limit(200)
+        return ['set_aside' => \App\Services\Perm::mine(DB::table('mo_label_pages as p'), 'p.fk_id_branch')->leftJoin('t_branches as b', 'b.id', '=', 'p.fk_id_branch')->where('p.fk_id_ent', $ent)->where('p.status', 'SET_ASIDE')->orderByDesc('p.id')->limit(200)
                 ->get(['p.id', 'p.fk_id_batch', 'p.page_no', 'p.fk_id_document', 'p.tracking_no', 'p.service_text', 'p.postcode_out', 'p.problem', 'p.candidates_json', 'p.fk_id_branch', 'b.shop_name as shop'])->map(function ($p) { $p->candidates = json_decode((string) $p->candidates_json, true) ?: []; unset($p->candidates_json); return $p; }),
             'batches' => DB::table('fin_import_batches')->where('company_id', $ent)->where('report_type', 'CARRIER_LABEL_PDF')->where('file_hash', 'not like', 'UNDONE-%')->orderByDesc('id')->limit(30)->get(['id', 'file_name', 'rows_total', 'rows_new', 'rows_error', 'imported_at']),
             'carriers' => DB::table('t_carriers')->whereIn('fk_id_ent', [0, $ent])->where('f_active', 1)->orderBy('carrier_name')->get(['id', 'carrier_name as name', 'label_pdf_layout', 'tracking_pattern']),
-            'shops' => DB::table('t_branches')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name as name']),
+            'shops' => \App\Services\Perm::mine(DB::table('t_branches'), 'id')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name as name']),
             'can_undo' => in_array(Context::role(), ['OWNER', 'MANAGER'], true)];
     }
 

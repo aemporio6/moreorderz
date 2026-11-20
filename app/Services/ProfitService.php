@@ -27,7 +27,7 @@ class ProfitService
             };
         };
         // 1. confirmed sale lines and the cost of the lots they used
-        $sales = DB::table('t_sales as s')->leftJoin('t_product_vendors as p', 'p.id', '=', 's.fk_product_id')->where('s.fk_id_ent', $ent)->where('s.sale_source', 'active')->where('s.status', 'Confirmed')->whereBetween('s.d_order', [$from, $to])
+        $sales = \App\Services\Perm::mine(DB::table('t_sales as s'), 's.fk_id_branch')->leftJoin('t_product_vendors as p', 'p.id', '=', 's.fk_product_id')->where('s.fk_id_ent', $ent)->where('s.sale_source', 'active')->where('s.status', 'Confirmed')->whereBetween('s.d_order', [$from, $to])
             ->get(['s.id', 's.fk_id_branch', 's.fk_product_id', 'p.SKU_VENDOR as sku', 'p.product_name_vendor as name', 's.d_order', 's.qty', 's.total_amount_gbp', 's.order_no', 's.refunded_at', 's.refund_loss_amount']);
         $cost = DB::table('fin_lot_consumption')->whereIn('fk_id_sale', $sales->pluck('id'))->groupBy('fk_id_sale')->selectRaw('fk_id_sale, SUM(qty * unit_cost_gbp) c')->pluck('c', 'fk_id_sale');
         $orderKey = []; $refunds = 0.0;
@@ -63,7 +63,7 @@ class ProfitService
         $tot['gross'] = round($tot['sales'] - $tot['cost'], 2); $tot['profit'] = round($tot['gross'] - $tot['mp_costs'] - $tot['expenses'], 2); $tot['margin_pct'] = $tot['sales'] > 0 ? round($tot['profit'] / $tot['sales'] * 100, 1) : null;
         $pl = Ledger::profitAndLoss($ent, $from, $to);
         // sales lines of the period that are not in the figures yet
-        $open = DB::table('t_sales')->where('fk_id_ent', $ent)->where('sale_source', 'active')->where('status', 'Pending')->whereBetween('d_order', [$from, $to])->selectRaw('COUNT(*) n, COALESCE(SUM(total_amount_gbp),0) v')->first();
+        $open = \App\Services\Perm::mine(DB::table('t_sales'), 'fk_id_branch')->where('fk_id_ent', $ent)->where('sale_source', 'active')->where('status', 'Pending')->whereBetween('d_order', [$from, $to])->selectRaw('COUNT(*) n, COALESCE(SUM(total_amount_gbp),0) v')->first();
         return ['by' => $by, 'from' => $from, 'to' => $to, 'rows' => array_values($rows), 'total' => $tot, 'base' => Fx::base($ent), 'views' => self::VIEWS,
             'books' => ['profit' => $pl['profit'], 'income' => $pl['income'], 'expense' => $pl['expense'], 'difference' => round($tot['profit'] - $pl['profit'], 2)],
             'not_confirmed' => ['lines' => (int) $open->n, 'value' => round((float) $open->v, 2)], 'estimate_rows' => count(array_filter($rows, fn ($r) => $r['estimate']))];

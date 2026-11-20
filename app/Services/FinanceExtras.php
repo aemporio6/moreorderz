@@ -258,7 +258,7 @@ class FinanceExtras
         $calls = DB::table('fin_capital_calls')->where('company_id', $ent)->orderByDesc('id')->limit(100)->get();
         foreach ($calls as $c) $c->answers = DB::table('fin_capital_call_responses as r')->leftJoin('t_account as a', 'a.id', '=', 'r.investor_id')->where('r.call_id', $c->id)
             ->get(['r.id', 'r.investor_id', 'r.status', 'r.amount_asked', 'r.amount_accepted', 'r.amount_received', 'r.responded_at', DB::raw("TRIM(CONCAT(a.first_name, ' ', a.sur_name)) who")]);
-        return ['calls' => $calls, 'shops' => DB::table('t_branches')->where('fk_id_ent', $ent)->where('f_active', 1)->get(['id', 'shop_name as name']),
+        return ['calls' => $calls, 'shops' => \App\Services\Perm::mine(DB::table('t_branches'), 'id')->where('fk_id_ent', $ent)->where('f_active', 1)->get(['id', 'shop_name as name']),
             'banks' => DB::table('fin_bank_accounts')->where('company_id', $ent)->where('is_active', 1)->get(['id', DB::raw("CONCAT(bank_name, ' · ', COALESCE(account_label,'')) name"), 'currency'])];
     }
 

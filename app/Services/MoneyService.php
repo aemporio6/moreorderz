@@ -413,7 +413,7 @@ class MoneyService
             if ($b->last < date('Y-m-d', strtotime("-$bd day"))) { TaskEngine::open('FIN_BANK_STALE', [$b->id], "No new bank lines for {$b->account_label} since {$b->last} – load the bank file", ['ent' => $ent, 'module' => 'fin_bank_accounts', 'record_id' => $b->id, 'fix_url' => '#/bank']); $n['bank']++; }
             else TaskEngine::close('FIN_BANK_STALE', [$b->id], 'Bank lines are up to date');
         }
-        foreach (DB::table('mo_settlements as m')->join('t_branches as s', 's.id', '=', 'm.fk_id_branch')->where('m.fk_id_ent', $ent)->where('s.f_active', 1)->groupBy('s.id', 's.shop_name')->selectRaw('s.id, s.shop_name, MAX(m.statement_date) last')->get() as $s) {
+        foreach (\App\Services\Perm::mine(DB::table('mo_settlements as m'), 'm.fk_id_branch')->join('t_branches as s', 's.id', '=', 'm.fk_id_branch')->where('m.fk_id_ent', $ent)->where('s.f_active', 1)->groupBy('s.id', 's.shop_name')->selectRaw('s.id, s.shop_name, MAX(m.statement_date) last')->get() as $s) {
             if ($s->last < date('Y-m-d', strtotime("-$sd day"))) { TaskEngine::open('FIN_SETTLEMENT_OVERDUE', [$s->id], "No money file for {$s->shop_name} since {$s->last} – load the marketplace's file", ['ent' => $ent, 'module' => 't_branches', 'record_id' => $s->id, 'fix_url' => '#/settlements']); $n['shop']++; }
             else TaskEngine::close('FIN_SETTLEMENT_OVERDUE', [$s->id], 'Money file is up to date');
         }

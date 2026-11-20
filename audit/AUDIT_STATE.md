@@ -43,8 +43,8 @@ Owner instruction (21 Nov 03:07): work without asking, resume by yourself with a
 | # | Step | State | Commit | BUILT after |
 |---|---|---|---|---|
 | 1 | Permission engine (pillar 1): rights as data, made roles, personal rights, field rules, access requests, view-as, shop scope (registry lists + any request naming a shop), screen "Roles and rights" | done, 195 tests | c804890 + next | 210 (15 %) |
-| 1b | Shop scope on the summary screens (orders, money, settlements, reports, partner) – `Perm::scopeQuery` on each list query; then MR-0036, MR-1286, R-A_SALES-47 become BUILT | NEXT | | |
-| 2 | Search everything (Ctrl+K: records, screens, actions, reports, settings, help) | todo | | |
+| 1b | Shop scope on the summary screens: `Perm::mine()` on order board, tracking, returns, label pages, profit, sales reports, settlements, refunds, hubs, month close, every shop picker; shop in a route path is checked too. MR-0036, MR-1286, R-A_SALES-47 → BUILT | done, 196 tests | this commit | 212 (15 %) |
+| 2 | Search everything (Ctrl+K: records, screens, actions, reports, settings, help) | NEXT | | |
 | 3 | Filters builder on every list (any field, AND/OR, saved, shared) | todo | | |
 | 4 | Smart fields (multi-select, All, + New in place, suggestions, click-to-fill, copy) | todo | | |
 | 5 | Guidance – never stuck (next step, why blocked, fix link on every refusal) | todo | | |

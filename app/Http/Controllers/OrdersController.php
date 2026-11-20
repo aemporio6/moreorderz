@@ -42,7 +42,7 @@ class OrdersController extends Controller
         $ent = (int) Context::ent(); $rows = Dispatch::board($ent);
         $count = fn (array $st) => count(array_filter($rows, fn ($x) => in_array($x->wh_status, $st, true)));
         return ['rows' => $rows, 'counts' => ['to_pick' => $count(['RESERVED']), 'short' => $count(['SHORT']), 'picking' => $count(['PICKING']), 'picked' => $count(['PICKED']), 'packed' => $count(['PACKED'])],
-            'shops' => DB::table('t_branches')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name as name']),
+            'shops' => \App\Services\Perm::mine(DB::table('t_branches'), 'id')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name as name']),
             'carriers' => DB::table('t_carriers')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('carrier_name')->get(['id', 'carrier_name as name']),
             'boxes' => DB::table('wh_box_sizes')->where('fk_id_ent', $ent)->where('f_active', 1)->get(['id', 'box_code as name']),
             'pick_lists' => DB::table('wh_pick_tasks')->where('fk_id_ent', $ent)->whereIn('status', ['OPEN', 'IN_PROGRESS'])->orderBy('id')->get(['id', 'task_code', 'status', 'created_at',
@@ -127,7 +127,7 @@ class OrdersController extends Controller
         $layouts = DB::table('mo_tracking_layouts')->where('f_active', 1)->orderBy('id')->get();
         $profileLayout = $shop ? DB::table('t_branches as b')->join('mp_profiles as p', 'p.id', '=', 'b.fk_id_mp_profile')->where('b.id', $shop)->value('p.tracking_upload_layout') : null;
         $code = (string) ($r->query('layout') ?: ($profileLayout ?: 'GENERIC')); $L = $layouts->firstWhere('code', $code) ?? $layouts->firstWhere('code', 'GENERIC');
-        $rows = DB::table('t_sales as s')->leftJoin('t_branches as b', 'b.id', '=', 's.fk_id_branch')->leftJoin('t_product_listings as l', 'l.id', '=', 's.fk_id_listing')->leftJoin('t_product_vendors as pv', 'pv.id', '=', 's.fk_product_id')
+        $rows = \App\Services\Perm::mine(DB::table('t_sales as s'), 's.fk_id_branch')->leftJoin('t_branches as b', 'b.id', '=', 's.fk_id_branch')->leftJoin('t_product_listings as l', 'l.id', '=', 's.fk_id_listing')->leftJoin('t_product_vendors as pv', 'pv.id', '=', 's.fk_product_id')
             ->leftJoin('t_carriers as c', 'c.id', '=', 'b.fk_id_default_carrier')   // the parcel's carrier: the shop's usual carrier
             ->where('s.fk_id_ent', $ent)->where('s.sale_source', 'active')->whereNotNull('s.tracking_no')->where('s.tracking_no', '<>', '')->whereBetween('s.d_order', [$from, $to])
             ->when($shop, fn ($q) => $q->where('s.fk_id_branch', $shop))->orderBy('s.order_no')
@@ -141,7 +141,7 @@ class OrdersController extends Controller
         if ($r->query('csv') === '1') return response()->streamDownload(function () use ($out, $cols, $value, $L) { $o = fopen('php://output', 'w'); $d = $L->delimiter === '\t' || $L->delimiter === "\t" ? "\t" : ($L->delimiter ?: ',');
             fputcsv($o, array_column($cols, 0), $d); foreach ($out as $x) fputcsv($o, array_map(fn ($c) => $value($x, $c[1]), $cols), $d); fclose($o); },
             'tracking_upload_' . strtolower($L->code) . '_' . date('Ymd') . ($L->delimiter === "\t" ? '.txt' : '.csv'), ['Content-Type' => 'text/csv']);
-        return ['rows' => $out, 'shops' => DB::table('t_branches')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name as name']), 'from' => $from, 'to' => $to, 'shop' => $shop,
+        return ['rows' => $out, 'shops' => \App\Services\Perm::mine(DB::table('t_branches'), 'id')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name as name']), 'from' => $from, 'to' => $to, 'shop' => $shop,
             'layout' => ['code' => $L->code, 'name' => $L->name, 'note' => $L->note, 'headers' => array_column($cols, 0), 'fields' => array_column($cols, 1), 'from_profile' => $profileLayout === $L->code], 'layouts' => $layouts->map(fn ($x) => ['code' => $x->code, 'name' => $x->name])];
     }
 
@@ -263,7 +263,7 @@ class OrdersController extends Controller
     public function returns(Request $r)
     {
         $this->can($r, 'orders.SEE');
-        return ['rows' => DB::table('wh_return_intakes as i')->leftJoin('t_sales as s', 's.id', '=', 'i.fk_id_sale')->leftJoin('t_users as u', 'u.id', '=', 'i.received_by')->where('i.fk_id_ent', Context::ent())->orderByDesc('i.id')->limit(200)
+        return ['rows' => \App\Services\Perm::mine(DB::table('wh_return_intakes as i'), 's.fk_id_branch')->leftJoin('t_sales as s', 's.id', '=', 'i.fk_id_sale')->leftJoin('t_users as u', 'u.id', '=', 'i.received_by')->where('i.fk_id_ent', Context::ent())->orderByDesc('i.id')->limit(200)
             ->get(['i.id', 'i.intake_code', 'i.scanned_code', 'i.status', 'i.qty', 'i.grade', 'i.received_at', 's.order_no', 's.sku', 'u.display_name as by']), 'rights' => $this->rights($r)];
     }
 

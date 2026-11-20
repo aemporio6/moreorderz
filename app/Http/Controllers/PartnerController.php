@@ -42,7 +42,7 @@ class PartnerController extends Controller
         if (! $own) foreach (Partners::scopeTotals($ent, $today) as $k => $t) $tot[] = ['scope' => Partners::scopeName($ent, $k), 'pct' => $t, 'over' => $t > 100.0001];
         $out = ['partners' => Partners::partners($ent, $own), 'totals' => $tot, 'base' => Fx::base($ent), 'own' => $own, 'rights' => ['edit' => \App\Services\Perm::has($r->user(), 'partners.EDIT'), 'money' => \App\Services\Perm::has($r->user(), 'partners.MONEY')]];
         if (! $own) $out += ['accounts' => DB::table('t_account')->where('f_active', 1)->orderBy('first_name')->limit(500)->get(['id', 'first_name', 'sur_name', 'account_code'])->map(fn ($a) => ['id' => $a->id, 'name' => trim(($a->first_name ?? '') . ' ' . ($a->sur_name ?? '')) ?: $a->account_code]),
-            'shops' => DB::table('t_branches')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name as name']), 'pos' => DB::table('t_src_po')->where('fk_id_ent', $ent)->where('f_active', 1)->orderByDesc('id')->limit(200)->get(['id', 'po_number as name']),
+            'shops' => \App\Services\Perm::mine(DB::table('t_branches'), 'id')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name as name']), 'pos' => DB::table('t_src_po')->where('fk_id_ent', $ent)->where('f_active', 1)->orderByDesc('id')->limit(200)->get(['id', 'po_number as name']),
             'banks' => DB::table('fin_bank_accounts')->where('company_id', $ent)->where('is_active', 1)->get(['id', 'account_label as name'])];
         return $out;
     }
@@ -87,7 +87,7 @@ class PartnerController extends Controller
     {
         $this->can($r, 'partners.waterfall');
         $ent = (int) Context::ent(); $month = date('Y-m');
-        $shops = DB::table('t_branches')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name as name']);
+        $shops = \App\Services\Perm::mine(DB::table('t_branches'), 'id')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name as name']);
         return ['splits' => Waterfall::splits($ent), 'routes' => $shops->map(fn ($s) => ['shop' => $s->id, 'name' => $s->name, 'route' => Waterfall::route($ent, (int) $s->id, $month), 'own' => DB::table('t_branch_profit_routes')->where('fk_id_company', $ent)->where('fk_id_branch', $s->id)->orderByDesc('d_start')->limit(5)->get(['profit_route', 'd_start', 'd_end', 'reason'])]),
             'route_names' => Waterfall::ROUTES, 'stacking' => Waterfall::STACKING, 'default_route' => \App\Services\Choices::get('DEFAULT_PROFIT_ROUTE', $ent), 'shops' => $shops, 'month' => $month, 'base' => Fx::base($ent), 'can_edit' => \App\Services\Perm::has($r->user(), 'partners.waterfall_owner'),
             'accounts' => DB::table('t_account')->where('f_active', 1)->orderBy('first_name')->limit(500)->get(['id', 'first_name', 'sur_name', 'account_code'])->map(fn ($a) => ['id' => $a->id, 'name' => trim(($a->first_name ?? '') . ' ' . ($a->sur_name ?? '')) ?: $a->account_code]),

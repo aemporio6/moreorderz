@@ -44,7 +44,7 @@
 44|P|form:sale_line|column picker on every list; no fixed / optional groups
 45|M||extra marketplace columns not built
 46|P|export/\{key\}|CSV export of the list; no PDF / Word with summary
-47|P|function scopeQuery|shop scope per person exists (registry lists, any request naming a shop); open: sales summary screens not yet narrowed to own shops
+47|B|function mine|shop scope per person: order board, tracking, returns, labels, profit, sales reports, settlements, refunds, month close and every shop picker show own shops only; PermissionTest
 48|M||period chips not built
 49|M||keep page / scroll after action not verified
 50|M||Annual Sale Report not built

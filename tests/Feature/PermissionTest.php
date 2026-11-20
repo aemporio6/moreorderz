@@ -180,4 +180,31 @@ class PermissionTest extends TestCase
         $this->getJson('/api/stock/on-hand')->assertOk();
         $this->assertNull($this->getJson('/api/boot')->json('view_as'));
     }
+
+    public function test_a_person_limited_to_a_shop_sees_only_that_shop_on_the_order_money_and_report_screens(): void
+    {
+        $fill = new \ReflectionMethod(\App\Services\RecordService::class, 'fillNotNull');
+        $a = DB::table('t_branches')->insertGetId($fill->invoke(null, 't_branches', ['fk_id_ent' => 1, 'shop_name' => 'Shop A', 'shop_no' => 'A1', 'iso_branch' => 'A1', 'f_active' => 1]));
+        $b = DB::table('t_branches')->insertGetId($fill->invoke(null, 't_branches', ['fk_id_ent' => 1, 'shop_name' => 'Shop B', 'shop_no' => 'B1', 'iso_branch' => 'B1', 'f_active' => 1]));
+        foreach ([[$a, 'ORD-A', 10], [$b, 'ORD-B', 25]] as [$shop, $no, $amt])
+            DB::table('t_sales')->insert($fill->invoke(null, 't_sales', ['fk_id_ent' => 1, 'fk_id_branch' => $shop, 'order_no' => $no, 'sku' => 'X', 'qty' => 1, 'total_amount' => $amt, 'total_amount_gbp' => $amt,
+                'd_order' => date('Y-m-d'), 'sale_source' => 'active', 'status' => 'Confirmed', 'tracking_no' => 'TRK' . $no]));
+        $mgr = $this->makeUser('MANAGER');
+        $see = function () {
+            $board = json_encode($this->getJson('/api/orders')->assertOk()->json());
+            $track = json_encode($this->getJson('/api/tracking-upload')->assertOk()->json('rows'));
+            $profit = $this->getJson('/api/profit?by=shop')->assertOk()->json();
+            $rep = json_encode($this->getJson('/api/reports/sales_shop')->assertOk()->json());
+            $close = json_encode($this->getJson('/api/close')->assertOk()->json());
+            return [str_contains($board, 'Shop B'), str_contains($track, 'ORD-B'), str_contains(json_encode($profit), 'Shop B'), str_contains($rep, 'Shop B'), str_contains($close, 'Shop B'),
+                str_contains($board, 'Shop A') && str_contains($track, 'ORD-A') && str_contains(json_encode($profit), 'Shop A') && str_contains($rep, 'Shop A')];
+        };
+        $this->actingAs($mgr);
+        $this->assertSame([true, true, true, true, true, true], $see());                         // no limit: both shops everywhere
+        Perm::setScope($mgr->id, 'SHOP', [$a], $this->owner->id);
+        $this->assertSame([false, false, false, false, false, true], $see());                    // limited: Shop B is nowhere, Shop A still everywhere
+        $this->getJson("/api/close/month?shop=$b&month=" . date('Y-m'))->assertStatus(403);
+        $this->actingAs($this->owner);
+        $this->assertSame([true, true, true, true, true, true], $see());                         // the Owner is never limited
+    }
 }

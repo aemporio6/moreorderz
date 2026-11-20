@@ -68,7 +68,7 @@ class ReportService
 
     private static function sales(int $ent, string $from, string $to)
     {
-        return DB::table('t_sales as s')->where('s.fk_id_ent', $ent)->where('s.sale_source', 'active')->whereIn('s.status', ['Pending', 'Confirmed'])->whereBetween('s.d_order', [$from, $to]);
+        return \App\Services\Perm::mine(DB::table('t_sales as s'), 's.fk_id_branch')->where('s.fk_id_ent', $ent)->where('s.sale_source', 'active')->whereIn('s.status', ['Pending', 'Confirmed'])->whereBetween('s.d_order', [$from, $to]);
     }
 
     private const SALE_SUMS = "COUNT(DISTINCT CONCAT(s.fk_id_branch, '|', s.order_no)) orders, SUM(s.qty) units, SUM(IF(s.status = 'Confirmed', s.total_amount_gbp, 0)) confirmed, SUM(IF(s.status = 'Pending', s.total_amount_gbp, 0)) pending, SUM(s.total_amount_gbp) total";
@@ -105,7 +105,7 @@ class ReportService
     private static function r_stock(int $ent, string $from, string $to): array
     {
         $since = date('Y-m-d', strtotime('-30 day'));
-        $sold = DB::table('t_sales')->where('fk_id_ent', $ent)->where('sale_source', 'active')->whereIn('status', ['Pending', 'Confirmed'])->where('d_order', '>=', $since)->groupBy('fk_product_id')->selectRaw('fk_product_id pid, SUM(qty) q')->pluck('q', 'pid');
+        $sold = \App\Services\Perm::mine(DB::table('t_sales'), 'fk_id_branch')->where('fk_id_ent', $ent)->where('sale_source', 'active')->whereIn('status', ['Pending', 'Confirmed'])->where('d_order', '>=', $since)->groupBy('fk_product_id')->selectRaw('fk_product_id pid, SUM(qty) q')->pluck('q', 'pid');
         $rows = DB::table('t_product_vendors as p')->leftJoin('fin_lots as l', fn ($j) => $j->on('l.fk_id_product', '=', 'p.id')->where('l.company_id', $ent))->leftJoin('fin_lot_balances as b', 'b.fk_id_lot', '=', 'l.id')->where('p.fk_id_ent', $ent)
             ->groupBy('p.id', 'p.SKU_VENDOR', 'p.product_name_vendor', 'p.min_level')->havingRaw('COALESCE(SUM(b.qty),0) <> 0 OR p.min_level > 0')->orderBy('p.SKU_VENDOR')
             ->selectRaw('p.id, p.SKU_VENDOR sku, p.product_name_vendor name, p.min_level, COALESCE(SUM(b.qty),0) units, COALESCE(SUM(b.qty * l.unit_cost_gbp),0) value')->get();
@@ -254,7 +254,7 @@ class ReportService
     private static function r_slow_dead(int $ent, string $from, string $to): array
     {
         $stock = DB::table('fin_lots')->where('company_id', $ent)->where('qty_left', '>', 0)->groupBy('fk_id_product')->selectRaw('fk_id_product p, SUM(qty_left) q, SUM(qty_left * unit_cost_gbp) v')->get()->keyBy('p');
-        $last = DB::table('t_sales')->where('fk_id_ent', $ent)->where('sale_source', 'active')->whereIn('status', ['Pending', 'Confirmed'])->whereIn('fk_product_id', $stock->keys())->groupBy('fk_product_id')->selectRaw('fk_product_id p, MAX(d_order) d')->pluck('d', 'p');
+        $last = \App\Services\Perm::mine(DB::table('t_sales'), 'fk_id_branch')->where('fk_id_ent', $ent)->where('sale_source', 'active')->whereIn('status', ['Pending', 'Confirmed'])->whereIn('fk_product_id', $stock->keys())->groupBy('fk_product_id')->selectRaw('fk_product_id p, MAX(d_order) d')->pluck('d', 'p');
         $names = DB::table('t_product_vendors')->whereIn('id', $stock->keys())->get(['id', 'SKU_VENDOR', 'product_name_vendor'])->keyBy('id');
         $slow = (int) Settings::get('slow_days', $ent, 90); $dead = (int) Settings::get('dead_days', $ent, 180); $rows = [];
         foreach ($stock as $p => $x) { $d = $last[$p] ?? null; $days = $d ? (int) ((time() - strtotime($d)) / 86400) : null; if ($days !== null && $days < $slow) continue;
@@ -334,7 +334,7 @@ class ReportService
 
     private static function r_close(int $ent, string $from, string $to): array
     {
-        $shops = DB::table('t_branches')->where('fk_id_ent', $ent)->orderBy('shop_name')->get(['id', 'shop_name']); $out = [];
+        $shops = \App\Services\Perm::mine(DB::table('t_branches'), 'id')->where('fk_id_ent', $ent)->orderBy('shop_name')->get(['id', 'shop_name']); $out = [];
         for ($m = substr($from, 0, 7); $m <= substr($to, 0, 7); $m = date('Y-m', strtotime($m . '-01 +1 month'))) {
             $a = $m . '-01'; $b = date('Y-m-t', strtotime($a));
             foreach ($shops as $s) {
