@@ -21,5 +21,10 @@ Owner (02:03): bring every good function of MY TOOL (repo aemporio6/nexus-sourci
 
 Business functions from MY TOOL (built inside their modules): smart import with learning + row report + undo (7), PI / packing list / freight bill / product sheet readers (8), ICC planner (9), cartons / CBM / rate cards / chargeable weight (10), freight-share basis Choice (11), mixed invoices + recharges (12), pay several orders at once (13), credit notes (14), daily ECB rates (16), Payment Summary styled Excel (17), calendar (18), home pipeline (19), camera scan (28), device app lock (29), supplier upload link (30), Drive any-link + inbox + shared-with-me (31), Seller-Central menu (32), form nav bar + drafts (33). MY TOOL's real data is imported once through its link package (`mytool-link-1`).
 
+## Root cause of the gaps (owner asked 02:10) – and the fix
+- The build was marked "done" when its own tests passed, but it was never ticked line by line against the spec's MASTER_REGISTER_v1.7 (1,547 lines, 624 rule ids). Its `code_status` / `test_status` columns are still empty; only 21 rule ids are named in the code or tests.
+- Example: R-G_CORE-61/62/63 (permission matrix roles × pages × actions, GRANTED / REVOKED per person, data scope, money masking, Request access) were in the spec; a simpler version was built (rights by screen + coded rules) and not flagged clearly as a gap.
+- Fix = step 0: every one of the 1,547 lines gets BUILT / PARTIAL / MISSING with the file and the test that prove it; nothing is called done without it; the real percentage comes from this audit.
+
 ## Order
 Parity list → 1 Permission engine → 2 Search → 3 Filters → 4 Smart fields → 5 Guidance → 7 Foundations → MY TOOL business functions → screens to Vue module by module → 6 Intelligence → server go-live (real keys, printers, files – the only proof that cannot happen in the cloud workspace).
