@@ -194,6 +194,7 @@ class RecordService
             }
             SearchIndex::put($formKey, $table, $id, $ent);
             if (! empty($opt['event'])) EventBus::fire($opt['event'], $table, $id, ['form' => $formKey, 'created' => $created], $ent);
+            FormAssist::remember($formKey, $data);   // for the "you used this last time" chips
             return ['id' => $id, 'created' => $created];
         });
     }

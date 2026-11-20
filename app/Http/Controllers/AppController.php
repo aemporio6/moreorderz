@@ -127,25 +127,34 @@ class AppController extends Controller
         return Registry::definition($key, Context::role()) + ['blank' => RecordService::blank($key)];
     }
 
+    /** Options of a dropdown: narrowed by what is typed (q) and by the fields it follows (parent[field]=value); with the person's last used values. */
     public function options(Request $r, string $key, string $field)
     {
-        foreach (Registry::fields($key) as $f) {
-            if ($f['field_name'] === $field) return ['options' => Registry::options($f, Context::ent(), $r->query('q'))];
-        }
-        abort(404);
+        Rights::check('VIEW', $key);
+        return \App\Services\FormAssist::options($key, $field, $r->query('q') !== null ? (string) $r->query('q') : null, (array) $r->query('parent', []));
     }
 
-    /** Suggestions for a free-text field: the values used most on this form before. */
-    public function suggest(string $key, string $field)
+    /** "+ Add" for a dropdown that has its own small list: the value is saved to the list and comes back selected. */
+    public function addOption(Request $r, string $key, string $field)
     {
-        $table = Registry::table($key);
-        foreach (Registry::fields($key) as $f) {
-            if ($f['field_name'] !== $field || ! $f['column_name'] || $f['secret'] || ! Registry::hasColumn($table, $f['column_name'])) continue;
-            $q = DB::table($table)->whereNotNull($f['column_name'])->where($f['column_name'], '<>', '');
-            if (Registry::hasColumn($table, 'fk_id_ent') && Context::ent()) $q->where('fk_id_ent', Context::ent());
-            return ['values' => $q->groupBy($f['column_name'])->orderByRaw('COUNT(*) DESC')->limit(8)->pluck($f['column_name'])];
-        }
-        return ['values' => []];
+        Rights::check('ADD', $key);
+        try { [$v, $l, $new] = \App\Services\FormAssist::addOption($key, $field, (string) $r->input('label')); return ['value' => $v, 'label' => $l, 'message' => $new ? 'Added and selected' : 'It was already in the list – selected']; }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+    }
+
+    /** Up to 2 suggestion chips for a field (from the linked record · you used this last time · used most). Old answer shape "values" kept. */
+    public function suggest(Request $r, string $key, string $field)
+    {
+        Rights::check('VIEW', $key);
+        $chips = \App\Services\FormAssist::chips($key, $field, (array) $r->query('form', []));
+        return ['chips' => $chips, 'values' => array_column($chips, 'value')];
+    }
+
+    /** Records that look like what is being typed in a name / code field – shown before a duplicate is saved. */
+    public function lookalike(Request $r, string $key)
+    {
+        Rights::check('VIEW', $key);
+        return ['matches' => \App\Services\FormAssist::lookalike($key, (string) $r->query('field'), (string) $r->query('value'), $r->query('id') ? (int) $r->query('id') : null)];
     }
 
     public function list(Request $r, string $key)
@@ -189,7 +198,14 @@ class AppController extends Controller
         Rights::check($id ? 'EDIT' : 'ADD', $key);
         $res = RecordService::save($key, (array) $r->input('values', []), $id, ['quick' => $r->boolean('quick'), 'reason' => $r->input('reason')]);
         $title = Registry::fields($key)[0]['form_title'];
-        return $res + ['message' => ($res['created'] ? 'Saved: ' : 'Updated: ') . $title, 'open' => "#/list/$key"];
+        // the label and code of what was saved: a dropdown that opened "+ Add" selects it, and the toast says what it is
+        $table = Registry::table($key); $label = null; $code = null;
+        if ($table && ($row = (array) DB::table($table)->where(Registry::pk($table), $res['id'])->first())) {
+            $lc = Registry::labelColumn($table); $label = $lc ? (string) ($row[$lc] ?? '') : '';
+            if ($table === 't_account') $label = trim(($row['first_name'] ?? '') . ' ' . ($row['sur_name'] ?? ''));
+            foreach (Registry::fields($key) as $f) if (str_starts_with((string) $f['default_rule'], 'numbering:') && ! empty($row[$f['column_name']])) { $code = (string) $row[$f['column_name']]; break; }
+        }
+        return $res + ['label' => $label !== '' && $label !== null ? $label : ($code ?: '#' . $res['id']), 'code' => $code, 'message' => ($res['created'] ? 'Saved in ' : 'Updated in ') . $title . ($code ? ' · ' . $code : ''), 'open' => "#/list/$key", 'open_record' => "#/rec/$key/{$res['id']}"];
     }
 
     public function company(Request $r)

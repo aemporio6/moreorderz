@@ -1834,23 +1834,30 @@
     try { def = await api('form/' + key); if (id) { vinfo = await api(`record/${key}/${id}`); rec = vinfo.values; } else rec = def.blank; } catch (e) { busy(false); return toast(e.message, 'err'); }
     busy(false);
     const flds = def.sections.flatMap(s => s.fields), hasQuick = flds.some(f => f.quick) && !id;
-    let mode = hasQuick && !opt.focus ? 'quick' : 'full';
-    if (opt.focus) { let n = 0; const t = setInterval(() => { const f = document.querySelector(`.overlay [data-w="${opt.focus}"] input, .overlay [data-w="${opt.focus}"] select, .overlay [data-w="${opt.focus}"] textarea`); if (f) { clearInterval(t); f.scrollIntoView({ block: 'center' }); f.focus(); } else if (++n > 40) clearInterval(t); }, 100); }
-    const uid = 'f' + Math.random().toString(36).slice(2, 8), val = {}, undo = [], redo = [];
-    flds.forEach(f => { val[f.name] = (opt.preset || {})[f.col] ?? (opt.preset || {})[f.name] ?? rec[f.name] ?? rec[f.col] ?? ''; });
+    let mode = hasQuick && !opt.focus ? 'quick' : 'full', helpMode = false;
+    const uid = 'f' + Math.random().toString(36).slice(2, 8), val = {}, undo = [], redo = [], typed = new Set(), labels = {}, fixes = {}, alike = {};
+    flds.forEach(f => { val[f.name] = (opt.preset || {})[f.col] ?? (opt.preset || {})[f.name] ?? rec[f.name] ?? rec[f.col] ?? ''; if (id || (opt.preset || {})[f.col] != null || (opt.preset || {})[f.name] != null) typed.add(f.name); });
     const { ov, close } = modal((id ? 'Edit · ' : 'New · ') + def.title, id ? 'Changes are kept in the history of this record.' : 'Saved in its own module; the list opens where it went.',
-      `<div class="fhost"><div class="fmbar">${hasQuick ? `<div class="seg"><button type="button" data-m="full">Full</button><button type="button" data-m="quick">Quick</button></div>` : ''}<span class="small muted" id="fInfo"></span></div><div class="fbody" id="fBody"></div></div>`,
-      `<span class="left small muted" id="fMsg"></span><button class="btn" id="fmCancel">Cancel</button><button class="btn primary" id="fmSave">${ic('save')} Save</button>`);
+      `<div class="fhost"><div class="fmbar">${hasQuick ? `<div class="seg"><button type="button" data-m="full">Full</button><button type="button" data-m="quick">Quick</button></div>` : ''}<span class="small muted" id="fInfo"></span><span style="flex:1"></span><span id="fNav" style="display:flex;gap:4px;flex-wrap:wrap"></span></div><div id="fWhy"></div><div class="fbody" id="fBody"></div>
+       <details class="small muted" style="padding:8px 4px 0"><summary style="cursor:pointer">What happens when I save?</summary><ul style="margin:6px 0 0 18px;padding:0">${(def.after_save || []).map(l => `<li>${esc(l)}</li>`).join('')}</ul></details></div>`,
+      `<span class="left small muted" id="fMsg"></span><button class="btn" id="fmCancel">Cancel</button><button class="btn primary" id="fmSave" title="Ctrl+S">${ic('save')} Save</button>`);
     const bar = document.createElement('div'); bar.className = 'mo-assist';
     bar.innerHTML = (opt.fromCreate ? `<button type="button" class="btn sm" data-a="back" title="Back to the Create list (keeps your search)">← Back</button>` : '') +
       `<button type="button" class="btn sm" data-a="undo" title="Undo the last change">↶ Undo</button><button type="button" class="btn sm" data-a="redo" title="Redo">↷ Redo</button>` +
-      (id ? '' : `<button type="button" class="btn sm" data-a="last" title="Fill the form with the values of the last saved one">⟲ Fill from last</button>`) + `<button type="button" class="btn sm ghost" data-a="clear" title="Empty all fields (can be undone)">Clear</button>`;
+      (id ? '' : `<button type="button" class="btn sm" data-a="last" title="Fill the form with the values of the last saved one">⟲ Fill from last</button>`) + `<button type="button" class="btn sm ghost" data-a="clear" title="Empty all fields (can be undone)">Clear</button><button type="button" class="btn sm ghost" data-a="help" title="Show the help line of every field">? Help</button>`;
     $('.modal-h', ov).insertBefore(bar, $('.x', ov));
-    const shown = f => (mode === 'full' || f.quick || f.required) && (!f.show_if || cond(f.show_if));
     const cond = ex => { const m = ex.match(/^([\w.]+)\s*(!=|=|>|<)\s*(.*)$/); if (!m) return true; const h = String(val[m[1].replace(/^parent\./, '')] ?? ''); return m[2] === '=' ? h === m[3] : m[2] === '!=' ? h !== m[3] : m[2] === '>' ? +h > +m[3] : +h < +m[3]; };
+    const shown = f => (mode === 'full' || f.quick || f.required) && (!f.show_if || cond(f.show_if));
+    const empty = n => val[n] === '' || val[n] == null;
+    const kids = name => flds.filter(f => (f.cascades_from || '').split(',').map(x => x.trim()).some(c => c === name || c === (flds.find(x => x.name === name) || {}).col || ((c === 'company' || c === 'companies') && (flds.find(x => x.name === name) || {}).col === 'fk_id_ent')));
+    const parentsOf = () => { const p = {}; flds.forEach(f => { if (!empty(f.name) && (f.has_options || f.col === 'fk_id_ent')) p[f.name] = val[f.name]; }); return p; };
     const input = f => { const idn = `${uid}_${f.name}`, v = val[f.name] ?? '', ro = f.readonly ? 'disabled' : '';
       if (f.numbered && !id && !v) return `<input id="${idn}" data-f="${f.name}" type="text" value="" placeholder="Given by the system when saved" autocomplete="off">`;
-      if (f.has_options) return `<div class="selwrap"><select id="${idn}" data-f="${f.name}" ${ro} ${f.type === 'multiselect' ? 'multiple' : ''}><option value="">${v !== '' && String(v) !== '0' ? esc(v) : 'Choose…'}</option></select>${f.add_form && !f.readonly ? `<button type="button" class="addbtn" data-add="${esc(f.name)}" title="Add a new one – opens its form, saves it to the list and selects it here">${ic('plus')}<span>Add</span></button>` : ''}</div>`;
+      if (f.has_options) { const multi = f.type === 'multiselect', vals = multi ? String(v).split(',').filter(x => x !== '') : (v !== '' && String(v) !== '0' ? [String(v)] : []);
+        return `<div class="selwrap"><div class="mo-dd" data-dd="${f.name}" style="position:relative;flex:1;min-width:0"><div data-ddbox tabindex="${f.readonly ? -1 : 0}" id="${idn}" style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;min-height:38px;padding:4px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface,#fff);cursor:${f.readonly ? 'not-allowed' : 'pointer'};${f.readonly ? 'opacity:.6' : ''}">
+          ${vals.length ? vals.map(x => multi ? `<span class="chip accent plain">${esc((labels[f.name] || {})[x] ?? x)} <a href="#" data-ddx="${esc(x)}">✕</a></span>` : `<span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc((labels[f.name] || {})[x] ?? x)}</span>`).join('') : '<span class="muted" style="flex:1">Choose…</span>'}
+          ${vals.length && !f.readonly && !multi ? '<a href="#" data-ddclr title="Clear" class="muted">✕</a>' : ''}<span class="muted" style="margin-left:auto">▾</span></div></div>
+          ${(f.add_form || f.add_inline) && !f.readonly ? `<button type="button" class="addbtn" data-add="${esc(f.name)}" title="Add a new one – it is saved to its list and selected here">${ic('plus')}<span>Add</span></button>` : ''}</div>`; }
       if (f.type === 'textarea') return `<textarea id="${idn}" data-f="${f.name}" rows="3" ${ro}>${esc(v)}</textarea>`;
       if (f.type === 'check') return `<label class="chk"><input id="${idn}" data-f="${f.name}" type="checkbox" ${+v ? 'checked' : ''} ${ro}> Yes</label>`;
       const vk = (vinfo.never || []).includes(f.col) ? 'NEVER' : (vinfo.card || []).includes(f.col) ? 'CARD' : (vinfo.vault || []).includes(f.col) ? 'VAULT' : (/(^|_)(cvv|cvc|pin)(_|$)/i.test(f.col || '') ? 'NEVER' : '');
@@ -1858,58 +1865,134 @@
       if (vk === 'CARD') return `<input id="${idn}" data-f="${f.name}" type="text" value="${esc(v)}" ${ro} autocomplete="off" placeholder="Card number"><div class="small muted">Only the last 4 digits are kept.</div>`;
       if (vk === 'VAULT') return `<div style="display:flex;gap:6px"><input id="${idn}" data-f="${f.name}" type="password" value="${esc(v)}" ${ro} autocomplete="new-password" style="flex:1">${id && vinfo.may_reveal && v ? `<button type="button" class="btn sm" data-reveal="${f.name}" title="Show the value (logged)">Reveal</button>` : ''}</div><div class="small muted">Kept encrypted in the vault.${id && v ? ' Leave •••• to keep it; type - to remove it.' : ''}</div>`;
       const t = { number: 'number', money: 'number', date: 'date', email: 'email', phone: 'tel', link: 'url', file: 'text' }[f.type] || 'text';
-      return `<input id="${idn}" data-f="${f.name}" type="${f.secret ? 'password' : t}" value="${esc(v)}" ${t === 'number' ? `step="${f.step || (f.type === 'money' ? '0.01' : 'any')}"` : ''} ${ro} autocomplete="off">`; };
+      const step = f.step || (f.type === 'money' ? '0.01' : f.type === 'number' ? '1' : '');
+      const box = `<input id="${idn}" data-f="${f.name}" type="${f.secret ? 'password' : t}" value="${esc(v)}" ${t === 'number' ? `step="${f.type === 'money' ? '0.01' : 'any'}" ${f.min !== null && f.min !== '' ? `min="${esc(f.min)}"` : ''} ${f.max !== null && f.max !== '' ? `max="${esc(f.max)}"` : ''}` : ''} ${ro} autocomplete="off" style="flex:1;min-width:0">`;
+      if (t === 'number' && !f.readonly) return `<div style="display:flex;gap:4px"><button type="button" class="btn sm" data-step="${f.name}" data-by="-${step}" title="Less by ${step}" tabindex="-1">−</button>${box}<button type="button" class="btn sm" data-step="${f.name}" data-by="${step}" title="More by ${step}" tabindex="-1">+</button></div>`;
+      return box; };
+    const under = f => `${fixes[f.name] ? `<div class="small" style="color:var(--accent)">Corrected: “${esc(fixes[f.name])}” → “${esc(val[f.name])}” · <a href="#" data-unfix="${f.name}">Undo</a></div>` : ''}${(alike[f.name] || []).length ? `<div class="small" style="color:#b45309">${alike[f.name][0].exact ? 'Already exists' : 'Looks like an existing record'}: ${alike[f.name].map(m => `<a href="${esc(m.url)}" target="_blank" rel="noopener">${esc(m.value)}</a>`).join(', ')} – use it instead of a duplicate?</div>` : ''}`;
     function draw(errors = {}) {
-      $('#fBody', ov).innerHTML = def.sections.map(s => { const fs = s.fields.filter(shown); if (!fs.length) return '';
-        return `<div class="fsec"><div class="fsec-h"><b>${esc(s.title)}</b><span class="small muted">${fs.length} field${fs.length === 1 ? '' : 's'}</span></div><div class="form">${fs.map(f => `<div class="fld ${f.required ? 'is-req' : ''} ${errors[f.name] ? 'has-err' : ''}" data-w="${f.name}">
-          <label for="${uid}_${f.name}"><span>${esc(f.label)}</span>${f.required ? ' <span class="req">*</span>' : ''}${f.help ? `<span class="help" title="${esc(f.help)}">?</span>` : ''}</label>${input(f)}${errors[f.name] ? `<div class="errtext">${esc(errors[f.name][0] || errors[f.name])}</div>` : ''}</div>`).join('')}</div></div>`; }).join('');
+      const secs = def.sections.map(s => ({ s, fs: s.fields.filter(shown) })).filter(x => x.fs.length);
+      $('#fBody', ov).innerHTML = secs.map(({ s, fs }, i) => `<div class="fsec" data-sec="${i}"><div class="fsec-h"><b>${esc(s.title)}</b><span class="small muted">${fs.length} field${fs.length === 1 ? '' : 's'} · ${fs.filter(f => f.required).length} required${mode === 'quick' && s.fields.length > fs.length ? ` · <a href="#" data-more>Show all ${s.fields.length - fs.length} more</a>` : ''}</span></div><div class="form">${fs.map(f => `<div class="fld ${f.required ? 'is-req' : ''} ${errors[f.name] ? 'has-err' : ''}" data-w="${f.name}">
+          <label for="${uid}_${f.name}"><span>${esc(f.label)}</span>${f.required ? ' <span class="req">*</span>' : ''}${f.help ? `<span class="help" title="${esc(f.help)}">?</span>` : ''}${!id && f.default_why && !typed.has(f.name) && !empty(f.name) ? ` <span class="chip plain" title="Filled by itself: ${esc(f.default_why)}. Change it if it is different.">default</span>` : ''}${!empty(f.name) && !f.secret ? ` <a href="#" data-copy="${f.name}" class="small muted" title="Copy this value" tabindex="-1">copy</a>` : ''}</label>${input(f)}
+          ${f.help ? `<div class="helptext" data-help style="display:${helpMode ? 'block' : 'none'}">${esc(f.help)}</div>` : ''}<div data-under="${f.name}">${under(f)}</div>${errors[f.name] ? `<div class="errtext">${esc(errors[f.name][0] || errors[f.name])}</div>` : ''}</div>`).join('')}</div></div>`).join('');
       $$('.seg button', ov).forEach(b => b.classList.toggle('on', b.dataset.m === mode));
-      const vis = flds.filter(shown); $('#fInfo', ov).innerHTML = `<b>${vis.length}</b> fields · <b>${vis.filter(f => f.required).length}</b> required · marked <span style="color:var(--err)">*</span>`;
-      vis.filter(f => f.has_options).forEach(loadOptions); paint();
+      const vis = flds.filter(shown); $('#fInfo', ov).innerHTML = `<b>${vis.length}</b> fields · <b>${vis.filter(f => f.required).length}</b> required · marked <span style="color:var(--err)">*</span> · saves into <b>${esc(def.title)}</b>`;
+      // jump to a section; a red dot = a required field in it is still empty
+      $('#fNav', ov).innerHTML = secs.length > 1 ? secs.map(({ s, fs }, i) => `<button type="button" class="btn sm ghost" data-go="${i}">${esc(s.title)}${fs.some(f => f.required && empty(f.name) && !f.numbered) ? ' <span style="color:var(--err)">●</span>' : ''}</button>`).join('') : '';
+      vis.filter(f => f.has_options).forEach(f => ensureLabels(f)); paint();
     }
-    const optCache = {};
-    async function loadOptions(f) { const el = $(`[data-f="${f.name}"]`, ov); if (!el) return;
-      try { optCache[f.name] = optCache[f.name] || (await api(`options/${key}/${f.name}`)).options; } catch (e) { optCache[f.name] = []; }
-      const cur = String(val[f.name] ?? ''), multi = f.type === 'multiselect', picked = multi ? cur.split(',') : [cur];
-      el.innerHTML = (multi ? '' : `<option value="">Choose…</option>`) + optCache[f.name].map(([v, l]) => `<option value="${esc(v)}" ${picked.includes(v) ? 'selected' : ''}>${esc(l)}</option>`).join(''); if (multi) return;
-      if (cur && cur !== '0' && !optCache[f.name].some(o => o[0] === cur)) el.insertAdjacentHTML('beforeend', `<option value="${esc(cur)}" selected>${esc(cur)}</option>`); }
-    const read = el => el.type === 'checkbox' ? (el.checked ? 1 : 0) : el.multiple ? [...el.selectedOptions].map(o => o.value).join(',') : el.value;
-    const setVal = (name, v) => { val[name] = v; const el = $(`[data-f="${name}"]`, ov); if (el) { if (el.type === 'checkbox') el.checked = !!+v; else el.value = v; } };
+    // labels of the chosen values of a dropdown (so an id never shows as a number)
+    async function ensureLabels(f) { const cur = String(val[f.name] ?? '').split(',').filter(x => x !== '' && x !== '0'); labels[f.name] = labels[f.name] || {}; if (!cur.length || cur.every(x => labels[f.name][x] !== undefined)) return;
+      try { const r = await api(`options/${key}/${f.name}?` + new URLSearchParams(Object.entries(parentsOf()).filter(([k]) => k !== f.name).map(([k, v]) => [`parent[${k}]`, v]))); r.options.forEach(([v, l]) => { labels[f.name][v] = l; }); cur.forEach(x => { if (labels[f.name][x] === undefined) labels[f.name][x] = x; }); redrawField(f); } catch (e) {} }
+    const redrawField = f => { const w = $(`[data-w="${f.name}"] .selwrap`, ov); if (w) w.outerHTML = input(f); };
+    // the dropdown panel: type to search (asks the server), your last values first, tick several, All / None, + Add what you typed
+    let ddOpen = null;
+    const closeDd = () => { if (ddOpen) { ddOpen.remove(); ddOpen = null; } };
+    async function openDd(f) { closeDd(); const host = $(`[data-dd="${f.name}"]`, ov); if (!host || f.readonly) return; const multi = f.type === 'multiselect';
+      const p = document.createElement('div'); ddOpen = p; p.style.cssText = 'position:absolute;z-index:80;left:0;right:0;top:calc(100% + 2px);background:var(--surface,#fff);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.18);padding:6px';
+      p.innerHTML = `<input class="q" data-ddq placeholder="Type to search…" style="width:100%;margin-bottom:4px" autocomplete="off">${multi ? '<div class="small" style="display:flex;gap:12px;padding:2px 6px"><a href="#" data-ddall>All</a><a href="#" data-ddnone>None</a><span style="flex:1"></span><a href="#" data-dddone>Done</a></div>' : ''}<div data-ddl style="max-height:240px;overflow:auto"><div class="small muted" style="padding:8px">Loading…</div></div>`;
+      host.appendChild(p); const qi = $('[data-ddq]', p), list = $('[data-ddl]', p); let opts = [], recent = [], cur = 0, seq = 0, tm;
+      const picked = () => String(val[f.name] ?? '').split(',').filter(x => x !== '');
+      const choose = v => { const o = opts.find(x => x[0] === v); if (o) (labels[f.name] = labels[f.name] || {})[v] = o[1];
+        if (multi) { const s = new Set(picked()); s.has(v) ? s.delete(v) : s.add(v); typed.add(f.name); change(f.name, [...s].join(',')); render(); redrawBox(); }
+        else { typed.add(f.name); change(f.name, v); closeDd(); redrawField(f); afterPick(f); } };
+      const redrawBox = () => { const box = $('[data-ddbox]', host), tmp = document.createElement('div'); tmp.innerHTML = input(f); box.innerHTML = $('[data-ddbox]', tmp).innerHTML; };
+      const render = () => { const pk = picked(), t = qi.value.trim(); const rows = recent.length && !t ? opts.filter(o => recent.includes(o[0])).concat(opts.filter(o => !recent.includes(o[0]))) : opts; cur = Math.min(cur, Math.max(0, rows.length - 1));
+        list.innerHTML = (rows.length ? rows.map((o, i) => `<div data-ddv="${esc(o[0])}" style="display:flex;gap:8px;align-items:center;padding:6px 8px;border-radius:6px;cursor:pointer;${i === cur ? 'background:rgba(15,118,110,.10)' : ''}">${multi ? `<input type="checkbox" ${pk.includes(o[0]) ? 'checked' : ''} tabindex="-1">` : ''}<span style="flex:1">${esc(o[1])}</span>${recent.includes(o[0]) && !t ? '<span class="small muted">used lately</span>' : pk.includes(o[0]) && !multi ? ic('check') : ''}</div>`).join('')
+          : `<div class="small muted" style="padding:8px">${t ? `Nothing called “${esc(t)}”.` : `No ${esc(f.label.toLowerCase())} yet${f.add_form || f.add_inline ? ' – press Add.' : '.'}`}</div>`)
+          + ((f.add_form || f.add_inline) && t && !rows.some(o => o[1].toLowerCase() === t.toLowerCase()) ? `<div data-ddadd style="padding:6px 8px;border-top:1px solid var(--line);cursor:pointer;color:var(--accent)">${ic('plus')} Add “${esc(t)}”</div>` : '');
+        $$('[data-ddv]', list).forEach(e => e.onmousedown = ev => { ev.preventDefault(); choose(e.dataset.ddv); });
+        if ($('[data-ddadd]', list)) $('[data-ddadd]', list).onmousedown = ev => { ev.preventDefault(); const t2 = qi.value.trim(); closeDd(); addNew(f, t2); };
+        const c = $$('[data-ddv]', list)[cur]; c && c.scrollIntoView({ block: 'nearest' }); };
+      const load = async () => { const my = ++seq, qs = new URLSearchParams(); if (qi.value.trim()) qs.set('q', qi.value.trim()); Object.entries(parentsOf()).forEach(([k, v]) => { if (k !== f.name) qs.set(`parent[${k}]`, v); });
+        try { const r = await api(`options/${key}/${f.name}?` + qs); if (my !== seq || ddOpen !== p) return; opts = r.options; recent = r.recent || []; opts.forEach(([v, l]) => { (labels[f.name] = labels[f.name] || {})[v] = l; }); render(); } catch (e) { list.innerHTML = `<div class="small muted" style="padding:8px">${esc(e.message)}</div>`; } };
+      qi.oninput = () => { clearTimeout(tm); cur = 0; tm = setTimeout(load, 180); };
+      qi.onkeydown = e => { const n = $$('[data-ddv]', list).length;
+        if (e.key === 'ArrowDown') { e.preventDefault(); cur = Math.min(n - 1, cur + 1); render(); } else if (e.key === 'ArrowUp') { e.preventDefault(); cur = Math.max(0, cur - 1); render(); }
+        else if (e.key === 'Enter') { e.preventDefault(); const c = $$('[data-ddv]', list)[cur]; if (c) choose(c.dataset.ddv); else if ($('[data-ddadd]', list)) { const t2 = qi.value.trim(); closeDd(); addNew(f, t2); } }
+        else if (e.key === 'Escape') { e.stopPropagation(); closeDd(); $('[data-ddbox]', host).focus(); } else if (e.key === 'Tab') closeDd(); };
+      if (multi) { $('[data-ddall]', p).onclick = e => { e.preventDefault(); typed.add(f.name); change(f.name, opts.map(o => o[0]).join(',')); render(); redrawBox(); }; $('[data-ddnone]', p).onclick = e => { e.preventDefault(); change(f.name, ''); render(); redrawBox(); }; $('[data-dddone]', p).onclick = e => { e.preventDefault(); closeDd(); redrawField(f); afterPick(f); }; }
+      qi.focus(); load(); }
+    // after a dropdown changes: the fields that follow it are emptied and re-offered, and chips of linked values show
+    function afterPick(f) { const ch = kids(f.name).filter(k => k.name !== f.name); let cleared = 0; ch.forEach(k => { if (!empty(k.name)) { change(k.name, ''); cleared++; } delete (labels[k.name] || {}).__all; redrawField(k); });
+      if (cleared) toast(`${cleared} field(s) that depend on ${f.label} were emptied – choose them again`, 'warn');
+      if (flds.some(x => x.show_if && x.show_if.replace(/^parent\./, '').startsWith(f.name))) draw(); refreshWhy(); paint(); }
+    async function addNew(f, text) { $$('[data-f]', ov).forEach(el => { val[el.dataset.f] = read(el); });
+      if (f.add_inline) { const go2 = async label => { const r = await api(`options/${key}/${f.name}`, { method: 'POST', body: { label } }); (labels[f.name] = labels[f.name] || {})[r.value] = r.label; typed.add(f.name); change(f.name, f.type === 'multiselect' ? String(val[f.name] || '').split(',').filter(x => x !== '').concat([r.value]).join(',') : r.value); redrawField(f); toast(r.message); afterPick(f); return r; };
+        if (text) { try { await go2(text); } catch (e) { toast(e.message, 'err'); } return; }
+        return miniForm('Add to ' + f.label, 'The new value is saved to this list and is there for everybody at once.', [{ name: 'label', label: 'New value', required: true }], v => go2(v.label), 'Add'); }
+      // the full form of the thing, with what we know already filled in; it comes back selected (forms stack)
+      const preset = { ...(f.add_preset || {}) }; const ent = flds.find(x => x.col === 'fk_id_ent'); if (ent && !empty(ent.name)) preset.fk_id_ent = val[ent.name]; if (text) preset.__label = text;
+      openForm(f.add_form, null, { preset, onSaved: r => { (labels[f.name] = labels[f.name] || {})[String(r.id)] = r.label || String(r.id); typed.add(f.name); change(f.name, f.type === 'multiselect' ? String(val[f.name] || '').split(',').filter(x => x !== '').concat([String(r.id)]).join(',') : String(r.id)); redrawField(f); toast('Added and selected'); afterPick(f); } }); }
+    const read = el => el.type === 'checkbox' ? (el.checked ? 1 : 0) : el.value;
+    const setVal = (name, v) => { val[name] = v; const f = flds.find(x => x.name === name); if (f && f.has_options) { ensureLabels(f); return redrawField(f); } const el = $(`[data-f="${name}"]`, ov); if (el) { if (el.type === 'checkbox') el.checked = !!+v; else el.value = v; } };
     const change = (name, nw) => { const old = val[name] ?? ''; if (String(old) === String(nw)) return; undo.push({ name, old, nw }); redo.length = 0; val[name] = nw; if (flds.some(f => f.show_if && f.show_if.startsWith(name))) draw(); paint(); };
     const paint = () => { const q = a => $(`[data-a=${a}]`, bar); q('undo').disabled = !undo.length; q('redo').disabled = !redo.length; if (q('last')) q('last').disabled = !lastSaved[key]; };
-    $('#fBody', ov).addEventListener('change', e => { const el = e.target; if (!el.dataset.f) return; change(el.dataset.f, read(el)); const w = el.closest('.fld'); if (w && w.classList.contains('has-err')) { w.classList.remove('has-err'); const m = w.querySelector('.errtext'); m && m.remove(); } });
+    // "Why can't I save?" – every required field that is still empty, with a link that goes there
+    const missing = () => flds.filter(f => shown(f) && f.required && !f.readonly && !f.numbered && empty(f.name));
+    const refreshWhy = (force) => { const m = missing(), box = $('#fWhy', ov); if (!box) return; if (!m.length || !(force || box.dataset.on)) { box.innerHTML = ''; if (!m.length) { delete box.dataset.on; if (/required field/.test($('#fMsg', ov).textContent)) $('#fMsg', ov).textContent = ''; } return; } box.dataset.on = 1; $('#fMsg', ov).textContent = m.length + ' required field(s) are empty';
+      box.innerHTML = `<div class="card" style="border-color:var(--err);margin:8px 0;padding:10px 12px"><b>Why can’t I save?</b> ${m.length} required field${m.length === 1 ? ' is' : 's are'} still empty: ${m.map(f => `<a href="#" data-goto="${f.name}">${esc(f.label)}</a>`).join(' · ')}</div>`; };
+    const gotoField = n => { const w = $(`[data-w="${n}"]`, ov); if (!w) return; w.scrollIntoView({ block: 'center' }); w.style.outline = '2px solid var(--err)'; setTimeout(() => { w.style.outline = ''; }, 1600); const el = w.querySelector('[data-f], [data-ddbox]'); el && el.focus(); };
+    // auto-correct while typing ends (with Undo) and look-alike warning before a duplicate is saved
+    const fixOf = (f, v) => { let x = String(v).replace(/\s+/g, ' ').trim(); if (f.auto_correct === 'upper') x = x.toUpperCase(); else if (f.auto_correct === 'lower' || f.type === 'email') x = x.toLowerCase(); return x; };
+    const drawUnder = f => { const u = $(`[data-under="${f.name}"]`, ov); if (u) u.innerHTML = under(f); };
+    $('#fBody', ov).addEventListener('focusout', async e => { const el = e.target, name = el.dataset.f; if (!name) return; const f = flds.find(x => x.name === name); if (!f || el.type === 'checkbox' || el.type === 'password') return;
+      if (['text', 'email', 'tel'].includes(el.type) && el.value) { const fx = fixOf(f, el.value); if (fx !== el.value && !fixes['!' + name]) { fixes[name] = el.value; el.value = fx; change(name, fx); drawUnder(f); } }
+      if ((def.lookalike || []).includes(name) && el.value.trim().length >= 3) { try { const r = await api(`lookalike/${key}?` + new URLSearchParams({ field: name, value: el.value, id: id || '' })); alike[name] = r.matches; } catch (x) { alike[name] = []; } drawUnder(f); } else if (alike[name]) { alike[name] = []; drawUnder(f); } });
+    $('#fBody', ov).addEventListener('input', e => { if (e.target.dataset.f && e.target.value !== '') { const w = e.target.closest('.fld'); w && $$('.mo-chips', w).forEach(c => c.remove()); } });
+    $('#fBody', ov).addEventListener('change', e => { const el = e.target; if (!el.dataset.f) return; typed.add(el.dataset.f); change(el.dataset.f, read(el)); const w = el.closest('.fld'); if (w && w.classList.contains('has-err')) { w.classList.remove('has-err'); const m = w.querySelector('.errtext'); m && m.remove(); } refreshWhy(); });
+    $('#fBody', ov).addEventListener('keydown', e => { const box = e.target.closest('[data-ddbox]'); if (box && (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown')) { e.preventDefault(); openDd(flds.find(x => x.name === box.parentElement.dataset.dd)); } });
+    // the dropdown opens on press (not on release): a line appearing under another field can move the page between the two
+    $('#fBody', ov).addEventListener('mousedown', e => { const bx = e.target.closest('[data-ddbox]'); if (!bx || e.button !== 0 || e.target.closest('[data-ddx], [data-ddclr]')) return; e.preventDefault(); const n = bx.parentElement.dataset.dd;
+      if (document.activeElement && document.activeElement !== document.body && !bx.contains(document.activeElement)) document.activeElement.blur();
+      if (ddOpen && ddOpen.parentElement === bx.parentElement) return closeDd(); openDd(flds.find(q => q.name === n)); });
+    ov.addEventListener('mousedown', e => { if (ddOpen && !e.target.closest('.mo-dd')) { const n = ddOpen.parentElement.dataset.dd; closeDd(); const f = flds.find(x => x.name === n); if (f && f.type === 'multiselect') { redrawField(f); afterPick(f); } } });
+    ov.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); $('#fmSave', ov).click(); } });
     // a secret: shown only on request, and every reveal is logged
     $('#fBody', ov).addEventListener('click', async e => { const b = e.target.closest('[data-reveal]'); if (!b) return; const el = $(`[data-f="${b.dataset.reveal}"]`, ov);
       try { const x = await api(`reveal/${key}/${id}`, { method: 'POST', body: { field: b.dataset.reveal } }); if (x.value == null) return toast('Nothing is kept for this field.', 'warn');
         el.type = 'text'; el.value = x.value; val[b.dataset.reveal] = x.value; b.remove(); toast('Shown – this reveal is in the audit log.'); } catch (x) { toast(x.message, 'err'); } });
-    // suggestions: the values used most on this form, as quick-pick chips under an empty text field
-    $('#fBody', ov).addEventListener('focusin', async e => { const el = e.target, name = el.dataset.f; $$('.mo-chips', ov).forEach(c => c.remove());
-      if (!name || el.tagName !== 'INPUT' || !['text', 'tel', 'email'].includes(el.type) || el.value || id) return;
-      let vals = []; try { vals = (await api(`suggest/${key}/${name}`)).values; } catch (x) {}
-      if (!vals.length || document.activeElement !== el) return; const box = document.createElement('div'); box.className = 'mo-chips';
-      box.innerHTML = '<span class="faint">Suggested:</span>' + vals.slice(0, 4).map(v => `<button type="button" class="mo-chip">${esc(v)}</button>`).join(''); el.insertAdjacentElement('afterend', box);
-      box.onmousedown = ev => { const b = ev.target.closest('.mo-chip'); if (!b) return; ev.preventDefault(); el.value = b.textContent; change(name, b.textContent); box.remove(); }; });
+    // suggestions on every empty field: at most 2 chips with the reason; one click fills the field
+    const showChips = async (f, anchor) => { $$('.mo-chips', ov).forEach(c => c.remove()); if (!f || f.readonly || f.secret || f.numbered || !empty(f.name)) return;
+      let chips = []; try { const qs = new URLSearchParams(); Object.entries(parentsOf()).forEach(([k, v]) => qs.set(`form[${k}]`, v)); chips = (await api(`suggest/${key}/${f.name}?` + qs)).chips || []; } catch (x) {}
+      if (!chips.length || !empty(f.name) || !anchor.isConnected) return; const box = document.createElement('div'); box.className = 'mo-chips';
+      box.innerHTML = '<span class="faint">Suggested:</span>' + chips.slice(0, 2).map((c, i) => `<button type="button" class="mo-chip" data-ci="${i}" title="${esc(c.why)}">⚡ ${esc(c.label)} <span class="faint">· ${esc(c.why)}</span></button>`).join(''); anchor.insertAdjacentElement('afterend', box);
+      box.onmousedown = ev => { const b = ev.target.closest('.mo-chip'); if (!b) return; ev.preventDefault(); const c = chips[+b.dataset.ci]; typed.add(f.name); (labels[f.name] = labels[f.name] || {})[c.value] = c.label; change(f.name, c.value); setVal(f.name, c.value); box.remove(); if (f.has_options) afterPick(f); refreshWhy(); }; };
+    $('#fBody', ov).addEventListener('focusin', e => { const el = e.target; const box = el.closest && el.closest('[data-ddbox]'); const name = box ? box.parentElement.dataset.dd : el.dataset.f; if (!name || el.matches('[data-ddq]')) return;
+      const w = el.closest('.fld'); if (w) { $$('[data-help]', ov).forEach(h => { if (!helpMode) h.style.display = h.closest('.fld') === w ? 'block' : 'none'; }); }
+      if (id) return $$('.mo-chips', ov).forEach(c => c.remove()); showChips(flds.find(x => x.name === name), box ? box.closest('.selwrap') : (el.parentElement.matches('[style*="display:flex"]') ? el.parentElement : el)); });
+    $('#fBody', ov).addEventListener('click', e => { const t = e.target;
+      const cp = t.closest('[data-copy]'); if (cp) { e.preventDefault(); const n = cp.dataset.copy, f = flds.find(x => x.name === n); const txt = f.has_options ? String(val[n]).split(',').map(x => (labels[n] || {})[x] ?? x).join(', ') : String(val[n] ?? ''); navigator.clipboard.writeText(txt).then(() => toast('Copied'), () => toast('Copy is not allowed by this browser', 'err')); return; }
+      const st = t.closest('[data-step]'); if (st) { const n = st.dataset.step, f = flds.find(x => x.name === n), el = $(`[data-f="${n}"]`, ov); const by = +st.dataset.by, dec = (String(Math.abs(by)).split('.')[1] || '').length; let v = (+el.value || 0) + by; if (f.min !== null && f.min !== '' && v < +f.min) v = +f.min; if (f.max !== null && f.max !== '' && v > +f.max) v = +f.max; el.value = dec ? v.toFixed(dec) : String(Math.round(v * 1e6) / 1e6); typed.add(n); change(n, el.value); refreshWhy(); return; }
+      const uf = t.closest('[data-unfix]'); if (uf) { e.preventDefault(); const n = uf.dataset.unfix, el = $(`[data-f="${n}"]`, ov); el.value = fixes[n]; change(n, fixes[n]); delete fixes[n]; fixes['!' + n] = 1; drawUnder(flds.find(x => x.name === n)); return; }
+      if (t.closest('[data-more]')) { e.preventDefault(); mode = 'full'; return draw(); }
+      const x = t.closest('[data-ddx]'); if (x) { e.preventDefault(); e.stopPropagation(); const n = x.closest('[data-dd]').dataset.dd, f = flds.find(q => q.name === n); change(n, String(val[n]).split(',').filter(v => v !== x.dataset.ddx).join(',')); redrawField(f); afterPick(f); return; }
+      const cl = t.closest('[data-ddclr]'); if (cl) { e.preventDefault(); e.stopPropagation(); const n = cl.closest('[data-dd]').dataset.dd, f = flds.find(q => q.name === n); change(n, ''); redrawField(f); afterPick(f); return; }
+      const b = t.closest('[data-add]'); if (b) addNew(flds.find(q => q.name === b.dataset.add), ''); });
+    $('.fhost', ov).addEventListener('click', e => { const g = e.target.closest('[data-goto]'); if (g) { e.preventDefault(); gotoField(g.dataset.goto); } const s = e.target.closest('[data-go]'); if (s) { const sec = $(`[data-sec="${s.dataset.go}"]`, ov); sec && sec.scrollIntoView({ block: 'start', behavior: 'smooth' }); } });
     bar.onclick = e => { const a = (e.target.closest('[data-a]') || {}).dataset; if (!a) return;
       if (a.a === 'back') { close(); return openCreate(lastCreateQ); }
+      if (a.a === 'help') { helpMode = !helpMode; $$('[data-help]', ov).forEach(h => { h.style.display = helpMode ? 'block' : 'none'; }); return; }
       if (a.a === 'undo' && undo.length) { const c = undo.pop(); setVal(c.name, c.old); redo.push(c); }
       if (a.a === 'redo' && redo.length) { const c = redo.pop(); setVal(c.name, c.nw); undo.push(c); }
-      if (a.a === 'last' && lastSaved[key]) { Object.entries(lastSaved[key]).forEach(([n, v]) => { if (String(val[n] ?? '') !== String(v)) { undo.push({ name: n, old: val[n] ?? '', nw: v }); setVal(n, v); } }); redo.length = 0; toast('Filled from the last saved one – check and change what is different'); }
+      if (a.a === 'last' && lastSaved[key]) { Object.entries(lastSaved[key]).forEach(([n, v]) => { const f = flds.find(x => x.name === n); if (f && !f.numbered && String(val[n] ?? '') !== String(v)) { undo.push({ name: n, old: val[n] ?? '', nw: v }); typed.add(n); setVal(n, v); } }); redo.length = 0; toast('Filled from the last saved one – check and change what is different'); }
       if (a.a === 'clear') { flds.filter(f => !f.readonly).forEach(f => { if ((val[f.name] ?? '') !== '') { undo.push({ name: f.name, old: val[f.name], nw: '' }); setVal(f.name, ''); } }); redo.length = 0; }
-      paint(); };
-    $('#fBody', ov).addEventListener('click', e => { const b = e.target.closest('[data-add]'); if (!b) return; const f = flds.find(x => x.name === b.dataset.add);
-      $$('[data-f]', ov).forEach(el => { val[el.dataset.f] = read(el); });
-      openForm(f.add_form, null, { preset: f.add_preset, onSaved: async r => { delete optCache[f.name]; change(f.name, String(r.id)); await loadOptions(f); toast('Added and selected'); } }); });
-    $$('.seg button', ov).forEach(b => b.onclick = () => { mode = b.dataset.m; draw(); });
+      refreshWhy(); paint(); };
+    $$('.seg button', ov).forEach(b => b.onclick = () => { $$('[data-f]', ov).forEach(el => { val[el.dataset.f] = read(el); }); mode = b.dataset.m; draw(); });
     $('#fmCancel', ov).onclick = close;
     $('#fmSave', ov).onclick = async () => { $$('[data-f]', ov).forEach(el => { val[el.dataset.f] = read(el); });
+      const miss = missing(); if (miss.length) { refreshWhy(true); $('#fMsg', ov).textContent = miss.length + ' required field(s) are empty'; return gotoField(miss[0].name); }
       const values = {}; flds.filter(f => !f.readonly && (shown(f) || id)).forEach(f => { values[f.name] = val[f.name]; });
       busy(true);
       try { const r = await api(`record/${key}` + (id ? '/' + id : ''), { method: 'POST', body: { values, quick: mode === 'quick' } });
         lastSaved[key] = values; try { localStorage.setItem('mo_last_forms', JSON.stringify(lastSaved)); } catch (x) {}
-        close(); toast(r.message, 'ok', r.open); opt.onSaved ? opt.onSaved(r) : go(r.open); }
-      catch (e) { if (e.status === 422) { draw(e.errors); $('#fMsg', ov).textContent = e.errors._form ? (e.errors._form[0] || e.errors._form) : Object.keys(e.errors).length + ' field(s) need attention'; if (e.errors._form) toast(e.errors._form[0] || e.errors._form, 'err'); const first = $('.fld.has-err [data-f]', ov); first && first.focus(); } else toast(e.message, 'err'); }
+        close(); toast(r.message, 'ok', r.open_record || r.open); opt.onSaved ? opt.onSaved(r) : go(r.open); }
+      catch (e) { if (e.status === 422) { draw(e.errors); $('#fMsg', ov).textContent = e.errors._form ? (e.errors._form[0] || e.errors._form) : Object.keys(e.errors).length + ' field(s) need attention'; if (e.errors._form) toast(e.errors._form[0] || e.errors._form, 'err'); const first = Object.keys(e.errors).find(n => $(`[data-w="${n}"]`, ov)); first && gotoField(first); } else toast(e.message, 'err'); }
       busy(false); };
+    // a name typed in the dropdown's "Add …" goes into the first name-like field of the new form
+    if (opt.preset && opt.preset.__label) { const f = flds.find(x => (def.lookalike || []).includes(x.name) && !x.numbered && !x.readonly && ['text'].includes(x.type)) || flds.find(x => x.type === 'text' && !x.numbered && !x.readonly && x.required); if (f && empty(f.name)) { val[f.name] = opt.preset.__label; typed.add(f.name); } }
     draw();
+    if (opt.focus) { mode = 'full'; draw(); setTimeout(() => gotoField(opt.focus), 150); }
   }
   MO.openForm = openForm;
 

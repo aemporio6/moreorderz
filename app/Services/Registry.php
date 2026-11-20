@@ -86,14 +86,16 @@ class Registry
                 'required' => (bool) $f['required'] && ! str_starts_with((string) $f['default_rule'], 'numbering:'), 'quick' => (bool) $f['in_quick'], 'readonly' => (bool) $f['readonly'] || ! $stored || Perm::fieldMode(\Illuminate\Support\Facades\Auth::user(), $formKey, (string) $f['field_name']) === 'READONLY',
                 'stored' => $stored, 'help' => $f['help'], 'step' => $f['step'], 'min' => $f['min'], 'max' => $f['max'],
                 'cascades_from' => $f['cascades_from'], 'show_if' => $f['show_if'], 'required_if' => $f['required_if'],
-                'add_form' => $f['add_form'], 'secret' => (bool) $f['secret'], 'auto_correct' => $f['auto_correct'],
+                'add_form' => ($way = FormAssist::addWay($f))['form'] ?? null, 'add_inline' => ! empty($way['inline']), 'secret' => (bool) $f['secret'], 'auto_correct' => $f['auto_correct'],
+                'default_why' => self::defaultWhy($f),
                 'has_options' => in_array($f['type'], ['select', 'multiselect'], true),
                 'numbered' => str_starts_with((string) $f['default_rule'], 'numbering:'),
                 'add_preset' => str_starts_with((string) $f['source'], 'ref:') ? ['fk_reference_id' => DB::table('cat_references')->where('ref_code', substr($f['source'], 4))->value('id')] : null,
             ];
         }
         ksort($sections);
-        return ['form_key' => $formKey, 'title' => $fields[0]['form_title'], 'kind' => $fields[0]['form_kind'], 'table' => $table, 'sections' => array_values($sections)];
+        return ['form_key' => $formKey, 'title' => $fields[0]['form_title'], 'kind' => $fields[0]['form_kind'], 'table' => $table, 'sections' => array_values($sections),
+            'lookalike' => FormAssist::lookalikeFields($formKey), 'after_save' => FormAssist::afterSave($formKey)];
     }
 
     public static function visible(array $f, ?string $role): bool
@@ -151,6 +153,16 @@ class Registry
         if ($ent && self::hasColumn($table, 'fk_id_ent')) $x->where(fn ($w) => $w->where('fk_id_ent', $ent)->orWhere('fk_id_ent', 0)->orWhereNull('fk_id_ent'));
         if (self::hasColumn($table, 'f_active')) $x->where('f_active', 1);
         return $x->limit($limit)->get()->map(fn ($r) => [(string) $r->id, (string) ($r->lbl ?? $r->id)])->all();
+    }
+
+    /** Why a new record already has a value in this field – shown as the "default" tag. Null = no default. */
+    public static function defaultWhy(array $f): ?string
+    {
+        [$k, $a] = array_pad(explode(':', (string) $f['default_rule'], 2), 2, '');
+        return match ($k) {
+            'const' => 'the usual value', 'today' => 'today', 'session.company' => 'the company you are working in', 'session.user' => 'you',
+            'setting' => 'from the setting ' . $a, default => null,
+        };
     }
 
     /** Default value of a field for a new record (registry column default_rule). */
