@@ -85,7 +85,7 @@ MR-0006|B|function chips|every field of a registry form: ? help (line shows on f
 MR-0007|B|data-step|number and money fields have - / + with the step of the registry (money 0.01, quantity 1) and its min / max
 MR-0008|P|form:cat_reference|1,533 dropdowns, all fed from a list
 MR-0010|B|function lookalike|auto-correct when leaving a field with Undo; look-alike warning (same letters, typing mistake, same sound, same phone) under name / code / e-mail / phone fields before save; FormAssistTest
-MR-0011|B|function refreshWhy|server-side validation with plain-word errors, and the "Why can't I save?" box that lists every empty required field with a link that goes there
+MR-0011|B|const refreshWhy|server-side validation with plain-word errors, and the "Why can't I save?" box that lists every empty required field with a link that goes there
 MR-0012|B|class Registry|field registry as data (4,084 fields / 322 forms)
 MR-0014|M||bulk edit / inline edit not built
 MR-0015|M||guidance strip / next-step card / empty-state actions not built as a standard
