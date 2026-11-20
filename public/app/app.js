@@ -189,48 +189,189 @@
   const fmtCell = (v, type, row, name) => { if (row[name + '__label'] !== undefined) return esc(row[name + '__label']); if (v === null || v === undefined || v === '') return '<span class="faint">—</span>';
     if (type === 'check') return +v ? ic('check') : '<span class="faint">—</span>'; if (type === 'money') return (+v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     if (type === 'link') return `<a href="${esc(v)}" target="_blank" rel="noopener">link</a>`; return esc(String(v).length > 60 ? String(v).slice(0, 57) + '…' : v); };
+  // ---------- list of any form: views, columns (order, width), filters on every column, filter builder, totals, export ----------
+  let FMETA = null, DENSITY = null;
+  const treeRules = w => (w && w.rules) || [];
+  const setColRule = (w, col, rule) => { const rules = treeRules(w).filter(r => r.rules || r.f !== col); if (rule) rules.push(rule); return rules.length ? { op: (w && w.op) || 'AND', rules } : null; };
+  const countRules = w => treeRules(w).reduce((n, r) => n + (r.rules ? countRules(r) : 1), 0);
   async function pageList(key, st = {}) {
     busy(true);
-    let V = { views: [], can_share: false }; try { V = await api('views/list:' + key); } catch (e) { /* the list still works without its views */ }
-    if (!st._touched) { const dv = V.views.find(v => v.default); if (dv) st = { ...dv.state, _touched: true, _view: dv.id }; }
-    const qs = new URLSearchParams({ page: st.page || 1, q: st.q || '', sort: st.sort || '', dir: st.dir || 'desc' }); if ((st.cols || []).length) qs.set('cols', st.cols.join(','));
+    let V = { views: [], can_share: false }, P = { list: {}, all: {} };
+    try { [V, P, FMETA] = await Promise.all([api('views/list:' + key), api('prefs/list:' + key).catch(() => P), FMETA || api('filter-meta')]); } catch (e) { /* the list still works without its views */ }
+    if (DENSITY === null) DENSITY = (P.all || {}).density || 'comfortable';
+    if (!st._touched) { const dv = V.views.find(v => v.default); st = dv ? { ...dv.state, _touched: true, _view: dv.id } : { cols: P.list.cols || [], widths: P.list.widths || {}, per: P.list.per, _touched: true }; }
+    const per = st.per || P.list.per || 100, widths = st.widths || {};
+    const qs = new URLSearchParams({ page: st.page || 1, q: st.q || '', sort: st.sort || '', dir: st.dir || 'desc', per_page: per }); if ((st.cols || []).length) qs.set('cols', st.cols.join(','));
     Object.entries(st.filter || {}).forEach(([k, v]) => { if (v !== '') qs.append(`filter[${k}]`, v); });
+    if (st.where) qs.set('where', JSON.stringify(st.where));
     let d; try { d = await api(`list/${key}?` + qs); } finally { busy(false); }
     const [, it] = findItem(i => i.route === '#/list/' + key);
-    const pages = Math.max(1, Math.ceil(d.total / d.per_page));
-    $('#main').innerHTML = `<div class="page-head"><div><h1>${esc(it ? it.name : key)}</h1><div class="sub">${d.total.toLocaleString('en-GB')} record${d.total === 1 ? '' : 's'}</div></div>
-        <div class="actions"><button class="btn" id="lFilt">${ic('filter')} Filters${Object.values(st.filter || {}).filter(v => v !== '').length ? ' · ' + Object.values(st.filter).filter(v => v !== '').length : ''}</button><a class="btn" id="lExp" href="/api/export/${key}?${qs}" title="Download this list (with its filters) as a spreadsheet file">${ic('ext')} Export</a>${d.table === 'cat_inventory_locations' && ['OWNER', 'MANAGER'].includes(S.boot.user.role) ? `<button class="btn" id="lBins">Make bins</button>` : ''}${d.table === 'cat_inventory_locations' && ['OWNER', 'MANAGER', 'WAREHOUSE'].includes(S.boot.user.role) ? `<button class="btn" id="lBinLbl">${ic('file')} Print bin labels</button>` : ''}<button class="btn primary" id="lNew">${ic('plus')} New</button></div></div>
-      <div class="card"><div class="list-bar"><select class="q" id="lView" style="min-width:0;max-width:220px" aria-label="Saved views"><option value="">Views…</option>${V.views.map(v => `<option value="${v.id}" ${st._view == v.id ? 'selected' : ''}>${esc(v.name)}${v.default ? ' ★' : ''}${v.shared && !v.mine ? ' (shared)' : ''}</option>`).join('')}</select><button class="btn sm" id="lCols" title="Choose which columns this list shows">Columns${(st.cols || []).length ? ' · ' + st.cols.length : ''}</button><button class="btn sm" id="lViewSave" title="Keep this search, these filters, this order and these columns as a view">Save view</button>${st._view && (V.views.find(v => v.id == st._view) || {}).mine ? '<button class="btn sm" id="lViewDel">Remove view</button>' : ''}</div>
-      <div class="list-bar"><input class="q" id="lQ" placeholder="Search this list…" value="${esc(st.q || '')}">${Object.entries(st.filter || {}).filter(([, v]) => v !== '').map(([k, v]) => `<span class="chip accent plain">${esc((d.columns.find(c => c.name === k) || {}).label || k)}: ${esc(v)} <a href="#" data-unf="${esc(k)}" title="Remove this filter">✕</a></span>`).join('')}</div>
-      <div class="list-bar" id="lFiltRow" ${st.showF ? '' : 'hidden'}>${d.columns.map(c => `<input class="q" style="min-width:130px;flex:1" data-fc="${esc(c.name)}" placeholder="${esc(c.label)}" value="${esc((st.filter || {})[c.name] || '')}">`).join('')}<button class="btn sm primary" id="lFiltGo">Apply</button><button class="btn sm" id="lFiltClr">Clear</button></div>
-      <div class="tbl-wrap"><table class="t"><thead><tr>${d.columns.map(c => `<th data-sort="${esc(c.name)}" class="${['number', 'money'].includes(c.type) ? 'num' : ''}">${esc(c.label)}${st.sort === c.name ? (st.dir === 'asc' ? ' ↑' : ' ↓') : ''}</th>`).join('')}</tr></thead>
-      <tbody>${d.rows.map(r => `<tr class="click" data-id="${r.id}">${d.columns.map(c => `<td class="${['number', 'money'].includes(c.type) ? 'num' : ''}">${fmtCell(r[c.name], c.type, r, c.name)}</td>`).join('')}</tr>`).join('')}</tbody></table>
-      ${d.rows.length ? '' : `<div class="empty">${ic('file')}<div>Nothing here yet. Press <b>New</b> to add the first one.</div></div>`}</div>
-      <div class="pager"><span>Page ${d.page} of ${pages}</span><button class="btn sm" id="pPrev" ${d.page <= 1 ? 'disabled' : ''}>Previous</button><button class="btn sm" id="pNext" ${d.page >= pages ? 'disabled' : ''}>Next</button></div></div>`;
+    const pages = Math.max(1, Math.ceil(d.total / d.per_page)), nF = countRules(d.where) + Object.values(st.filter || {}).filter(v => v !== '').length;
+    const colOf = n => d.all_columns.find(c => c.name === n) || { name: n, label: n, group: 'text' };
+    const ruleOf = n => treeRules(d.where).find(r => !r.rules && r.f === n);
+    const numc = c => ['number', 'money'].includes(c.type) ? 'num' : '';
+    const pad = DENSITY === 'compact' ? 'padding:3px 8px;font-size:12.5px' : '';
+    const money = v => (+v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    $('#main').innerHTML = `<div class="page-head"><div><h1>${esc(it ? it.name : d.title || key)}</h1><div class="sub">${d.total.toLocaleString('en-GB')} record${d.total === 1 ? '' : 's'}${nF ? ' · filtered' : ''}</div></div>
+        <div class="actions"><button class="btn ${nF ? 'primary' : ''}" id="lFilt">${ic('filter')} Filters${nF ? ' · ' + nF : ''}</button><button class="btn" id="lExp" title="Download or copy this list – the columns you see, in your order, with your filters">${ic('ext')} Export</button>${d.table === 'cat_inventory_locations' && ['OWNER', 'MANAGER'].includes(S.boot.user.role) ? `<button class="btn" id="lBins">Make bins</button>` : ''}${d.table === 'cat_inventory_locations' && ['OWNER', 'MANAGER', 'WAREHOUSE'].includes(S.boot.user.role) ? `<button class="btn" id="lBinLbl">${ic('file')} Print bin labels</button>` : ''}<button class="btn primary" id="lNew">${ic('plus')} New</button></div></div>
+      <div class="card"><div class="list-bar"><select class="q" id="lView" style="min-width:0;max-width:220px" aria-label="Saved views"><option value="">Views…</option>${V.views.map(v => `<option value="${v.id}" ${st._view == v.id ? 'selected' : ''}>${esc(v.name)}${v.default ? ' ★' : ''}${v.shared && !v.mine ? ' (shared)' : ''}</option>`).join('')}</select><button class="btn sm" id="lCols" title="Choose the columns and their order">Columns${(st.cols || []).length ? ' · ' + st.cols.length : ''}</button><button class="btn sm" id="lViewSave" title="Keep this search, these filters, this order, these columns and their widths as a view">Save view</button>${st._view && (V.views.find(v => v.id == st._view) || {}).mine ? '<button class="btn sm" id="lViewDel">Remove view</button>' : ''}
+        <span style="flex:1"></span><select class="q" id="lPer" style="min-width:0" title="Rows per page">${(FMETA.per_page || [25, 50, 100, 250]).map(n => `<option value="${n}" ${n == d.per_page ? 'selected' : ''}>${n} rows</option>`).join('')}</select><button class="btn sm" id="lDen" title="Row height">${DENSITY === 'compact' ? 'Compact' : 'Comfortable'}</button></div>
+      <div class="list-bar"><input class="q" id="lQ" placeholder="Search this list… (words in any order)" value="${esc(st.q || '')}">
+        ${treeRules(d.where).map((r, i) => `<span class="chip accent plain" title="${esc(d.where_text)}">${r.rules ? 'Group of ' + countRules(r) : esc(colOf(r.f).label) + ' ' + esc(((FMETA.ops[colOf(r.f).group] || {})[r.o]) || r.o) + (r.o === 'preset' ? ' ' + esc(FMETA.presets[r.v]) : Array.isArray(r.v) ? ' ' + esc(r.v.length > 2 ? r.v.length + ' values' : r.v.map(x => x === '' ? '(empty)' : x).join(r.o === 'between' ? ' – ' : ', ')) : r.v != null ? ' ' + esc(r.v) : '')} <a href="#" data-unr="${i}" title="Remove this filter">✕</a></span>${i < treeRules(d.where).length - 1 ? `<span class="small muted">${d.where.op === 'OR' ? 'or' : 'and'}</span>` : ''}`).join('')}
+        ${Object.entries(st.filter || {}).filter(([, v]) => v !== '').map(([k, v]) => `<span class="chip accent plain">${esc(colOf(k).label)}: ${esc(v)} <a href="#" data-unf="${esc(k)}" title="Remove this filter">✕</a></span>`).join('')}${nF ? '<a href="#" class="small" id="lClrAll">Clear all</a>' : ''}</div>
+      <div class="tbl-wrap"><table class="t" id="lTbl" style="${Object.keys(widths).length ? 'table-layout:fixed' : ''}"><thead><tr>${d.columns.map(c => `<th draggable="true" data-col="${esc(c.name)}" class="${numc(c)}" style="position:sticky;white-space:nowrap;${widths[c.name] ? 'width:' + widths[c.name] + 'px;' : ''}${pad}"><span data-sort="${esc(c.name)}" style="cursor:pointer">${esc(c.label)}${st.sort === c.name ? (st.dir === 'asc' ? ' ↑' : ' ↓') : ''}</span> <a href="#" data-cf="${esc(c.name)}" title="Filter this column" style="opacity:${ruleOf(c.name) ? 1 : .35};color:${ruleOf(c.name) ? 'var(--accent)' : 'inherit'}">${ic('filter')}</a><span data-rz="${esc(c.name)}" style="position:absolute;right:0;top:0;bottom:0;width:6px;cursor:col-resize"></span></th>`).join('')}</tr></thead>
+      <tbody>${d.rows.map(r => `<tr class="click" data-id="${r.id}">${d.columns.map(c => `<td class="${numc(c)}" style="${pad};${widths[c.name] ? 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap' : ''}">${fmtCell(r[c.name], c.type, r, c.name)}</td>`).join('')}</tr>`).join('')}</tbody>
+      ${d.rows.length ? `<tfoot><tr>${d.columns.map((c, i) => `<td class="${numc(c)}" style="font-weight:650;border-top:2px solid var(--line);${pad}">${d.totals[c.name] !== undefined ? `<span title="Total ${esc(c.label)} of all ${d.total} filtered rows">${c.type === 'money' ? money(d.totals[c.name]) : (+d.totals[c.name]).toLocaleString('en-GB')}</span>` : i === 0 ? `Total records: ${d.total.toLocaleString('en-GB')}` : ''}</td>`).join('')}</tr></tfoot>` : ''}</table>
+      ${d.rows.length ? '' : `<div class="empty">${ic('file')}<div>${nF || st.q ? 'Nothing matches these filters. <a href="#" id="lClrAll2">Clear the filters</a> to see everything.' : 'Nothing here yet. Press <b>New</b> to add the first one.'}</div></div>`}</div>
+      <div class="pager"><span>Page ${d.page} of ${pages} · ${d.total.toLocaleString('en-GB')} rows</span><button class="btn sm" id="pPrev" ${d.page <= 1 ? 'disabled' : ''}>Previous</button><button class="btn sm" id="pNext" ${d.page >= pages ? 'disabled' : ''}>Next</button></div></div>`;
     const again = x => pageList(key, { ...st, _touched: true, ...x });
-    $('#lView').onchange = e => { const v = V.views.find(x => x.id == e.target.value); pageList(key, v ? { ...v.state, _touched: true, _view: v.id } : { _touched: true }); };
-    $('#lViewSave').onclick = () => miniForm('Save this view', 'The search text, the filters, the order and the chosen columns of this list are kept under a name. Your default view opens by itself.', [{ name: 'name', label: 'Name', required: true, value: (V.views.find(v => v.id == st._view && v.mine) || {}).name || '' }, { name: 'def', label: 'Open this view by default', type: 'check' }, ...(V.can_share ? [{ name: 'shared', label: 'Share with everybody', type: 'check' }] : [])],
-      async v => { const r = await api('views', { method: 'POST', body: { page: 'list:' + key, name: v.name, state: { q: st.q || '', sort: st.sort || '', dir: st.dir || 'desc', filter: st.filter || {}, cols: st.cols || [] }, default: !!v.def, shared: !!v.shared } }); pageList(key, { ...st, _touched: true, _view: r.id }); return r; }, 'Save view');
-    $('#lCols').onclick = () => { const shown = new Set(d.columns.map(c => c.name)); const { ov, close } = modal('Columns of this list', 'Tick what you want to see. The export uses the same columns. Save the view to keep them.',
-        `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:4px 14px">${d.all_columns.map(c => `<label class="chk" style="display:flex;gap:8px;align-items:center;padding:3px 0"><input type="checkbox" data-col="${esc(c.name)}" ${shown.has(c.name) ? 'checked' : ''}> ${esc(c.label)}</label>`).join('')}</div>`,
-        `<span class="left small muted" id="lcMsg"></span><button class="btn" id="lcStd">Standard columns</button><button class="btn" id="lcCancel">Cancel</button><button class="btn primary" id="lcOk">Show</button>`);
-      $('#lcCancel', ov).onclick = close; $('#lcStd', ov).onclick = () => { close(); again({ cols: [] }); };
-      $('#lcOk', ov).onclick = () => { const pick = $$('[data-col]', ov).filter(i => i.checked).map(i => i.dataset.col); if (!pick.length) { $('#lcMsg', ov).textContent = 'Tick at least one column.'; return; } close(); again({ cols: pick, sort: pick.includes(st.sort) ? st.sort : '' }); }; };
+    const savePrefs = b => api('prefs/list:' + key, { method: 'POST', body: b }).catch(() => {});
+    const viewState = () => ({ q: st.q || '', sort: st.sort || '', dir: st.dir || 'desc', filter: st.filter || {}, cols: d.columns.map(c => c.name), where: d.where, per: d.per_page, widths });
+    $('#lView').onchange = e => { const v = V.views.find(x => x.id == e.target.value); pageList(key, v ? { ...v.state, _touched: true, _view: v.id } : { _touched: true, cols: P.list.cols || [], widths: P.list.widths || {} }); };
+    $('#lViewSave').onclick = () => miniForm('Save this view', 'The search text, the filters, the order, the chosen columns with their order and widths, and the rows per page are kept under a name. Your default view opens by itself.', [{ name: 'name', label: 'Name', required: true, value: (V.views.find(v => v.id == st._view && v.mine) || {}).name || '' }, { name: 'def', label: 'Open this view by default', type: 'check' }, ...(V.can_share ? [{ name: 'shared', label: 'Share with everybody', type: 'check' }] : [])],
+      async v => { const r = await api('views', { method: 'POST', body: { page: 'list:' + key, name: v.name, state: viewState(), default: !!v.def, shared: !!v.shared } }); pageList(key, { ...st, _touched: true, _view: r.id }); return r; }, 'Save view');
+    // columns: tick, and drag (or the arrows) to put them in order – remembered for you on this list
+    $('#lCols').onclick = () => { let order = d.columns.map(c => c.name).concat(d.all_columns.map(c => c.name).filter(n => !d.columns.some(c => c.name === n))); const on = new Set(d.columns.map(c => c.name));
+      const { ov, close } = modal('Columns of this list', 'Tick what you want to see and drag the rows into your order. It is remembered for you on this list; a saved view keeps it too. The export uses the same columns.',
+        `<input class="q" id="lcQ" placeholder="Find a column…" style="width:100%;margin-bottom:8px"><div id="lcList" style="max-height:52vh;overflow:auto"></div>`,
+        `<span class="left small muted" id="lcMsg"></span><button class="btn" id="lcAll">All</button><button class="btn" id="lcStd">Standard columns</button><button class="btn" id="lcCancel">Cancel</button><button class="btn primary" id="lcOk">Show</button>`);
+      const draw = () => { const t = $('#lcQ', ov).value.trim().toLowerCase(); $('#lcList', ov).innerHTML = order.filter(n => !t || colOf(n).label.toLowerCase().includes(t)).map(n => `<div draggable="true" data-row="${esc(n)}" style="display:flex;gap:8px;align-items:center;padding:5px 6px;border-bottom:1px solid var(--line);cursor:grab"><span class="muted">⋮⋮</span><label class="chk" style="flex:1;display:flex;gap:8px;align-items:center"><input type="checkbox" data-col="${esc(n)}" ${on.has(n) ? 'checked' : ''}> ${esc(colOf(n).label)}</label><button class="btn sm ghost" data-up="${esc(n)}" title="Up">↑</button><button class="btn sm ghost" data-dn="${esc(n)}" title="Down">↓</button></div>`).join('');
+        $$('[data-col]', ov).forEach(i => i.onchange = () => { i.checked ? on.add(i.dataset.col) : on.delete(i.dataset.col); });
+        const move = (n, to) => { const a = order.indexOf(n); if (to < 0 || to >= order.length) return; order.splice(a, 1); order.splice(to, 0, n); draw(); };
+        $$('[data-up]', ov).forEach(b => b.onclick = () => move(b.dataset.up, order.indexOf(b.dataset.up) - 1)); $$('[data-dn]', ov).forEach(b => b.onclick = () => move(b.dataset.dn, order.indexOf(b.dataset.dn) + 1));
+        let drag = null; $$('[data-row]', ov).forEach(r => { r.ondragstart = () => { drag = r.dataset.row; }; r.ondragover = e => e.preventDefault(); r.ondrop = e => { e.preventDefault(); if (drag && drag !== r.dataset.row) move(drag, order.indexOf(r.dataset.row)); }; }); };
+      draw(); $('#lcQ', ov).oninput = draw;
+      $('#lcCancel', ov).onclick = close; $('#lcStd', ov).onclick = () => { close(); savePrefs({ cols: [] }); P.list.cols = []; again({ cols: [] }); }; $('#lcAll', ov).onclick = () => { order.forEach(n => on.add(n)); draw(); };
+      $('#lcOk', ov).onclick = () => { const pick = order.filter(n => on.has(n)); if (!pick.length) { $('#lcMsg', ov).textContent = 'Tick at least one column.'; return; } close(); savePrefs({ cols: pick }); again({ cols: pick, sort: pick.includes(st.sort) ? st.sort : '' }); }; };
     if ($('#lViewDel')) $('#lViewDel').onclick = () => act(`views/${st._view}/remove`, {}, () => pageList(key, { _touched: true }));
     $('#lNew').onclick = () => openForm(key, null, { onSaved: () => again({}) });
     $('#lQ').onkeydown = e => { if (e.key === 'Enter') again({ q: e.target.value, page: 1 }); };
     $('#pPrev').onclick = () => again({ page: d.page - 1 }); $('#pNext').onclick = () => again({ page: d.page + 1 });
-    $$('#main th[data-sort]').forEach(th => th.onclick = () => again({ sort: th.dataset.sort, dir: st.sort === th.dataset.sort && st.dir === 'asc' ? 'desc' : 'asc', page: 1 }));
+    $('#lPer').onchange = e => { savePrefs({ per: +e.target.value }); again({ per: +e.target.value, page: 1 }); };
+    $('#lDen').onclick = () => { DENSITY = DENSITY === 'compact' ? 'comfortable' : 'compact'; api('prefs/*', { method: 'POST', body: { density: DENSITY } }).catch(() => {}); again({}); };
+    $$('#main [data-sort]').forEach(th => th.onclick = () => again({ sort: th.dataset.sort, dir: st.sort === th.dataset.sort && st.dir === 'asc' ? 'desc' : 'asc', page: 1 }));
+    // drag a heading onto another to move the column; drag its right edge to make it wider or narrower
+    let dragCol = null; $$('#lTbl th[data-col]').forEach(th => { th.ondragstart = e => { if (e.target.closest && e.target.closest('[data-rz]')) return e.preventDefault(); dragCol = th.dataset.col; }; th.ondragover = e => e.preventDefault();
+      th.ondrop = e => { e.preventDefault(); if (!dragCol || dragCol === th.dataset.col) return; const cols = d.columns.map(c => c.name); cols.splice(cols.indexOf(dragCol), 1); cols.splice(cols.indexOf(th.dataset.col), 0, dragCol); savePrefs({ cols }); again({ cols }); }; });
+    $$('#lTbl [data-rz]').forEach(h => { h.onmousedown = e => { e.preventDefault(); e.stopPropagation(); const th = h.parentElement, x0 = e.clientX, w0 = th.offsetWidth; th.draggable = false;
+      const mv = ev => { th.style.width = Math.max(40, w0 + ev.clientX - x0) + 'px'; }; const up = () => { document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); const w = { ...widths }; $$('#lTbl th[data-col]').forEach(t => { w[t.dataset.col] = t.offsetWidth; }); savePrefs({ widths: w }); again({ widths: w }); };
+      document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up); }; });
     const WS = { src_research: '#/research/', t_src_cycles: '#/cycle/', t_src_po: '#/po/' };
     $$('#main tr[data-id]').forEach(tr => tr.onclick = () => go(WS[d.table] ? WS[d.table] + tr.dataset.id : `#/rec/${key}/${tr.dataset.id}`));
     if ($('#lBins')) $('#lBins').onclick = () => binGenerator(() => again({}));
     if ($('#lBinLbl')) $('#lBinLbl').onclick = () => { const ids = d.rows.filter(r => r.kind === 'BIN').map(r => r.id); if (!ids.length) return toast('No bins in this list. Filter the list to the bins you want, then print.', 'err');
       miniForm('Print bin labels', `${ids.length} bin(s) shown in this list. On a label sheet you can start at a later cell to use up a half-used sheet.`, [{ name: 'start_cell', label: 'Start at cell', type: 'number', value: 1, help: 'Label sheets only. 1 = first label, top left.' }, { name: 'copies', label: 'Copies of each', type: 'number', value: 1 }], async v => { setTimeout(() => printNow('LOCATION', ids, { start_cell: +v.start_cell || 1, copies: +v.copies || 1 }), 60); return { message: 'Preparing labels…' }; }, 'Print'); };
-    $('#lFilt').onclick = () => again({ showF: !st.showF });
-    const applyF = () => { const f = {}; $$('#lFiltRow [data-fc]').forEach(i => { if (i.value.trim() !== '') f[i.dataset.fc] = i.value.trim(); }); again({ filter: f, page: 1, showF: true }); };
-    $('#lFiltGo').onclick = applyF; $$('#lFiltRow [data-fc]').forEach(i => i.onkeydown = e => { if (e.key === 'Enter') applyF(); });
-    $('#lFiltClr').onclick = () => again({ filter: {}, page: 1 });
+    const clr = e => { e.preventDefault(); again({ filter: {}, where: null, q: '', page: 1 }); };
+    if ($('#lClrAll')) $('#lClrAll').onclick = clr; if ($('#lClrAll2')) $('#lClrAll2').onclick = clr;
     $$('#main [data-unf]').forEach(a => a.onclick = e => { e.preventDefault(); const f = { ...(st.filter || {}) }; delete f[a.dataset.unf]; again({ filter: f, page: 1 }); });
+    $$('#main [data-unr]').forEach(a => a.onclick = e => { e.preventDefault(); const rules = treeRules(d.where).filter((_, i) => i != a.dataset.unr); again({ where: rules.length ? { op: d.where.op, rules } : null, page: 1 }); });
+    // one column's filter (the funnel in its heading)
+    const baseQs = () => { const p = new URLSearchParams({ q: st.q || '' }); Object.entries(st.filter || {}).forEach(([k, v]) => { if (v !== '') p.append(`filter[${k}]`, v); }); return p; };
+    $$('#main [data-cf]').forEach(a => a.onclick = e => { e.preventDefault(); e.stopPropagation(); const c = colOf(a.dataset.cf); ruleEditor(key, c, ruleOf(c.name), baseQs(), setColRule(d.where, c.name, null), rule => again({ where: setColRule(d.where, c.name, rule), page: 1 })); });
+    $('#lFilt').onclick = () => filterBuilder(key, d, baseQs(), where => again({ where, page: 1 }));
+    $('#lExp').onclick = () => exportMenu(key, d, qs, viewState());
+  }
+
+  // the value part of one rule, by the type of its column
+  function ruleInputs(c, r, host, key, qsBase, otherWhere) {
+    const ops = FMETA.ops[c.group] || FMETA.ops.text, o = r.o && ops[r.o] ? r.o : Object.keys(ops)[0]; r.o = o;
+    const sel = `<select class="q" data-ro style="min-width:0">${Object.entries(ops).map(([k, l]) => `<option value="${k}" ${k === o ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+    let val = '';
+    if (['empty', 'filled', 'yes', 'no'].includes(o)) val = '';
+    else if (o === 'preset') val = `<select class="q" data-rv>${Object.entries(FMETA.presets).map(([k, l]) => `<option value="${k}" ${r.v === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+    else if (o === 'between') { const t = c.group === 'date' ? 'date' : 'number', v = Array.isArray(r.v) ? r.v : ['', '']; val = `<input class="q" data-rv0 type="${t}" step="any" value="${esc(v[0] || '')}" style="min-width:0;width:140px"> <span class="small muted">and</span> <input class="q" data-rv1 type="${t}" step="any" value="${esc(v[1] || '')}" style="min-width:0;width:140px">`; }
+    else if (o === 'in' || o === 'not_in') val = `<div data-pick style="flex-basis:100%"><input class="q" data-pq placeholder="Find a value…" style="width:100%;margin:6px 0"><div class="small" style="display:flex;gap:12px;margin-bottom:4px"><a href="#" data-pall>All</a><a href="#" data-pnone>None</a><span class="muted" data-pn></span></div><div data-plist style="max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:4px 8px"><span class="muted small">Loading…</span></div></div>`;
+    else val = `<input class="q" data-rv type="${c.group === 'date' ? 'date' : c.group === 'number' ? 'number' : 'text'}" step="any" value="${esc(Array.isArray(r.v) ? '' : r.v ?? '')}" style="flex:1;min-width:120px">`;
+    host.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${sel}${val}</div>`;
+    $('[data-ro]', host).onchange = e => { r.o = e.target.value; r.v = null; ruleInputs(c, r, host, key, qsBase, otherWhere); };
+    if ($('[data-rv]', host)) { const i = $('[data-rv]', host); r.v = i.value; i.oninput = i.onchange = () => { r.v = i.value; }; }
+    if ($('[data-rv0]', host)) { const a = $('[data-rv0]', host), b = $('[data-rv1]', host); const up = () => { r.v = [a.value, b.value]; }; a.oninput = b.oninput = up; up(); }
+    if ($('[data-pick]', host)) { const picked = new Set(Array.isArray(r.v) ? r.v : []); r.v = [...picked]; let all = [];
+      const draw = () => { $('[data-plist]', host).innerHTML = all.length ? all.map(x => `<label class="chk" style="display:flex;gap:8px;align-items:center;padding:3px 0"><input type="checkbox" value="${esc(x.v)}" ${picked.has(x.v) ? 'checked' : ''}> <span style="flex:1">${esc(x.label)}</span><span class="small muted">${x.n}</span></label>`).join('') : '<span class="muted small">No values.</span>';
+        $('[data-pn]', host).textContent = picked.size ? picked.size + ' picked' : 'nothing picked = no filter';
+        $$('[data-plist] input', host).forEach(i => i.onchange = () => { i.checked ? picked.add(i.value) : picked.delete(i.value); r.v = [...picked]; $('[data-pn]', host).textContent = picked.size ? picked.size + ' picked' : 'nothing picked = no filter'; }); };
+      const load = async () => { const p = new URLSearchParams(qsBase); p.set('col', c.name); if (otherWhere) p.set('where', JSON.stringify(otherWhere)); const t = $('[data-pq]', host).value.trim(); if (t) p.set('term', t);
+        try { const res = await api(`list-values/${key}?` + p); all = res.values; if (res.secret) $('[data-plist]', host).innerHTML = '<span class="muted small">This field is secret – its values are not listed.</span>'; else draw(); } catch (e) { $('[data-plist]', host).innerHTML = `<span class="muted small">${esc(e.message)}</span>`; } };
+      let tm; $('[data-pq]', host).oninput = () => { clearTimeout(tm); tm = setTimeout(load, 250); };
+      $('[data-pall]', host).onclick = e => { e.preventDefault(); all.forEach(x => picked.add(x.v)); r.v = [...picked]; draw(); }; $('[data-pnone]', host).onclick = e => { e.preventDefault(); picked.clear(); r.v = []; draw(); };
+      load(); }
+  }
+  const ruleDone = r => ['empty', 'filled', 'yes', 'no'].includes(r.o) || (Array.isArray(r.v) ? (r.o === 'between' ? r.v[0] !== '' && r.v[1] !== '' && r.v.length === 2 : r.v.length > 0) : r.v != null && String(r.v).trim() !== '');
+  function ruleEditor(key, c, cur, qsBase, otherWhere, done) {
+    const r = cur ? JSON.parse(JSON.stringify(cur)) : { f: c.name, o: c.group === 'select' ? 'in' : c.group === 'date' ? 'preset' : c.group === 'number' ? 'eq' : c.group === 'check' ? 'yes' : 'contains', v: c.group === 'date' ? 'this_month' : null };
+    const { ov, close } = modal('Filter: ' + c.label, 'The values shown are the ones left under your other filters, with how many rows each.', `<div id="reBody"></div>`,
+      `${cur ? '<button class="btn left" id="reClr">Remove this filter</button>' : ''}<button class="btn" id="reCancel">Cancel</button><button class="btn primary" id="reOk">Apply</button>`, false);
+    ruleInputs(c, r, $('#reBody', ov), key, qsBase, otherWhere);
+    $('#reCancel', ov).onclick = close; if ($('#reClr', ov)) $('#reClr', ov).onclick = () => { close(); done(null); };
+    $('#reOk', ov).onclick = () => { close(); done(ruleDone(r) ? r : null); };
+  }
+  // the filter builder: any field, the right operators for its type, rules joined by AND or OR, groups inside
+  function filterBuilder(key, d, qsBase, done) {
+    const tree = d.where ? JSON.parse(JSON.stringify(d.where)) : { op: 'AND', rules: [] };
+    const cols = d.all_columns, colOf = n => cols.find(c => c.name === n) || cols[0];
+    const { ov, close } = modal('Filters', 'Filter by any field of this list. Put rules in a group to mix “and” with “or”. The list narrows as you add rules.', `<div id="fbBody"></div>`,
+      `<button class="btn left" id="fbClr">Clear all</button><button class="btn" id="fbCancel">Cancel</button><button class="btn primary" id="fbOk">Apply</button>`);
+    const draw = () => { const host = $('#fbBody', ov);
+      const html = (g, path) => `<div style="border:1px solid var(--line);border-radius:10px;padding:10px;margin:6px 0;${path ? 'background:rgba(0,0,0,.025)' : ''}"><div style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><span class="small">Rows that match</span><select class="q" data-gop="${path}" style="min-width:0"><option value="AND" ${g.op === 'AND' ? 'selected' : ''}>all of these (and)</option><option value="OR" ${g.op === 'OR' ? 'selected' : ''}>any of these (or)</option></select>${path ? `<span style="flex:1"></span><a href="#" data-gdel="${path}">remove group</a>` : ''}</div>
+        ${g.rules.map((r, i) => r.rules ? html(r, path + i + '.') : `<div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;padding:6px 0;border-top:1px dashed var(--line)"><select class="q" data-rf="${path}${i}" style="min-width:0;max-width:240px">${cols.map(c => `<option value="${esc(c.name)}" ${c.name === r.f ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select><div data-rh="${path}${i}" style="flex:1;min-width:240px"></div><a href="#" data-rdel="${path}${i}" title="Remove this rule">✕</a></div>`).join('')}
+        <div style="display:flex;gap:8px;margin-top:8px"><button class="btn sm" data-add="${path}">${ic('plus')} Rule</button>${path.split('.').length <= 2 ? `<button class="btn sm" data-addg="${path}">${ic('plus')} Group</button>` : ''}</div></div>`;
+      host.innerHTML = html(tree, '');
+      const at = p => { let g = tree; const parts = p.split('.').filter(x => x !== ''); for (const i of parts.slice(0, -1)) g = g.rules[+i]; return [g, +parts[parts.length - 1]]; };
+      const grp = p => { let g = tree; for (const i of p.split('.').filter(x => x !== '')) g = g.rules[+i]; return g; };
+      $$('[data-gop]', host).forEach(s => s.onchange = () => { grp(s.dataset.gop).op = s.value; });
+      $$('[data-add]', host).forEach(b => b.onclick = () => { const c = cols[0]; grp(b.dataset.add).rules.push({ f: c.name, o: Object.keys(FMETA.ops[c.group] || FMETA.ops.text)[0], v: null }); draw(); });
+      $$('[data-addg]', host).forEach(b => b.onclick = () => { grp(b.dataset.addg).rules.push({ op: grp(b.dataset.addg).op === 'AND' ? 'OR' : 'AND', rules: [] }); draw(); });
+      $$('[data-gdel]', host).forEach(a => a.onclick = e => { e.preventDefault(); const [g, i] = at(a.dataset.gdel.replace(/\.$/, '')); g.rules.splice(i, 1); draw(); });
+      $$('[data-rdel]', host).forEach(a => a.onclick = e => { e.preventDefault(); const [g, i] = at(a.dataset.rdel); g.rules.splice(i, 1); draw(); });
+      $$('[data-rf]', host).forEach(s => s.onchange = () => { const [g, i] = at(s.dataset.rf); const c = colOf(s.value); g.rules[i] = { f: c.name, o: Object.keys(FMETA.ops[c.group] || FMETA.ops.text)[0], v: null }; draw(); });
+      $$('[data-rh]', host).forEach(h => { const [g, i] = at(h.dataset.rh); ruleInputs(colOf(g.rules[i].f), g.rules[i], h, key, qsBase, null); }); };
+    draw();
+    const prune = g => { g.rules = g.rules.map(r => r.rules ? prune(r) : (ruleDone(r) ? r : null)).filter(Boolean); return g.rules.length ? g : null; };
+    $('#fbCancel', ov).onclick = close; $('#fbClr', ov).onclick = () => { close(); done(null); }; $('#fbOk', ov).onclick = () => { close(); done(prune(tree)); };
+  }
+  // export: file formats, copy, print, and named exports that can be shared and scheduled
+  function exportMenu(key, d, qs, state) {
+    const href = f => `/api/export/${key}?${qs}&format=${f}`;
+    const { ov, close } = modal('Export this list', `${d.total.toLocaleString('en-GB')} row(s) with your filters${d.where_text ? ' (' + d.where_text + ')' : ''}; the columns you see, in your order.`,
+      `<div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn" href="${href('CSV')}">CSV</a><a class="btn" href="${href('XLSX')}">Excel</a><a class="btn" href="${href('PDF')}">PDF</a><button class="btn" id="exCopy">Copy</button><button class="btn" id="exPrint">Print</button></div>
+       <h3 style="margin:18px 0 6px">Saved exports</h3><div class="small muted" style="margin-bottom:8px">A named export keeps its own fields (in your order), these filters and a format. It can be shared with a role and sent by e-mail every day or every Monday.</div><div id="exList"><span class="muted small">Loading…</span></div>`,
+      `<button class="btn left" id="exNew">${ic('plus')} New saved export</button><button class="btn" id="exClose">Close</button>`);
+    $('#exClose', ov).onclick = close;
+    const rowsJson = () => api(`export/${key}?${qs}&format=JSON`);
+    $('#exCopy', ov).onclick = async () => { try { const r = await rowsJson(); await navigator.clipboard.writeText([r.head].concat(r.rows).map(x => x.map(v => String(v ?? '').replace(/[\t\n]/g, ' ')).join('\t')).join('\n')); toast(`${r.rows.length} row(s) copied – paste into a sheet`); } catch (e) { toast(e.message || 'Copy is not allowed by this browser', 'err'); } };
+    $('#exPrint', ov).onclick = async () => { try { const r = await rowsJson(); const w = window.open('', '_blank'); if (!w) return toast('Allow pop-ups to print', 'err');
+      w.document.write(`<html><head><title>${esc(key)}</title><style>body{font:11px sans-serif}table{border-collapse:collapse;width:100%}th,td{border:1px solid #999;padding:3px 5px;text-align:left}th{background:#eee}</style></head><body><h3>${esc($('#main h1').textContent)}</h3><div>${r.rows.length} rows${d.where_text ? ' · ' + esc(d.where_text) : ''}</div><table><thead><tr>${r.head.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${r.rows.map(x => `<tr>${x.map(v => `<td>${esc(v ?? '')}</td>`).join('')}</tr>`).join('')}</tbody></table></body></html>`); w.document.close(); w.print(); } catch (e) { toast(e.message, 'err'); } };
+    let T = { templates: [], roles: [], can_share: false };
+    const load = async () => { try { T = await api('export-templates/' + key); } catch (e) { $('#exList', ov).innerHTML = `<span class="muted small">${esc(e.message)}</span>`; return; }
+      $('#exList', ov).innerHTML = T.templates.length ? `<table class="t"><thead><tr><th>#</th><th>Name</th><th>Fields</th><th>Format</th><th>Sent</th><th>Created</th><th></th></tr></thead><tbody>${T.templates.map((t, i) => `<tr><td>${i + 1}</td><td>${esc(t.name)}${t.mine ? '' : ` <span class="small muted">by ${esc(t.owner || '')}</span>`}${t.shared_role ? ` <span class="chip plain">shared: ${esc(t.shared_role === '*' ? 'everybody' : t.shared_role)}</span>` : ''}</td><td><span class="chip accent plain">${t.columns.length}</span></td><td>${esc(t.format)}</td><td>${t.schedule === 'NONE' ? '—' : esc((t.schedule === 'DAILY' ? 'Every day' : 'Every Monday') + ' → ' + (t.send_to || ''))}</td><td class="small">${esc(t.created)}</td>
+        <td style="white-space:nowrap"><a class="btn sm primary" href="/api/export-template/${t.id}/download">Download</a>${t.mine ? ` <button class="btn sm" data-ted="${t.id}">Edit</button> <button class="btn sm" data-tdel="${t.id}">Delete</button>` : ''}</td></tr>`).join('')}</tbody></table>` : '<div class="muted small">No saved exports for this list yet.</div>';
+      $$('[data-ted]', ov).forEach(b => b.onclick = () => edit(T.templates.find(t => t.id == b.dataset.ted)));
+      $$('[data-tdel]', ov).forEach(b => b.onclick = async () => { if (b.dataset.sure) { try { await api(`export-template/${b.dataset.tdel}/remove`, { method: 'POST' }); load(); } catch (e) { toast(e.message, 'err'); } } else { b.dataset.sure = 1; b.textContent = 'Sure? Delete'; b.classList.add('primary'); } }); };
+    const edit = t => { const sel = t ? t.columns.slice() : d.columns.map(c => c.name); const lab = n => (d.all_columns.find(c => c.name === n) || { label: n }).label;
+      const m = modal(t ? 'Edit saved export' : 'New saved export', 'Move fields to the right; the order on the right is the order in the file.',
+        `<div class="form"><div class="fld is-req"><label>Name</label><input id="teName" value="${esc(t ? t.name : '')}"></div></div>
+         <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:start;margin-top:10px"><div><div class="small" style="font-weight:650">Available fields</div><input class="q" id="teFa" placeholder="Find…" style="width:100%;margin:4px 0"><select id="teA" multiple size="12" style="width:100%"></select></div>
+           <div style="display:flex;flex-direction:column;gap:6px;padding-top:54px"><button class="btn sm" id="teAdd">›</button><button class="btn sm" id="teAddAll">»</button><button class="btn sm" id="teRem">‹</button><button class="btn sm" id="teRemAll">«</button><button class="btn sm" id="teUp">↑</button><button class="btn sm" id="teDn">↓</button></div>
+           <div><div class="small" style="font-weight:650">Selected fields for export</div><input class="q" id="teFs" placeholder="Find…" style="width:100%;margin:4px 0"><select id="teS" multiple size="12" style="width:100%"></select></div></div>
+         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;align-items:center"><label class="small">Format <select class="q" id="teFmt" style="min-width:0"><option>CSV</option><option ${t && t.format === 'XLSX' ? 'selected' : ''}>XLSX</option><option ${t && t.format === 'PDF' ? 'selected' : ''}>PDF</option></select></label>
+           <label class="chk small"><input type="checkbox" id="teFil" ${!t || (t.state && (t.state.where || Object.keys(t.state.filter || {}).length || t.state.q)) ? 'checked' : ''}> Keep the filters of the list as it is now</label>
+           ${T.can_share ? `<label class="small">Share with <select class="q" id="teRole" style="min-width:0"><option value="">Only me</option><option value="*" ${t && t.shared_role === '*' ? 'selected' : ''}>Everybody</option>${T.roles.map(r => `<option value="${esc(r.code)}" ${t && t.shared_role === r.code ? 'selected' : ''}>${esc(r.label)}</option>`).join('')}</select></label>` : ''}
+           <label class="small">Send <select class="q" id="teSch" style="min-width:0"><option value="NONE">Never (download only)</option><option value="DAILY" ${t && t.schedule === 'DAILY' ? 'selected' : ''}>Every day</option><option value="WEEKLY" ${t && t.schedule === 'WEEKLY' ? 'selected' : ''}>Every Monday</option></select></label><input class="q" id="teTo" type="email" placeholder="to this e-mail address" value="${esc(t ? t.send_to || '' : '')}"></div>`,
+        `<span class="left small" id="teMsg" style="color:var(--err,#b91c1c)"></span><button class="btn" id="teCancel">Cancel</button><button class="btn primary" id="teSave">Save</button>`);
+      const o = m.ov, draw = () => { const fa = $('#teFa', o).value.toLowerCase(), fs = $('#teFs', o).value.toLowerCase();
+        $('#teA', o).innerHTML = d.all_columns.filter(c => !sel.includes(c.name) && (!fa || c.label.toLowerCase().includes(fa))).sort((a, b) => a.label.localeCompare(b.label)).map(c => `<option value="${esc(c.name)}">${esc(c.label)}</option>`).join('');
+        $('#teS', o).innerHTML = sel.filter(n => !fs || lab(n).toLowerCase().includes(fs)).map(n => `<option value="${esc(n)}">${esc(lab(n))}</option>`).join(''); };
+      const picked = id => [...$(id, o).selectedOptions].map(x => x.value);
+      draw(); $('#teFa', o).oninput = $('#teFs', o).oninput = draw;
+      $('#teAdd', o).onclick = () => { picked('#teA').forEach(n => sel.push(n)); draw(); }; $('#teAddAll', o).onclick = () => { d.all_columns.forEach(c => { if (!sel.includes(c.name)) sel.push(c.name); }); draw(); };
+      $('#teRem', o).onclick = () => { picked('#teS').forEach(n => sel.splice(sel.indexOf(n), 1)); draw(); }; $('#teRemAll', o).onclick = () => { sel.length = 0; draw(); };
+      const mv = dir => { const p = picked('#teS'); (dir < 0 ? p : p.reverse()).forEach(n => { const i = sel.indexOf(n), j = i + dir; if (j < 0 || j >= sel.length || p.includes(sel[j])) return; sel.splice(i, 1); sel.splice(j, 0, n); }); draw(); p.forEach(n => { const op = [...$('#teS', o).options].find(x => x.value === n); if (op) op.selected = true; }); };
+      $('#teUp', o).onclick = () => mv(-1); $('#teDn', o).onclick = () => mv(1); $('#teCancel', o).onclick = m.close;
+      $('#teSave', o).onclick = async () => { const keep = $('#teFil', o).checked;
+        try { await api('export-templates/' + key, { method: 'POST', body: { name: $('#teName', o).value, columns: sel, format: $('#teFmt', o).value, state: keep ? (t && !state ? t.state : state) : {}, shared_role: $('#teRole', o) ? $('#teRole', o).value : '', schedule: $('#teSch', o).value, send_to: $('#teTo', o).value } }); m.close(); toast('Export saved'); load(); }
+        catch (e) { $('#teMsg', o).textContent = e.message; } }; };
+    $('#exNew', ov).onclick = () => edit(null);
+    load();
   }
 
   // ---------- record page: details, links both ways, tasks, history ----------

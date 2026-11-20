@@ -45,6 +45,14 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('find', [WorkController::class, 'find']);
         Route::post('find/opened', [WorkController::class, 'findOpened']);
         Route::get('export/{key}', [WorkController::class, 'export']);
+        Route::get('export-templates/{key}', [WorkController::class, 'exportTemplates']);
+        Route::post('export-templates/{key}', [WorkController::class, 'saveExportTemplate']);
+        Route::get('export-template/{id}/download', [WorkController::class, 'runExportTemplate'])->whereNumber('id');
+        Route::post('export-template/{id}/remove', [WorkController::class, 'removeExportTemplate'])->whereNumber('id');
+        Route::get('prefs/{page}', [WorkController::class, 'prefs'])->where('page', '[A-Za-z0-9_.:*-]+');
+        Route::post('prefs/{page}', [WorkController::class, 'savePrefs'])->where('page', '[A-Za-z0-9_.:*-]+');
+        Route::get('list-values/{key}', [AppController::class, 'listValues']);
+        Route::get('filter-meta', [AppController::class, 'filterMeta']);
         Route::get('home', [AdminController::class, 'home']);
         Route::get('users', [AdminController::class, 'users']);
         Route::get('permissions', [AdminController::class, 'permissions']);

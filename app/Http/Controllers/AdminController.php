@@ -249,6 +249,9 @@ class AdminController extends Controller
         if (! empty($d['shared']) && ! \App\Services\Perm::has($u, 'admin.saveView_may')) abort(403, 'Only the Owner or a Manager can share a view with everybody.');
         $state = ['q' => (string) ($d['state']['q'] ?? ''), 'sort' => (string) ($d['state']['sort'] ?? ''), 'dir' => ($d['state']['dir'] ?? 'desc') === 'asc' ? 'asc' : 'desc', 'filter' => array_map('strval', array_filter((array) ($d['state']['filter'] ?? []), fn ($v) => is_scalar($v) && $v !== '')),
             'cols' => array_values(array_filter(array_map('strval', array_filter((array) ($d['state']['cols'] ?? []), 'is_scalar')), fn ($c) => preg_match('/^[A-Za-z0-9_]{1,64}$/', $c)))];
+        $state['where'] = is_array($d['state']['where'] ?? null) ? $d['state']['where'] : null;   // the filter builder's tree; cleaned against the form every time it is used
+        if (in_array((int) ($d['state']['per'] ?? 0), [25, 50, 100, 250], true)) $state['per'] = (int) $d['state']['per'];
+        foreach ((array) ($d['state']['widths'] ?? []) as $c => $w) if (preg_match('/^[A-Za-z0-9_]{1,64}$/', (string) $c) && (int) $w >= 40 && (int) $w <= 1200) $state['widths'][$c] = (int) $w;
         return DB::transaction(function () use ($u, $d, $state) {
             if (! empty($d['default'])) DB::table('sys_saved_views')->where('fk_id_account', $u->id)->where('page_key', $d['page'])->update(['f_default' => 0]);
             $have = DB::table('sys_saved_views')->where('fk_id_account', $u->id)->where('page_key', $d['page'])->where('view_name', $d['name'])->value('id');

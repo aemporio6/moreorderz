@@ -127,7 +127,7 @@ class Messenger
             try {
                 Mail::raw($body, function ($msg) use ($m, $file) {
                     $msg->to($m->to_address)->subject($m->subject);
-                    if ($file && Storage::disk('local')->exists($file)) $msg->attach(Storage::disk('local')->path($file), ['as' => basename($file), 'mime' => 'application/pdf']);
+                    if ($file && Storage::disk('local')->exists($file)) $msg->attach(Storage::disk('local')->path($file), ['as' => basename($file), 'mime' => ['csv' => 'text/csv', 'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'][strtolower(pathinfo($file, PATHINFO_EXTENSION))] ?? 'application/pdf']);
                 });
                 DB::table('email_outbound')->where('id', $m->id)->update(['status' => 'SENT', 'sent_at' => now(), 'error' => null, 'attempts' => $m->attempts + 1]); $done['mail_sent']++;
             } catch (\Throwable $e) {

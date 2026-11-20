@@ -120,7 +120,7 @@ class Part3Test extends TestCase
         $this->assertSame($pick, array_column($d2['columns'], 'name'), 'only real columns, in the order chosen');
         $this->postJson('/api/views', ['page' => "list:$key", 'name' => 'Two columns', 'state' => ['q' => '', 'cols' => array_merge($pick, ['bad col; drop'])], 'default' => true])->assertOk();
         $this->assertSame($pick, $this->getJson("/api/views/list:$key")->json('views.0.state.cols'));
-        $csv = $this->get("/api/export/$key?cols=" . implode(',', $pick))->assertOk()->streamedContent();
+        $csv = $this->get("/api/export/$key?cols=" . implode(',', $pick))->assertOk()->getContent();
         $this->assertCount(2, str_getcsv(explode("\n", ltrim($csv, "\xEF\xBB\xBF"))[0]), 'the export has the same two columns');
     }
 

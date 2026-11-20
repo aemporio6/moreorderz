@@ -29,7 +29,7 @@
 36|P|form:t_product_vendor|generic filters; MP-id search, mode chips not built
 37|P|stock/on-hand|low filter by min level; ICC days-of-cover status not built
 38|M||WAC column not built (lot cost shown)
-39|P|views/\{page\}|saved views with columns; "saved export formats" not built
+39|B|function templates|saved export formats per user and list (dual list, name, table with number of columns and created date, Edit / Delete, download in the chosen format and order), shareable by Owner / Manager; ListStandardTest
 40|B|class StockService|every stock change through the stock service under a lock, ledger with stock-after
 41|B|stock/opening|opening stock as lots with location, owner, cost
 42|P|function quickBuy|purchase booked with lot and payment (Quick buy); the product Logistics tab form not built

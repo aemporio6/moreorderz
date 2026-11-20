@@ -49,18 +49,45 @@ class WorkController extends Controller
         return $page;
     }
 
+    /** Export what the user sees (columns, order, filters) as CSV, Excel or PDF; "json" gives the rows for Copy. */
     public function export(Request $r, string $key)
     {
-        abort_unless(Rights::can(Context::role(), 'EXPORT', $key), 403, 'Your role cannot export this list.');
-        [$head, $rows] = RecordService::export($key, $r->only(['q', 'sort', 'dir', 'filter', 'cols']));
-        return response()->streamDownload(function () use ($head, $rows) {
-            $o = fopen('php://output', 'w');
-            fwrite($o, "\xEF\xBB\xBF");
-            fputcsv($o, $head);
-            foreach ($rows as $row) fputcsv($o, array_map(fn ($v) => is_string($v) && preg_match('/^[=+\-@]/', $v) ? "'" . $v : $v, $row));   // no formula injection in spreadsheets
-            fclose($o);
-        }, $key . '_' . date('Ymd_Hi') . '.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
+        \App\Services\Perm::need($r->user(), "form:$key:EXPORT");
+        $fmt = strtoupper((string) $r->query('format', 'CSV'));
+        if ($fmt === 'JSON') { [$head, $rows] = RecordService::export($key, $r->query()); return ['head' => $head, 'rows' => array_slice($rows, 0, 5000)]; }
+        [$bytes, $ext, $mime] = \App\Services\ListExports::build($key, $r->query(), $fmt, \App\Services\Registry::fields($key)[0]['form_title']);
+        return response($bytes, 200, ['Content-Type' => $mime, 'Content-Disposition' => 'attachment; filename="' . $key . '_' . date('Ymd_Hi') . '.' . $ext . '"']);
     }
+
+    // ---- saved export templates (every list) ----
+    public function exportTemplates(Request $r, string $key)
+    {
+        \App\Services\Perm::need($r->user(), "form:$key:EXPORT");
+        return ['templates' => \App\Services\ListExports::templates($r->user(), $key), 'can_share' => \App\Services\Perm::has($r->user(), 'admin.saveView_may'),
+            'roles' => array_values(array_map(fn ($x) => ['code' => $x['code'], 'label' => $x['label']], array_filter(\App\Services\Perm::roles(), fn ($x) => $x['active'])))];
+    }
+
+    public function saveExportTemplate(Request $r, string $key)
+    {
+        \App\Services\Perm::need($r->user(), "form:$key:EXPORT");
+        try { return ['id' => \App\Services\ListExports::save($r->user(), $key, $r->all()), 'message' => 'Export saved']; }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+    }
+
+    public function runExportTemplate(Request $r, int $id)
+    {
+        $t = \App\Services\ListExports::find($r->user(), $id);
+        \App\Services\Perm::need($r->user(), "form:{$t->list_key}:EXPORT");
+        [$bytes, $name, $mime, $rows] = \App\Services\ListExports::run($t);
+        \App\Services\Audit::log(\App\Services\Registry::table($t->list_key), 0, 'EXPORT', ['rows' => $rows, 'template' => $t->name]);
+        return response($bytes, 200, ['Content-Type' => $mime, 'Content-Disposition' => 'attachment; filename="' . $name . '"']);
+    }
+
+    public function removeExportTemplate(Request $r, int $id) { \App\Services\ListExports::remove($r->user(), $id); return ['message' => 'Export removed']; }
+
+    // ---- list preferences of this person ----
+    public function prefs(Request $r, string $page) { return \App\Services\ListExports::prefs($r->user(), $page); }
+    public function savePrefs(Request $r, string $page) { \App\Services\ListExports::savePrefs($r->user(), $page, $r->all()); return ['ok' => true]; }
 
     public function tasks(Request $r)
     {

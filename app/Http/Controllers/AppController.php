@@ -151,7 +151,20 @@ class AppController extends Controller
     public function list(Request $r, string $key)
     {
         Rights::check('VIEW', $key);
-        return RecordService::list($key, $r->only(['q', 'page', 'per_page', 'sort', 'dir', 'filter', 'cols']));
+        return RecordService::list($key, $r->query());
+    }
+
+    /** The different values of one column under the list's other filters (for the filter's "is any of" picker). */
+    public function listValues(Request $r, string $key)
+    {
+        Rights::check('VIEW', $key);
+        return RecordService::values($key, (string) $r->query('col'), $r->query());
+    }
+
+    /** What the filter builder offers: operators per type and the date presets. */
+    public function filterMeta()
+    {
+        return ['ops' => \App\Services\ListFilter::OPS, 'presets' => \App\Services\ListFilter::PRESETS, 'per_page' => [25, 50, 100, 250]];
     }
 
     public function record(string $key, int $id)

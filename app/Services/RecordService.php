@@ -33,27 +33,69 @@ class RecordService
                 foreach ($text as $f) { $w->orWhere($f['column_name'], 'like', '%' . $word . '%'); foreach ($alts[mb_strtolower($word)] ?? [] as $alt) $w->orWhere($f['column_name'], 'like', '%' . $alt . '%'); }
             });
         }
-        foreach (($p['filter'] ?? []) as $col => $val) {
-            if ($val === '' || $val === null || ! Registry::hasColumn($table, $col)) continue;
-            if (is_array($val)) $q->whereIn($col, $val);
-            elseif (in_array(self::fieldByCol($fields, $col)['type'], ['text', 'textarea', 'email', 'phone', 'link'], true)) $q->where($col, 'like', "%$val%");
-            else $q->where($col, $val);
-        }
+        self::narrow($q, $table, $fields, $p);
+        $where = ListFilter::clean($p['where'] ?? null, self::byCol($fields));
         $total = (clone $q)->count();
+        // totals row: every number / money column that shows, over ALL filtered rows (not only this page)
+        $sumCols = array_values(array_filter($cols, fn ($c) => in_array(self::fieldByCol($fields, $c)['type'], ['number', 'money'], true) && ! str_starts_with($c, 'fk_') && ! str_ends_with($c, '_id')));
+        $totals = [];
+        if ($sumCols && $total && empty($p['no_totals'])) { $t = (array) (clone $q)->selectRaw(implode(', ', array_map(fn ($c) => "SUM(`$c`) as `$c`", $sumCols)))->first(); foreach ($sumCols as $c) $totals[$c] = round((float) ($t[$c] ?? 0), 2); }
         $sort = Registry::hasColumn($table, (string) ($p['sort'] ?? '')) ? $p['sort'] : $pk;
-        $per = max(1, min(200, (int) ($p['per_page'] ?? 25)));
+        $per = max(1, min(250, (int) ($p['per_page'] ?? 100)));
         $page = max(1, (int) ($p['page'] ?? 1));
         $rows = $q->orderBy($sort, ($p['dir'] ?? 'desc') === 'asc' ? 'asc' : 'desc')->offset(($page - 1) * $per)->limit($per)->get(array_merge([$pk . ' as id'], $cols));
         $labels = self::labels($fields, $rows);
+        $col = fn ($c) => ['name' => $c, 'label' => self::fieldByCol($fields, $c)['label'], 'type' => self::fieldByCol($fields, $c)['type'], 'group' => ListFilter::group(self::fieldByCol($fields, $c)['type'])];
         return [
-            'form_key' => $formKey, 'table' => $table, 'total' => $total, 'page' => $page, 'per_page' => $per, 'all_columns' => array_map(fn ($c) => ['name' => $c, 'label' => self::fieldByCol($fields, $c)['label']], $allCols),
-            'columns' => array_map(fn ($c) => ['name' => $c, 'label' => self::fieldByCol($fields, $c)['label'], 'type' => self::fieldByCol($fields, $c)['type']], $cols),
+            'form_key' => $formKey, 'title' => Registry::fields($formKey)[0]['form_title'], 'table' => $table, 'total' => $total, 'page' => $page, 'per_page' => $per, 'all_columns' => array_map($col, $allCols),
+            'columns' => array_map($col, $cols), 'totals' => $totals, 'where' => $where, 'where_text' => ListFilter::words($where, self::byCol($fields)),
             'rows' => $rows->map(function ($r) use ($labels, $table) {
                 $a = Vault::maskRow($table, (array) $r);
                 foreach ($a as $k => $v) if (isset($labels[$k][(string) $v])) $a[$k . '__label'] = $labels[$k][(string) $v];
                 return $a;
             })->all(),
         ];
+    }
+
+    private static function byCol(array $fields): array
+    {
+        $out = [];
+        foreach ($fields as $f) $out[$f['column_name']] ??= $f;
+        return $out;
+    }
+
+    /** Every filter of a list request on the query: quick filters per column, "(empty)", From / To of a date column, and the filter builder's tree. */
+    private static function narrow($q, string $table, array $fields, array $p): void
+    {
+        foreach (($p['filter'] ?? []) as $col => $val) {
+            if ($val === '' || $val === null || ! Registry::hasColumn($table, $col)) continue;
+            $type = self::fieldByCol($fields, $col)['type'];
+            if (is_array($val)) $q->whereIn($col, $val);
+            elseif ($val === '(empty)') $q->where(fn ($w) => in_array($type, ['number', 'money', 'date'], true) ? $w->whereNull($col) : $w->whereNull($col)->orWhere($col, ''));
+            elseif (in_array($type, ListFilter::TEXT, true)) str_starts_with((string) $val, '^') ? $q->where($col, 'like', substr($val, 1) . '%') : (str_starts_with((string) $val, '=') ? $q->where($col, substr($val, 1)) : $q->where($col, 'like', "%$val%"));
+            else $q->where($col, $val);
+        }
+        // date range kept in the address: <field>_start / <field>_end
+        foreach ($fields as $f) if ($f['type'] === 'date') {
+            $c = $f['column_name'];
+            if (! empty($p[$c . '_start']) && strtotime((string) $p[$c . '_start'])) $q->where($c, '>=', date('Y-m-d 00:00:00', strtotime((string) $p[$c . '_start'])));
+            if (! empty($p[$c . '_end']) && strtotime((string) $p[$c . '_end'])) $q->where($c, '<=', date('Y-m-d 23:59:59', strtotime((string) $p[$c . '_end'])));
+        }
+        ListFilter::apply($q, ListFilter::clean($p['where'] ?? null, self::byCol($fields)), self::byCol($fields));
+    }
+
+    /** The different values of one column (with how many rows each), under the list's other filters – for the "is any of" picker. "" = empty. */
+    public static function values(string $formKey, string $col, array $p = [], int $limit = 300): array
+    {
+        $table = Registry::table($formKey) ?? abort(404); $fields = self::storedFields($formKey, $table); $by = self::byCol($fields);
+        if (! isset($by[$col])) abort(404, 'This list has no such column.');
+        if (! empty($by[$col]['secret']) || Vault::maskRow($table, [$col => 'x'])[$col] !== 'x') return ['values' => [], 'more' => false, 'secret' => true];
+        $q = DB::table($table); self::scope($q, $table);
+        unset($p['filter'][$col]); self::narrow($q, $table, $fields, $p);
+        if (! empty($p['term'])) $q->where($col, 'like', '%' . addcslashes((string) $p['term'], '%_\\') . '%');
+        $rows = $q->selectRaw("COALESCE(`$col`, '') as v, COUNT(*) as n")->groupBy('v')->orderBy('v')->limit($limit + 1)->get();
+        $labels = self::labels([$by[$col]], $rows->map(fn ($r) => (object) [$col => $r->v]));
+        return ['more' => $rows->count() > $limit, 'values' => $rows->take($limit)->map(fn ($r) => ['v' => (string) $r->v, 'label' => (string) $r->v === '' ? '(empty)' : ($labels[$col][(string) $r->v] ?? (string) $r->v), 'n' => (int) $r->n])->all()];
     }
 
     public static function get(string $formKey, int $id): array
@@ -88,7 +130,7 @@ class RecordService
         $quick = ! empty($opt['quick']);
         $data = []; $errors = [];
         $old = $id ? (array) (DB::table($table)->where($pk, $id)->first() ?? abort(404)) : [];
-        foreach (self::storedFields($formKey, $table) as $f) {
+        foreach (self::storedFields($formKey, $table, true) as $f) {
             $col = $f['column_name'];
             if (in_array($col, self::BLOCKED, true) || $f['readonly']) continue;
             $given = array_key_exists($f['field_name'], $input) || array_key_exists($col, $input);
@@ -212,7 +254,7 @@ class RecordService
     public static function export(string $formKey, array $p = []): array
     {
         $out = []; $head = [];
-        $p['per_page'] = 200; $page = 1;
+        $p['per_page'] = 200; $page = 1; $p['no_totals'] = 1;
         do {
             $d = self::list($formKey, $p + ['page' => $page, 'max_cols' => 60]);
             $head = array_map(fn ($c) => $c['label'], $d['columns']);
@@ -225,11 +267,11 @@ class RecordService
 
     // ---- helpers ----
 
-    private static function storedFields(string $formKey, string $table): array
+    private static function storedFields(string $formKey, string $table, bool $forWrite = false): array
     {
         return array_values(array_filter(Registry::fields($formKey), fn ($f) => $f['column_name'] && Registry::baseTable($f['table_name']) === $table
             && Registry::hasColumn($table, $f['column_name']) && ! in_array($f['column_name'], self::BLOCKED, true) && Registry::visible($f, Context::role())
-            && Perm::fieldMode(\Illuminate\Support\Facades\Auth::user(), $formKey, (string) $f['field_name']) !== 'READONLY'));
+            && (! $forWrite || Perm::fieldMode(\Illuminate\Support\Facades\Auth::user(), $formKey, (string) $f['field_name']) !== 'READONLY')));
     }
 
     private static function fieldByCol(array $fields, string $col): array

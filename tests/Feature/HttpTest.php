@@ -132,7 +132,7 @@ class HttpTest extends TestCase
         $mp = DB::table('cat_marketplaces')->insertGetId(['fk_id_ent' => 1] + $this->notNull('cat_marketplaces'));
         \App\Services\RecordService::save('mp_profile', ['code' => 'X1', 'name' => '=HYPERLINK("http://bad")', 'fk_id_marketplace' => $mp] + $this->required('mp_profile'));
         $this->actingAs($this->makeUser('VA'))->get('/api/export/mp_profile')->assertStatus(403);
-        $csv = $this->actingAs($this->owner)->get('/api/export/mp_profile')->assertOk()->streamedContent();
+        $csv = $this->actingAs($this->owner)->get('/api/export/mp_profile')->assertOk()->getContent();
         $this->assertStringContainsString("'=HYPERLINK", $csv);
         $this->assertSame(1, DB::table('sys_audit_log')->where('action', 'EXPORT')->count());
     }
