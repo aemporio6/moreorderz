@@ -292,4 +292,28 @@ class ConnectTest extends TestCase
         foreach (['15.5' => '#/connections', '6.4' => '#/hubs', '13.6' => '#/messages', '14.2' => '#/drive', '12.7' => '#/subscriptions'] as $no => $route)
             $this->assertSame($route, \App\Http\Controllers\AppController::routeOf((object) ['screen_no' => $no, 'forms' => '']));
     }
+
+    public function test_drive_keeps_everything_in_one_main_folder_with_sub_folders_never_loose_in_the_root(): void
+    {
+        $k = openssl_pkey_new(['private_key_bits' => 2048]); openssl_pkey_export($k, $pem);
+        Connections::save(['adapter' => 'GOOGLE_DRIVE', 'settings' => ['root_folder_id' => ''], 'secrets' => ['service_account_json' => json_encode(['client_email' => 'mo@test.iam.gserviceaccount.com', 'private_key' => $pem])]]);
+        $made = []; $n = 0;
+        Http::fake(function (HttpRequest $q) use (&$made, &$n) {
+            if (str_contains($q->url(), 'oauth2.googleapis.com/token')) return Http::response(['access_token' => 'ya29.x', 'expires_in' => 3600]);
+            if ($q->method() === 'POST' && str_contains($q->url(), '/drive/v3/files')) { $id = 'F' . (++$n) . 'abcdefghijk'; $made[] = ['name' => $q['name'], 'parent' => $q['parents'][0] ?? null, 'id' => $id]; return Http::response(['id' => $id, 'webViewLink' => "https://drive.google.com/drive/folders/$id"]); }
+            return Http::response([], 404);
+        });
+        $x = DriveFolders::setup();
+        $this->assertSame(['MoreOrders', 'root'], [$made[0]['name'], $made[0]['parent']], 'only ONE folder is made in the Drive root');
+        $this->assertCount(1, array_filter($made, fn ($m) => $m['parent'] === 'root'));
+        $this->assertSame(array_values(DriveFolders::SECTIONS), array_column(array_slice($made, 1), 'name'));
+        foreach (array_slice($made, 1) as $m) $this->assertSame($made[0]['id'], $m['parent'], 'every sub-folder sits in MoreOrders');
+        // a second setup makes nothing new
+        $before = count($made); DriveFolders::setup(); $this->assertSame($before, count($made));
+        // a shop folder goes into MoreOrders › Shops
+        DriveFolders::make('SHOP', $this->shop);
+        $last = end($made); $shops = collect($made)->firstWhere('name', 'Shops');
+        $this->assertSame(['Shop A', $shops['id']], [$last['name'], $last['parent']]);
+        $this->assertSame(10, count(collect($this->getJson('/api/drive')->assertOk()->json('structure'))));
+    }
 }

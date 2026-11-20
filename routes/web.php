@@ -89,6 +89,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('drive', [ConnectController::class, 'drive']);
         Route::post('drive/link', [ConnectController::class, 'driveLink']);
         Route::post('drive/make', [ConnectController::class, 'driveMake']);
+        Route::post('drive/setup', [ConnectController::class, 'driveSetup']);
         Route::post('drive/check', [ConnectController::class, 'driveCheck']);
         Route::post('drive/load/{id}', [ConnectController::class, 'driveLoad'])->whereNumber('id');
         Route::get('subscriptions', [ConnectController::class, 'subscriptions']);

@@ -19,6 +19,49 @@ class DriveFolders
     public const ENTITIES = ['COMPANY' => ['t_enterprise', 'ent_name', 'Companies'], 'SHOP' => ['t_branches', 'shop_name', 'Shops'], 'SUPPLIER' => ['t_src_suppliers', 'supplier_name', 'Suppliers'],
         'PO' => ['t_src_po', 'po_number', 'Purchase orders'], 'PRODUCT' => ['t_product_vendors', 'SKU_VENDOR', 'Products']];
 
+    /**
+     * Everything the tool makes in Drive goes into ONE main folder ("MoreOrders", or the folder chosen in the connection),
+     * sorted into these sub-folders – never loose files or folders in the Drive's own root.
+     */
+    public const SECTIONS = ['COMPANY' => 'Companies', 'SHOP' => 'Shops', 'SUPPLIER' => 'Suppliers', 'PO' => 'Purchase orders', 'PRODUCT' => 'Products',
+        'REPORTS' => 'Marketplace reports', 'STATEMENTS' => 'Partner statements', 'LABELS' => 'Carrier labels', 'EXPORTS' => 'Exports and backups'];
+
+    public const MAIN_NAME = 'MoreOrders';
+
+    /** The main folder: the one chosen in the connection (main folder id), else "MoreOrders" made once in the Drive's root. */
+    public static function main(object $c, Adapter $ad): string
+    {
+        $cfg = json_decode((string) $c->settings_json, true) ?: [];
+        if (! empty($cfg['root_folder_id'])) return (string) $cfg['root_folder_id'];
+        $id = DB::table('sys_drive_folders')->where(['entity' => 'MAIN', 'entity_id' => $c->id])->value('folder_id');
+        if ($id) return $id;
+        $f = $ad->folder(self::MAIN_NAME, 'root');
+        DB::table('sys_drive_folders')->insert(['entity' => 'MAIN', 'entity_id' => $c->id, 'folder_id' => $f['id'], 'folder_url' => $f['url'], 'created_at' => now()]);
+        return $f['id'];
+    }
+
+    /** One sub-folder of the main folder, made the first time it is needed. */
+    public static function section(object $c, Adapter $ad, string $key): string
+    {
+        $name = self::SECTIONS[$key] ?? throw new \InvalidArgumentException('Unknown section.');
+        $id = DB::table('sys_drive_folders')->where(['entity' => 'SEC:' . $key, 'entity_id' => $c->id])->value('folder_id');
+        if ($id) return $id;
+        $f = $ad->folder($name, self::main($c, $ad));
+        DB::table('sys_drive_folders')->insert(['entity' => 'SEC:' . $key, 'entity_id' => $c->id, 'folder_id' => $f['id'], 'folder_url' => $f['url'], 'created_at' => now()]);
+        return $f['id'];
+    }
+
+    /** "Set up the folders": the main folder and all its sub-folders at once. */
+    public static function setup(): array
+    {
+        $c = self::connection() ?? throw new \InvalidArgumentException('Set up the Google Drive connection first (System › API connections).');
+        $ad = Connections::adapter($c); $out = [];
+        try { $main = self::main($c, $ad); foreach (array_keys(self::SECTIONS) as $k) $out[self::SECTIONS[$k]] = self::section($c, $ad, $k); }
+        catch (ApiError $e) { throw new \InvalidArgumentException($e->getMessage()); }
+        finally { Connections::keepRenewed($c, $ad); }
+        return ['main' => $main, 'sections' => $out];
+    }
+
     public static function connection(): ?object
     {
         return DB::table('api_connections')->where('adapter', 'GOOGLE_DRIVE')->whereIn('fk_id_ent', [(int) Context::ent(), 0])->whereNotIn('status', ['OFF'])->orderByDesc('fk_id_ent')->first();
@@ -38,7 +81,9 @@ class DriveFolders
             $rows = $x->orderByRaw('f.id IS NULL')->orderBy('r.' . $nameCol)->limit(300)->get(['r.id', 'r.' . $nameCol . ' as name', 'f.folder_url', 'f.folder_id', 'f.created_at']);
         }
         $c = self::connection();
-        return ['entity' => $entity, 'entities' => array_map(fn ($k, $v) => ['code' => $k, 'label' => $v[2]], array_keys(self::ENTITIES), self::ENTITIES), 'rows' => $rows,
+        $sections = $c ? DB::table('sys_drive_folders')->where('entity_id', $c->id)->where(fn ($q) => $q->where('entity', 'MAIN')->orWhere('entity', 'like', 'SEC:%'))->get(['entity', 'folder_url'])
+            ->map(fn ($x) => ['name' => $x->entity === 'MAIN' ? self::MAIN_NAME : (self::SECTIONS[substr($x->entity, 4)] ?? $x->entity), 'url' => $x->folder_url, 'main' => $x->entity === 'MAIN'])->values() : collect();
+        return ['structure' => $sections, 'section_names' => array_values(self::SECTIONS), 'entity' => $entity, 'entities' => array_map(fn ($k, $v) => ['code' => $k, 'label' => $v[2]], array_keys(self::ENTITIES), self::ENTITIES), 'rows' => $rows,
             'with_folder' => $rows->whereNotNull('folder_url')->count(), 'drive' => $c ? ['id' => $c->id, 'status' => $c->status, 'label' => $c->label] : null,
             'watched' => DB::table('imp_drive_folders as w')->leftJoin('t_branches as b', 'b.id', '=', 'w.fk_id_branch')->leftJoin('imp_report_types as r', 'r.code', '=', 'w.report_type')->when($ent, fn ($x) => $x->where('w.fk_id_ent', $ent))
                 ->orderBy('b.shop_name')->get(['w.id', 'b.shop_name as shop', 'w.report_type', 'r.name as report_name', 'r.handler', 'w.folder_url', 'w.folder_id', 'w.last_checked_at', 'w.f_auto_save', 'w.f_active']),
@@ -70,7 +115,10 @@ class DriveFolders
         if ($entity === 'SHOP') $parent = DB::table('sys_drive_folders')->where(['entity' => 'COMPANY', 'entity_id' => DB::table('t_branches')->where('id', $id)->value('fk_id_ent')])->value('folder_id');
         if ($entity === 'PO' && DB::getSchemaBuilder()->hasColumn('t_src_po', 'fk_id_supplier')) $parent = DB::table('sys_drive_folders')->where(['entity' => 'SUPPLIER', 'entity_id' => DB::table('t_src_po')->where('id', $id)->value('fk_id_supplier')])->value('folder_id');
         $ad = Connections::adapter($c);
-        try { $f = $ad->folder(self::ENTITIES[$entity][2] === 'Products' ? "SKU $name" : $name, $parent); }
+        try {
+            $parent = $parent ?: self::section($c, $ad, $entity);   // never in the Drive's root: inside MoreOrders › <section>
+            $f = $ad->folder(self::ENTITIES[$entity][2] === 'Products' ? "SKU $name" : $name, $parent);
+        }
         catch (ApiError $e) { throw new \InvalidArgumentException($e->getMessage()); }
         finally { if ($ad->renewed) Connections::keepRenewed($c, $ad); }
         DB::table('sys_drive_folders')->updateOrInsert(['entity' => $entity, 'entity_id' => $id], ['folder_url' => $f['url'], 'folder_id' => $f['id'], 'created_at' => now()]);

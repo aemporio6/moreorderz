@@ -54,7 +54,8 @@ class GoogleDrive extends Adapter
     /** @return array{id: string, url: string} */
     public function folder(string $name, ?string $parent = null): array
     {
-        $parent = $parent ?: ($this->cfg['root_folder_id'] ?? null);
+        $parent = $parent ?: (($this->cfg['root_folder_id'] ?? '') ?: null);
+        if ($parent === null) throw new ApiError('No folder to put it in: the tool never makes folders loose in the Drive\'s root (only its own main folder).');
         $j = Api::ok($this->call('POST', 'https://www.googleapis.com/drive/v3/files', ['headers' => $this->h(), 'query' => ['supportsAllDrives' => 'true', 'fields' => 'id,webViewLink'],
             'json' => ['name' => mb_substr($name, 0, 200), 'mimeType' => 'application/vnd.google-apps.folder'] + ($parent ? ['parents' => [$parent]] : [])]), 'Google Drive folder');
         return ['id' => (string) $j['id'], 'url' => (string) ($j['webViewLink'] ?? 'https://drive.google.com/drive/folders/' . $j['id'])];

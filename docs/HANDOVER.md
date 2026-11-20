@@ -77,7 +77,7 @@ Print the test page after every change; one-click adapters are built to the prot
 | Royal Mail Click & Drop | API key | service code, package format | buy one label for a test order; PDF lands in Carrier labels |
 | Royal Mail Tracking | client id, client secret | – | track one real number |
 | WhatsApp Cloud API | phone number id, permanent access token, app secret, verify token (a word you choose) | API version, language | see below |
-| Google Drive | the service account key file (whole JSON) | main folder id | share the main folder and each watched folder with the service account's e-mail; "Make in Drive" once; "Check now" on a watched folder |
+| Google Drive | the service account key file (whole JSON) | main folder id (optional) | the tool keeps everything in ONE main folder: either the folder whose id is typed (share it with the service account's e-mail), or "MoreOrders", made once – then "Set up the folders" makes its sub-folders (Companies, Shops, Suppliers, Purchase orders, Products, Marketplace reports, Partner statements, Carrier labels, Exports and backups). Nothing is ever made loose in the Drive's root. "Check now" on a watched folder |
 
 **WhatsApp:** in Meta Business Manager create a template for every code in Messages › Templates with the **same name in lower case** (statement, digest, task_new, approval, …) and the same placeholders in the same order; wait for Meta's approval. Set the webhook in the Meta app to `https://<APP_URL>/wa/inbound`, verify token = the one typed in the connection, subscribe to `messages`. A message to a template Meta has not approved fails with Meta's reason on the Messages screen.
 **E-mail:** set the `MAIL_*` lines, send one partner statement with the Send button, check it arrives with the PDF.

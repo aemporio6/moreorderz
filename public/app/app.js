@@ -1102,6 +1102,9 @@
     busy(true); let d; try { d = await api(`drive?entity=${ent}&q=${encodeURIComponent(qs.get('q') || '')}`); } finally { busy(false); }
     const again = () => pageDrive(new URLSearchParams(location.hash.split('?')[1] || ''));
     $('#main').innerHTML = `<div class="page-head"><div><h1>Drive folders</h1><div class="sub">One Google Drive folder per company, shop, supplier, purchase order and product, and the shop folders the tool watches for new report files. ${d.drive ? `Google Drive: ${cxChip(d.drive.status)}` : 'No Google Drive connection: paste folder links by hand (they work the same), or add the connection to let the tool make folders and read watched folders.'}</div></div></div>
+      ${d.drive ? `<div class="card" style="margin-bottom:10px"><div class="card-h"><h3>Folder layout in Drive</h3><button class="btn sm primary" id="dvSetup">${d.structure.length ? 'Check / make missing folders' : 'Set up the folders'}</button></div>
+        <div class="small muted">Everything goes into ONE main folder <b>MoreOrders</b> (or the main folder chosen in the connection) and its sub-folders – nothing loose in the Drive's own root.</div>
+        <div class="small" style="margin-top:6px">${d.structure.length ? d.structure.map(f => `${f.main ? '📁 <b>' : '&nbsp;&nbsp;&nbsp;└ 📁 '}<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.name)}</a>${f.main ? '</b>' : ''}`).join('<br>') : `Will be made: 📁 MoreOrders › ${d.section_names.map(esc).join(' · ')}`}</div></div>` : ''}
       <div class="seg" style="margin-bottom:10px"><button class="${tab === 'folders' ? 'on' : ''}" data-tab="folders">Record folders</button><button class="${tab === 'watched' ? 'on' : ''}" data-tab="watched">Watched report folders</button></div>
       ${tab === 'folders' ? `<div class="card"><div class="card-h"><div class="seg">${d.entities.map(e => `<button class="${e.code === d.entity ? 'on' : ''}" data-ent="${e.code}">${esc(e.label)}</button>`).join('')}</div><span class="small muted">${d.with_folder} of ${d.rows.length} have a folder</span></div>
         <div class="tbl-wrap"><table class="t"><thead><tr><th>Record</th><th>Folder</th><th></th></tr></thead><tbody>${d.rows.map(x => `<tr><td>${esc(x.name || '#' + x.id)}</td><td class="small">${x.folder_url ? `<a href="${esc(x.folder_url)}" target="_blank" rel="noopener">Open folder</a>` : '<span class="muted">none</span>'}</td>
@@ -1113,6 +1116,7 @@
     $$('#main [data-link]').forEach(b => b.onclick = () => miniForm('Drive folder link', 'Open the folder in Google Drive and copy the address from the browser. Empty = remove the link.', [{ name: 'url', label: 'Folder link', value: b.dataset.url }], async v => { const r = await api('drive/link', { method: 'POST', body: { entity: d.entity, id: +b.dataset.link, url: v.url } }); setTimeout(again, 50); return r; }));
     $$('#main [data-make]').forEach(b => b.onclick = () => act('drive/make', { entity: d.entity, id: +b.dataset.make }, again, 'Folder made in Drive'));
     $$('#main [data-load]').forEach(b => b.onclick = () => act(`drive/load/${b.dataset.load}`, {}, r => { if (r && r.ok === false) toast(r.error, 'err'); again(); }));
+    if ($('#dvSetup')) $('#dvSetup').onclick = () => act('drive/setup', {}, again, 'Folders ready in Drive');
     if ($('#dvCheck')) $('#dvCheck').onclick = () => act('drive/check', {}, r => { toast(`${r.found} new file(s), ${r.loaded} loaded, ${r.waiting} waiting` + (r.errors.length ? ' – ' + r.errors.join(' | ') : ''), r.errors.length ? 'warn' : 'ok'); again(); });
   }
   async function pageSubscriptions() {

@@ -102,6 +102,8 @@ class ConnectController extends Controller
 
     public function driveMake(Request $r) { $this->can($r, ['OWNER', 'MANAGER']); return $this->run(fn () => DriveFolders::make((string) $r->input('entity'), (int) $r->input('id'))); }
 
+    public function driveSetup(Request $r) { $this->can($r, ['OWNER', 'MANAGER']); return $this->run(fn () => DriveFolders::setup()); }
+
     public function driveCheck(Request $r) { $this->can($r, ['OWNER', 'MANAGER', 'TL', 'FINANCE']); return $this->run(fn () => DriveFolders::check($r->input('watch') ? (int) $r->input('watch') : null)); }
 
     public function driveLoad(Request $r, int $id) { $this->can($r, ['OWNER', 'MANAGER', 'TL', 'VA', 'FINANCE']); return $this->run(fn () => DriveFolders::load($id)); }
