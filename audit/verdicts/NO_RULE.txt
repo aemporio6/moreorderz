@@ -18,7 +18,7 @@ MR-1273|N||guiding principle, not a function
 MR-1274|P|function boot|clean screens; open-in-new-tab menu, Refresh / Home buttons like Seller Central not built
 MR-1275|P|function addWay|+ Add on 564 of 615 live dropdowns: opens the form of the thing (stacking, comes back selected) or adds to the field's own list in place, also by typing a new name in the search; open: 45 lists fixed by the system (statuses that drive rules) and 6 tables without a form (fin_categories, print_adapters, t_sale_orders)
 MR-1276|P|class Subscriptions|subscriptions with price, cycle, due dates; VPN / IP / cards / filings due dates not connected
-MR-1277|P|auto_correct|auto-correct and suggestion chips on some fields; guidance when stuck not built
+MR-1277|B|class Guide|suggestion chips, auto-correct with Undo, look-alike warning, "Why can't I save?", next step and "Why can't I continue?" on records, "Ask the Owner" on every refusal, "I am stuck" on tasks; GuideTest, FormAssistTest
 MR-1278|P|class HomeCards|one Home + module dashboards (Buying, Money, Accounts)
 MR-1279|B|class Numbering|clear numbering for every own record
 MR-1280|P|class Merges|one source for stock, ledger, numbering; some duplicate masters remain as forms
@@ -88,7 +88,7 @@ MR-0010|B|function lookalike|auto-correct when leaving a field with Undo; look-a
 MR-0011|B|const refreshWhy|server-side validation with plain-word errors, and the "Why can't I save?" box that lists every empty required field with a link that goes there
 MR-0012|B|class Registry|field registry as data (4,084 fields / 322 forms)
 MR-0014|M||bulk edit / inline edit not built
-MR-0015|M||guidance strip / next-step card / empty-state actions not built as a standard
+MR-0015|B|function guideStrip|guidance strip above every list (what it is, how to add, where else it is created, tips), next-step / why-blocked card on every record with the button that fixes it, empty lists offer "Add the first one" and "Import from a file"; GuideTest
 MR-0016|P|function boot|clean pages with status colours
 MR-0018|P|MENU_NAMES|English, simple names
 MR-0019|B|class Numbering|numbering per type and company, never a row count

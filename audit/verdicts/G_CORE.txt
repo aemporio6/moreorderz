@@ -1,7 +1,7 @@
 1|P|tasks/\{id\}/status|tasks with status, rule tasks close themselves and cannot be ticked by hand; the 7-status machine (rework, waiting approval) not built
 2|P|form:task|task form from the registry; SLA defaults, absence cover, pick-only record link not built
 3|P|form:task|priority field; notice rules per priority not built
-4|M||"I am stuck" not built
+4|P|function stuck|built: stuck on a person / supplier / marketplace / forwarder / other with the rule's checks and refusal texts, stuck_since, comment "STUCK: …" on the web, "Stuck on me" list, the four fields cleared on start and on done; open: cover person may mark it, supplier / forwarder picker from the party master on the screen, "stuck on me" in the digest
 5|M||Done gate (checklist, subtasks, proof) not built
 6|M||proof switch / partner-only fields not built
 7|M||who may approve (no self-approval) not built for tasks
@@ -98,13 +98,13 @@
 98|M||2FA re-ask after 60 min not built
 99|P|function synonyms|built: every registry field as "Form › Field" (help text, opens the form with the field focused), screens, reports, settings, synonyms from sys_search_synonyms (alias, abbreviation, Roman Urdu, direct page), sound + typing-mistake layer, by rights, secrets never; open: help topics do not exist yet, and "sku" lists screens before the field
 100|P|function amountRange|built: amount within 0.5 % and ranges, phone digits, e-mail, Enter / arrows / Esc, recent searches (SEARCH_RECENT_KEEP) and pinned, no-result guidance with "Did you mean", misses logged, scope chips, scan-to-search (SKU / EAN / UPC / tracking / order / bin), record buttons by right; open: the buttons "Create PO for <product>" and "Print label for <order>", and the 200-real-queries acceptance test
-101|P|function boot|top bar; Back / Forward / Recent pages, shortcut help, brand seal not built
+101|P|function openShortcuts|built: Back / Forward, recent pages (last 8, sys_user_nav), favourites (star), Refresh, bell, Help mode, "?" shortcut overlay with g-h style jumps, engineering-seal brand; open: list filters are not kept in the address when going Back, company legal line under the logo and the watermark not checked
 102|M||"All companies (added up)" view not built
 103|M||charts not built
 104|M||calendar / kanban views not built
 105|P|function savePrefs|built: column chooser with drag-to-order, order and widths per user per list and in saved views, row density Comfortable / Compact; open: "More…" menu for long tab bars on forms / record pages
 106|P|function audit|audit log viewer with filters user / table / action; date presets not built
-107|F|form:playbook_step|form only
+107|B|function playbookCoverage|playbooks per workflow step (title, checklist, video link) shown as "How to do this" on the screens of the workflow, ticks are a guide only, the Admin sees every step with written / missing; GuideTest
 108|M||data-quality score not built
 109|N||old tool key rotation – outside the new code
 110|P|job|job runs written by pulls; one job log for every scheduled job + Health "late" not built

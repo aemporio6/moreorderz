@@ -44,6 +44,13 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('reveal/{key}/{id}', [AppController::class, 'reveal'])->whereNumber('id');
         Route::get('page/{key}/{id}', [WorkController::class, 'page'])->whereNumber('id');
         Route::get('search', [WorkController::class, 'search']);
+        Route::get('guide/list/{key}', [WorkController::class, 'guideList']);
+        Route::get('guide/record/{key}/{id}', [WorkController::class, 'guideRecord'])->whereNumber('id');
+        Route::get('playbooks/{workflow}', [WorkController::class, 'playbooks']);
+        Route::get('playbook-coverage', [WorkController::class, 'playbookCoverage']);
+        Route::get('nav', [WorkController::class, 'nav']);
+        Route::post('nav', [WorkController::class, 'navVisit']);
+        Route::post('tasks/{id}/stuck', [WorkController::class, 'taskStuck'])->whereNumber('id');
         Route::get('find', [WorkController::class, 'find']);
         Route::post('find/opened', [WorkController::class, 'findOpened']);
         Route::get('export/{key}', [WorkController::class, 'export']);

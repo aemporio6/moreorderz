@@ -95,13 +95,16 @@ class WorkController extends Controller
         $q = DB::table('tasks as t')->leftJoin('t_users as u', 'u.id', '=', 't.owner_user_id')->leftJoin('task_categories as c', 'c.id', '=', 't.category_id')
             ->where(fn ($w) => $w->where('t.fk_id_ent', Context::ent())->orWhere('t.fk_id_ent', 0)->orWhereNull('t.fk_id_ent'));
         $scope = $r->query('scope', 'mine');
-        if ($scope === 'mine' || ! \App\Services\Perm::has($u, 'work.tasks_may')) $q->where('t.owner_user_id', $u->id);
+        if ($scope === 'stuck_on_me') $q->where('t.status', 'STUCK')->where('t.stuck_on_type', 'USER')->where('t.stuck_on_id', $u->id);   // tasks of others that wait on this person
+        elseif ($scope === 'mine' || ! \App\Services\Perm::has($u, 'work.tasks_may')) $q->where('t.owner_user_id', $u->id);
         if ($r->query('status', 'open') === 'open') $q->whereNotIn('t.status', ['DONE', 'APPROVED', 'CANCELLED']);
         if ($s = $r->query('q')) $q->where('t.title', 'like', "%$s%");
         $rows = $q->orderByRaw("FIELD(t.priority,'URGENT','HIGH','NORMAL','LOW')")->orderBy('t.due_at')->limit(300)
-            ->get(['t.id', 't.title', 't.status', 't.priority', 't.due_at', 't.rule_code', 't.source', 't.fix_url', 't.linked_module', 't.linked_record_id', 't.amount_gbp', 'u.display_name as owner', 'c.name as category']);
+            ->get(['t.id', 't.title', 't.status', 't.priority', 't.due_at', 't.rule_code', 't.source', 't.fix_url', 't.linked_module', 't.linked_record_id', 't.amount_gbp', 't.stuck_on_type', 't.stuck_on_text', 't.stuck_since', 'u.display_name as owner', 'c.name as category']);
         $today = date('Y-m-d');
-        return ['tasks' => $rows, 'counts' => ['open' => $rows->count(), 'late' => $rows->filter(fn ($t) => $t->due_at < $today)->count(), 'urgent' => $rows->where('priority', 'URGENT')->count()]];
+        return ['tasks' => $rows, 'stuck_on_me' => DB::table('tasks')->where('status', 'STUCK')->where('stuck_on_type', 'USER')->where('stuck_on_id', $u->id)->count(),
+            'stuck_on' => \App\Services\Guide::STUCK_ON, 'people' => DB::table('t_users')->where('f_active', 1)->where('id', '<>', $u->id)->orderBy('display_name')->get(['id', DB::raw('COALESCE(display_name, login_id) as name')]),
+            'counts' => ['open' => $rows->count(), 'late' => $rows->filter(fn ($t) => $t->due_at < $today)->count(), 'urgent' => $rows->where('priority', 'URGENT')->count()]];
     }
 
     public function taskStatus(Request $r, int $id)
@@ -114,10 +117,33 @@ class WorkController extends Controller
             return response()->json(['message' => 'This task was opened by a rule. It closes by itself when the problem is fixed' . ($t->fix_url ? ' – use the Fix link.' : '.')], 422);
         }
         if ($data['status'] === 'STUCK' && empty($data['note'])) return response()->json(['message' => 'Say what you are stuck on.', 'errors' => ['note' => ['Say what you are stuck on.']]], 422);
+        if ($t->status === 'STUCK' && $data['status'] !== 'STUCK') \App\Services\Guide::unstuck($id);   // start again or done: the stuck fields are cleared
         DB::table('tasks')->where('id', $id)->update(['status' => $data['status'], 'last_update_at' => now(), 'done_at' => $data['status'] === 'DONE' ? now() : null,
             'stuck_since' => $data['status'] === 'STUCK' ? now() : null, 'stuck_on_text' => $data['status'] === 'STUCK' ? $data['note'] : null]);
         DB::table('task_history')->insert(['task_id' => $id, 'at' => now(), 'user_id' => $u->id, 'field' => 'status', 'old_value' => $t->status, 'new_value' => $data['status'], 'reason' => $data['note'] ?? null]);
         Audit::log('tasks', $id, 'UPDATE', ['status' => [$t->status, $data['status']]]);
         return ['ok' => true];
+    }
+
+    /** "I am stuck": what the task waits on (a person, a supplier, a marketplace, a forwarder, something else). The person named sees it under "Stuck on me". */
+    public function taskStuck(Request $r, int $id)
+    {
+        $d = $r->validate(['type' => 'required|string', 'on_id' => 'nullable|integer', 'text' => 'nullable|string|max:255']);
+        try { \App\Services\Guide::stuck($id, $r->user(), $d['type'], $d['on_id'] ?? null, $d['text'] ?? null); return ['ok' => true, 'message' => 'Marked as stuck']; }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+    }
+
+    // ---- guidance ----
+    public function guideList(Request $r, string $key) { Rights::check('VIEW', $key); return \App\Services\Guide::list($key, $r->user()); }
+    public function guideRecord(Request $r, string $key, int $id) { Rights::check('VIEW', $key); return \App\Services\Guide::record($key, $id, $r->user()); }
+    public function playbooks(Request $r, string $workflow) { return ['playbooks' => \App\Services\Guide::playbooks(strtoupper($workflow)), 'can_edit' => \App\Services\Perm::has($r->user(), 'form:playbook_step:EDIT')]; }
+    public function playbookCoverage(Request $r) { \App\Services\Perm::need($r->user(), 'form:playbook_step:VIEW'); return ['rows' => \App\Services\Guide::playbookCoverage()]; }
+    public function nav(Request $r) { return \App\Services\Guide::nav($r->user()); }
+    public function navVisit(Request $r)
+    {
+        $d = $r->validate(['title' => 'required|string|max:150', 'url' => 'required|string|max:255', 'favourite' => 'nullable|boolean']);
+        try { if (array_key_exists('favourite', $d) && $d['favourite'] !== null) \App\Services\Guide::favourite($r->user(), $d['title'], $d['url'], (bool) $d['favourite']); else \App\Services\Guide::visited($r->user(), $d['title'], $d['url']); }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+        return \App\Services\Guide::nav($r->user());
     }
 }

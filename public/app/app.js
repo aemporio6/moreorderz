@@ -46,6 +46,55 @@
   document.addEventListener('click', e => { if (!document.body.classList.contains('side-open')) return; if (e.target.closest('#side') || e.target.closest('#btnSide')) return; document.body.classList.remove('side-open'); }, true);
 
   // ---------- top bar and menu ----------
+  // ---------- guidance: help mode, recent pages, favourites, shortcuts, playbooks ----------
+  let HELP = false, NAV = { recent: [], favourites: [] };
+  const paintFav = () => { const b = $('#btnFav'); if (!b) return; const on = (NAV.favourites || []).some(f => f.url === S.route); b.style.color = on ? '#d97706' : ''; b.title = on ? 'A favourite – click to remove' : 'Make this page a favourite'; };
+  function openNav() {
+    const row = x => `<a href="${esc(x.url)}" data-nv style="display:block;padding:7px 10px;border-radius:8px;text-decoration:none;color:inherit">${esc(x.title)}<div class="small muted">${esc(x.url)}</div></a>`;
+    const { ov, close } = modal('Recent pages and favourites', 'The last 8 pages you opened, and the pages you starred.', `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px"><div><h3 style="margin:0 0 6px">Favourites</h3>${(NAV.favourites || []).map(row).join('') || '<div class="muted small">None yet. Open a page and press the star in the top bar.</div>'}</div><div><h3 style="margin:0 0 6px">Recent</h3>${(NAV.recent || []).map(row).join('') || '<div class="muted small">Nothing yet.</div>'}</div></div>`, '', false);
+    $$('[data-nv]', ov).forEach(a => a.addEventListener('click', () => close()));
+  }
+  const SHORTCUTS = [['/', 'Search everything'], ['Ctrl + K', 'Search everything (from anywhere, also while typing)'], ['n', 'Create'], ['g then h', 'Home'], ['g then t', 'My tasks'], ['g then o', 'Orders to dispatch'], ['g then s', 'Stock'], ['g then b', 'Buying'], ['g then m', 'Money'], ['g then r', 'Reports'],
+    ['[', 'Back'], [']', 'Forward'], ['r', 'Refresh the data (keeps filters)'], ['f', 'Favourite / un-favourite this page'], ['h', 'Help on / off'], ['Ctrl + S', 'Save the open form'], ['Ctrl + P', 'Pin a search result'], ['?', 'This list'], ['Esc', 'Close']];
+  const GOTO = { h: '#/home', t: '#/tasks', o: '#/orders', s: '#/stock', b: '#/buying', m: '#/money', r: '#/reports' };
+  function openShortcuts() { if ($('#kbHelp')) return; const { ov } = modal('Keyboard shortcuts', 'They work on every screen when you are not typing in a field.', `<div id="kbHelp" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:6px 24px">${SHORTCUTS.map(([k, l]) => `<div style="display:flex;gap:10px;align-items:center;padding:4px 0"><span style="min-width:96px">${k.split(' ').map(x => /then|\+/.test(x) ? `<span class="small muted">${x}</span>` : `<span class="kbd">${esc(x)}</span>`).join(' ')}</span><span>${esc(l)}</span></div>`).join('')}</div>`, '', false); }
+  // "How to do this step": the playbooks of the workflow this screen belongs to
+  const PB_ROUTES = [[/^#\/cycle/, 'SOURCING_CYCLE'], [/^#\/(buying|research|po|quick-buy)/, 'SOURCING_CYCLE'], [/^#\/close/, 'MONTH_CLOSE'], [/^#\/(orders|work|returns|stock\/counts|pick)/, 'WAREHOUSE'], [/^#\/import/, 'IMPORT'], [/^#\/(confirm|settlements|labels|refunds)/, 'SALES']];
+  function openPlaybook(p) { const { ov } = modal('How to do this step: ' + p.title, 'A guide only – the ticks are not stored on the record.', `${p.checklist.map((l, i) => `<label class="chk" style="display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--line)"><input type="checkbox" style="margin-top:3px"> <span>${i + 1}. ${esc(l)}</span></label>`).join('') || '<div class="muted">No checklist written yet.</div>'}${p.video ? `<div style="margin-top:12px"><a class="btn" href="${esc(p.video)}" target="_blank" rel="noopener">${ic('play')} Watch the short video</a></div>` : ''}`, '', false); }
+  async function playbookBar(route) { const m = PB_ROUTES.find(([re]) => re.test(route)); const old = $('#pbBar'); old && old.remove(); if (!m) return;
+    let d; try { d = await api('playbooks/' + m[1]); } catch (e) { return; } if (S.route !== route) return; const list = Object.values(d.playbooks);
+    if (!list.length && !(d.can_edit && HELP)) return; const head = $('#main .page-head'); if (!head) return;
+    const bar = document.createElement('div'); bar.id = 'pbBar'; bar.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:-4px 0 12px';
+    bar.innerHTML = `<span class="small muted">How to do this:</span>` + list.map((p, i) => `<button class="btn sm" data-pb="${i}">${ic('play')} ${esc(p.title)}</button>`).join('') + (d.can_edit ? ` <a class="small" href="#/playbooks">${list.length ? 'edit' : 'No playbook written for these steps yet – add one'}</a>` : '');
+    head.insertAdjacentElement('afterend', bar); $$('[data-pb]', bar).forEach(b => b.onclick = () => openPlaybook(list[+b.dataset.pb])); }
+  // after every page: remember it (recent pages), paint the star, show the playbooks
+  let navTimer; function afterRender(route) { paintFav(); playbookBar(route); clearTimeout(navTimer);
+    navTimer = setTimeout(async () => { if (S.route !== route || route === '#/home') return; const h = $('#main h1'); if (!h) return; try { NAV = await api('nav', { method: 'POST', body: { title: h.textContent.trim().slice(0, 150), url: route } }); paintFav(); } catch (e) {} }, 1500); }
+  // the strip above a list: what this screen is, how to add, where else it is created
+  async function guideStrip(key) { const host = $('#lGuide'); if (!host) return; let g; try { g = await api('guide/list/' + key); } catch (e) { return; } if (!$('#lGuide')) return;
+    let open = HELP; try { open = HELP || localStorage.getItem('mo_strip_' + key) === '1' || (localStorage.getItem('mo_strip_' + key) === null && !localStorage.getItem('mo_strip_seen')); localStorage.setItem('mo_strip_seen', '1'); } catch (e) {}
+    const draw = () => { host.innerHTML = `<div class="card" style="margin-bottom:12px;border-left:3px solid var(--accent)"><div class="card-b" style="padding:10px 14px"><div style="display:flex;gap:10px;align-items:flex-start"><span class="muted">${ic('help')}</span><div style="flex:1;min-width:0"><b>${esc(g.what)}</b>
+        ${open ? `<div style="margin-top:6px"><b>To add:</b> ${esc(g.add)}</div>${g.also.length ? `<div style="margin-top:4px"><b>Also created from:</b> + Add in ${esc(g.also.join(' · '))}${g.also_more ? ` and ${g.also_more} more forms` : ''}.</div>` : ''}${g.menu ? `<div style="margin-top:4px" class="small muted">In the menu: ${esc(g.menu)}</div>` : ''}<ul class="small muted" style="margin:6px 0 0 18px;padding:0">${g.tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}</div>
+        <a href="#" class="small" id="lGuideT">${open ? 'Hide' : 'How this screen works'}</a></div></div></div>`;
+      $('#lGuideT').onclick = e => { e.preventDefault(); open = !open; try { localStorage.setItem('mo_strip_' + key, open ? '1' : '0'); } catch (x) {} draw(); }; };
+    draw(); const em = $('#lEmptyAct'); if (em) em.innerHTML = (g.can_add ? `<button class="btn primary" id="lEmptyNew">${ic('plus')} Add the first one</button>` : '') + (g.import ? ` <a class="btn" href="${esc(g.import)}">Import from a file</a>` : ''); if ($('#lEmptyNew')) $('#lEmptyNew').onclick = () => $('#lNew').click(); }
+  // the card on a record: the next step, and what stops it with the button that fixes it
+  async function guideCard(key, id) { const host = $('#rGuide'); if (!host) return; let g; try { g = await api(`guide/record/${key}/${id}`); } catch (e) { return; } if (!$('#rGuide')) return;
+    const btn = (x, i, k) => x.label ? (x.url ? `<a class="btn sm" href="${esc(x.url)}">${esc(x.label)}</a>` : `<button class="btn sm" data-ga="${k}${i}">${esc(x.label)}</button>`) : '';
+    host.innerHTML = `<div class="card" style="margin-bottom:14px;border-left:3px solid ${g.state === 'BLOCKED' ? 'var(--err)' : g.state === 'TODO' ? 'var(--warn,#d97706)' : 'var(--ok,#15803d)'}"><div class="card-b" style="padding:10px 14px">
+      ${g.blocked.length ? `<div><b>Why can’t I continue?</b></div>${g.blocked.map((b, i) => `<div style="display:flex;gap:10px;align-items:center;padding:5px 0"><span style="flex:1">${esc(b.why)}</span>${btn(b, i, 'b')}</div>`).join('')}` : ''}
+      ${g.next.length ? `<div style="${g.blocked.length ? 'margin-top:8px' : ''}"><b>Next step</b></div>${g.next.map((n, i) => `<div style="display:flex;gap:10px;align-items:center;padding:5px 0"><span style="flex:1;${n.late ? 'color:var(--err);font-weight:600' : ''}">${esc(n.text)}</span>${btn(n, i, 'n')}</div>`).join('')}` : ''}
+      ${!g.next.length && !g.blocked.length ? `<span style="color:var(--ok,#15803d)">${ic('check')}</span> ${esc(g.ok_text)}` : ''}</div></div>`;
+    $$('[data-ga]', host).forEach(b => b.onclick = () => { const x = (b.dataset.ga[0] === 'b' ? g.blocked : g.next)[+b.dataset.ga.slice(1)];
+      if (x.ask) return askAccess({ perm: x.ask, why: x.why, message: x.why }); if (x.action === 'edit') openForm(key, id, { focus: x.field, onSaved: () => pageRecord(key, id) }); }); }
+  async function pagePlaybooks() {
+    busy(true); let d; try { d = await api('playbook-coverage'); } finally { busy(false); }
+    const miss = d.rows.filter(r => !r.playbook).length; let w = '';
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/settings">Settings</a> ›</div><h1>Step playbooks</h1><div class="sub">A playbook is the short “How to do this step”: a checklist and, if you like, a one-minute video. It shows on the screens of its workflow. ${d.rows.length - miss} written · ${miss} missing.</div></div><div class="actions"><a class="btn" href="#/list/playbook_step">All playbooks</a></div></div>
+      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>Workflow</th><th>Step</th><th>Playbook</th><th></th></tr></thead><tbody>${d.rows.map((r, i) => `${r.workflow !== w ? `<tr><td colspan="4" style="font-weight:650;background:rgba(0,0,0,.04)">${esc((w = r.workflow, r.workflow_name))}</td></tr>` : ''}<tr><td class="small muted">${esc(r.workflow)}</td><td>${esc(r.step_name)} <span class="small muted">${esc(r.step)}</span></td><td>${r.playbook ? `${esc(r.playbook.title)} <span class="chip done">${r.playbook.checklist.length} steps</span>${r.playbook.video ? ' <span class="chip plain">video</span>' : ''}` : '<span class="chip warn">missing</span>'}</td><td><button class="btn sm ${r.playbook ? '' : 'primary'}" data-pe="${i}">${r.playbook ? 'Edit' : 'Write it'}</button></td></tr>`).join('')}</tbody></table></div></div>`;
+    $$('#main [data-pe]').forEach(b => b.onclick = () => { const r = d.rows[+b.dataset.pe]; openForm('playbook_step', r.playbook ? r.playbook.id : null, { preset: { workflow_code: r.workflow, step_code: r.step, title: r.step_name, f_active: 1 }, onSaved: () => pagePlaybooks() }); });
+  }
+
   function drawViewAs() {
     let v = $('#viewAsBar'); if (v) v.remove(); if (!S.boot.view_as) return;
     v = document.createElement('div'); v.id = 'viewAsBar'; v.style.cssText = 'position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:9000;background:#b45309;color:#fff;padding:8px 14px;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,.25);font-size:13px;display:flex;gap:10px;align-items:center';
@@ -63,6 +112,10 @@
       <div class="searchbox" id="sbox">${ic('search')}<input id="q" placeholder="Search everything – SKU, order, PO, person, task…" autocomplete="off"><span class="kbd">/</span></div>
       <button class="tb-btn primary" id="btnCreate" title="Create (N)">${ic('plus')}<span class="hide-m">Create</span></button>
       <button class="tb-btn icon hide-m" id="btnBack" title="Back">${ic('chev')}</button>
+      <button class="tb-btn icon hide-m" id="btnFwd" title="Forward">${ic('chev')}</button>
+      <button class="tb-btn icon hide-m" id="btnRecent" title="Recent pages and favourites">${ic('panel')}</button>
+      <button class="tb-btn icon hide-m" id="btnFav" title="Make this page a favourite">${ic('star')}</button>
+      <button class="tb-btn icon ${HELP ? 'primary' : ''}" id="btnHelp" title="Help: show the guidance of every screen (press ? for the keyboard shortcuts)">${ic('help')}</button>
       <button class="tb-btn icon" id="btnRefresh" title="Refresh data (keeps filters)">${ic('refresh')}</button>
       <button class="tb-btn icon bell" id="btnBell" title="My tasks">${ic('bell')}<span class="dot" id="bellDot" style="display:${b.tasks_open ? 'flex' : 'none'}">${b.tasks_open}</span></button>
       <div class="user" id="btnUser" title="My account: password, 2-step sign-in, sign out"><div class="avatar">${esc(ini)}</div><div class="hide-m"><div style="font-weight:600;font-size:13px">${esc(b.user.name)}</div><div class="small muted">${esc(b.user.role)}</div></div></div>`;
@@ -73,6 +126,12 @@
     $('#btnCreate').onclick = () => openCreate();
     $('#btnRefresh').onclick = () => render();
     $('#btnBack').onclick = () => { if (S.hist.length) { S.fwd.push(S.route); go(S.hist.pop(), false); } };
+    $('#btnFwd').onclick = () => { if (S.fwd.length) { S.hist.push(S.route); go(S.fwd.pop(), false); } };
+    $('#btnHelp').onclick = () => { HELP = !HELP; drawTop(); render(); toast(HELP ? 'Help is on: every screen shows its guidance. Press ? for the shortcuts.' : 'Help is off'); };
+    $('#btnRecent').onclick = () => openNav();
+    $('#btnFav').onclick = async () => { const title = ($('#main h1') || {}).textContent || S.route; const on = !(NAV.favourites || []).some(f => f.url === S.route);
+      try { NAV = await api('nav', { method: 'POST', body: { title: title.trim().slice(0, 150), url: S.route, favourite: on } }); paintFav(); toast(on ? 'Added to your favourites' : 'Removed from your favourites'); } catch (e) { toast(e.message, 'err'); } };
+    paintFav();
     $('#btnBell').onclick = () => go('#/tasks');
     $('#btnUser').onclick = () => go('#/me');
     $('#selEnt').onchange = async e => { busy(true); try { await api('company', { method: 'POST', body: { ent: +e.target.value } }); S.boot = await api('boot'); drawTop(); drawSide(); render(); toast('Now working in ' + e.target.selectedOptions[0].text); } catch (x) { toast(x.message, 'err'); } busy(false); };
@@ -88,13 +147,14 @@
   }
 
   // ---------- pages ----------
-  async function render() {
+  async function render() { await renderPage(); afterRender(S.route); }
+  async function renderPage() {
     const m = $('#main'), r = S.route; let mt;
     drawSide();
     try {
       if ((mt = r.match(/^#\/list\/([\w-]+)(?:\?(.*))?/))) { const f = {}; new URLSearchParams(mt[2] || '').forEach((v, k) => { const m2 = k.match(/^f\[(\w+)\]$/); if (m2) f[m2[1]] = v; }); return await pageList(mt[1], { filter: f }); }
       if ((mt = r.match(/^#\/rec\/([\w-]+)\/(\d+)/))) return await pageRecord(mt[1], +mt[2]);
-      if (r.startsWith('#/tasks')) return await pageTasks(r.includes('scope=all') ? 'all' : 'mine');
+      if (r.startsWith('#/tasks')) return await pageTasks(r.includes('scope=all') ? 'all' : r.includes('scope=stuck_on_me') ? 'stuck_on_me' : 'mine');
       if ((mt = r.match(/^#\/stock\/product\/(\d+)/))) return await pageStockProduct(+mt[1]);
       if (r.startsWith('#/stock/ledger')) return await pageStockLedger({ act: (r.match(/act=(\w+)/) || [])[1], product: (r.match(/product=(\d+)/) || [])[1] });
       if (r.startsWith('#/stock/lots')) return await pageLots();
@@ -155,6 +215,7 @@
       if (r === '#/print-queue') return await pagePrintQueue();
       if (r === '#/users') return await pageUsers();
       if (r === '#/permissions') return await pagePermissions();
+      if (r === '#/playbooks') return await pagePlaybooks();
       if (r === '#/choices') return await pageChoices();
       if (r === '#/settings') return await pageSettings();
       if (r.startsWith('#/audit')) return await pageAudit();
@@ -214,6 +275,7 @@
     const money = v => (+v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     $('#main').innerHTML = `<div class="page-head"><div><h1>${esc(it ? it.name : d.title || key)}</h1><div class="sub">${d.total.toLocaleString('en-GB')} record${d.total === 1 ? '' : 's'}${nF ? ' · filtered' : ''}</div></div>
         <div class="actions"><button class="btn ${nF ? 'primary' : ''}" id="lFilt">${ic('filter')} Filters${nF ? ' · ' + nF : ''}</button><button class="btn" id="lExp" title="Download or copy this list – the columns you see, in your order, with your filters">${ic('ext')} Export</button>${d.table === 'cat_inventory_locations' && ['OWNER', 'MANAGER'].includes(S.boot.user.role) ? `<button class="btn" id="lBins">Make bins</button>` : ''}${d.table === 'cat_inventory_locations' && ['OWNER', 'MANAGER', 'WAREHOUSE'].includes(S.boot.user.role) ? `<button class="btn" id="lBinLbl">${ic('file')} Print bin labels</button>` : ''}<button class="btn primary" id="lNew">${ic('plus')} New</button></div></div>
+      <div id="lGuide"></div>
       <div class="card"><div class="list-bar"><select class="q" id="lView" style="min-width:0;max-width:220px" aria-label="Saved views"><option value="">Views…</option>${V.views.map(v => `<option value="${v.id}" ${st._view == v.id ? 'selected' : ''}>${esc(v.name)}${v.default ? ' ★' : ''}${v.shared && !v.mine ? ' (shared)' : ''}</option>`).join('')}</select><button class="btn sm" id="lCols" title="Choose the columns and their order">Columns${(st.cols || []).length ? ' · ' + st.cols.length : ''}</button><button class="btn sm" id="lViewSave" title="Keep this search, these filters, this order, these columns and their widths as a view">Save view</button>${st._view && (V.views.find(v => v.id == st._view) || {}).mine ? '<button class="btn sm" id="lViewDel">Remove view</button>' : ''}
         <span style="flex:1"></span><select class="q" id="lPer" style="min-width:0" title="Rows per page">${(FMETA.per_page || [25, 50, 100, 250]).map(n => `<option value="${n}" ${n == d.per_page ? 'selected' : ''}>${n} rows</option>`).join('')}</select><button class="btn sm" id="lDen" title="Row height">${DENSITY === 'compact' ? 'Compact' : 'Comfortable'}</button></div>
       <div class="list-bar"><input class="q" id="lQ" placeholder="Search this list… (words in any order)" value="${esc(st.q || '')}">
@@ -222,7 +284,7 @@
       <div class="tbl-wrap"><table class="t" id="lTbl" style="${Object.keys(widths).length ? 'table-layout:fixed' : ''}"><thead><tr>${d.columns.map(c => `<th draggable="true" data-col="${esc(c.name)}" class="${numc(c)}" style="position:sticky;white-space:nowrap;${widths[c.name] ? 'width:' + widths[c.name] + 'px;' : ''}${pad}"><span data-sort="${esc(c.name)}" style="cursor:pointer">${esc(c.label)}${st.sort === c.name ? (st.dir === 'asc' ? ' ↑' : ' ↓') : ''}</span> <a href="#" data-cf="${esc(c.name)}" title="Filter this column" style="opacity:${ruleOf(c.name) ? 1 : .35};color:${ruleOf(c.name) ? 'var(--accent)' : 'inherit'}">${ic('filter')}</a><span data-rz="${esc(c.name)}" style="position:absolute;right:0;top:0;bottom:0;width:6px;cursor:col-resize"></span></th>`).join('')}</tr></thead>
       <tbody>${d.rows.map(r => `<tr class="click" data-id="${r.id}">${d.columns.map(c => `<td class="${numc(c)}" style="${pad};${widths[c.name] ? 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap' : ''}">${fmtCell(r[c.name], c.type, r, c.name)}</td>`).join('')}</tr>`).join('')}</tbody>
       ${d.rows.length ? `<tfoot><tr>${d.columns.map((c, i) => `<td class="${numc(c)}" style="font-weight:650;border-top:2px solid var(--line);${pad}">${d.totals[c.name] !== undefined ? `<span title="Total ${esc(c.label)} of all ${d.total} filtered rows">${c.type === 'money' ? money(d.totals[c.name]) : (+d.totals[c.name]).toLocaleString('en-GB')}</span>` : i === 0 ? `Total records: ${d.total.toLocaleString('en-GB')}` : ''}</td>`).join('')}</tr></tfoot>` : ''}</table>
-      ${d.rows.length ? '' : `<div class="empty">${ic('file')}<div>${nF || st.q ? 'Nothing matches these filters. <a href="#" id="lClrAll2">Clear the filters</a> to see everything.' : 'Nothing here yet. Press <b>New</b> to add the first one.'}</div></div>`}</div>
+      ${d.rows.length ? '' : `<div class="empty">${ic('file')}<div>${nF || st.q ? 'Nothing matches these filters. <a href="#" id="lClrAll2">Clear the filters</a> to see everything.' : 'Nothing here yet.'}</div>${nF || st.q ? '' : '<div id="lEmptyAct" style="margin-top:10px;display:flex;gap:8px;justify-content:center"></div>'}</div>`}</div>
       <div class="pager"><span>Page ${d.page} of ${pages} · ${d.total.toLocaleString('en-GB')} rows</span><button class="btn sm" id="pPrev" ${d.page <= 1 ? 'disabled' : ''}>Previous</button><button class="btn sm" id="pNext" ${d.page >= pages ? 'disabled' : ''}>Next</button></div></div>`;
     const again = x => pageList(key, { ...st, _touched: true, ...x });
     const savePrefs = b => api('prefs/list:' + key, { method: 'POST', body: b }).catch(() => {});
@@ -270,6 +332,7 @@
     $$('#main [data-cf]').forEach(a => a.onclick = e => { e.preventDefault(); e.stopPropagation(); const c = colOf(a.dataset.cf); ruleEditor(key, c, ruleOf(c.name), baseQs(), setColRule(d.where, c.name, null), rule => again({ where: setColRule(d.where, c.name, rule), page: 1 })); });
     $('#lFilt').onclick = () => filterBuilder(key, d, baseQs(), where => again({ where, page: 1 }));
     $('#lExp').onclick = () => exportMenu(key, d, qs, viewState());
+    guideStrip(key);
   }
 
   // the value part of one rule, by the type of its column
@@ -389,7 +452,9 @@
       : `<div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>When</th><th>Who</th><th>What</th><th>Change</th></tr></thead><tbody>${d.history.map(h => `<tr><td>${esc(h.at)}</td><td>${esc(h.by)}</td><td>${esc({ INSERT: 'Created', UPDATE: 'Changed', EXPORT: 'Exported' }[h.action] || h.action)}</td><td>${h.changes ? Object.entries(h.changes).map(([k, v]) => `<div><b>${esc(k)}</b>: ${esc(v[0] ?? '—')} → ${esc(v[1] ?? '—')}</div>`).join('') : ''}${h.reason ? `<div class="small muted">${esc(h.reason)}</div>` : ''}</td></tr>`).join('')}</tbody></table></div></div>`;
     $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/list/${key}">${esc(d.form_title)}</a> ›</div><h1>${esc(d.title)}</h1></div>
       <div class="actions">${key === S.boot.product_form ? `<a class="btn" href="#/stock/product/${id}">Stock</a><a class="btn" href="#/prices/${id}">Prices</a>` : ''}<button class="btn primary" id="rEdit">${ic('wand')} Edit</button></div></div>
+      <div id="rGuide"></div>
       <div class="seg" style="margin-bottom:14px">${tabs.map(([k, l]) => `<button type="button" class="${k === tab ? 'on' : ''}" data-tab="${k}">${esc(l)}</button>`).join('')}</div>${body}`;
+    guideCard(key, id);
     $('#rEdit').onclick = () => openForm(key, id, { onSaved: () => pageRecord(key, id) });
     $$('#main [data-tab]').forEach(b => b.onclick = () => { S.recTab = b.dataset.tab; pageRecord(key, id); });
   }
@@ -399,14 +464,18 @@
     busy(true); let d; try { d = await api(`tasks?scope=${scope}`); } finally { busy(false); }
     const today = S.boot.today;
     $('#main').innerHTML = `<div class="page-head"><div><h1>${scope === 'all' ? 'Needs action' : 'My tasks'}</h1><div class="sub">Tasks opened by a rule close by themselves when the problem is fixed.</div></div>
-      <div class="actions"><div class="seg"><button type="button" class="${scope === 'mine' ? 'on' : ''}" data-sc="mine">Mine</button><button type="button" class="${scope === 'all' ? 'on' : ''}" data-sc="all">Everyone</button></div></div></div>
+      <div class="actions"><div class="seg"><button type="button" class="${scope === 'mine' ? 'on' : ''}" data-sc="mine">Mine</button><button type="button" class="${scope === 'stuck_on_me' ? 'on' : ''}" data-sc="stuck_on_me">Stuck on me${d.stuck_on_me ? ' · ' + d.stuck_on_me : ''}</button><button type="button" class="${scope === 'all' ? 'on' : ''}" data-sc="all">Everyone</button></div></div></div>
       <div class="kpis"><div class="card kpi"><div class="bar"></div><div class="lbl">Open</div><div class="val">${d.counts.open}</div></div><div class="card kpi ${d.counts.late ? 'err' : 'done'}"><div class="bar"></div><div class="lbl">Late</div><div class="val">${d.counts.late}</div></div><div class="card kpi ${d.counts.urgent ? 'warn' : 'done'}"><div class="bar"></div><div class="lbl">Urgent</div><div class="val">${d.counts.urgent}</div></div></div>
       <div class="card" style="margin-top:14px"><div class="tbl-wrap"><table class="t"><thead><tr><th>Task</th><th>Area</th><th>Owner</th><th>Priority</th><th>Due</th><th>Status</th><th></th></tr></thead><tbody>
-      ${d.tasks.map(t => `<tr><td>${esc(t.title)}${t.rule_code ? ` <span class="small muted">${esc(t.rule_code)}</span>` : ''}</td><td>${esc(t.category || '')}</td><td>${esc(t.owner || '—')}</td><td><span class="chip ${t.priority === 'URGENT' ? 'err' : t.priority === 'HIGH' ? 'warn' : 'pend'} plain">${esc(t.priority)}</span></td>
+      ${d.tasks.map(t => `<tr><td>${esc(t.title)}${t.rule_code ? ` <span class="small muted">${esc(t.rule_code)}</span>` : ''}${t.status === 'STUCK' ? `<div class="small" style="color:var(--err)">Stuck on ${esc((d.stuck_on[t.stuck_on_type] || 'something').toLowerCase())}${t.stuck_on_text ? ': ' + esc(t.stuck_on_text) : ''}${t.stuck_since ? ' · since ' + esc(String(t.stuck_since).slice(0, 10)) : ''}</div>` : ''}</td><td>${esc(t.category || '')}</td><td>${esc(t.owner || '—')}</td><td><span class="chip ${t.priority === 'URGENT' ? 'err' : t.priority === 'HIGH' ? 'warn' : 'pend'} plain">${esc(t.priority)}</span></td>
         <td class="${t.due_at < today ? 'late' : ''}" style="${t.due_at < today ? 'color:var(--err);font-weight:600' : ''}">${esc(t.due_at)}</td><td><span class="chip ${chipFor(t.status)}">${esc(t.status)}</span></td>
-        <td style="white-space:nowrap">${t.fix_url ? `<a class="btn sm" href="${esc(t.fix_url)}">Fix</a> ` : ''}${t.status === 'TODO' ? `<button class="btn sm" data-ts="DOING" data-id="${t.id}">Start</button> ` : ''}${t.source !== 'RULE' ? `<button class="btn sm primary" data-ts="DONE" data-id="${t.id}">Done</button>` : ''}</td></tr>`).join('')}</tbody></table>
+        <td style="white-space:nowrap">${t.fix_url ? `<a class="btn sm" href="${esc(t.fix_url)}">Fix</a> ` : ''}${t.status === 'TODO' || t.status === 'STUCK' ? `<button class="btn sm" data-ts="DOING" data-id="${t.id}">${t.status === 'STUCK' ? 'Moving again' : 'Start'}</button> ` : ''}${t.status !== 'STUCK' && scope !== 'stuck_on_me' ? `<button class="btn sm" data-stuck="${t.id}" title="Say what this task is waiting on – the person named sees it under “Stuck on me”">I’m stuck</button> ` : ''}${t.source !== 'RULE' ? `<button class="btn sm primary" data-ts="DONE" data-id="${t.id}">Done</button>` : ''}</td></tr>`).join('')}</tbody></table>
       ${d.tasks.length ? '' : `<div class="empty">${ic('check')}<div>Nothing waiting. </div></div>`}</div></div>`;
-    $$('#main [data-sc]').forEach(b => b.onclick = () => go(b.dataset.sc === 'all' ? '#/tasks?scope=all' : '#/tasks'));
+    $$('#main [data-sc]').forEach(b => b.onclick = () => go(b.dataset.sc === 'mine' ? '#/tasks' : '#/tasks?scope=' + b.dataset.sc));
+    $$('#main [data-stuck]').forEach(b => b.onclick = () => miniForm('I am stuck', 'Say what this task waits on. A person you name sees it under “Stuck on me” at once.', [
+      { name: 'type', label: 'Stuck on', required: true, value: 'USER', options: Object.entries(d.stuck_on) }, { name: 'on_id', label: 'Person (when it is a person in the team)', options: [['', '—']].concat(d.people.map(p => [p.id, p.name])) },
+      { name: 'text', label: 'Name and what you need', help: 'For a supplier, marketplace, forwarder or something else: who, and what you need from them.' }],
+      async v => { const r = await api(`tasks/${b.dataset.stuck}/stuck`, { method: 'POST', body: { type: v.type, on_id: v.type === 'USER' && v.on_id ? +v.on_id : null, text: v.text || null } }); pageTasks(scope); return r; }, 'Mark as stuck'));
     $$('#main [data-ts]').forEach(b => b.onclick = async () => { try { await api(`tasks/${b.dataset.id}/status`, { method: 'POST', body: { status: b.dataset.ts } }); toast(b.dataset.ts === 'DONE' ? 'Task done' : 'Task started'); S.boot = await api('boot'); drawTop(); pageTasks(scope); } catch (e) { toast(e.message, 'err'); } });
   }
 
@@ -1810,7 +1879,12 @@
   document.addEventListener('keydown', e => { const typing = /INPUT|TEXTAREA|SELECT/.test((e.target.tagName || ''));
     if (e.key === 'Escape') { const o = $$('.overlay').pop(); if (o) o.remove(); }
     else if (!typing && (e.key === 'n' || e.key === 'N') && !$('.overlay')) openCreate();
-    else if (!typing && e.key === '/') { e.preventDefault(); if (S.boot) openPalette(); } });
+    else if (!typing && e.key === '/') { e.preventDefault(); if (S.boot) openPalette(); }
+    else if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey && S.boot && !$('.overlay')) { const k = e.key;
+      if (gKey && GOTO[k]) { gKey = false; return go(GOTO[k]); } gKey = false;
+      if (k === '?') openShortcuts(); else if (k === 'g') { gKey = true; setTimeout(() => { gKey = false; }, 1500); }
+      else if (k === '[') $('#btnBack').click(); else if (k === ']') $('#btnFwd').click(); else if (k === 'r') render(); else if (k === 'f') $('#btnFav').click(); else if (k === 'h') $('#btnHelp').click(); } });
+  let gKey = false;
 
   // ---------- + Create: everything that can be created, grouped by department; new modules appear by themselves ----------
   let lastCreateQ = '';
