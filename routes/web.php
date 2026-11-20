@@ -251,6 +251,17 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('print-routes', [PrintController::class, 'route']);
         Route::get('orders', [OrdersController::class, 'board']);
         Route::get('sales', [OrdersController::class, 'saleLines']);
+        Route::get('sales/import', [OrdersController::class, 'saleImportHome']);
+        Route::get('sales/import/name', [OrdersController::class, 'saleImportName']);
+        Route::post('sales/import', [OrdersController::class, 'saleImportRun']);
+        Route::get('sales/import/sku', [OrdersController::class, 'saleImportSku']);
+        Route::post('sales/import/restore', [OrdersController::class, 'saleImportRestore']);
+        Route::get('sales/import/{id}/errors', [OrdersController::class, 'saleImportErrors'])->whereNumber('id');
+        Route::get('sales/import/{id}/unmatched', [OrdersController::class, 'saleImportUnmatched'])->whereNumber('id');
+        Route::post('sales/import/{id}/delete', [OrdersController::class, 'saleImportDelete'])->whereNumber('id');
+        Route::post('sales/link/{id}', [OrdersController::class, 'saleImportLink'])->whereNumber('id');
+        Route::get('sales/columns/{mp}', [OrdersController::class, 'saleColumns'])->whereNumber('mp');
+        Route::post('sales/columns/{mp}', [OrdersController::class, 'saleColumnsSave'])->whereNumber('mp');
         Route::get('sales/month', [OrdersController::class, 'saleMonthInfo']);
         Route::post('sales/month/delete', [OrdersController::class, 'saleDeleteMonth']);
         Route::post('sales/restore', [OrdersController::class, 'saleRestore']);

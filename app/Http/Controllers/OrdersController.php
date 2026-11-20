@@ -296,4 +296,39 @@ class OrdersController extends Controller
     public function saleMonthInfo(Request $r) { $this->can($r, 'orders.saleDeleteMonth'); $i = \App\Services\SaleLines::monthInfo((int) $r->query('shop'), (string) $r->query('month')); return ['lines' => $i['lines'], 'confirmed' => $i['confirmed'], 'text' => $i['text'], 'month_name' => $i['month_name']]; }
     public function saleDeleteMonth(Request $r) { return $this->run(fn () => \App\Services\SaleLines::deleteMonth((int) $r->input('shop'), (string) $r->input('month'))); }
     public function saleRestore(Request $r) { return $this->run(fn () => \App\Services\SaleLines::restore((string) $r->input('undo'))); }
+
+    // ---------- the monthly sales import (R-A_SALES-1 … 18) ----------
+    public function saleImportHome(Request $r)
+    {
+        $this->can($r, 'orders.saleImport'); $u = $r->user(); $ent = Context::ent();
+        return \App\Services\SalesImport::register($u) + ['self_check' => \App\Services\SalesImport::selfCheckMessage(), 'can_columns' => \App\Services\Perm::has($u, 'orders.saleColumns'), 'can_delete' => \App\Services\Perm::has($u, 'orders.saleDeleteMonth'),
+            'marketplaces' => DB::table('cat_marketplaces')->whereIn('id', \App\Services\Perm::mine(DB::table('t_branches'), 'id')->where('fk_id_ent', $ent)->pluck('fk_id_marketplace'))->orderBy('marketplace_descr')->get(['id', DB::raw("COALESCE(NULLIF(marketplace_short,''), marketplace_descr) as name")]),
+            'shops' => \App\Services\Perm::mine(DB::table('t_branches'), 'id')->where('fk_id_ent', $ent)->orderBy('shop_no')->get(['id', 'shop_no', 'shop_name', 'fk_id_marketplace as marketplace', 'f_active'])->map(fn ($s) => ['id' => $s->id, 'marketplace' => $s->marketplace, 'active' => (int) $s->f_active, 'name' => \App\Services\SalesImport::label($s)])];
+    }
+    public function saleImportName(Request $r) { $this->can($r, 'orders.saleImport'); return \App\Services\SalesImport::fileName((string) $r->query('name'), (int) $r->query('marketplace') ?: null); }
+    public function saleImportRun(Request $r)
+    {
+        return $this->run(function () use ($r) {
+            $this->can($r, 'orders.saleImport'); $f = $r->file('file'); $d = $r->only(['nature', 'marketplace', 'shop', 'month', 'year', 'fee', 'out_mode', 'delimiter', 'header_line']) + ['replace' => $r->boolean('replace'), 'sure' => $r->boolean('sure')];
+            if (! $f || ! $f->isValid()) { \App\Services\SalesImport::preCheck($d, null, $r->user()); throw new \InvalidArgumentException('Choose a CSV file to upload.'); }
+            return \App\Services\SalesImport::run($f->getRealPath(), $f->getClientOriginalName(), (int) $f->getSize(), $d, $r->user(), $r->boolean('apply'));
+        });
+    }
+    public function saleImportErrors(Request $r, int $id) { $this->can($r, 'orders.saleImport'); return \App\Services\SalesImport::errors($id); }
+    public function saleImportUnmatched(Request $r, int $id)
+    {
+        $this->can($r, 'orders.saleImport'); $rows = \App\Services\SalesImport::unmatched($id);
+        if ($r->query('format') !== 'csv') return ['rows' => $rows];
+        $b = \App\Services\SalesImport::batch($id); $out = fopen('php://temp', 'w+'); fputcsv($out, ['Line', 'Order No', 'SKU', 'Buyer', 'Product', 'Qty', 'Total', 'Order Date', 'Why not matched'], ',', '"', '\\');
+        foreach ($rows as $x) fputcsv($out, array_map(fn ($v) => is_string($v) && preg_match('/^[=+\-@]/', $v) ? "'" . $v : $v, [$x['line'], $x['order_no'], $x['sku'], $x['buyer'], $x['product'], $x['qty'], $x['total'], $x['d_order'], $x['why']]), ',', '"', '\\');
+        rewind($out); $csv = stream_get_contents($out);
+        return response("\xEF\xBB\xBF" . $csv, 200, ['Content-Type' => 'text/csv; charset=UTF-8', 'Content-Disposition' => 'attachment; filename="not-matched-' . sprintf('%04d-%02d', $b->period_year, $b->period_month) . '.csv"']);
+    }
+    public function saleImportSku(Request $r) { $this->can($r, 'orders.saleImport'); return $r->query('q') !== null ? ['rows' => \App\Services\SalesImport::skuSearch((string) $r->query('q'))] : \App\Services\SalesImport::skuCheck((string) $r->query('sku')); }
+    public function saleImportLink(Request $r, int $id) { return $this->run(fn () => \App\Services\SalesImport::link($id, (string) $r->input('sku'), $r->user())); }
+    public function saleImportDelete(Request $r, int $id) { return $this->run(fn () => \App\Services\SalesImport::deleteBatch($id, $r->user())); }
+    public function saleImportRestore(Request $r) { return $this->run(fn () => \App\Services\SalesImport::restoreBatch((string) $r->input('undo'), $r->user())); }
+    public function saleColumns(Request $r, int $mp) { $this->can($r, 'orders.saleImport'); $set = strtoupper((string) $r->query('set', 'SALE')); abort_unless(isset(\App\Services\SalesImport::SETS[$set]), 404);
+        return ['set' => $set, 'fields' => \App\Services\SalesImport::SETS[$set][2], 'required' => $set === 'MATCH' ? [] : \App\Services\SalesImport::REQUIRED, 'columns' => array_map(fn ($a) => implode(',', $a), \App\Services\SalesImport::columns($mp, $set)), 'can_save' => \App\Services\Perm::has($r->user(), 'orders.saleColumns')]; }
+    public function saleColumnsSave(Request $r, int $mp) { return $this->run(function () use ($r, $mp) { $this->can($r, 'orders.saleColumns'); return ['message' => 'Columns saved.', 'columns' => \App\Services\SalesImport::saveColumns($mp, strtoupper((string) $r->input('set', 'SALE')), (array) $r->input('columns', []))]; }); }
 }

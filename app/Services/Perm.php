@@ -157,6 +157,8 @@ class Perm
         $c['orders.saleRefund'] = ['Refund a sale line with the nature of the loss', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
         $c['orders.saleDelete'] = ['Delete a sale line (to the recycle bin)', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
         $c['orders.saleDeleteMonth'] = ['Delete a whole month of sales of a shop', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL']];
+        $c['orders.saleImport'] = ['Import the monthly sales file of a shop', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
+        $c['orders.saleColumns'] = ['Set the Sale Columns of a marketplace (which CSV column is which field)', 'Orders and dispatch', ['OWNER', 'MANAGER']];
         return self::$cat = $c;
     }
 

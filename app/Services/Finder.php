@@ -15,6 +15,7 @@ class Finder
     /** Named actions that are not a menu item: [title, words that also find it, url, right needed (null = everyone)]. */
     public const ACTIONS = [
         ['Sales lines', 'sales list edit sale refund carrier packing delete month loss lines', '#/sales', 'orders.SEE'],
+        ['Import sales', 'import monthly sales file csv upload shop month sale columns fix not matched', '#/sales-import', 'orders.saleImport'],
         ['New order', 'enter order add sale', '#/orders?do=new', 'orders.ENTER'],
         ['Load order file', 'import orders upload ebay temu amazon csv', '#/orders?do=file', 'orders.ENTER'],
         ['Make pick list', 'picking pick sheet warehouse', '#/orders?do=pick', 'orders.WAREHOUSE'],
