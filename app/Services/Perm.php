@@ -241,7 +241,7 @@ class Perm
     {
         if (self::$roles) return self::$roles;
         $out = [];
-        foreach (User::ROLES as $r) $out[$r] = ['code' => $r, 'label' => ucfirst(strtolower($r)), 'like' => $r, 'system' => true, 'active' => true];
+        foreach (User::ROLES as $r) $out[$r] = ['code' => $r, 'label' => strlen($r) <= 2 ? $r : ucfirst(strtolower($r)), 'like' => $r, 'system' => true, 'active' => true];
         foreach (DB::table('mo_roles')->orderBy('role_code')->get() as $r) $out[$r->role_code] = ['code' => $r->role_code, 'label' => $r->label, 'like' => $r->like_role, 'system' => false, 'active' => (bool) $r->f_active, 'notes' => $r->notes];
         return self::$roles = $out;
     }

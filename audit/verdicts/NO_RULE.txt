@@ -27,7 +27,7 @@ MR-1282|B|class EventBus|events with retry, follow-up by listeners
 MR-1283|P|function cycle|steps shown on buying cycles and month close; not every process
 MR-1284|P|function defaultValue|defaults and pickers from the registry; "nothing typed twice" not everywhere
 MR-1285|M||click any figure down to its record, file and row not built
-MR-1286|P|class Rights|rights by role on every request; button-level and data scope (shop) not built
+MR-1286|P|function shopAllowed|page and button rights on every request, company scope, shop named in a request is checked; open: summary screens not yet narrowed to the person's shops
 MR-1287|N||build constraint replaced by the owner's decision: Laravel + MariaDB
 MR-1288|N||build constraint replaced (own front end)
 MR-1289|N||build constraint replaced
@@ -97,7 +97,7 @@ MR-0021|P|function find|universal search; no spelling tolerance
 MR-0029|P|class HomeCards|Home per role with cards; "Needs action first" ranking partly
 MR-0030|M||sourcing dashboard with the cards of all modules not built
 MR-0031|M||ICC not built
-MR-0036|P|class Rights|rights per role and screen; matrix with Export / Approve, per-user overrides, field and row level not built
+MR-0036|P|class Perm|built: role x right matrix as data (screens, forms See/Add/Change/Delete/Export, approve rights, menu, reports), made roles, per-person extra / taken away with reason and end date, field rules hidden / see only, view-as; open: shop scope is enforced on registry lists and on any request that names a shop, but the summary screens are not yet narrowed to the person's shops
 MR-0037|P|visible_to|field visibility from the registry; Owner / HR-only on save not verified
 MR-0038|M||maker-checker for supplier bank / ownership / price floor / settings not built
 MR-0039|P|APPROVAL_LIMIT|approval limits per action (expense, payment, adjustment, withdrawal); tiers per role not built
@@ -188,7 +188,7 @@ MR-0551|M||WH_PARCEL_LOST money code not built
 MR-0583|P|class Approvals|approval rules for expense, payment, adjustment, withdrawal; the full rule list of 06 section A not built
 MR-0585|M||ICC not built
 MR-0591|N||spec document
-MR-1247|P|class Rights|rights checked on every request (by role)
+MR-1247|B|function need|every screen action, form, menu item and report asks the permission engine on every request (Perm::need); PermissionTest
 MR-1248|B|class Context|company filter on every query
 MR-1249|B|class Numbering|codes from the numbering service
 MR-1251|B|class Merges|no duplicate tables in the new build; merge tool for records

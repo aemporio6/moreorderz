@@ -379,6 +379,11 @@ class AdminController extends Controller
         foreach ($cat as $code => [$label, $group, $def]) $rights[] = ['code' => $code, 'label' => $label, 'group' => $group];
         foreach (DB::table('sidebar_modules as m')->leftJoin('sidebar_modules as s', 's.id_module', '=', 'm.parent_id')->where('m.e_status', 'ACTIVE')->whereNotNull('m.parent_id')->orderBy('m.sort_order')->get(['m.module_key', 'm.module_name', 'm.screen_no', 's.module_name as section']) as $m)
             $rights[] = ['code' => 'menu:' . $m->module_key, 'label' => trim($m->screen_no . ' ' . AppController::simpleName((string) $m->module_name)), 'group' => 'Menu › ' . AppController::simpleName((string) $m->section)];
+        // the five actions of every form – many rows, so only when the screen asks for them
+        if ($r->boolean('forms')) foreach (DB::table('sys_forms')->where('f_active', 1)->orderBy('module')->orderBy('title')->get(['form_key', 'title', 'module']) as $f) {
+            if (! \App\Services\Registry::exists($f->form_key)) continue;
+            foreach (P::ACTIONS as $a => $word) $rights[] = ['code' => "form:{$f->form_key}:$a", 'label' => $f->title . ' – ' . $word, 'group' => 'Forms › ' . ($f->module ?: 'Other')];
+        }
         $matrix = [];
         foreach ($roles as $key => $role) foreach ($rights as $x) {
             $on = P::roleCan($role['like'], $key, $x['code']);

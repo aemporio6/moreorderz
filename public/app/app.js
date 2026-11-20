@@ -753,9 +753,9 @@
 
 
   // ---------- roles and rights (permission engine) ----------
-  const PM = { tab: 'roles', q: '', group: '', role: '', only: '' };
+  const PM = { tab: 'roles', q: '', group: '', role: '', only: '', forms: '' };
   async function pagePermissions() {
-    busy(true); let d; try { d = await api('permissions'); } finally { busy(false); }
+    busy(true); let d; try { d = await api('permissions' + (PM.forms ? '?forms=1' : '')); } finally { busy(false); }
     const groups = [...new Set(d.rights.map(x => x.group))], roleOf = k => d.roles.find(r => r.code === k);
     const shown = d.roles.filter(r => r.active && (!PM.role || r.code === PM.role));
     const tabs = [['roles', 'Roles and rights'], ['people', 'People'], ['fields', 'Fields'], ['requests', `Requests${d.requests.filter(q => q.status === 'OPEN').length ? ' · ' + d.requests.filter(q => q.status === 'OPEN').length : ''}`], ['viewas', 'View as']];
@@ -770,6 +770,7 @@
         <select class="q" id="pmG">${opt(groups.map(x => [x, x]), PM.group, 'All groups')}</select>
         <select class="q" id="pmR">${opt(d.roles.filter(r => r.active).map(r => [r.code, r.label]), PM.role, 'All roles')}</select>
         <label class="chk small"><input type="checkbox" id="pmO" ${PM.only ? 'checked' : ''}> Only changed</label>
+        <label class="chk small" title="See / Add / Change / Delete / Export for every form"><input type="checkbox" id="pmF" ${PM.forms ? 'checked' : ''}> With forms</label>
         <button class="btn primary" id="pmNew">${ic('plus')} New role</button></div>
         <div class="small muted" style="padding:0 16px 10px">Tick = the role may do it. A <span class="chip warn plain">changed</span> box differs from the built-in default; click “reset” on it to go back. The Owner always has every right. ${rows.length} of ${d.rights.length} rights shown.</div>
         <div class="tbl-wrap" style="max-height:68vh;overflow:auto"><table class="t"><thead><tr><th style="position:sticky;left:0;top:0;z-index:3;background:var(--card,#fff)">Right</th>${shown.map(r => `<th style="position:sticky;top:0;text-align:center" title="${esc(r.system ? 'Built-in role' : 'Made role, works like ' + r.like)}">${esc(r.label)}${r.system ? '' : `<div class="small muted">like ${esc(r.like)}</div>`}</th>`).join('')}</tr></thead><tbody>
@@ -807,7 +808,7 @@
     $$('#main [data-pt]').forEach(b => b.onclick = () => { PM.tab = b.dataset.pt; re(); });
     if (PM.tab === 'roles') {
       let tm; $('#pmQ').oninput = e => { PM.q = e.target.value; clearTimeout(tm); tm = setTimeout(() => { re().then(() => { const i = $('#pmQ'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }); }, 350); };
-      $('#pmG').onchange = e => { PM.group = e.target.value; re(); }; $('#pmR').onchange = e => { PM.role = e.target.value; re(); }; $('#pmO').onchange = e => { PM.only = e.target.checked ? 1 : ''; re(); };
+      $('#pmG').onchange = e => { PM.group = e.target.value; re(); }; $('#pmR').onchange = e => { PM.role = e.target.value; re(); }; $('#pmO').onchange = e => { PM.only = e.target.checked ? 1 : ''; re(); }; $('#pmF').onchange = e => { PM.forms = e.target.checked ? 1 : ''; re(); };
       $$('#main [data-pm]').forEach(c => c.onchange = () => { const [role, code] = c.dataset.pm.split('|'); post('set', { role, code, allowed: c.checked }); });
       $$('#main [data-pmr]').forEach(a => a.onclick = e => { e.preventDefault(); const [role, code] = a.dataset.pmr.split('|'); post('set', { role, code, allowed: null }, 'Back to the default'); });
       $('#pmNew').onclick = () => miniForm('New role', 'A made role starts with the rights of a built-in role; then tick or untick what should differ.', [

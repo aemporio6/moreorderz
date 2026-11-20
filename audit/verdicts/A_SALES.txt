@@ -44,7 +44,7 @@
 44|P|form:sale_line|column picker on every list; no fixed / optional groups
 45|M||extra marketplace columns not built
 46|P|export/\{key\}|CSV export of the list; no PDF / Word with summary
-47|P|class Rights|rights per role; data scope "own shops only" not built
+47|P|function scopeQuery|shop scope per person exists (registry lists, any request naming a shop); open: sales summary screens not yet narrowed to own shops
 48|M||period chips not built
 49|M||keep page / scroll after action not verified
 50|M||Annual Sale Report not built
@@ -79,7 +79,7 @@
 79|M||"Update existing data" import mode not built
 80|F|form:supplier_order_history|form only; 68-column Amazon Business import not built
 81|M||standard shop label component not built
-82|P|class Rights|rights by role and screen; the named rights list (sale.import ...) not built
+82|P|class PermCatalogue|named rights for orders / dispatch exist as data and are checked on the server; open: names differ from the spec list (sale.import ...) and per-shop narrowing of the sales screens
 83|B|feeBucket|fee buckets + month totals from the money files; hub compare (SAL_HUB_MISMATCH task) not built
 84|P|fulfilment_channel|orders by file / API / hand with tracking + label; monthly merge and "Close daily orders" not built
 85|B|class CarrierLabels|carrier label PDF import, match, service map; one label per page only

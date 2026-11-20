@@ -102,6 +102,9 @@ class PermissionTest extends TestCase
         $this->actingAs($this->owner)->postJson('/api/permissions/set', ['role' => 'VA', 'code' => "form:$form:VIEW", 'allowed' => true])->assertOk();
         $this->actingAs($va)->getJson("/api/list/$form")->assertOk();
         $this->assertFalse(Perm::has($va, "form:$form:DELETE"));
+        $all = $this->actingAs($this->owner)->getJson('/api/permissions?forms=1')->assertOk()->json();
+        $this->assertSame([1, 1], $all['matrix']['VA']["form:$form:VIEW"]); $this->assertGreaterThan(900, count($all["rights"]));
+        $this->actingAs($va);
         // reports
         $key = array_key_first(array_filter(\App\Services\ReportService::LIST, fn ($r) => ! in_array('VA', $r[3], true)));
         $this->getJson("/api/reports/$key")->assertStatus(403);

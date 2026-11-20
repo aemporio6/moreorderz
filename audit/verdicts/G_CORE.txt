@@ -52,13 +52,13 @@
 52|P|function inbound|signed webhook, receipts, replies to an inbox, DONE closes a hand-made task; the full command set not built
 53|P|class WhatsAppCloud|templates list + Meta provider; log provider, 360dialog not built
 54|P|messages|Messages screen (sent, e-mails, replies, retry); Messages tab per record, masking not built
-55|P|class Rights|menu from the menu table filtered by role
+55|P|menu:|menu from the menu table, every item its own right that can be switched per role / person; open: "Soon" items and current-item rules not checked line by line
 56|P|function find|search everything (records); menu / page search with ranking not built
 57|F|form:menu_builder|form only
 58|B|sidebar_modules|146 menu screens seeded from the v1.7 menu tree, all open
 59|P|function reveal|secret reveal by right with audit; secure pages with 2FA re-ask not built
 60|P|function boot|top bar with company switch, search, Create, user menu
-61|P|class Rights|rights per role; per-person GRANTED / REVOKED, request access not built
+61|P|function explain|built: role rights + personal GRANTED - REVOKED, refusal names the right, Request access goes to the Owner; open: dry-run report that the migrated old rights equal the new ones
 62|P|class Rights|money removed for Warehouse; one Mask service for every field right not built
 63|M||data scope "own shops" not built
 64|B|function attempt|login: hashed password, lock after 5 wrong tries, login log, 2-step

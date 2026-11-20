@@ -1,4 +1,4 @@
-FIN-1|P|class Rights|finance rights by role lists in the controllers; the permission matrix as data not built
+FIN-1|P|class PermCatalogue|finance rights are data now (matrix per role, switchable); open: the spec's fin.* action names and the PARTNER_ACCOUNT own-partner right are not mapped one to one
 FIN-2|P|function partnerOfUser|a PARTNER login sees only his own account and asks only his own withdrawal; route-level whitelist of 12 actions not built
 FIN-3|M||partner onboarding gate (6 items) not built
 FIN-4|P|vat_rate|VAT rate + corporation tax rate per company used for the reserve; the full settings form with checks not built

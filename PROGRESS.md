@@ -191,3 +191,14 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - "Set up the folders" button on the Drive screen (OWNER / MANAGER) makes missing folders and reuses existing ones (running it twice makes nothing new). Any other Drive can be connected later; the same layout is made there.
 - GoogleDrive::folder() refuses to make a folder without a parent.
 - Tests: 186 pass (1,828 checks). Commit eaf640e.
+
+## 21 Nov 2026 – Permission engine (own-version plan, pillar 1)
+- Every "may this person do this?" now goes through one service, `App\Services\Perm`. The role lists that were written inside the controllers are data: 100+ named screen rights (`app/Services/PermCatalogue.php` + labels in Perm), `form:<key>:<VIEW|ADD|EDIT|DELETE|EXPORT>`, `menu:<module_key>`, `report:<key>`.
+- Answer = built-in role default → the role's own switches (`mo_role_perms`) → the person's own rights (`mo_user_perms`, GRANTED / REVOKED, reason required, optional end date). The Owner role always has everything; `admin.permissions` can never be handed out.
+- Made roles (`mo_roles`): start like a built-in role, can copy another role's switches. The user keeps the built-in role in `role_code` and the made role in `custom_role`.
+- Field rules (`mo_field_rules`): Hidden / See only / Can change per role or person, on any registry form.
+- Shop scope (`mo_user_scopes`): a person limited to some shops – registry lists are narrowed, and any request on any screen that names another shop is refused. OPEN: summary screens (orders, money, reports) are not yet narrowed – next step 1b.
+- Refusal answer names the right and offers "Ask the Owner" (`mo_access_requests`); the Owner grants (with end date) or refuses (with reason). "Why?" explains any answer. "View as" lets the Owner see the tool as any role, read-only.
+- Screen: Setup › Permissions & roles (`#/permissions`) – tabs Roles and rights (search, group, role, only changed, with forms), People, Fields, Requests, View as.
+- Migration `2026_11_21_000019_permissions.php`. Tests: 195 pass (3,270 checks), new `tests/Feature/PermissionTest.php` (9).
+- Register audit after this step: BUILT 210 of 1,433 (15 %) – one line moved to BUILT (MR-1247); MR-0036, MR-1286, R-G_CORE-61, R-FIN-1, R-A_SALES-47/82 stay PARTIAL with a shorter open list (see audit/verdicts).

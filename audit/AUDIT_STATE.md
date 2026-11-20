@@ -37,3 +37,19 @@ Rules level: 631 rules – BUILT 78, PARTIAL 235, FORM ONLY 112, MISSING 206.
 
 ## Next (build phase) – order agreed with the owner in docs/OWN_VERSION_PLAN.md
 Parity gate -> Permission engine -> Search -> Filters -> Smart fields -> Guidance -> Foundations -> then area by area, weakest first (Sales, Tasks, Accounts, Reports), each MISSING / PARTIAL / FORM ONLY line turned BUILT with a test; the verdict line is changed in the same commit.
+
+## Build phase log (newest last) – continue from the last line
+Owner instruction (21 Nov 03:07): work without asking, resume by yourself with a timer, take every register line to BUILT (100 %), keep the numbers honest.
+| # | Step | State | Commit | BUILT after |
+|---|---|---|---|---|
+| 1 | Permission engine (pillar 1): rights as data, made roles, personal rights, field rules, access requests, view-as, shop scope (registry lists + any request naming a shop), screen "Roles and rights" | done, 195 tests | c804890 + next | 210 (15 %) |
+| 1b | Shop scope on the summary screens (orders, money, settlements, reports, partner) – `Perm::scopeQuery` on each list query; then MR-0036, MR-1286, R-A_SALES-47 become BUILT | NEXT | | |
+| 2 | Search everything (Ctrl+K: records, screens, actions, reports, settings, help) | todo | | |
+| 3 | Filters builder on every list (any field, AND/OR, saved, shared) | todo | | |
+| 4 | Smart fields (multi-select, All, + New in place, suggestions, click-to-fill, copy) | todo | | |
+| 5 | Guidance – never stuck (next step, why blocked, fix link on every refusal) | todo | | |
+| 6 | Foundations (soft delete + restore, import undo, bulk actions, notifications) | todo | | |
+| 7 | Areas weakest first: Sales (3 %), Tasks (3 %), Accounts (3 %), Reports (4 %), Migration (0 %), Sourcing, Core, Products, Finance, Security, Stock, Setup, Labels | todo | | |
+| 8 | MY TOOL functions (docs/MYTOOL_GAP.md, 34) | todo | | |
+| 9 | Vue screens, Intelligence, server go-live | todo | | |
+How to work each step: build → test → change the verdict lines in `audit/verdicts/` → `python3 audit/verify.py` → `python3 audit/build_result.py <register.csv>` → commit + push → update this table and project docs `claude/AUDIT_STATE.md`, `claude/CODE_PROGRESS.md`.
