@@ -44,6 +44,7 @@ class TaskEngine
         }
         $id = DB::table('tasks')->insertGetId($data);
         self::history($id, 'CREATED', "Opened by rule $ruleCode");
+        if ($data['owner_user_id']) Notify::push((int) $data['owner_user_id'], 'TASK', $data['title'], $data['fix_url'] ?: '#/tasks', (int) $id);
         return $id;
     }
 

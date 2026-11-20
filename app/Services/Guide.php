@@ -184,6 +184,7 @@ class Guide
             DB::table('task_history')->insert(['task_id' => $t->id, 'at' => now(), 'user_id' => $u->id, 'field' => 'status', 'old_value' => $t->status, 'new_value' => 'STUCK', 'reason' => trim(self::STUCK_ON[$type] . ': ' . ($name ?: '') . ' ' . $text)]);
             DB::table('task_comments')->insert(['task_id' => $t->id, 'at' => now(), 'user_id' => $u->id, 'text' => 'STUCK: ' . trim(($name ? $name . ' – ' : '') . $text), 'via' => 'APP']);
             Audit::log('tasks', $t->id, 'UPDATE', ['status' => [$t->status, 'STUCK'], 'stuck_on' => [null, $type]]);
+            if ($type === 'USER') Notify::push((int) $onId, 'TASK', ($u->display_name ?: $u->login_id) . ' is stuck on you: ' . $t->title . ($text !== '' ? ' – ' . $text : ''), '#/tasks?scope=stuck_on_me', (int) $t->id);
         });
     }
 

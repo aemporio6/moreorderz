@@ -132,7 +132,7 @@
     $('#btnFav').onclick = async () => { const title = ($('#main h1') || {}).textContent || S.route; const on = !(NAV.favourites || []).some(f => f.url === S.route);
       try { NAV = await api('nav', { method: 'POST', body: { title: title.trim().slice(0, 150), url: S.route, favourite: on } }); paintFav(); toast(on ? 'Added to your favourites' : 'Removed from your favourites'); } catch (e) { toast(e.message, 'err'); } };
     paintFav();
-    $('#btnBell').onclick = () => go('#/tasks');
+    $('#btnBell').onclick = () => openBell(); $('#btnBell').title = 'Notifications and my tasks'; loadBell();
     $('#btnUser').onclick = () => go('#/me');
     $('#selEnt').onchange = async e => { busy(true); try { await api('company', { method: 'POST', body: { ent: +e.target.value } }); S.boot = await api('boot'); drawTop(); drawSide(); render(); toast('Now working in ' + e.target.selectedOptions[0].text); } catch (x) { toast(x.message, 'err'); } busy(false); };
   }
@@ -216,6 +216,7 @@
       if (r === '#/users') return await pageUsers();
       if (r === '#/permissions') return await pagePermissions();
       if (r === '#/playbooks') return await pagePlaybooks();
+      if (r === '#/bulk-jobs') return await pageBulkJobs();
       if (r === '#/choices') return await pageChoices();
       if (r === '#/settings') return await pageSettings();
       if (r.startsWith('#/audit')) return await pageAudit();
@@ -281,9 +282,10 @@
       <div class="list-bar"><input class="q" id="lQ" placeholder="Search this list… (words in any order)" value="${esc(st.q || '')}">
         ${treeRules(d.where).map((r, i) => `<span class="chip accent plain" title="${esc(d.where_text)}">${r.rules ? 'Group of ' + countRules(r) : esc(colOf(r.f).label) + ' ' + esc(((FMETA.ops[colOf(r.f).group] || {})[r.o]) || r.o) + (r.o === 'preset' ? ' ' + esc(FMETA.presets[r.v]) : Array.isArray(r.v) ? ' ' + esc(r.v.length > 2 ? r.v.length + ' values' : r.v.map(x => x === '' ? '(empty)' : x).join(r.o === 'between' ? ' – ' : ', ')) : r.v != null ? ' ' + esc(r.v) : '')} <a href="#" data-unr="${i}" title="Remove this filter">✕</a></span>${i < treeRules(d.where).length - 1 ? `<span class="small muted">${d.where.op === 'OR' ? 'or' : 'and'}</span>` : ''}`).join('')}
         ${Object.entries(st.filter || {}).filter(([, v]) => v !== '').map(([k, v]) => `<span class="chip accent plain">${esc(colOf(k).label)}: ${esc(v)} <a href="#" data-unf="${esc(k)}" title="Remove this filter">✕</a></span>`).join('')}${nF ? '<a href="#" class="small" id="lClrAll">Clear all</a>' : ''}</div>
-      <div class="tbl-wrap"><table class="t" id="lTbl" style="${Object.keys(widths).length ? 'table-layout:fixed' : ''}"><thead><tr>${d.columns.map(c => `<th draggable="true" data-col="${esc(c.name)}" class="${numc(c)}" style="position:sticky;white-space:nowrap;${widths[c.name] ? 'width:' + widths[c.name] + 'px;' : ''}${pad}"><span data-sort="${esc(c.name)}" style="cursor:pointer">${esc(c.label)}${st.sort === c.name ? (st.dir === 'asc' ? ' ↑' : ' ↓') : ''}</span> <a href="#" data-cf="${esc(c.name)}" title="Filter this column" style="opacity:${ruleOf(c.name) ? 1 : .35};color:${ruleOf(c.name) ? 'var(--accent)' : 'inherit'}">${ic('filter')}</a><span data-rz="${esc(c.name)}" style="position:absolute;right:0;top:0;bottom:0;width:6px;cursor:col-resize"></span></th>`).join('')}</tr></thead>
-      <tbody>${d.rows.map(r => `<tr class="click" data-id="${r.id}">${d.columns.map(c => `<td class="${numc(c)}" style="${pad};${widths[c.name] ? 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap' : ''}">${fmtCell(r[c.name], c.type, r, c.name)}</td>`).join('')}</tr>`).join('')}</tbody>
-      ${d.rows.length ? `<tfoot><tr>${d.columns.map((c, i) => `<td class="${numc(c)}" style="font-weight:650;border-top:2px solid var(--line);${pad}">${d.totals[c.name] !== undefined ? `<span title="Total ${esc(c.label)} of all ${d.total} filtered rows">${c.type === 'money' ? money(d.totals[c.name]) : (+d.totals[c.name]).toLocaleString('en-GB')}</span>` : i === 0 ? `Total records: ${d.total.toLocaleString('en-GB')}` : ''}</td>`).join('')}</tr></tfoot>` : ''}</table>
+      <div class="list-bar" id="lBulk" hidden style="background:rgba(15,118,110,.07)"></div>
+      <div class="tbl-wrap"><table class="t" id="lTbl" style="${Object.keys(widths).length ? 'table-layout:fixed' : ''}"><thead><tr><th style="width:34px;${pad}"><input type="checkbox" id="lAll" title="Tick every row on this page"></th>${d.columns.map(c => `<th draggable="true" data-col="${esc(c.name)}" class="${numc(c)}" style="position:sticky;white-space:nowrap;${widths[c.name] ? 'width:' + widths[c.name] + 'px;' : ''}${pad}"><span data-sort="${esc(c.name)}" style="cursor:pointer">${esc(c.label)}${st.sort === c.name ? (st.dir === 'asc' ? ' ↑' : ' ↓') : ''}</span> <a href="#" data-cf="${esc(c.name)}" title="Filter this column" style="opacity:${ruleOf(c.name) ? 1 : .35};color:${ruleOf(c.name) ? 'var(--accent)' : 'inherit'}">${ic('filter')}</a><span data-rz="${esc(c.name)}" style="position:absolute;right:0;top:0;bottom:0;width:6px;cursor:col-resize"></span></th>`).join('')}</tr></thead>
+      <tbody>${d.rows.map(r => `<tr class="click" data-id="${r.id}"><td style="${pad}" data-nogo><input type="checkbox" data-tick="${r.id}"></td>${d.columns.map(c => `<td class="${numc(c)}" data-cell="${esc(c.name)}" style="${pad};${widths[c.name] ? 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap' : ''}">${fmtCell(r[c.name], c.type, r, c.name)}</td>`).join('')}</tr>`).join('')}</tbody>
+      ${d.rows.length ? `<tfoot><tr><td style="border-top:2px solid var(--line)"></td>${d.columns.map((c, i) => `<td class="${numc(c)}" style="font-weight:650;border-top:2px solid var(--line);${pad}">${d.totals[c.name] !== undefined ? `<span title="Total ${esc(c.label)} of all ${d.total} filtered rows">${c.type === 'money' ? money(d.totals[c.name]) : (+d.totals[c.name]).toLocaleString('en-GB')}</span>` : i === 0 ? `Total records: ${d.total.toLocaleString('en-GB')}` : ''}</td>`).join('')}</tr></tfoot>` : ''}</table>
       ${d.rows.length ? '' : `<div class="empty">${ic('file')}<div>${nF || st.q ? 'Nothing matches these filters. <a href="#" id="lClrAll2">Clear the filters</a> to see everything.' : 'Nothing here yet.'}</div>${nF || st.q ? '' : '<div id="lEmptyAct" style="margin-top:10px;display:flex;gap:8px;justify-content:center"></div>'}</div>`}</div>
       <div class="pager"><span>Page ${d.page} of ${pages} · ${d.total.toLocaleString('en-GB')} rows</span><button class="btn sm" id="pPrev" ${d.page <= 1 ? 'disabled' : ''}>Previous</button><button class="btn sm" id="pNext" ${d.page >= pages ? 'disabled' : ''}>Next</button></div></div>`;
     const again = x => pageList(key, { ...st, _touched: true, ...x });
@@ -319,7 +321,28 @@
       const mv = ev => { th.style.width = Math.max(40, w0 + ev.clientX - x0) + 'px'; }; const up = () => { document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); const w = { ...widths }; $$('#lTbl th[data-col]').forEach(t => { w[t.dataset.col] = t.offsetWidth; }); savePrefs({ widths: w }); again({ widths: w }); };
       document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up); }; });
     const WS = { src_research: '#/research/', t_src_cycles: '#/cycle/', t_src_po: '#/po/' };
-    $$('#main tr[data-id]').forEach(tr => tr.onclick = () => go(WS[d.table] ? WS[d.table] + tr.dataset.id : `#/rec/${key}/${tr.dataset.id}`));
+    let clickT; $$('#main tr[data-id]').forEach(tr => tr.onclick = e => { if (e.target.closest('[data-nogo], input, select, [data-editing]')) return; clearTimeout(clickT); clickT = setTimeout(() => go(WS[d.table] ? WS[d.table] + tr.dataset.id : `#/rec/${key}/${tr.dataset.id}`), 230); });
+    // bulk: tick rows → change a field for all, delete or restore – always with a preview, and Undo afterwards
+    const ticked = () => $$('#lTbl [data-tick]').filter(i => i.checked).map(i => +i.dataset.tick); let BA = null;
+    const bulkBar = async () => { const ids = ticked(), bar = $('#lBulk'); if (!ids.length) { bar.hidden = true; return; } if (!BA) { try { BA = await api('bulk/' + key); } catch (e) { BA = { fields: [] }; } }
+      bar.hidden = false; bar.innerHTML = `<b>${ids.length} selected</b>${BA.can_edit && BA.fields.length ? `<select class="q" id="lbF" style="min-width:0;max-width:240px"><option value="">Change a field for all…</option>${BA.fields.map(f => `<option value="${esc(f.name)}">${esc(f.label)}</option>`).join('')}</select>` : ''}${BA.can_delete ? '<button class="btn sm" id="lbDel">Delete</button><button class="btn sm" id="lbRes">Restore</button>' : ''}<button class="btn sm ghost" id="lbNone">Clear ticks</button><span style="flex:1"></span><a class="small" href="#/bulk-jobs">What was changed in bulk · Undo</a>`;
+      $('#lbNone').onclick = () => { $$('#lTbl [data-tick]').forEach(i => { i.checked = false; }); $('#lAll').checked = false; bulkBar(); };
+      if ($('#lbDel')) { $('#lbDel').onclick = () => bulkRun(key, 'DELETE', ids, null, null, () => again({})); $('#lbRes').onclick = () => bulkRun(key, 'RESTORE', ids, null, null, () => again({})); }
+      if ($('#lbF')) $('#lbF').onchange = e => { const f = BA.fields.find(x => x.name === e.target.value); e.target.value = ''; if (f) bulkValue(key, f, v => bulkRun(key, 'SET', ids, f.name, v, () => again({}))); }; };
+    $('#lAll').onchange = e => { $$('#lTbl [data-tick]').forEach(i => { i.checked = e.target.checked; }); bulkBar(); };
+    $$('#lTbl [data-tick]').forEach(i => i.onchange = bulkBar);
+    // inline edit: double-click a cell → change that one value (same checks and history as the form)
+    $$('#lTbl td[data-cell]').forEach(td => td.ondblclick = async e => { clearTimeout(clickT); e.stopPropagation(); if (td.dataset.editing) return; if (!BA) { try { BA = await api('bulk/' + key); } catch (x) { BA = { fields: [] }; } }
+      const f = BA.fields.find(x => x.col === td.dataset.cell); if (!f) return toast(BA.can_edit ? 'This column cannot be changed here – open the record.' : 'Your role cannot change this list.', 'warn');
+      const id = +td.parentElement.dataset.id, row = d.rows.find(r => r.id == id), old = row[f.col] ?? ''; td.dataset.editing = 1; const html = td.innerHTML;
+      let opts = null; if (f.has_options) { try { opts = (await api(`options/${key}/${f.name}`)).options; } catch (x) { opts = []; } }
+      td.innerHTML = opts ? `<select class="q" style="min-width:120px"><option value="">—</option>${opts.map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(old) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>` : f.type === 'check' ? `<select class="q"><option value="1" ${+old ? 'selected' : ''}>Yes</option><option value="0" ${+old ? '' : 'selected'}>No</option></select>`
+        : `<input class="q" type="${f.type === 'date' ? 'date' : ['number', 'money'].includes(f.type) ? 'number' : 'text'}" step="any" value="${esc(f.type === 'date' ? String(old).slice(0, 10) : old)}" style="min-width:90px;width:100%">`;
+      const el = td.firstElementChild; el.focus(); if (el.select) el.select(); let done = false;
+      const cancel = () => { if (done) return; done = true; delete td.dataset.editing; td.innerHTML = html; };
+      const save = async () => { if (done) return; if (String(el.value) === String(old ?? '')) return cancel(); done = true;
+        try { await api(`record/${key}/${id}`, { method: 'POST', body: { values: { [f.name]: el.value } } }); toast(`${f.label} changed`); again({}); } catch (x) { done = false; toast(x.errors && Object.values(x.errors)[0] ? [].concat(Object.values(x.errors)[0])[0] : x.message, 'err'); el.focus(); } };
+      el.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); save(); } else if (ev.key === 'Escape') { ev.stopPropagation(); cancel(); } }; el.onblur = () => setTimeout(() => { if (!done && document.activeElement !== el) save(); }, 120); el.onchange = () => { if (el.tagName === 'SELECT') save(); }; });
     if ($('#lBins')) $('#lBins').onclick = () => binGenerator(() => again({}));
     if ($('#lBinLbl')) $('#lBinLbl').onclick = () => { const ids = d.rows.filter(r => r.kind === 'BIN').map(r => r.id); if (!ids.length) return toast('No bins in this list. Filter the list to the bins you want, then print.', 'err');
       miniForm('Print bin labels', `${ids.length} bin(s) shown in this list. On a label sheet you can start at a later cell to use up a half-used sheet.`, [{ name: 'start_cell', label: 'Start at cell', type: 'number', value: 1, help: 'Label sheets only. 1 = first label, top left.' }, { name: 'copies', label: 'Copies of each', type: 'number', value: 1 }], async v => { setTimeout(() => printNow('LOCATION', ids, { start_cell: +v.start_cell || 1, copies: +v.copies || 1 }), 60); return { message: 'Preparing labels…' }; }, 'Print'); };
@@ -437,6 +460,41 @@
     load();
   }
 
+  // ---------- bulk actions: value → preview → apply → Undo ----------
+  function bulkValue(key, f, done) {
+    if (f.has_options) { (async () => { let opts = []; try { opts = (await api(`options/${key}/${f.name}`)).options; } catch (e) {} miniForm('Set “' + f.label + '” for the selected rows', 'Next you see every row with its old and new value before anything is changed.', [{ name: 'v', label: f.label, options: [['', '(empty)']].concat(opts) }], async v => { setTimeout(() => done(v.v), 30); return { message: 'Preview…' }; }, 'Preview'); })(); return; }
+    miniForm('Set “' + f.label + '” for the selected rows', 'Next you see every row with its old and new value before anything is changed.', [f.type === 'check' ? { name: 'v', label: f.label, options: [['1', 'Yes'], ['0', 'No']] } : { name: 'v', label: f.label, type: f.type === 'date' ? 'date' : ['number', 'money'].includes(f.type) ? 'number' : 'text' }], async v => { setTimeout(() => done(v.v), 30); return { message: 'Preview…' }; }, 'Preview');
+  }
+  async function bulkRun(key, action, ids, field, value, after) {
+    busy(true); let p; try { p = await api('bulk/' + key, { method: 'POST', body: { action, ids, field, value } }); } catch (e) { busy(false); return toast(e.message, 'err'); } busy(false);
+    const red = action === 'DELETE';
+    const { ov, close } = modal(p.title, '', `<div class="card" style="padding:10px 12px;margin-bottom:10px;border-color:${red ? 'var(--err)' : 'var(--accent)'};color:${red ? 'var(--err)' : 'inherit'}"><b>${esc(p.message)}</b>${red ? ' Nothing is erased: a deleted record is switched off and can be restored.' : ''}</div>
+      <div class="tbl-wrap" style="max-height:50vh;overflow:auto"><table class="t"><thead><tr><th>Record</th><th>${esc(p.field)} now</th><th>becomes</th><th></th></tr></thead><tbody>${p.rows.map(r => `<tr style="${r.skip ? 'opacity:.6' : ''}"><td>${esc(r.label)}</td><td>${esc(r.old_label ?? '')}</td><td>${r.skip ? '—' : `<b>${esc(r.new_label === '' ? '(empty)' : r.new_label)}</b>`}</td><td class="small" style="color:${r.skip ? '#b45309' : 'inherit'}">${esc(r.skip || '')}${(r.used || []).length && r.skip ? ' ' + r.used.map(u => `<a href="${esc(u.url)}" data-cl>see</a>`).join(' ') : ''}</td></tr>`).join('')}</tbody></table></div>`,
+      `<button class="btn" id="brCancel">Cancel</button><button class="btn primary" id="brOk" ${p.will_change ? '' : 'disabled'}>${red ? 'Delete' : action === 'RESTORE' ? 'Restore' : 'Update'} ${p.will_change} row(s)</button>`);
+    $('#brCancel', ov).onclick = close; $$('[data-cl]', ov).forEach(a => a.addEventListener('click', close));
+    $('#brOk', ov).onclick = async () => { $('#brOk', ov).disabled = true; busy(true);
+      try { const r = await api('bulk/' + key, { method: 'POST', body: { action, ids, field, value, apply: true } }); close(); undoToast(r.message, r.job, after); if ((r.failed || []).length) toast(`${r.failed.length} row(s) refused: ${r.failed[0].why}`, 'warn'); after && after(); }
+      catch (e) { toast(e.message, 'err'); $('#brOk', ov).disabled = false; } busy(false); };
+  }
+  function undoToast(msg, job, after) { const t = document.createElement('div'); t.className = 'toast ok'; t.innerHTML = `<span>${esc(msg)}</span>${job ? ' <a href="#" style="font-weight:650">Undo</a>' : ''}`; $('#toasts').appendChild(t); const off = setTimeout(() => t.remove(), 12000);
+    if (job) t.querySelector('a').onclick = async e => { e.preventDefault(); clearTimeout(off); t.remove(); try { const r = await api(`bulk-jobs/${job}/undo`, { method: 'POST' }); toast(r.message); after && after(); } catch (x) { toast(x.message, 'err'); } }; }
+  async function pageBulkJobs() {
+    busy(true); let d; try { d = await api('bulk-jobs'); } finally { busy(false); }
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Changed in bulk</h1><div class="sub">Every bulk change and delete, newest first. Undo puts the old values back; a row that was changed again afterwards is left alone.</div></div></div>
+      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>When</th><th>No.</th><th>List</th><th>What</th><th class="num">Rows</th><th>By</th><th>State</th><th></th></tr></thead><tbody>${d.jobs.map(j => `<tr><td>${esc(j.at.slice(0, 16))}</td><td>${esc(j.no)}</td><td><a href="#/list/${esc(j.list)}">${esc(j.list_title)}</a></td><td>${esc(j.what)}</td><td class="num">${j.rows}</td><td>${esc(j.by || '')}</td><td><span class="chip ${j.status === 'APPLIED' ? 'done' : 'lock'}">${j.status === 'APPLIED' ? 'Done' : j.status === 'UNDONE' ? 'Undone' : esc(j.status)}</span></td><td>${j.status === 'APPLIED' ? `<button class="btn sm" data-bu="${j.id}">Undo</button>` : ''}</td></tr>`).join('')}</tbody></table>${d.jobs.length ? '' : '<div class="empty">Nothing was changed in bulk yet. Tick rows in any list to start.</div>'}</div></div>`;
+    $$('#main [data-bu]').forEach(b => b.onclick = () => act(`bulk-jobs/${b.dataset.bu}/undo`, {}, () => pageBulkJobs()));
+  }
+  // ---------- the bell: latest messages, grouped; click opens and marks read; refreshed every minute while the tab is visible ----------
+  let BELL = null;
+  const paintBell = () => { const dot = $('#bellDot'); if (!dot || !BELL) return; dot.style.display = BELL.count ? 'flex' : 'none'; dot.textContent = BELL.badge; };
+  async function loadBell() { if (document.hidden || !S.boot) return; try { BELL = await api('bell'); paintBell(); } catch (e) {} }
+  setInterval(loadBell, 60000); document.addEventListener('visibilitychange', () => { if (!document.hidden) loadBell(); });
+  async function openBell() { await loadBell(); const b = BELL || { items: [], open_tasks: 0, unread: 0 }; const groups = [...new Set(b.items.map(i => i.group))];
+    const { ov, close } = modal('Notifications', `${b.unread} unread · ${b.open_tasks} open task(s) of yours`, b.items.length ? groups.map(g => `<div class="small muted" style="font-weight:650;text-transform:uppercase;letter-spacing:.04em;margin:10px 0 2px">${esc(g)}</div>` + b.items.filter(i => i.group === g).map(i => `<a href="${esc(i.url)}" data-bn="${i.id}" style="display:block;padding:8px 10px;border-radius:8px;text-decoration:none;color:inherit;${i.unread ? 'font-weight:650;background:rgba(15,118,110,.06)' : 'opacity:.65'}">${esc(i.text)}<div class="small muted" style="font-weight:400">${esc(i.at.slice(0, 16))}</div></a>`).join('')).join('') : '<div class="empty">No messages yet.</div>',
+      `<button class="btn left" id="bnAll" ${b.unread ? '' : 'disabled'}>Mark all read</button><a class="btn primary" href="#/tasks" id="bnTasks">Open My tasks</a>`, false);
+    $$('[data-bn]', ov).forEach(a => a.addEventListener('click', () => { api('bell/read', { method: 'POST', body: { id: +a.dataset.bn } }).then(x => { BELL = x; paintBell(); }).catch(() => {}); close(); }));
+    $('#bnAll', ov).onclick = async () => { try { BELL = await api('bell/read', { method: 'POST', body: {} }); paintBell(); } catch (e) {} close(); }; $('#bnTasks', ov).addEventListener('click', close); }
+
   // ---------- record page: details, links both ways, tasks, history ----------
   const chipFor = s => ({ DONE: 'done', APPROVED: 'done', DOING: 'prog', STUCK: 'err', TODO: 'pend', REWORK: 'warn', CANCELLED: 'lock' }[s] || 'pend');
   const showVal = f => { const v = f.shown ?? f.value; if (v === null || v === undefined || v === '') return '<span class="faint">—</span>'; if (f.type === 'check') return +v ? 'Yes' : 'No';
@@ -451,10 +509,11 @@
       : tab === 'tasks' ? `<div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>Task</th><th>Status</th><th>Priority</th><th>Due</th></tr></thead><tbody>${d.tasks.map(t => `<tr><td>${esc(t.title)}${t.rule_code ? ` <span class="small muted">${esc(t.rule_code)}</span>` : ''}</td><td><span class="chip ${chipFor(t.status)}">${esc(t.status)}</span></td><td>${esc(t.priority)}</td><td>${esc(t.due_at)}</td></tr>`).join('')}</tbody></table>${d.tasks.length ? '' : '<div class="empty">No tasks on this record.</div>'}</div></div>`
       : `<div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>When</th><th>Who</th><th>What</th><th>Change</th></tr></thead><tbody>${d.history.map(h => `<tr><td>${esc(h.at)}</td><td>${esc(h.by)}</td><td>${esc({ INSERT: 'Created', UPDATE: 'Changed', EXPORT: 'Exported' }[h.action] || h.action)}</td><td>${h.changes ? Object.entries(h.changes).map(([k, v]) => `<div><b>${esc(k)}</b>: ${esc(v[0] ?? '—')} → ${esc(v[1] ?? '—')}</div>`).join('') : ''}${h.reason ? `<div class="small muted">${esc(h.reason)}</div>` : ''}</td></tr>`).join('')}</tbody></table></div></div>`;
     $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/list/${key}">${esc(d.form_title)}</a> ›</div><h1>${esc(d.title)}</h1></div>
-      <div class="actions">${key === S.boot.product_form ? `<a class="btn" href="#/stock/product/${id}">Stock</a><a class="btn" href="#/prices/${id}">Prices</a>` : ''}<button class="btn primary" id="rEdit">${ic('wand')} Edit</button></div></div>
+      <div class="actions">${key === S.boot.product_form ? `<a class="btn" href="#/stock/product/${id}">Stock</a><a class="btn" href="#/prices/${id}">Prices</a>` : ''}<button class="btn" id="rDel" title="Switch this record off. Refused when something still uses it. Can be undone.">Delete</button><button class="btn primary" id="rEdit">${ic('wand')} Edit</button></div></div>
       <div id="rGuide"></div>
       <div class="seg" style="margin-bottom:14px">${tabs.map(([k, l]) => `<button type="button" class="${k === tab ? 'on' : ''}" data-tab="${k}">${esc(l)}</button>`).join('')}</div>${body}`;
     guideCard(key, id);
+    $('#rDel').onclick = () => bulkRun(key, 'DELETE', [id], null, null, () => pageRecord(key, id));
     $('#rEdit').onclick = () => openForm(key, id, { onSaved: () => pageRecord(key, id) });
     $$('#main [data-tab]').forEach(b => b.onclick = () => { S.recTab = b.dataset.tab; pageRecord(key, id); });
   }

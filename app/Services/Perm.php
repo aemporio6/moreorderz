@@ -387,6 +387,7 @@ class Perm
         if ($open) return (int) $open;
         $id = (int) DB::table('mo_access_requests')->insertGetId(['fk_id_ent' => Context::ent(), 'user_id' => $u->id, 'perm_code' => $code, 'note' => $note ? mb_substr($note, 0, 255) : null, 'created_at' => now(), 'updated_at' => now()]);
         Audit::log('mo_access_requests', $id, 'INSERT', ['right' => $code]);
+        Notify::toRight('admin.permissions', 'ACCESS', ($u->display_name ?: $u->login_id) . ' asks for: ' . self::label($code), '#/permissions', (int) $u->id);
         return $id;
     }
 
@@ -398,6 +399,7 @@ class Perm
         DB::transaction(function () use ($q, $grant, $note, $until, $by) {
             if ($grant) self::setUser((int) $q->user_id, $q->perm_code, 'GRANTED', 'Asked for by the person' . ($note ? ": $note" : ''), $until, (int) $by->id);
             DB::table('mo_access_requests')->where('id', $q->id)->update(['status' => $grant ? 'GRANTED' : 'REFUSED', 'decided_by' => $by->id, 'decided_note' => $note, 'updated_at' => now()]);
+            Notify::push((int) $q->user_id, 'ACCESS', ($grant ? 'Granted: ' : 'Refused: ') . self::label($q->perm_code) . ($note ? ' – ' . $note : ''), '#/home');
         });
     }
 }

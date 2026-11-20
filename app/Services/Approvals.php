@@ -32,6 +32,7 @@ class Approvals
             'requested_by' => (int) Context::userId(), 'requested_at' => now(), 'status' => 'PENDING', 'change_json' => json_encode($change), 'risk' => 'MEDIUM']);
         $task = TaskEngine::open('FIN_APPROVE', [$aid], $title ?: "Approval needed: $action " . number_format($amountBase, 2), ['ent' => $ent, 'module' => 'sys_approvals', 'record_id' => $aid, 'amount' => $amountBase, 'fix_url' => '#/approvals']);
         if ($task) DB::table('sys_approvals')->where('id', $aid)->update(['fk_id_task' => $task]);
+        Notify::toRight('money.approve', 'APPROVAL', ($title ?: "Approval needed: $action") . ' · ' . number_format($amountBase, 2), '#/approvals', (int) Context::userId());
         EventBus::fire('APPROVAL_REQUESTED', 'sys_approvals', $aid, ['action' => $action, 'amount' => $amountBase], $ent);
         return $aid;
     }
@@ -47,6 +48,7 @@ class Approvals
             DB::table('sys_approvals')->where('id', $a->id)->update(['status' => $approve ? 'APPROVED' : 'REJECTED', 'decided_by' => Context::userId(), 'decided_at' => now(), 'reason' => $reason]);
             if (isset(self::$handlers[$a->action_code])) (self::$handlers[$a->action_code])($a, $approve, $reason);
             TaskEngine::close('FIN_APPROVE', [$a->id], $approve ? 'Approved' : 'Rejected');
+            Notify::push((int) $a->requested_by, 'APPROVAL', ($approve ? 'Approved: ' : 'Rejected: ') . strtolower(str_replace('_', ' ', (string) $a->action_code)) . ' ' . number_format((float) $a->amount_gbp, 2) . ($reason ? ' – ' . $reason : ''), '#/approvals');
             Audit::log('sys_approvals', $a->id, $approve ? 'APPROVE' : 'REJECT', ['action' => $a->action_code, 'amount' => $a->amount_gbp], $reason, (int) $a->fk_id_ent);
             EventBus::fire($approve ? 'APPROVAL_APPROVED' : 'APPROVAL_REJECTED', 'sys_approvals', $a->id, ['action' => $a->action_code], (int) $a->fk_id_ent);
             return DB::table('sys_approvals')->where('id', $a->id)->first();

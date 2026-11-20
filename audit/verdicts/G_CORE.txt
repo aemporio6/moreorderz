@@ -40,7 +40,7 @@
 40|M||Team & Settings page / leaderboard not built
 41|P|function page|task record page; action bar / banners not built
 42|M||built-in guide not built
-43|M||bell not built
+43|B|class Notify|bell in the header: badge = unread + my open tasks (99+ cap), latest 10, unread bold / read faded, grouped by type, click marks read and opens, Mark all read, refresh every 60 s only while the tab is visible, "Open My tasks"; BulkJobsTest
 44|M||weekly task report not built
 45|P|function digests|morning digest of late / urgent tasks by WhatsApp; sections, team digest, preview not built
 46|P|class Messenger|WhatsApp + e-mail outboxes, never twice, 3 tries, HELD until a channel exists; one tm_messages table for every engine partly
@@ -66,8 +66,8 @@
 66|B|class ListFilter|every list: 25/50/100/250 rows (100 default), Copy / CSV / Excel / PDF / Print, column chooser, totals row over the filtered rows with "Total records", filter per column (values with counts, All, "(empty)"), text contains / starts with / exact, date From / To and presets, drag to reorder and resize saved per user and in saved views; ListStandardTest. Note: the date range lives in the saved state; <field>_start / _end in the address is accepted by the server
 67|B|function export|export follows the visible columns and filters, logged, formula-safe
 68|P|class ListExports|built: named exports per list (dual list, order, filters, CSV / XLSX / PDF), private or shared with a role, list with count badge and created date, Edit / Download / Delete, file name {name}_{YmdHis}, scoped and logged, daily / weekly by e-mail; open: schedule to a Drive folder, migration of the old t_export_options rows
-69|M||bulk actions registry not built
-70|P|miniForm|confirm / mini-form popups with plain refusal reasons; Undo toast not built
+69|P|class BulkJobs|built: on every registry list – tick rows → change any allowed field (status included), delete, restore; "Please select at least one checkbox", popup titles and "System will change n selected row(s)", preview old → new with skip reasons, one bulk_jobs row, Undo, answer after the work, list reloads; open: change role in bulk on the users list and module-specific bulk actions
+70|B|function usedBy|delete asks with a preview, POST only, the server's reason shows ("Not deleted – used by 12 products" with a link), success toast with Undo (soft delete, restore); Esc cancels; BulkJobsTest
 71|P|auto_correct|field types and auto-correct from the registry; month_year type not built
 72|P|class PrintService|PDF print service at exact size; DOCX export not built
 73|M||"Update a field" import mode not built

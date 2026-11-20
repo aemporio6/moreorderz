@@ -146,4 +146,27 @@ class WorkController extends Controller
         catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
         return \App\Services\Guide::nav($r->user());
     }
+
+    // ---- bulk actions: preview → apply → Undo ----
+    public function bulkActions(Request $r, string $key) { Rights::check('VIEW', $key); return \App\Services\BulkJobs::actions($key, $r->user()); }
+
+    public function bulk(Request $r, string $key)
+    {
+        $d = $r->validate(['action' => 'required|in:SET,DELETE,RESTORE', 'ids' => 'present|array', 'ids.*' => 'integer', 'field' => 'nullable|string|max:80', 'value' => 'nullable', 'apply' => 'nullable|boolean']);
+        try {
+            return ! empty($d['apply']) ? \App\Services\BulkJobs::apply($key, $r->user(), $d['action'], $d['ids'], $d['field'] ?? null, $d['value'] ?? null)
+                : \App\Services\BulkJobs::preview($key, $r->user(), $d['action'], $d['ids'], $d['field'] ?? null, $d['value'] ?? null);
+        } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+    }
+
+    public function bulkUndo(Request $r, int $id)
+    {
+        try { return \App\Services\BulkJobs::undo($id, $r->user()); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+    }
+
+    public function bulkHistory(Request $r) { return ['jobs' => \App\Services\BulkJobs::history($r->user())]; }
+
+    // ---- the bell ----
+    public function bell(Request $r) { return \App\Services\Notify::bell($r->user()); }
+    public function bellRead(Request $r) { return \App\Services\Notify::read($r->user(), $r->input('id') ? (int) $r->input('id') : null); }
 }

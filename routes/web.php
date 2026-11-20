@@ -51,6 +51,12 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('nav', [WorkController::class, 'nav']);
         Route::post('nav', [WorkController::class, 'navVisit']);
         Route::post('tasks/{id}/stuck', [WorkController::class, 'taskStuck'])->whereNumber('id');
+        Route::get('bulk/{key}', [WorkController::class, 'bulkActions']);
+        Route::post('bulk/{key}', [WorkController::class, 'bulk']);
+        Route::post('bulk-jobs/{id}/undo', [WorkController::class, 'bulkUndo'])->whereNumber('id');
+        Route::get('bulk-jobs', [WorkController::class, 'bulkHistory']);
+        Route::get('bell', [WorkController::class, 'bell']);
+        Route::post('bell/read', [WorkController::class, 'bellRead']);
         Route::get('find', [WorkController::class, 'find']);
         Route::post('find/opened', [WorkController::class, 'findOpened']);
         Route::get('export/{key}', [WorkController::class, 'export']);
