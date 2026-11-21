@@ -126,6 +126,7 @@ class BuyingTest extends TestCase
         $this->assertTrue(TaskEngine::isOpen('SRC_GRN_SHORT', \App\Services\CycleAlerts::key('SRC_GRN_SHORT', (int) $grn)));
         $this->assertSame(1, (int) DB::table('t_product_vendors')->where('id', $go['product'])->value('f_active'), 'the draft product is live once it has stock');
         $this->assertSame('RECEIVED', DB::table('t_src_po')->where('id', $po)->value('status'), '990 received + 10 missing = 1,000 ordered: every unit is accounted for; the 10 missing live on in the claim task');
+        $this->assertEquals([20, '10 missing – supplier claim. 10 damaged – supplier / forwarder claim.'], [(float) DB::table('t_src_grn')->where('id', $grn)->value('claim_units'), DB::table('t_src_grn')->where('id', $grn)->value('claim_reason')], 'R-F_SETUP-20: the claim is drafted with the qty filled');
         try { Buy::postGrn($grn); $this->fail('posted twice'); } catch (\RuntimeException $e) { $this->assertStringContainsString('already posted', $e->getMessage()); }
         $this->assertSame(990, Stock::balance($go['product']), 'stock is never received twice');
 

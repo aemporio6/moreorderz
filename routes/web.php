@@ -243,6 +243,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('cycle/{id}/context', [BuyingController::class, 'cycleContext'])->whereNumber('id');
         Route::post('cycle/{id}/whatsapp', [BuyingController::class, 'cycleWhatsapp'])->whereNumber('id');
         Route::get('src-report/landed/{id}', [BuyingController::class, 'repLanded'])->whereNumber('id');
+        Route::get('buying/card/{card}', [BuyingController::class, 'card'])->where('card', '[a-z]+');
         Route::get('buying/contacts', [BuyingController::class, 'contactsToday']);
         Route::post('buying/contacts/whatsapp', [BuyingController::class, 'contactsWa']);
         Route::get('buying/shipments', [BuyingController::class, 'shipBoard']);

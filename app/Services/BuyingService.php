@@ -330,6 +330,9 @@ class BuyingService
             $allIn = ! DB::table('t_src_po_lines as p')->where('p.fk_id_po', $po->id)->where('p.f_active', 1)->where(fn ($q) => $q->whereNull('p.line_type')->orWhereIn('p.line_type', ['', 'PRODUCT']))
                 ->whereRaw('p.qty_confirmed > (SELECT COALESCE(SUM(l.received_qty + l.missing_qty),0) FROM t_src_grn_lines l JOIN t_src_grn g ON g.id=l.fk_id_grn WHERE l.fk_id_po_line=p.id AND g.posting_status="POSTED")')->exists();
             if ($allIn) DB::table('t_src_po')->where('id', $po->id)->update(['status' => 'RECEIVED']);
+            if (($g->missing_units > 0 || $g->damaged_units > 0) && ! (float) $g->claim_units) {      // R-F_SETUP-20: the claim is drafted with the qty filled – missing → supplier claim, damaged → supplier / forwarder claim
+                DB::table('t_src_grn')->where('id', $grnId)->update(['claim_units' => (int) $g->missing_units + (int) $g->damaged_units, 'claim_reason' => mb_substr(trim(($g->missing_units > 0 ? (int) $g->missing_units . ' missing – supplier claim. ' : '') . ($g->damaged_units > 0 ? (int) $g->damaged_units . ' damaged – supplier / forwarder claim.' : '')), 0, 255)]);
+            }
             if ($g->missing_units > 0 || $g->damaged_units > 0) {
                 TaskEngine::open('SRC_GRN_SHORT', CycleAlerts::key('SRC_GRN_SHORT', (int) $grnId), "GRN {$g->grn_number}: " . (int) $g->missing_units . ' short, ' . (int) $g->damaged_units . ' damaged – claim from the supplier', ['ent' => $ent, 'module' => 't_src_grn', 'record_id' => $grnId]);
             }

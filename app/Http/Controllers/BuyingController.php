@@ -44,10 +44,11 @@ class BuyingController extends Controller
     {
         $this->can($r, 'buying.SEE');
         $ent = (int) Context::ent();
-        $st = \App\Services\CycleAlerts::dashboard($ent, max(1, (int) $r->query('page', 1)));      // R-F_SETUP-19: one stage engine for every cycle row
-        $d = Buy::dashboard($ent);
-        if (! \App\Services\Perm::has($r->user(), 'buying.MONEY')) unset($d['pay_due_base'], $d['supplier_advances'], $d['supplier_payables']);
-        return ['kpi' => $d, 'cycles' => $st['rows'], 'stages' => $st, 'rights' => $this->rights($r)];
+        // R-F_SETUP-15: every block on its own; a failing one is named in the "could not load" box, the rest of the page works
+        $st = \App\Services\DashCards::run($ent, 'stages', 'Open cycles', fn () => \App\Services\CycleAlerts::dashboard($ent, max(1, (int) $r->query('page', 1))));      // R-F_SETUP-19: one stage engine for every cycle row
+        $kp = \App\Services\DashCards::run($ent, 'kpi', 'Buying figures', function () use ($ent, $r) { $d = Buy::dashboard($ent);
+            if (! \App\Services\Perm::has($r->user(), 'buying.MONEY')) unset($d['pay_due_base'], $d['supplier_advances'], $d['supplier_payables']); return $d; });
+        return ['kpi' => $kp['ok'] ? $kp['data'] : null, 'cycles' => $st['ok'] ? $st['data']['rows'] : [], 'stages' => $st['ok'] ? $st['data'] : null, 'failed' => array_values(array_map(fn ($x) => $x['label'], array_filter([$kp, $st], fn ($x) => ! $x['ok']))), 'rights' => $this->rights($r)];
     }
 
     public function pick(Request $r)
@@ -121,6 +122,17 @@ class BuyingController extends Controller
     public function cycleOverview(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\CycleAlerts::overview((int) Context::ent(), $id, $r->user())); }
     /** R-F_SETUP-3 / 4 / 9: landed cost per cycle, outstanding supplier payments, PO payment position (money: buying.MONEY). */
     public function repLanded(Request $r, int $id) { $this->can($r, 'buying.MONEY'); return $this->run(fn () => \App\Services\SourcingReports::landed((int) Context::ent(), $id)); }
+    /** R-F_SETUP-15: one card per call – contacts, shipments, payments (see money), needs. */
+    public function card(Request $r, string $card)
+    {
+        $this->can($r, 'buying.SEE'); $ent = (int) Context::ent();
+        if ($card === 'payments' && ! \App\Services\Perm::has($r->user(), 'buying.MONEY')) abort(403, 'Supplier payments need the right to see buying money.');
+        $fn = match ($card) {
+            'contacts' => ['Contact today', fn () => \App\Services\SourcingBoard::contactToday($ent)], 'shipments' => ['Shipments on the way', fn () => \App\Services\SourcingBoard::shipments($ent, $r->boolean('all') ? 500 : 15)],
+            'payments' => ['Supplier payments', fn () => \App\Services\DashCards::payments($ent)], 'needs' => ['Needs action', fn () => \App\Services\DashCards::needs($ent, $r->boolean('all'))],
+            default => abort(404) };
+        return \App\Services\DashCards::run($ent, $card, $fn[0], $fn[1]);
+    }
     /** R-F_SETUP-22 / 23: Contact today and the shipments board on the buying dashboard. */
     public function contactsToday(Request $r) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\SourcingBoard::contactToday((int) Context::ent())); }
     public function contactsWa(Request $r) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\SourcingBoard::whatsapp((int) Context::ent(), (string) $r->input('key'), (int) $r->input('cycle'), (string) $r->input('item'), trim((string) $r->input('text')))); }
