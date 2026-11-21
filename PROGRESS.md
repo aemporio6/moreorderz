@@ -621,3 +621,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-107 (22 Nov): Finance – R-FIN-51 / 54 / 50 / 32 BUILT (stock snapshot, products & stock list, monthly summary + missing-report task, nightly / monthly jobs). +7 register lines (701). 523 tests.
 - 7e-108 (22 Nov): Finance – R-FIN-4 / 6 / 24 / 63 BUILT (finance settings company + system, bank file check → apply, VAT card by stagger). +5 register lines (706). 527 tests.
 - 7e-109 (22 Nov): Sourcing landed cost – R-B_SOURCING-43 / 45 / 46 / 60 BUILT (ten buckets, override with approval, preview + FINAL rules + auto re-run, versions + COGS correction after a locked month). +5 register lines (711, 50 %). 531 tests.
+- 7e-110 (22 Nov): Sourcing claims – R-B_SOURCING-56 / 31 BUILT, R-57 / 63 PARTIAL (credit-note payments, claim credit as a new landed version). 713 register lines BUILT, 2 more M → P. 535 tests.

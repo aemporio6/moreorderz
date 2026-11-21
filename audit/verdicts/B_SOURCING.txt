@@ -28,7 +28,7 @@
 28|P|function contacts|people of the cycle: suppliers of its POs / accepted quotes / shipments (agent by supplier type), forwarders of its freight rows and shipments, inspectors, investors of its investments, the cycle owner; initials (first letter + first after the last space: Ningbo Bright Lights → NL, Fast Cargo → FC, tested), role chips, phone, Call and WhatsApp (logged on the cycle); "No suppliers linked yet.". Missing: their open tasks on this cycle
 29|P|function shipmentTasks|shipments with ETA and overdue task; the shipments card with customs / GRN chips not built
 30|P|function pay|term paid / remaining / status; mixed-currency sum in PO currency partly
-31|P|function payOrAsk|overpay refused; reason + SRC_OVERPAY approval not built
+31|B|function payOrAsk|over the term's open amount (PO currency, SRC_MONEY_TOL): reason required (old warning text), payment saved PENDING_APPROVAL (not counted, not booked, not matched to the bank) with approval SRC_OVERPAY; approved by a second person -> the same row is booked; refused -> cancelled; SupplierClaimsTest r31
 32|P|class Fx|rate of the date kept on the row; "rate table vs typed" difference, FX_MISSING task not built
 33|P|function landedCost|some computed fields; the full list of live formulas not built
 34|B|class CartonCalc|one calculation (CartonCalc) for the carton form, the freight split by Weight / CBM (R-44, reads the stored totals), shipment totals and carton marks: unit CBM, volumetric kg (divisor of the carrier, else of the shipping mode VOLUMETRIC_DIVISOR_<MODE>, else VOLUMETRIC_DIVISOR default 5000, ≤ 0 → 5000), carton net, carton gross (calc) with the weighed gross replacing it when > 0, full cartons = floor(planned ÷ max(units/carton, 1)), loose, carton qty, totals, carton CBM and total CBM at 4 dp; the calculated columns are read-only "System calculated", worked out on save (typed values ignored) and shown live while typing; carton marks print (one per carton: PO, SKU, carton n / N, units, net / gross, size, CBM, HS, made in, barcode) from the carton record. Rule test passes (1,030 / 40 / 50×40×30 / 0.28 / 0.8 → 25, 30, 26, 12.00, 312.00, 1.5600; actual 12.4 → 322.40); clicked in a browser (live figures). The ICC module (07) is not built yet – it is to call this same calculation
@@ -53,14 +53,14 @@
 53|F|form:t_src_suppliers|party roles behind the lists partly (supplier form)
 54|P|function save|required fields from the registry; the spec messages not all
 55|P|class Rights|Sourcing cannot pay / see rates; the named rights (sourcing.money ...) not built
-56|P|SRC_GRN_SHORT|short / damaged raises a claim task; claim section with amounts / credit not built
-57|P|function pay|one payment schedule; CREDIT_NOTE payments not built; bank line links to a term (split)
+56|B|class SupplierClaims|claim section per GRN: line claim qty (default missing + damaged, lower needs a reason) and amount (qty x PO price), header units / amount / PO currency / base at the GRN-date rate, OPEN -> AGREED -> SETTLED / REJECTED / NO_CLAIM (reasons), settled as CREDIT_NOTE / REFUND / REPLACEMENT, reference, date, credit used / remaining; SRC_GRN_SHORT closes on SETTLED / REJECTED / NO_CLAIM; claim modal on the GRN; SupplierClaimsTest r56 (6 units USD 30, used 20, left 10)
+57|P|function payWithCredit|CREDIT_NOTE payment pays a term from a claim's credit (same supplier and currency), never a bank line, no cash booking, refused above the credit ('Only x credit is left on claim ...'); SupplierClaimsTest r57. Missing: bank match of typed BANK payments within match_supplier_pct and the approved supplier bank check
 58|B|function bookSample|sample cost in own currency, booked once, shared by 90-day sales – spec example passes
 59|B|function payCustoms|customs pay: duty to goods on the way, import VAT apart; bank line split across cost rows
 60|B|function revalueConsumption|every run a version (PROVISIONAL / FINAL / SUPERSEDED); a later version after FINAL is FINAL by itself when Balanced and rates exist, else it waits and lots keep the FINAL cost (Partner told 'New cost after FINAL'); units sold in a LOCKED shop-month are never edited – COGS correction in the next open month (fin_cogs_corrections, in Profit views and month close), open months updated in place; LandedVersionsTest r60 (3.32 -> 3.42, +10.00 in November)
 61|M||lot owner split at GRN by PO agreements not built (owner = one)
 62|P|requested_by|requested_by = logged-in user; product required on lines partly
-63|M||settled claim as negative cost / new landed version not built
+63|P|function landedCredits|settled claim (CREDIT_NOTE / REFUND) -> Dr supplier 1300 / Cr 1210 and a new landed version with a negative supplier-credit cost on the claimed products only (FINAL by itself when it can be), never income; SupplierClaimsTest r63 (-0.0600). Missing: IMPORT_FREIGHT / IMPORT_DUTY bank categories into stock value
 64|M||supplier share link not built
 65|B|function saveQc|QC checklist, photo on FAIL, computed result, QC chip on lots
 66|P|d_valid_until|some restored fields present; supplier profile fields form-only

@@ -217,7 +217,29 @@ class BuyingController extends Controller
     public function cyclePager(Request $r, int $id) { $this->can($r, 'buying.SEE'); if (! DB::table('t_src_cycles')->where('id', $id)->where('fk_id_ent', Context::ent())->exists()) abort(404);
         return \App\Services\WorkflowContext::pager($id, (string) $r->query('step', 'details'), \App\Services\Perm::has($r->user(), 'see_money')); }
     public function cycleWhatsapp(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\CycleAlerts::whatsapp((int) Context::ent(), $id, (string) $r->input('key'), trim((string) $r->input('text')))); }
-    public function grnClaim(Request $r, int $id) { $this->can($r, 'buying.BUY'); return $this->run(fn () => \App\Services\CycleAlerts::claim((int) Context::ent(), $id, strtoupper((string) $r->input('status')), (string) $r->input('reason'))); }
+    public function grnClaim(Request $r, int $id)
+    {
+        $this->can($r, 'buying.BUY');
+        $d = $r->validate(['status' => 'required|string|max:12', 'reason' => 'nullable|string|max:255', 'settled_as' => 'nullable|string|max:12', 'reference' => 'nullable|string|max:60', 'date' => 'nullable|date']);
+        return $this->run(fn () => \App\Services\SupplierClaims::status((int) Context::ent(), $id, $d['status'], $d));
+    }
+
+    /** R-B_SOURCING-56 the claim section of a GRN (lines with defaults filled). */
+    public function grnClaimShow(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\SupplierClaims::refresh((int) Context::ent(), $id)); }
+    public function grnClaimLine(Request $r, int $lineId)
+    {
+        $this->can($r, 'buying.BUY');
+        $d = $r->validate(['qty' => 'required|numeric|min:0', 'amount' => 'nullable|numeric|min:0', 'reason' => 'nullable|string|max:200']);
+        return $this->run(fn () => \App\Services\SupplierClaims::setLine((int) Context::ent(), $lineId, (float) $d['qty'], isset($d['amount']) ? (float) $d['amount'] : null, $d['reason'] ?? null));
+    }
+
+    /** R-B_SOURCING-57 pay a term from a claim's credit note. */
+    public function payCredit(Request $r)
+    {
+        $this->can($r, 'buying.PAY');
+        $d = $r->validate(['term' => 'required|integer', 'grn' => 'required|integer', 'amount' => 'required|numeric|gt:0', 'date' => 'nullable|date']);
+        return $this->run(fn () => ['id' => \App\Services\SupplierClaims::payWithCredit((int) Context::ent(), (int) $d['term'], (int) $d['grn'], (float) $d['amount'], $d['date'] ?? null), 'message' => 'Paid from the credit note (no bank line)']);
+    }
     public function docRequirements(Request $r) { $this->can($r, 'buying.SEE'); return ['rows' => DB::table('src_doc_requirements')->where('fk_id_ent', Context::ent())->orderBy('step_key')->orderBy('doc_type')->get(), 'steps' => array_map(fn ($x) => $x[3], \App\Services\CycleAlerts::DOC_STEPS),
         'types' => DB::table('cat_doc_types')->where('f_active', 1)->orderBy('doc_type_name')->pluck('doc_type_name'), 'can_edit' => in_array(Context::role(), ['OWNER', 'MANAGER'], true)]; }
     public function docRequirementSave(Request $r)
@@ -305,8 +327,8 @@ class BuyingController extends Controller
     public function pay(Request $r)
     {
         $this->can($r, 'buying.PAY');
-        $d = $r->validate(['term' => 'required|integer', 'amount' => 'required|numeric|gt:0', 'date' => 'required|date', 'bank' => 'required|integer', 'txn_ref' => 'nullable|string|max:255']);
-        return $this->run(function () use ($d) { $x = Buy::payOrAsk($d); return $x + ['message' => $x['status'] === 'WAITING' ? 'Over the limit – the payment waits for approval and is not booked yet' : 'Payment posted to the ledger']; });
+        $d = $r->validate(['term' => 'required|integer', 'amount' => 'required|numeric|gt:0', 'date' => 'required|date', 'bank' => 'required|integer', 'txn_ref' => 'nullable|string|max:255', 'overpay_reason' => 'nullable|string|max:200']);
+        return $this->run(function () use ($d) { $x = Buy::payOrAsk($d); return $x + ['message' => ! empty($x['overpay']) ? 'More than the term – saved, waiting for the Owner\'s approval (not booked, not matched to the bank yet)' : ($x['status'] === 'WAITING' ? 'Over the limit – the payment waits for approval and is not booked yet' : 'Payment posted to the ledger')]; });
     }
 
     public function shipment(Request $r)

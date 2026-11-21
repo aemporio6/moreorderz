@@ -68,14 +68,16 @@ class LandedEngine
         foreach ($keys as $k) $out[$k] = ['shares' => [], 'extra' => 0.0];
         foreach ($costs as $ci => [$label, $amount, $method]) {
             $method = self::method($method); $amount = round((float) $amount, 2); $basis = [];
+            if (isset($costs[$ci][4]) && isset($products[$costs[$ci][4]])) { foreach ($keys as $k) $basis[$k] = $k == $costs[$ci][4] ? 1.0 : 0.0; $method = 'PRODUCT'; }      // a cost of one product only (R-B_SOURCING-63 supplier credit)
             if (in_array($method, ['WEIGHT', 'CBM'], true)) {
                 $field = $method === 'WEIGHT' ? 'gross' : 'cbm'; $missing = array_filter($keys, fn ($k) => (float) ($products[$k][$field] ?? 0) <= 0);
                 if ($missing || array_sum(array_map(fn ($k) => (float) $products[$k][$field], $keys)) <= 0) { foreach ($missing ?: $keys as $k) $warn[] = 'No carton data for ' . $products[$k]['name'] . " – $label split by quantity"; $method = 'QUANTITY'; }
                 else foreach ($keys as $k) $basis[$k] = (float) $products[$k][$field];
             }
-            if ($method === 'VALUE') { foreach ($keys as $k) $basis[$k] = (float) $products[$k]['value']; if (array_sum($basis) <= 0) { $method = 'QUANTITY'; $basis = []; } }
+            if ($method === 'PRODUCT') { /* basis set above */ }
+            elseif ($method === 'VALUE') { foreach ($keys as $k) $basis[$k] = (float) $products[$k]['value']; if (array_sum($basis) <= 0) { $method = 'QUANTITY'; $basis = []; } }
             if ($method === 'QUANTITY') foreach ($keys as $k) $basis[$k] = (float) $products[$k]['ordered'];
-            $sum = array_sum($basis); $left = $amount; $last = end($keys);
+            $sum = array_sum($basis); $left = $amount; $last = $method === 'PRODUCT' ? $costs[$ci][4] : end($keys);
             foreach ($keys as $k) {
                 $s = $k === $last ? round($left, 2) : ($sum > 0 ? round($amount * $basis[$k] / $sum, 2) : 0.0);      // 2 dp; the last product takes the remainder, so the shares add up to the cost exactly
                 $left = round($left - $s, 2); $out[$k]['shares'][] = ['cost' => $label, 'method' => $method, 'pct' => $sum > 0 ? round($basis[$k] / $sum * 100, 2) : 0, 'amount' => $s, 'bucket' => $costs[$ci][3] ?? self::bucketOf($label)]; $out[$k]['extra'] = round($out[$k]['extra'] + $s, 2);

@@ -268,6 +268,9 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('cycle/{id}/repeat', [BuyingController::class, 'cycleRepeat'])->whereNumber('id');
         Route::get('grn/{id}/pdf', [BuyingController::class, 'grnPdf'])->whereNumber('id');
         Route::post('grn/{id}/claim', [BuyingController::class, 'grnClaim'])->whereNumber('id');
+        Route::get('grn/{id}/claim', [BuyingController::class, 'grnClaimShow'])->whereNumber('id');
+        Route::post('grn-lines/{lineId}/claim', [BuyingController::class, 'grnClaimLine'])->whereNumber('lineId');
+        Route::post('payments/credit-note', [BuyingController::class, 'payCredit']);
         Route::get('src-doc-requirements', [BuyingController::class, 'docRequirements']);
         Route::post('src-doc-requirements', [BuyingController::class, 'docRequirementSave']);
         Route::post('rfq/{id}/accept', [BuyingController::class, 'acceptRfq'])->whereNumber('id');

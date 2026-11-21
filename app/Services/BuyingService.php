@@ -190,6 +190,22 @@ class BuyingService
         $ent = (int) Context::ent();
         $t = DB::table('t_src_payment_terms')->where('id', $d['term'])->where('fk_id_ent', $ent)->first() ?? throw new \RuntimeException('Payment term not found.');
         $po = self::po((int) $t->fk_id_po); $cur = Fx::code($po->fk_id_currency, $ent); $base = round((float) $d['amount'] * Fx::rate($cur, $d['date'] ?? date('Y-m-d'), $ent), 2);
+        // R-B_SOURCING-31: more than the term still open (PO currency, SRC_MONEY_TOL) → a reason, and the payment waits for the Owner (SRC_OVERPAY), not booked, not matched to the bank
+        $tol = (float) Settings::get('SRC_MONEY_TOL', $ent, 0.009);
+        if ((float) $d['amount'] > (float) $t->remaining_amount + $tol) {
+            if (trim((string) ($d['overpay_reason'] ?? '')) === '') throw new \RuntimeException('WARNING: This payment (' . number_format((float) $d['amount'], 2) . ') exceeds the remaining amount of the selected Payment Term (' . number_format((float) $t->remaining_amount, 2) . '). Give the reason for paying more than the term.');
+            DB::table('fin_bank_accounts')->where('id', $d['bank'])->where('company_id', $ent)->where('is_active', 1)->first() ?? throw new \RuntimeException('Choose a bank account of this company.');
+            return DB::transaction(function () use ($ent, $t, $po, $d, $cur, $base) {
+                $date = $d['date'] ?? date('Y-m-d');
+                $pid = (int) DB::table('t_src_payments')->insertGetId(['fk_id_ent' => $ent, 'payment_code' => Numbering::next('PAY', $ent, $date), 'fk_id_cycle' => $po->fk_id_cycle, 'fk_id_po' => $po->id, 'fk_id_supplier' => $po->fk_id_supplier, 'fk_id_term' => $t->id,
+                    'payment_type' => $t->milestone, 'payment_method' => $d['method'] ?? 'BANK', 'payment_amount' => round((float) $d['amount'], 2), 'fk_id_currency' => $po->fk_id_currency, 'exchange_rate' => round($base / max(0.01, (float) $d['amount']), 6), 'base_amount' => $base, 'payment_date' => $date,
+                    'status' => 'PENDING_APPROVAL', 'txn_ref' => $d['txn_ref'] ?? null, 'created_by' => Context::userId(), 'f_active' => 0 /* not counted as paid anywhere until approved */, 'created_at' => now(), 'paid_via' => 'BANK', 'notes' => mb_substr('Paid more than the term: ' . trim((string) $d['overpay_reason']), 0, 255)]);
+                $a = Approvals::request($ent, 'SRC_OVERPAY', 't_src_payments', $pid, $base, ['category' => "Over-payment {$po->po_number} · {$t->milestone}", 'amount' => (float) $d['amount'], 'currency' => $cur, 'remaining' => (float) $t->remaining_amount, 'reason' => trim((string) $d['overpay_reason']), 'pay' => $d + ['_pending' => $pid, '_overpay_ok' => true]],
+                    "Approve over-payment {$po->po_number}: " . number_format((float) $d['amount'], 2) . " $cur on a term with " . number_format((float) $t->remaining_amount, 2) . ' open');
+                Audit::log('t_src_payments', $pid, 'INSERT', ['overpay' => (float) $d['amount'], 'remaining' => (float) $t->remaining_amount], trim((string) $d['overpay_reason']), $ent);
+                return ['status' => 'WAITING', 'approval' => $a, 'id' => $pid, 'overpay' => true];
+            });
+        }
         if (! Approvals::needed($ent, 'PAYMENT', $base, 2000)) return ['status' => 'PAID', 'id' => self::pay($d)];
         if ((float) $d['amount'] > $t->remaining_amount + 0.009) throw new \RuntimeException('This is more than the ' . number_format($t->remaining_amount, 2) . ' still open on this term.');
         DB::table('fin_bank_accounts')->where('id', $d['bank'])->where('company_id', $ent)->where('is_active', 1)->first() ?? throw new \RuntimeException('Choose a bank account of this company.');
@@ -208,13 +224,15 @@ class BuyingService
             if (! in_array($po->status, ['CONFIRMED', 'SHIPPED', 'RECEIVED'], true)) throw new \RuntimeException('Confirm the PO before paying.');
             $amt = round((float) $d['amount'], 2); $tol = (float) Settings::get('SRC_MONEY_TOL', $ent, 0.009);
             if ($amt <= 0) throw new \InvalidArgumentException('The amount must be more than zero.');
-            if ($amt > $t->remaining_amount + $tol) throw new \RuntimeException('This is more than the ' . number_format($t->remaining_amount, 2) . ' still open on this term.');
+            if ($amt > $t->remaining_amount + $tol && empty($d['_overpay_ok'])) throw new \RuntimeException('This is more than the ' . number_format($t->remaining_amount, 2) . ' still open on this term.');
             $bank = DB::table('fin_bank_accounts')->where('id', $d['bank'])->where('company_id', $ent)->where('is_active', 1)->first() ?? throw new \RuntimeException('Choose a bank account of this company.');
             $cur = Fx::code($po->fk_id_currency, $ent); $date = $d['date'] ?? date('Y-m-d');
             $rate = Fx::rate($cur, $date, $ent); $base = round($amt * $rate, 2);
-            $pid = DB::table('t_src_payments')->insertGetId(['fk_id_ent' => $ent, 'payment_code' => Numbering::next('PAY', $ent, $date), 'fk_id_cycle' => $po->fk_id_cycle, 'fk_id_po' => $po->id, 'fk_id_supplier' => $po->fk_id_supplier, 'fk_id_term' => $t->id,
+            $row = ['fk_id_ent' => $ent, 'fk_id_cycle' => $po->fk_id_cycle, 'fk_id_po' => $po->id, 'fk_id_supplier' => $po->fk_id_supplier, 'fk_id_term' => $t->id,
                 'payment_type' => $t->milestone, 'payment_method' => $d['method'] ?? 'BANK', 'payment_amount' => $amt, 'fk_id_currency' => $po->fk_id_currency, 'exchange_rate' => $rate, 'base_amount' => $base, 'payment_date' => $date,
-                'status' => 'PAID', 'txn_ref' => $d['txn_ref'] ?? null, 'created_by' => Context::userId(), 'f_active' => 1, 'created_at' => now(), 'paid_via' => 'BANK', 'notes' => $d['notes'] ?? null]);
+                'status' => 'PAID', 'txn_ref' => $d['txn_ref'] ?? null, 'f_active' => 1, 'paid_via' => 'BANK'];
+            if (! empty($d['_pending'])) { $pid = (int) $d['_pending']; DB::table('t_src_payments')->where('id', $pid)->where('status', 'PENDING_APPROVAL')->update($row + ['approved_by' => Context::userId(), 'approved_at' => now()]); }      // R-31: the approved over-payment is booked now
+            else $pid = DB::table('t_src_payments')->insertGetId($row + ['payment_code' => Numbering::next('PAY', $ent, $date), 'created_by' => Context::userId(), 'created_at' => now(), 'notes' => $d['notes'] ?? null]);
             $paid = round($t->paid_amount + $amt, 2); $rem = round($t->planned_amount - $paid, 2);
             DB::table('t_src_payment_terms')->where('id', $t->id)->update(['paid_amount' => $paid, 'remaining_amount' => max(0, $rem), 'completion_pct' => $t->planned_amount > 0 ? round($paid / $t->planned_amount * 100, 2) : 100, 'status' => $rem <= $tol ? 'PAID' : 'PART_PAID']);
             Ledger::post($ent, $date, 'PAYMENT', $pid, [
@@ -392,6 +410,7 @@ class BuyingService
                 $amt = $c->pay_status === 'PAID' && $c->paid_base_amount !== null ? (float) $c->paid_base_amount : (float) $c->base_amount; if ($amt > 0) $costs[] = ['Duty ' . $c->customs_code, $amt, $hist ? 'VALUE' : $method('DUTY'), 'customs_duty'];      // duty only – import VAT never
             }
             foreach (['freight' => ['Freight (typed)', 'FREIGHT', 'freight_cost'], 'duty' => ['Duty (typed)', 'DUTY', 'customs_duty'], 'other' => ['Other (typed)', 'OTHER', 'other_cost']] as $k => [$label, $kind, $bk]) if (round((float) ($d[$k] ?? 0), 2) > 0) $costs[] = [$label, round((float) $d[$k], 2), $hist ? 'VALUE' : $method($kind), $bk];
+            if ($cyc) foreach (SupplierClaims::landedCredits((int) $cyc->id) as $cr) if (isset($prod[$cr[4]])) $costs[] = $cr;      // R-B_SOURCING-63: a settled claim lowers the cost of its products
             $loss = strtoupper((string) ($d['loss'] ?? '')) ?: (Choices::get('LC_LOSS_UNITS', $ent) ?: 'ABSORB'); if (! in_array($loss, ['ABSORB', 'WRITE_OFF'], true)) $loss = 'ABSORB';
             $calc = LandedEngine::split($prod, $costs, $loss);
             // R-B_SOURCING-46 / 60: FINAL only when every product is received, quantities Balanced (R-39) and every rate exists; a version after FINAL is FINAL by itself when it can be
@@ -457,7 +476,7 @@ class BuyingService
             if (! $applyLots) return ['run' => (int) $lc, 'version' => $ver, 'status' => 'PROVISIONAL', 'applied' => false, 'waiting' => $block, 'to_stock' => 0.0, 'to_cost_of_sale' => 0.0, 'loss' => $lossTot, 'unit_cost' => $accAll > 0 ? round($totAll / $accAll, 4) : 0.0, 'lots' => 0, 'warnings' => $calc['warnings'],
                 'products' => array_map(fn ($r) => ['unit' => $r['unit'], 'total' => $r['total'], 'loss' => $r['loss'], 'formula' => $r['formula'], 'shares' => $r['shares'], 'value' => $r['value'], 'units' => $r['units']], $calc['products'])];
             if ($loss === 'WRITE_OFF') foreach ($grnIds as $gid) { $cl = 0.0; foreach (DB::table('t_src_grn_lines')->where('fk_id_grn', $gid)->get() as $g) $cl += ((float) $g->damaged_qty + (float) $g->missing_qty) * (float) ($calc['products'][(int) $g->fk_id_product]['unit'] ?? 0);
-                DB::table('t_src_grn')->where('id', $gid)->update(['claim_base_amount' => round($cl, 2)]); }      // the written-off cost goes onto the supplier claim of the GRN
+                DB::table('t_src_grn')->where('id', $gid)->whereNull('claim_status')->update(['claim_base_amount' => round($cl, 2)]); }      // once the claim section is used, it keeps its own figures (R-56)      // the written-off cost goes onto the supplier claim of the GRN
             foreach (array_keys($calc['products']) as $pid) DB::table('t_product_vendors')->where('id', $pid)->update(['landing_price' => round((float) DB::table('fin_lots')->where('fk_id_product', $pid)->where('source', '<>', 'DAMAGED')->orderByDesc('received_date')->orderByDesc('id')->value('unit_cost_gbp'), 4)]);
             EventBus::fire($final ? 'LANDED_FINAL' : 'LANDED_PROVISIONAL', 't_src_po', $poId, ['run' => $lc, 'to_stock' => $toStock, 'to_cost_of_sale' => $toCogs], $ent);
             return ['run' => (int) $lc, 'version' => $ver, 'status' => $final ? 'FINAL' : 'PROVISIONAL', 'applied' => true, 'to_stock' => $toStock, 'to_cost_of_sale' => $toCogs, 'loss' => $lossTot, 'unit_cost' => $accAll > 0 ? round($totAll / $accAll, 4) : 0.0, 'lots' => $n, 'warnings' => $calc['warnings'],

@@ -165,7 +165,7 @@ class CycleAlerts
             elseif ($s->eta <= $soon) $add('SRC_SHIP_ARRIVING', [$s->shipment_code ?: $s->id], $cid, 'P2', "Shipment arriving · {$s->shipment_code}", "ETA $eta – prepare GRN", 'Shipments', $s->eta, ['module' => 't_src_shipments', 'record_id' => $s->id, 'fix_url' => "#/cycle/$cid"]);
         }
         // SRC_GRN_SHORT: missing or damaged units until the claim is settled or marked "no claim"
-        foreach (DB::table('t_src_grn')->where('fk_id_ent', $ent)->where('f_active', 1)->whereIn('fk_id_cycle', $ids ?: [0])->where(fn ($q) => $q->where('missing_units', '>', 0)->orWhere('damaged_units', '>', 0))->where(fn ($q) => $q->whereNull('claim_status')->orWhereNotIn('claim_status', ['SETTLED', 'NO_CLAIM']))->get() as $g)
+        foreach (DB::table('t_src_grn')->where('fk_id_ent', $ent)->where('f_active', 1)->whereIn('fk_id_cycle', $ids ?: [0])->where(fn ($q) => $q->where('missing_units', '>', 0)->orWhere('damaged_units', '>', 0))->where(fn ($q) => $q->whereNull('claim_status')->orWhereNotIn('claim_status', ['SETTLED', 'NO_CLAIM', 'REJECTED']))->get() as $g)
             $add('SRC_GRN_SHORT', [$g->grn_number ?: $g->id], (int) $g->fk_id_cycle, 'P2', "Claim short delivery · {$g->grn_number}", 'Received ' . (int) $g->units_received . ' · Accepted ' . ((int) $g->units_received - (int) $g->damaged_units) . ' · Damaged ' . (int) $g->damaged_units . ' · Missing ' . (int) $g->missing_units, 'Landing / GRN', $g->grn_date, ['module' => 't_src_grn', 'record_id' => $g->id, 'fix_url' => "#/cycle/{$g->fk_id_cycle}"]);
         // SRC_LOT_NO_COST: an active lot without a landed unit cost
         foreach (DB::table('fin_lots as l')->leftJoin('t_src_inventory_receipts as r', 'r.id', '=', 'l.fk_id_receipt')->where('l.company_id', $ent)->where('l.qty_left', '>', 0)->where(fn ($q) => $q->whereNull('l.unit_cost_gbp')->orWhere('l.unit_cost_gbp', '<=', 0))->when($cycleId, fn ($q) => $q->where('l.fk_id_cycle', $cycleId))->get(['l.id', 'l.lot_code', 'l.sku', 'l.fk_id_cycle', 'r.receipt_code']) as $l)
@@ -271,15 +271,9 @@ class CycleAlerts
         return ['url' => 'https://wa.me/' . $party['whatsapp'] . ($text !== '' ? '?text=' . rawurlencode($text) : ''), 'message' => 'Logged on the cycle.'];
     }
 
-    /** GRN claim: settled, or "no claim" with a reason – closes SRC_GRN_SHORT. */
-    public static function claim(int $ent, int $grnId, string $status, string $reason): array
+    /** GRN claim status (R-B_SOURCING-56 – the full claim section is SupplierClaims). */
+    public static function claim(int $ent, int $grnId, string $status, string $reason, array $d = []): array
     {
-        $g = DB::table('t_src_grn')->where('id', $grnId)->where('fk_id_ent', $ent)->first() ?? throw new \InvalidArgumentException('GRN not found.');
-        if (! in_array($status, ['SETTLED', 'NO_CLAIM', 'OPEN'], true)) throw new \InvalidArgumentException('Choose Settled, No claim or Open.');
-        if ($status === 'NO_CLAIM' && trim($reason) === '') throw new \InvalidArgumentException('Give the reason for "no claim".');
-        DB::table('t_src_grn')->where('id', $grnId)->update(['claim_status' => $status, 'claim_reason' => mb_substr(trim($reason), 0, 255) ?: null, 'claim_date' => $status === 'OPEN' ? null : date('Y-m-d'), 'updated_at' => now(), 'updated_by' => Context::userId()]);
-        Audit::log('t_src_grn', $grnId, 'UPDATE', ['claim' => $status, 'reason' => $reason], $reason ?: null, $ent);
-        if ($status !== 'OPEN') TaskEngine::close('SRC_GRN_SHORT', self::key('SRC_GRN_SHORT', $grnId), $status === 'SETTLED' ? 'Claim settled' : 'No claim: ' . $reason);
-        return ['message' => $status === 'SETTLED' ? 'Claim settled.' : ($status === 'NO_CLAIM' ? 'Marked "no claim".' : 'Claim open again.')];
+        return SupplierClaims::status($ent, $grnId, $status, $d + ['reason' => $reason]);
     }
 }
