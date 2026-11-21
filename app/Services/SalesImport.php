@@ -128,6 +128,16 @@ class SalesImport
         return $line->sale_source !== 'summary' && $line->created_at && $batch->imported_at && strtotime((string) $line->created_at) < strtotime((string) $batch->imported_at) - 1;
     }
 
+    /** The VA of the shop and the VA % of the job-history row valid on the period end of the batch – frozen on the batch at import (R-A_SALES-31, R-C-40). */
+    public static function vaOf(object $shop, int $month, int $year): array
+    {
+        $va = (int) ($shop->fk_id_seller ?? 0); if (! $va) return ['va_share_percentage' => 0];
+        $end = date('Y-m-t', mktime(0, 0, 0, $month, 1, $year));
+        $row = DB::table('t_account_job_history')->where('fk_id_account', $va)->where('fk_id_marketplace', (int) $shop->fk_id_marketplace)->where(fn ($w) => $w->whereNull('d_job_start_date')->orWhere('d_job_start_date', '<=', $end))
+            ->where(fn ($w) => $w->whereNull('d_end_date')->orWhere('d_end_date', '>=', $end))->orderByDesc('d_job_start_date')->orderByDesc('id')->first();
+        return ['fk_id_va_account' => $va, 'va_share_percentage' => round((float) ($row->share_percentage ?? 0), 2)];
+    }
+
     /** The batch of a shop + month, if any. */
     public static function batchOf(int $shopId, int $month, int $year, ?string $nature = null): ?object
     {
@@ -195,7 +205,7 @@ class SalesImport
                 DB::table('t_sales')->where('fk_id_import', $old->id)->delete(); DB::table('t_sale_import_errors')->where('fk_id_import', $old->id)->delete(); DB::table('t_sale_imports')->where('id', $old->id)->delete();
             }
             $batch = (int) DB::table('t_sale_imports')->insertGetId(RecordService::fillNotNull('t_sale_imports', ['fk_id_ent' => $ent, 'fk_id_branch' => $shop->id, 'fk_id_marketplace' => $shop->fk_id_marketplace, 'import_nature' => $totals ? 'Totals' : 'Normal', 'file_name' => mb_substr($fileName, 0, 255), 'period_month' => $m, 'period_year' => $y,
-                'marketplace_fee' => (float) $d['fee'], 'fee_source' => 'typed', 'status' => 'Pending', 'imported_by' => $u->id ?? null, 'imported_at' => now(), 'replaced_rows' => $replaced]));
+                'marketplace_fee' => (float) $d['fee'], 'fee_source' => 'typed', 'status' => 'Pending', 'imported_by' => $u->id ?? null, 'imported_at' => now(), 'replaced_rows' => $replaced] + self::vaOf($shop, $m, $y)));
             $st = ['saved' => 0, 'active' => 0, 'ds' => 0, 'unmatched' => 0, 'errors' => 0, 'skipped' => 0, 'out_of_period' => 0, 'moved' => 0, 'merged' => 0, 'qty' => 0, 'sale' => 0.0, 'buy' => 0.0, 'profit' => 0.0, 'cost_current' => 0, 'cost_product' => 0, 'file_rows' => count($csv['rows'])];
             $errors = []; $seen = []; $nosku = []; $newKeys = []; $unmatchedRows = [];
             $from = sprintf('%04d-%02d-01', $y, $m); $to = date('Y-m-t', strtotime($from)); $cur = Fx::code((int) $shop->fk_id_payout_currency ?: null, $ent);

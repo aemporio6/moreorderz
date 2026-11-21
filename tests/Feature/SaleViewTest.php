@@ -113,6 +113,19 @@ class SaleViewTest extends TestCase
         $this->assertSame(round(($profit - 10) * 0.4, 2), $t['va_share']); $this->assertSame(round($profit - 10 - $t['va_share'], 2), $t['net']); $this->assertSame(2.0, $t['loss']);      // loss = Σ(−profit) of loss lines
     }
 
+    public function test_va_percent_is_frozen_from_the_job_history_row_valid_on_the_period_end_and_the_strip_example_of_the_rule(): void
+    {
+        $this->world(); $va = DB::table('t_account')->insertGetId($this->fill('t_account', ['fk_id_ent' => 1, 'first_name' => 'Vera', 'sur_name' => 'VA', 'f_active' => 1])); DB::table('t_branches')->where('id', $this->shop)->update(['fk_id_seller' => $va]);
+        $h = fn (string $from, ?string $to, float $pct) => DB::table('t_account_job_history')->insert($this->fill('t_account_job_history', ['fk_id_account' => $va, 'fk_id_marketplace' => $this->mp, 'd_job_start_date' => $from, 'share_percentage' => $pct]) + ['d_end_date' => $to]);
+        $h('2026-01-01', '2026-07-31', 10); $h('2026-08-01', null, 15);      // the latest row by id is 15 %, but July's period end falls in the 10 % row
+        $b1 = $this->import(['A-1,05/07/2026,Ann,BOWL-01,Dog bowl,1,9.00,RM'], ['fee' => '40']); $b2 = $this->import(['A-2,05/08/2026,Bob,BOWL-01,Dog bowl,1,9.00,RM'], ['month' => 8, 'fee' => '0'], '101A_aug26.csv');
+        $this->assertSame([10.0, 15.0, $va], [(float) DB::table('t_sale_imports')->where('id', $b1['batch'])->value('va_share_percentage'), (float) DB::table('t_sale_imports')->where('id', $b2['batch'])->value('va_share_percentage'), (int) DB::table('t_sale_imports')->where('id', $b1['batch'])->value('fk_id_va_account')]);
+        // rule example: batch 1 profit 500, fee 40, 10 % → VA 46, net 414; batch 2 profit 300, fee 0, 15 % → 45, 255; strip: profit 800, fee 40, "mixed %" 91, net 669
+        DB::table('t_sales')->where('order_no', 'A-1')->update(['profit' => 500]); DB::table('t_sales')->where('order_no', 'A-2')->update(['profit' => 300]);
+        $t = SaleLines::list(['marketplace' => $this->mp, 'from' => '2026-07-01', 'to' => '2026-08-31'], $this->owner)['totals'];
+        $this->assertSame([800.0, 40.0, 'VA share (mixed %)', 91.0, 669.0], [$t['profit'], $t['fee'], $t['va_label'], $t['va_share'], $t['net']]);
+    }
+
     public function test_filters_carrier_group_company_batch_and_the_lists_for_the_controls(): void
     {
         $this->world(); $r = $this->import(['A-1,05/07/2026,Ann,BOWL-01,Dog bowl,1,9.00,RM', 'A-2,06/07/2026,Bob,BOWL-01,Dog bowl,1,9.00,RM', 'A-3,07/07/2026,Cy,BOWL-01,Dog bowl,1,9.00,RM']);

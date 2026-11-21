@@ -279,3 +279,16 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - New rights: `orders.saleImport` (Owner, Manager, TL, VA), `orders.saleColumns` (Owner, Manager).
 - Tests: 247 pass (4,940 checks); new `tests/Feature/SalesImportTest.php` (16) uses the rules' own examples (100 rows → 96 / 2 / 2; 412-style replace with the diff; `101A_july26 (1).csv`; `GRP-2-BR`). Checked in a real browser with a made-up file; no console errors.
 - Register after this batch: BUILT 267 of 1,433 (19 %); Sales 25 of 155 (16 %).
+
+## Sales batch 3 – the sales list as a view, export, Owner unlock (21 Nov 2026)
+- New service `app/Services/SaleView.php`; `SaleLines::list` now returns `columns`, `lists` (for the filter controls), `totals` (the strip), `batch_info`, `self_check`.
+- **Columns per person** (R-A_SALES-44): 9 fixed, 11 optional (cost columns only with the cost right), extra columns after Total Amt; panel with Show all / Hide all, count, saved 400 ms after a tick ("Saved for your account"). The same set drives every export.
+- **Extra marketplace columns** (45): set under Sale Columns of a marketplace (label + CSV column names). The value is read from each line's stored file row, so months already imported show it. Same label on two marketplaces = one column. All seven setup checks use the rule's texts.
+- **Export** (46): PDF (A4 landscape, repeating header, row colours), Word (own small writer, no library), Excel, CSV – same filters and columns, limits 1,500 / 5,000 / 20,000, subtitle with the filters, summary block, file name `sales_YYYY-mm-dd_His`. New right `orders.saleExport`.
+- **Strip** (31): Records, qty, sale, buy, profit before fee, marketplace fee, VA share (n % or mixed %), net profit, total loss – over the whole filter, per batch. The VA of the shop and the VA % of the job-history row valid on the batch period end are frozen on the batch at import.
+- **Filters** (42): controls added for import (month), carrier (carrier or one service), Pool / Private, investor, company, vendor, drop-ship platform.
+- **One-batch view** (35): chip "Showing one import only: <shop> - <Month YYYY> ×", Confirm this month, Errors, Delete with Undo; × brings back the remembered marketplace, shop and dates.
+- **Lock and Owner unlock** (34): Month Confirm now sets the import batch to Confirmed (it leaves the Pending list and cannot be deleted or imported again). `SalesService::unlockMonth` – Owner only (right `orders.saleUnlock` can never be handed out), reason required, version of every line kept in `imp_batch_effects`, units back into their lot, revenue journal reversed, refused when the month is closed in Month Close. Tested end to end: confirm → unlock → stock and books back → confirm again.
+- **Partly built, said honestly**: 34 (refund / return / landed-cost change after Confirm as an adjustment line in the next open month), 42 (the Vendor role's own-inventory view), 46 (background job + e-mail / WhatsApp for large exports; DS investor cell), 31 (saved VA share amount and basis, Refresh VA %, click a figure, Month Close figures).
+- Tests: 255 pass (5,058 checks); new `tests/Feature/SaleViewTest.php` (8). Browser checked with a made-up file; no script errors.
+- Register after this batch: BUILT 272 of 1,433 (19 %); Sales 28 of 155 (18 %).
