@@ -129,6 +129,13 @@ class WorkController extends Controller
         } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage(), 'errors' => ['status' => [$e->getMessage()]]], 422); }
     }
 
+    /** New task form (R-G_CORE-2): SLA prefill, pick-only record link, dependency by name, absence cover, weekly-limit warning. */
+    public function taskForm(Request $r) { Rights::check('ADD', 'task'); return \App\Services\TaskCreate::form((int) Context::ent()); }
+    public function taskPrefill(Request $r) { Rights::check('ADD', 'task'); try { return \App\Services\TaskCreate::prefill($r->integer('category')); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
+    public function taskRecords(Request $r) { Rights::check('ADD', 'task'); try { return ['rows' => \App\Services\TaskCreate::records((int) Context::ent(), (string) $r->query('module', ''), (string) $r->query('q', ''))]; } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
+    public function taskFind(Request $r) { Rights::check('ADD', 'task'); return ['rows' => \App\Services\TaskCreate::tasks((int) Context::ent(), (string) $r->query('q', ''))]; }
+    public function taskCreate(Request $r) { Rights::check('ADD', 'task'); try { return \App\Services\TaskCreate::create((int) Context::ent(), $r->all(), $r->user()); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage(), 'errors' => ['_form' => [$e->getMessage()]]], 422); } }
+
     /** Approve / send back (R-G_CORE-7) and the score preview (R-G_CORE-8). */
     public function taskApprove(Request $r, int $id) { try { return \App\Services\TaskScore::approve($id, $r->user(), $r->input('quality')); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
     public function taskRework(Request $r, int $id) { try { return \App\Services\TaskScore::rework($id, $r->user(), (string) $r->input('reason')); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }

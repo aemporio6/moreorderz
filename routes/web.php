@@ -473,6 +473,11 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('returns', [OrdersController::class, 'returns']);
         Route::post('returns', [OrdersController::class, 'receiveReturn']);
         Route::get('tasks', [WorkController::class, 'tasks']);
+        Route::get('tasks/new', [WorkController::class, 'taskForm']);
+        Route::get('tasks/new/prefill', [WorkController::class, 'taskPrefill']);
+        Route::get('tasks/new/records', [WorkController::class, 'taskRecords']);
+        Route::get('tasks/new/depends', [WorkController::class, 'taskFind']);
+        Route::post('tasks/new', [WorkController::class, 'taskCreate']);
         Route::get('alerts', [WorkController::class, 'alerts']);
         Route::post('alerts/rules/{code}', [WorkController::class, 'alertRule'])->where('code', '[A-Z0-9]+');
         Route::post('alerts/texts/{key}/{lang}', [WorkController::class, 'alertText'])->where(['key' => '[a-z_]+', 'lang' => '[a-z]{2}']);

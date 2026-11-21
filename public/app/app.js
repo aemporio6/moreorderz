@@ -1727,7 +1727,7 @@
     busy(true); let d; try { d = await api(`tasks?scope=${scope}`); } finally { busy(false); }
     const today = S.boot.today;
     $('#main').innerHTML = `<div class="page-head"><div><h1>${scope === 'all' ? 'Needs action' : 'My tasks'}</h1><div class="sub">Tasks opened by a rule close by themselves when the problem is fixed.</div></div>
-      <div class="actions"><div class="seg"><button type="button" class="${scope === 'mine' ? 'on' : ''}" data-sc="mine">Mine</button><button type="button" class="${scope === 'stuck_on_me' ? 'on' : ''}" data-sc="stuck_on_me">Stuck on me${d.stuck_on_me ? ' · ' + d.stuck_on_me : ''}</button><button type="button" class="${scope === 'all' ? 'on' : ''}" data-sc="all">Everyone</button><button type="button" class="${scope === 'to_approve' ? 'on' : ''}" data-sc="to_approve">To approve${d.to_approve ? ' · ' + d.to_approve : ''}</button></div></div></div>
+      <div class="actions"><div class="seg"><button type="button" class="${scope === 'mine' ? 'on' : ''}" data-sc="mine">Mine</button><button type="button" class="${scope === 'stuck_on_me' ? 'on' : ''}" data-sc="stuck_on_me">Stuck on me${d.stuck_on_me ? ' · ' + d.stuck_on_me : ''}</button><button type="button" class="${scope === 'all' ? 'on' : ''}" data-sc="all">Everyone</button><button type="button" class="${scope === 'to_approve' ? 'on' : ''}" data-sc="to_approve">To approve${d.to_approve ? ' · ' + d.to_approve : ''}</button></div><button class="btn primary" id="tkNew">${ic('plus')} New task</button></div></div>
       <div class="small" style="margin:-4px 0 10px">My score (30 days): ${d.my_score.score === null ? '<span class="muted">—</span>' : `<span class="chip" style="color:${d.my_score.band.fg};background:${d.my_score.band.bg}">${d.my_score.score}</span>`} <span class="muted">${esc(d.my_score.line)}</span></div>
       <div class="kpis"><div class="card kpi"><div class="bar"></div><div class="lbl">Open</div><div class="val">${d.counts.open}</div></div><div class="card kpi ${d.counts.late ? 'err' : 'done'}"><div class="bar"></div><div class="lbl">Late</div><div class="val">${d.counts.late}</div></div><div class="card kpi ${d.counts.urgent ? 'warn' : 'done'}"><div class="bar"></div><div class="lbl">Urgent</div><div class="val">${d.counts.urgent}</div></div></div>
       <div class="card" style="margin-top:14px"><div class="tbl-wrap"><table class="t"><thead><tr><th>Task</th><th>Area</th><th>Owner</th><th>Priority</th><th>Due</th><th>Status</th><th></th></tr></thead><tbody>
@@ -1736,6 +1736,7 @@
         <td style="white-space:nowrap">${t.fix_url ? `<a class="btn sm" href="${esc(t.fix_url)}">Fix</a> ` : ''}${(t.actions || []).includes('DOING') ? `<button class="btn sm" data-ts="DOING" data-id="${t.id}">${t.status === 'STUCK' ? 'Moving again' : 'Start'}</button> ` : ''}${(t.actions || []).includes('STUCK') && scope !== 'stuck_on_me' ? `<button class="btn sm" data-stuck="${t.id}" title="Say what this task is waiting on – the person named sees it under “Stuck on me”">I’m stuck</button> ` : ''}${(t.actions || []).includes('DONE') ? `<button class="btn sm primary" data-ts="DONE" data-id="${t.id}" ${t.missing && t.missing.length ? `title="${esc(t.missing.join(' '))}"` : ''}>Done${t.missing && t.missing.length ? ' · ' + t.missing.length + ' missing' : ''}</button>` : ''}${t.may_approve ? `<button class="btn sm primary" data-apr="${t.id}">Approve</button> <button class="btn sm" data-rwk="${t.id}">Rework</button>` : ''}</td></tr>`).join('')}</tbody></table>
       ${d.tasks.length ? '' : `<div class="empty">${ic('check')}<div>Nothing waiting. </div></div>`}</div></div>`;
     $$('#main [data-sc]').forEach(b => b.onclick = () => go(b.dataset.sc === 'mine' ? '#/tasks' : '#/tasks?scope=' + b.dataset.sc));
+    if ($('#tkNew')) $('#tkNew').onclick = () => taskNew({}, () => pageTasks(scope));
     $$('#main [data-apr]').forEach(b => b.onclick = () => miniForm('Approve the task', 'Score = on time + evidence + quality − rework, frozen now.', [{ name: 'quality', label: 'Quality', required: true, value: 'GOOD', options: [['EXCELLENT', 'Excellent'], ['GOOD', 'Good'], ['OK', 'OK'], ['POOR', 'Poor']] }],
       async v => { const r = await api(`tasks/${b.dataset.apr}/approve`, { method: 'POST', body: v }); pageTasks(scope); return r; }, 'Approve'));
     $$('#main [data-rwk]').forEach(b => b.onclick = () => miniForm('Send back for rework', 'The owner is told why; each rework costs points on the score.', [{ name: 'reason', label: 'What needs to be redone', required: true }],
@@ -3453,7 +3454,40 @@
 
   // ---------- form: built from the registry; Quick / Full; Back, Undo, Redo, Fill from last, suggestions ----------
   const lastSaved = (() => { try { return JSON.parse(localStorage.getItem('mo_last_forms') || '{}'); } catch (e) { return {}; } })();
+  // ---------- New task (R-G_CORE-2): category = SLA preset, pick-only record link, dependency by name, absence cover, weekly-limit warning ----------
+  async function taskNew(preset = {}, onSaved) {
+    let f; try { f = await api('tasks/new'); } catch (e) { return toast(e.message, 'err'); }
+    const st = { record: preset.record || null, depends: null };
+    const m = modal('New task', 'Every refusal says why. A category fills the due date and the owner.', `<div class="form" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <label style="grid-column:1/-1">Title *<input id="tnTitle" maxlength="255" value="${esc(preset.title || '')}"></label>
+      <label>Category<select id="tnCat"><option value="">—</option>${f.categories.map(c => `<option value="${c.id}">${esc(c.name)}${c.default_due_days !== null ? ' · ' + c.default_due_days + ' d' : ''}</option>`).join('')}</select></label>
+      <label>Priority<select id="tnPr">${f.priorities.map(p => `<option ${p === 'NORMAL' ? 'selected' : ''}>${p}</option>`).join('')}</select></label>
+      <label>Owner *<select id="tnOwner"><option value="">Choose…</option>${f.owners.map(o => `<option value="${o.id}">${esc(o.name)} · ${o.open}/${o.limit} ${o.state === 'OK' ? '' : o.state}${o.absent ? ' · absent' : ''}</option>`).join('')}</select></label>
+      <label>Due *<input id="tnDue" type="date" min="${f.today}"></label>
+      <label>About (link to a record)<select id="tnMod">${f.modules.map(x => `<option value="${esc(x.value)}" ${x.value === (preset.link || 'NONE') ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select></label>
+      <label>Record<input id="tnRec" placeholder="search and pick…" autocomplete="off" value="${esc(preset.record_label || '')}"><div id="tnRecList" class="small"></div></label>
+      <label style="grid-column:1/-1">Waits for task (search by name)<input id="tnDep" placeholder="title or T-0012" autocomplete="off"><div id="tnDepList" class="small"></div></label>
+      <label style="grid-column:1/-1">Detail<textarea id="tnDet" rows="2"></textarea></label>
+      <label style="grid-column:1/-1">Checklist (one item per line)<textarea id="tnChk" rows="2"></textarea></label>
+      <label><input type="checkbox" id="tnEv"> Proof required</label>
+      <div class="small" id="tnErr" style="grid-column:1/-1;color:var(--err)"></div></div>`, '<button class="btn" id="tnNo">Cancel</button><button class="btn primary" id="tnOk">Create task</button>', false);
+    const $m = s2 => $(s2, m.ov);
+    $m('#tnNo').onclick = m.close;
+    $m('#tnCat').onchange = async () => { const c = $m('#tnCat').value; if (!c) return; try { const p = await api('tasks/new/prefill?category=' + c); if (p.due) $m('#tnDue').value = p.due; if (p.owner && !$m('#tnOwner').value) $m('#tnOwner').value = String(p.owner); } catch (e) { $m('#tnErr').textContent = e.message; } };
+    const picker = (inp, list, url, onPick) => { let t; inp.oninput = () => { onPick(null); clearTimeout(t); t = setTimeout(async () => { const q = inp.value.trim(); if (q.length < 2 && !/^\d+$/.test(q)) { list.innerHTML = ''; return; }
+      try { const r = await api(url() + encodeURIComponent(q)); list.innerHTML = r.rows.length ? r.rows.map(x => `<a href="#" data-pk="${x.id}" style="display:block">${esc(x.label)}</a>`).join('') : '<span class="muted">Nothing found</span>';
+        $$('[data-pk]', list).forEach(a => a.onclick = e => { e.preventDefault(); inp.value = a.textContent; list.innerHTML = ''; onPick(+a.dataset.pk); }); } catch (e) { list.textContent = e.message; } }, 300); }; };
+    picker($m('#tnRec'), $m('#tnRecList'), () => `tasks/new/records?module=${encodeURIComponent($m('#tnMod').value)}&q=`, id => { st.record = id; });
+    picker($m('#tnDep'), $m('#tnDepList'), () => 'tasks/new/depends?q=', id => { st.depends = id; });
+    $m('#tnMod').onchange = () => { st.record = null; $m('#tnRec').value = ''; $m('#tnRecList').innerHTML = ''; };
+    $m('#tnOk').onclick = async () => { $m('#tnErr').textContent = '';
+      try { const r = await api('tasks/new', { method: 'POST', body: { title: $m('#tnTitle').value, category: $m('#tnCat').value || null, priority: $m('#tnPr').value, owner: $m('#tnOwner').value || null, due: $m('#tnDue').value,
+          link: $m('#tnMod').value, record: st.record, record_text: $m('#tnRec').value, depends_on: st.depends, detail: $m('#tnDet').value, checklist: $m('#tnChk').value, evidence: $m('#tnEv').checked ? 1 : 0 } });
+        m.close(); toast(r.ref + ' created.'); (r.warnings || []).forEach(w => toast(w, 'warn')); if (r.warnings && r.warnings.length) await new Promise(res => setTimeout(res, 6000)); onSaved && onSaved(r); }
+      catch (e) { $m('#tnErr').textContent = e.message; } };
+  }
   async function openForm(key, id, opt = {}) {
+    if (key === 'task' && !id) return taskNew(opt.preset || {}, opt.onSaved);      // R-G_CORE-2: the task form with SLA prefill and pick-only links
     busy(true); let def, rec, vinfo = {};
     try { def = await api('form/' + key); if (id) { vinfo = await api(`record/${key}/${id}`); rec = vinfo.values; } else rec = def.blank; } catch (e) { busy(false); return toast(e.message, 'err'); }
     busy(false);
