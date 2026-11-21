@@ -15,6 +15,13 @@ class MoNightly extends Command
 
     public function handle(): int
     {
+        $r = \App\Services\JobLog::run('NIGHTLY', null, fn () => $this->nightly());      // R-FIN-32: one lock, one run-log line
+        if ($r['status'] !== 'OK') $this->line('Nightly: ' . $r['status'] . (isset($r['error']) ? ' – ' . $r['error'] : ''));
+        return 0;
+    }
+
+    private function nightly(): int
+    {
         foreach (DB::table('t_enterprise')->where('f_active', 1)->pluck('id') as $ent) {
             Context::set((int) $ent, null);
             $r = StockService::selfCheck((int) $ent);

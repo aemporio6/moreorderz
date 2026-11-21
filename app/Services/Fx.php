@@ -18,7 +18,7 @@ class Fx
         $currency = strtoupper($currency);
         if ($currency === self::base($ent)) return 1.0;
         $r = DB::table('fin_fx_rates')->where('currency', $currency)->where('rate_date', '<=', $date)->orderByDesc('rate_date')->value('rate_to_gbp');
-        if (! $r) throw new \RuntimeException("No exchange rate for $currency on or before $date. Add it under Money › FX rates.");
+        if (! $r) { FxMissing::note($currency, $date, $ent); throw new \RuntimeException("No exchange rate for $currency on or before $date. Add it under Money › FX rates."); }      // R-FIN-26: never 1.0 – a task Add rate
         return (float) $r;
     }
 
@@ -36,5 +36,6 @@ class Fx
     {
         if ($rate <= 0) throw new \InvalidArgumentException('A rate must be more than zero.');
         DB::table('fin_fx_rates')->updateOrInsert(['rate_date' => $date, 'currency' => strtoupper($currency)], ['rate_to_gbp' => $rate, 'source' => $source]);
+        FxMissing::answered($currency, $date);
     }
 }

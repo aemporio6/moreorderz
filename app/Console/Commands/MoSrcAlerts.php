@@ -16,8 +16,9 @@ class MoSrcAlerts extends Command
     public function handle(): int
     {
         foreach (DB::table('t_enterprise')->where('f_active', 1)->pluck('id') as $ent) {
-            Context::set((int) $ent, null); $r = CycleAlerts::sweep((int) $ent);
-            $this->line("Company $ent: opened " . array_sum(array_column($r, 'opened')) . ', closed ' . array_sum(array_column($r, 'closed')));
+            Context::set((int) $ent, null); $r = [];
+            $run = \App\Services\JobLog::run('SRC_ALERTS', (int) $ent, function () use ($ent, &$r) { $r = CycleAlerts::sweep((int) $ent); return array_sum(array_column($r, 'opened')) + array_sum(array_column($r, 'closed')); });      // R-FIN-32 lock + run log
+            $this->line("Company $ent: {$run['status']}, opened " . array_sum(array_column($r, 'opened')) . ', closed ' . array_sum(array_column($r, 'closed')));
         }
         $this->line('Stuck alerts (N6) queued: ' . \App\Services\AlertRules::stuckSweep());
         return 0;

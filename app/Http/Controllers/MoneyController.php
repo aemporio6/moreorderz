@@ -103,11 +103,16 @@ class MoneyController extends Controller
     {
         $this->can($r, 'money.SEE');
         $ent = (int) Context::ent(); $show = $r->query('show', 'UNMATCHED'); $bank = (int) $r->query('bank', 0);
-        $lines = DB::table('fin_bank_transactions as t')->join('fin_bank_accounts as b', 'b.id', '=', 't.bank_account_id')->where('t.company_id', $ent)
-            ->when($show !== 'ALL', fn ($q) => $q->where('t.match_status', 'UNMATCHED'))->when($bank, fn ($q) => $q->where('t.bank_account_id', $bank))->orderByDesc('t.txn_date')->orderByDesc('t.id')->limit(300)
-            ->get(['t.id', 't.bank_account_id', 'b.account_label as bank', 't.txn_date', 't.amount', 't.currency', 't.description', 't.reference_no', 't.match_status', 't.matched_to_type', 't.match_rule', 't.category_code']);
-        $names = DB::table('fin_categories')->pluck('name', 'code'); foreach ($lines as $l) $l->category = $names[$l->category_code] ?? null;
-        return ['banks' => Money::banks($ent), 'lines' => $lines, 'show' => $show, 'bank' => $bank, 'base' => Fx::base($ent), 'can_edit' => \App\Services\Perm::has($r->user(), 'money.EDIT'),
+        $led = $show === 'LEDGER' ? \App\Services\BankLedger::filters($r->query(), $r->user()) : null;      // R-FIN-31 Ledger / Accountant view
+        $base = DB::table('fin_bank_transactions as t')->join('fin_bank_accounts as b', 'b.id', '=', 't.bank_account_id')
+            ->when($led, fn ($q) => \App\Services\BankLedger::apply($q, $led), fn ($q) => $q->where('t.company_id', $ent)->when($show !== 'ALL', fn ($w) => $w->where('t.match_status', 'UNMATCHED')))
+            ->when($bank, fn ($q) => $q->where('t.bank_account_id', $bank));
+        $totals = $led ? \App\Services\BankLedger::totals(clone $base) : null;
+        $lines = (clone $base)->orderByDesc('t.txn_date')->orderByDesc('t.id')->limit(300)
+            ->get(['t.id', 't.bank_account_id', 'b.account_label as bank', 't.txn_date', 't.amount', 't.currency', 't.description', 't.counterparty', 't.reference_no', 't.match_status', 't.matched_to_type', 't.match_rule', 't.category_code']);
+        $names = DB::table('fin_categories')->pluck('name', 'code');
+        foreach ($lines as $l) { $l->category = $names[$l->category_code] ?? null; $l->suggest = $l->match_status === 'UNMATCHED' ? \App\Services\BankCategoryHint::suggest($ent, $l) : null; }      // R-FIN-30: a chip, never applied by itself
+        return ['banks' => Money::banks($ent), 'lines' => $lines, 'show' => $show, 'bank' => $bank, 'base' => Fx::base($ent), 'ledger' => $led ? ['filters' => $led, 'totals' => $totals, 'companies' => \App\Services\BankLedger::companies($r->user()), 'statuses' => \App\Services\BankLedger::STATUSES] : null, 'can_edit' => \App\Services\Perm::has($r->user(), 'money.EDIT'),
             'vat' => \App\Services\Choices::get('VAT_REGISTERED', $ent) === '1',
             'profiles' => DB::table('bank_statement_profiles')->whereIn('fk_id_ent', [0, $ent])->where('f_active', 1)->orderBy('id')->get(['id', 'name', 'date_format'])] + $this->lists($ent);
     }

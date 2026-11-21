@@ -9,5 +9,6 @@ Schedule::command('mo:nightly')->dailyAt('02:30')->withoutOverlapping();
 Schedule::command('mo:cleanup-temp')->dailyAt('02:30')->timezone((function () { try { return (string) (\App\Services\Settings::get('COMPANY_TIMEZONE', 0, 'Europe/London') ?: 'Europe/London'); } catch (\Throwable $e) { return 'Europe/London'; } })())->withoutOverlapping();
 Schedule::command('mo:send-messages')->everyMinute()->withoutOverlapping();
 Schedule::command('mo:pull')->hourlyAt(17)->withoutOverlapping();
+Schedule::command('mo:finance-hourly')->hourly()->withoutOverlapping();      // R-FIN-32: minute 0, lock + run log (JobLog)
 Schedule::command('mo:src-alerts')->everyFifteenMinutes()->withoutOverlapping();
 Schedule::command('mo:dispatch-watch')->everyFifteenMinutes()->withoutOverlapping();

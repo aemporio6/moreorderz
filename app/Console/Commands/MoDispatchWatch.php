@@ -15,7 +15,7 @@ class MoDispatchWatch extends Command
 
     public function handle(): int
     {
-        foreach (DB::table('t_enterprise')->where('f_active', 1)->pluck('id') as $ent) { Context::set((int) $ent, null); TrackingPush::tasks((int) $ent); }
+        foreach (DB::table('t_enterprise')->where('f_active', 1)->pluck('id') as $ent) { Context::set((int) $ent, null); \App\Services\JobLog::run('DISPATCH_WATCH', (int) $ent, fn () => TrackingPush::tasks((int) $ent)); }      // R-FIN-32 lock + run log
         return 0;
     }
 }

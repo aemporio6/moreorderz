@@ -193,6 +193,7 @@ class MoneyService
             DB::table('fin_bank_transactions')->where('id', $l->id)->update(['category_code' => $cat->code, 'branch_id' => $d['branch'] ?? null]);
             self::link($l, $isCost ? 'EXPENSE' : 'CATEGORY', $isCost ? $expId : (int) $l->id, 'BY_HAND', 'MANUAL');
             $paid = $in ? null : VaStatements::bankPaid($ent, $cat->code, (int) ($d['party'] ?? 0) ?: null, $base, (int) $l->id);      // a VA share / salary payout closes its payable
+            BankCategoryHint::learn($ent, $l, (string) $cat->code);      // R-FIN-30: payee → category, offered first next time
             return ['line' => (int) $l->id, 'account' => $acc, 'expense' => $expId, 'payable_closed' => $paid];
         });
     }

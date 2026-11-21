@@ -615,3 +615,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-101 (21 Nov, first bigger batch): R-B_SOURCING-47 / 48 / 49 / 4 BUILT; owner answers applied (SOURCING money without banks, demo products Pool, logo on PDF headers); OWNER_QUESTIONS.md. +7 register lines (675). 497 tests.
 - 7e-102 (21 Nov): logo watermark on every screen and every A4 PDF page, logo on PDF headers and Excel exports; R-G_CORE-101 BUILT (company line, list filters in the address for Back). 677 register lines. 499 tests.
 - 7e-103 (21 Nov): owner's form standard – every dropdown central with + Add or a stated reason, groups, click-to-fix, field show / hide from the form, Create menu from the registry (FormStandardTest over every form). MR-1275 / MR-1319 BUILT. 679 register lines. 505 tests.
+- 7e-104 (21 Nov): Finance – R-FIN-29 / 30 / 26 / 31 BUILT, R-FIN-32 lock + run log (P). +5 register lines (684). 510 tests.
