@@ -156,6 +156,7 @@
       if ((mt = r.match(/^#\/rec\/([\w-]+)\/(\d+)/))) return await pageRecord(mt[1], +mt[2]);
       if (r.startsWith('#/variations/')) return await pageVariations(+r.split('/')[2]);
       if (r.startsWith('#/due')) return await pageDue();
+      if (r === '#/products' || r.startsWith('#/products?')) return await pageProducts();
       if (r.startsWith('#/alerts')) return await pageAlerts();
       if (r.startsWith('#/tasks')) return await pageTasks(r.includes('scope=all') ? 'all' : r.includes('scope=stuck_on_me') ? 'stuck_on_me' : 'mine');
       if ((mt = r.match(/^#\/stock\/product\/(\d+)/))) return await pageStockProduct(+mt[1]);
@@ -1326,6 +1327,61 @@
   function dupLive(supEl, refEl, outEl, cycle) { let t; const run = () => { clearTimeout(t); t = setTimeout(async () => { const sup = supEl ? +supEl.value : 0, ref = refEl.value.trim(); outEl.textContent = ''; if ((supEl && !sup) || !ref) return;
       try { const r = await api('buying/duplicate-check?' + new URLSearchParams({ supplier: sup || '', ref, cycle: cycle || '' })); if (!r.ok) outEl.innerHTML = `${esc(r.message)} · <a href="#/cycle/${r.existing.id}">open</a>`; } catch (x) { } }, 400); };
     refEl.addEventListener('input', run); supEl && supEl.addEventListener('change', run); }
+  // ---------- products list (R-D-35, Type R-D-25, Cover R-D-37, WAC R-D-38) ----------
+  let PL = null;
+  async function pageProducts() {
+    const q = PL ? new URLSearchParams(Object.entries(PL).filter(([k, v]) => v !== null && v !== undefined && v !== '' && k !== 'hidden')) : '';
+    busy(true); let d; try { d = await api('products' + (q ? '?' + q : '')); } finally { busy(false); }
+    PL = PL || { q: d.view.q || '', status: d.view.status, mp: d.view.mp || '', set: d.view.set, per: d.view.per, page: 1, hidden: d.view.hidden || [] };
+    const cols = Object.entries(d.columns).concat(PL.set === 'pricing' ? Object.entries(d.pricing_columns) : []).filter(([k]) => !PL.hidden.includes(k) && (d.money || !['wac', 'raw', 'vat', 'postage', 'packing_rate', 'fee', 'final_sale', 'cost', 'margin', 'margin_pct'].includes(k)));
+    const f2 = x => x === null || x === undefined || x === '' ? '—' : (+x).toFixed(2), covC = { Critical: 'err', Urgent: 'warn', Good: 'done' };
+    const cell = (r, k) => { switch (k) {
+      case 'image': return `<td style="width:56px">${r.image ? `<img src="${esc(r.image)}" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:6px" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'small muted',textContent:'No image'}))">` : '<span class="small muted">No image</span>'}</td>`;
+      case 'name': return `<td style="color:${r.colour};font-weight:600" title="${esc(r.full_name)}"><a href="#" data-pe="${r.id}" style="color:inherit">${esc(r.name)}</a> <span class="small muted">${esc(r.suffix)}</span></td>`;
+      case 'owner': return `<td>${r.owner === 'Multiple' ? `<span class="chip plain" title="${esc(r.owners.join(', '))}">Multiple</span>` : esc(r.owner || '—')}</td>`;
+      case 'type': return `<td>${r.type ? `<span class="chip plain" title="${esc(d.types[r.type])}">${esc(r.type)}</span>` : '—'}</td>`;
+      case 'marketplaces': return `<td style="white-space:nowrap">${r.pills.map(p => `<span class="chip ${p.visible ? (p.mode === 'PRIVATE' ? 'accent' : 'done') : 'plain'}" style="${p.visible ? '' : 'opacity:.45'}" title="${esc(p.name)}: ${p.visible ? (p.mode === 'PRIVATE' ? 'Private' : 'Pool') + ' – visible' : 'not visible'}">${p.visible ? '<span style="color:#1a9e55">●</span> ' : ''}${esc(p.name)}</span>`).join(' ')}</td>`;
+      case 'qty': return `<td class="num" style="${r.qty <= 0 ? 'color:var(--err);font-weight:600' : ''}">${r.qty}</td>`;
+      case 'cover': return `<td><span class="chip ${covC[r.cover]}" title="Basis: ${esc(r.cover_basis)}">${esc(r.cover)}</span></td>`;
+      case 'wac': return `<td class="num" title="${esc(r.wac_tip || '')}">${f2(r.wac)}</td>`;
+      case 'listings': return `<td class="num">${esc(r.listings)}</td>`;
+      case 'status': return `<td><span class="chip ${r.active ? 'done' : 'lock'}">${r.active ? 'ACTIVE' : 'INACTIVE'}</span></td>`;
+      default: { const v = r[k]; return `<td class="${typeof v === 'number' ? 'num' : 'small'}">${typeof v === 'number' && !['stock', 'min_level'].includes(k) ? (k === 'margin_pct' ? v + '%' : f2(v)) : esc(v ?? '—')}</td>`; } } };
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Products</h1><div class="sub">Parents and products on their own; children open inside their parent. Text colour: ${Object.values(d.row_status).map(([l, c]) => `<span style="color:${c};font-weight:600">${esc(l)}</span>`).join(' · ')}</div></div>
+      <div class="actions"><button class="btn" id="plSave" title="Keep these filters, page size and columns as your default view">Save as my view</button><button class="btn primary" id="plNew">${ic('plus')} New product</button></div></div>
+      <div class="card"><div class="list-bar" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input id="plQ" placeholder="Search name, SKU, EAN or MP-id" value="${esc(PL.q)}" style="min-width:230px">
+        <select id="plSt">${[['active', 'Active'], ['inactive', 'Inactive'], ['all', 'All']].map(([v, l]) => `<option value="${v}" ${PL.status === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        <div class="seg"><button type="button" data-mp="" class="${PL.mp ? '' : 'on'}">All channels</button>${d.marketplaces.map(m => `<button type="button" data-mp="${m.id}" class="${String(PL.mp) === String(m.id) ? 'on' : ''}">${esc(m.name)}</button>`).join('')}</div>
+        <div class="seg"><button type="button" data-set="default" class="${PL.set !== 'pricing' ? 'on' : ''}">Default</button><button type="button" data-set="pricing" class="${PL.set === 'pricing' ? 'on' : ''}">Pricing</button></div>
+        <span style="margin-left:auto"></span><button class="btn sm" id="plCols">Columns</button><button class="btn sm" id="plCopy">Copy</button><button class="btn sm" id="plPrint">Print</button>
+        <a class="btn sm" data-ex="csv">CSV</a><a class="btn sm" data-ex="xlsx">Excel</a><a class="btn sm" data-ex="pdf">PDF</a></div>
+      ${d.pricing_needs_mp ? '<div class="small" style="color:#b7791f;padding:6px 14px">Choose a marketplace chip to fill the pricing columns.</div>' : ''}
+      <div class="tbl-wrap" id="plTbl"><table class="t"><thead><tr>${cols.map(([k, l]) => `<th class="${['qty', 'wac', 'listings'].includes(k) ? 'num' : ''}">${esc(l)}</th>`).join('')}<th></th></tr></thead><tbody>
+      ${d.rows.map(r => `<tr>${cols.map(([k]) => cell(r, k)).join('')}<td style="white-space:nowrap"><button class="btn sm" data-pe="${r.id}">Edit</button> <a class="btn sm" href="#/stock/product/${r.id}">Stock</a> <button class="btn sm" data-pd="${r.id}">Duplicate</button> <a class="btn sm" href="#/rec/t_product_vendor/${r.id}" title="History of changes">History</a> ${r.active ? `<button class="btn sm ghost" data-ph="${r.id}">Hide</button>` : ''}</td></tr>`).join('')}</tbody></table>
+      ${d.rows.length ? '' : `<div class="empty">${ic('search')}<div>No products match.</div></div>`}</div>
+      <div style="display:flex;gap:8px;align-items:center;padding:10px 14px;flex-wrap:wrap"><span class="small muted">${esc(d.footer)}</span><span style="margin-left:auto"></span>
+        <button class="btn sm" data-pg="${d.page - 1}" ${d.page <= 1 ? 'disabled' : ''}>‹</button>${d.pager.map(n => `<button class="btn sm ${n === d.page ? 'primary' : ''}" data-pg="${n}">${n}</button>`).join('')}<button class="btn sm" data-pg="${d.page + 1}" ${d.page >= d.pages ? 'disabled' : ''}>›</button>
+        <select id="plPer">${d.sizes.map(n => `<option ${n === d.per ? 'selected' : ''}>${n}</option>`).join('')}</select></div></div>`;
+    const go2 = ch => { Object.assign(PL, ch); pageProducts(); };
+    let t; $('#plQ').oninput = e => { clearTimeout(t); t = setTimeout(() => go2({ q: e.target.value, page: 1 }), 350); };
+    $('#plSt').onchange = e => go2({ status: e.target.value, page: 1 }); $('#plPer').onchange = e => go2({ per: +e.target.value, page: 1 });
+    $$('[data-mp]').forEach(b => b.onclick = () => go2({ mp: b.dataset.mp, page: 1 })); $$('[data-set]').forEach(b => b.onclick = () => go2({ set: b.dataset.set }));
+    $$('[data-pg]').forEach(b => b.onclick = () => go2({ page: +b.dataset.pg }));
+    const exq = () => new URLSearchParams(Object.entries({ q: PL.q, status: PL.status, mp: PL.mp, set: PL.set }).filter(([, v]) => v !== '' && v !== null)).toString() + PL.hidden.map(h => '&hidden[]=' + encodeURIComponent(h)).join('');
+    $$('[data-ex]').forEach(a => a.href = `/api/products/export/${a.dataset.ex}?` + exq());
+    $('#plSave').onclick = async () => { try { toast((await api('products/view', { method: 'POST', body: PL })).message); } catch (e) { toast(e.message, 'err'); } };
+    $('#plNew').onclick = () => openForm('t_product_vendor', null, { onSaved: () => pageProducts() });
+    $$('[data-pe]').forEach(b => b.onclick = e => { e.preventDefault(); openForm('t_product_vendor', +b.dataset.pe, { onSaved: () => pageProducts() }); });
+    $$('[data-pd]').forEach(b => b.onclick = async () => { try { const rec = await api(`record/t_product_vendor/${b.dataset.pd}`); const v = { ...(rec.values || rec) }; ['id', 'SKU_VENDOR', 'ean', 'upc'].forEach(k => delete v[k]); openForm('t_product_vendor', null, { preset: v, onSaved: () => pageProducts() }); } catch (e) { toast(e.message, 'err'); } });
+    $$('[data-ph]').forEach(b => b.onclick = () => { const m = modal('Hide this product', '', '<p>The product is switched off (inactive). It can be shown again from the Inactive filter.</p>', '<button class="btn" id="phNo">No</button><button class="btn primary" id="phYes">Hide</button>', false);
+      $('#phNo', m.ov).onclick = m.close; $('#phYes', m.ov).onclick = async () => { try { const r = await api('bulk/t_product_vendor', { method: 'POST', body: { action: 'DELETE', ids: [+b.dataset.ph], apply: true } }); m.close(); undoToast('Product hidden', r.job, pageProducts); pageProducts(); } catch (e) { toast(e.message, 'err'); } }; });
+    $('#plCols').onclick = () => { const all = Object.entries(d.columns).concat(PL.set === 'pricing' ? Object.entries(d.pricing_columns) : []); const m = modal('Columns', 'Tick the columns to show. "Save as my view" keeps the choice.', `<div style="columns:2">${all.map(([k, l]) => `<label class="chk" style="display:block"><input type="checkbox" data-col="${k}" ${PL.hidden.includes(k) ? '' : 'checked'}> ${esc(l)}</label>`).join('')}</div>`, '<button class="btn primary" id="pcOk">Apply</button>', false);
+      $('#pcOk', m.ov).onclick = () => { PL.hidden = $$('[data-col]', m.ov).filter(x => !x.checked).map(x => x.dataset.col); m.close(); pageProducts(); }; };
+    const plain = () => [cols.map(([, l]) => l).join('\t')].concat(d.rows.map(r => cols.map(([k]) => { const td = document.createElement('div'); td.innerHTML = cell(r, k).replace(/^<td[^>]*>|<\/td>$/g, ''); return td.textContent.trim(); }).join('\t'))).join('\n');
+    $('#plCopy').onclick = () => navigator.clipboard.writeText(plain()).then(() => toast('Copied ' + d.rows.length + ' row(s)'), () => toast('Copy is not allowed by this browser', 'err'));
+    $('#plPrint').onclick = () => { const w = window.open('', '_blank'); if (!w) return toast('Allow pop-ups to print', 'err'); w.document.write(`<html><head><title>Products</title><style>@page{size:landscape}body{font:11px sans-serif}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:3px}</style></head><body><h3>Products</h3>${$('#plTbl').innerHTML.replace(/<button[^>]*>.*?<\/button>|<a class="btn[^>]*>.*?<\/a>/g, '')}</body></html>`); w.document.close(); w.print(); };
+  }
   // ---------- alert rules (R-G_CORE-49) and thresholds (R-G_CORE-51) ----------
   const AL = { tab: 'rules', q: '' };
   async function pageAlerts() {

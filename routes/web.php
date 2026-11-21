@@ -149,6 +149,9 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('health/retry', [AdminController::class, 'retryEvents']);
         Route::get('ledger', [AdminController::class, 'ledger']);
         Route::get('stock/on-hand', [StockController::class, 'onHand']);
+        Route::get('products', [StockController::class, 'products']);
+        Route::post('products/view', [StockController::class, 'productsView']);
+        Route::get('products/export/{format}', [StockController::class, 'productsExport'])->where('format', 'csv|xlsx|pdf');
         Route::get('stock/product/{id}', [StockController::class, 'product'])->whereNumber('id');
         Route::get('stock/ledger', [StockController::class, 'ledger']);
         Route::get('stock/lots', [StockController::class, 'lots']);

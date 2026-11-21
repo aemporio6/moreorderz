@@ -30,6 +30,22 @@ class StockController extends Controller
         catch (\InvalidArgumentException|\RuntimeException $e) { return response()->json(['message' => $e->getMessage(), 'errors' => ['_form' => [$e->getMessage()]]], 422); }
     }
 
+    /** Products list (R-D-35). */
+    public function products(Request $r)
+    {
+        \App\Services\Perm::need($r->user(), 'stock.SEE');
+        $f = $r->only(['q', 'status', 'mp', 'set', 'page', 'per']); $v = \App\Services\ProductsList::view($r->user());
+        if (! $r->has('per')) $f += ['per' => $v['per'], 'set' => $v['set'], 'status' => $v['status'], 'mp' => $v['mp'] ?? null, 'q' => $v['q'] ?? ''];      // the person's default view
+        return \App\Services\ProductsList::page((int) Context::ent(), $f, $r->user());
+    }
+    public function productsView(Request $r) { return \App\Services\ProductsList::saveView($r->user(), $r->all()); }
+    public function productsExport(Request $r, string $format)
+    {
+        \App\Services\Perm::need($r->user(), 'stock.SEE');
+        $x = \App\Services\ProductsList::export((int) Context::ent(), $r->only(['q', 'status', 'mp', 'set', 'hidden']), $format, $r->user());
+        return response($x['body'], 200, ['Content-Type' => $x['type'], 'Content-Disposition' => 'attachment; filename="' . $x['name'] . '"']);
+    }
+
     public function onHand(Request $r)
     {
         $this->can($r, 'stock.SEE');

@@ -98,4 +98,5 @@ How to work each step: build → test → change the verdict lines in `audit/ver
 | 7e-39 | Gen-2 money values kept + compare report R-A_SALES-52 BUILT (legacy columns, status map, SAL_ZERO + change log history, Old profit compare screen) | done | 476/1433 | 388 tests |
 | 7e-40 | VA share – the one definition R-C-40 BUILT (JobPay: shop row first, No VA share set, per-line commission, salary GBP month-end FX, Team engagements xlsx) | done | 482/1433 | 390 tests |
 | 7e-41 | Dependent dropdowns of the person forms R-C-21 BUILT (Chains: networks, addresses, 6 questions, bank accounts, PayPal debit cards, shops, free slots, owner companies; own lists per person) | done | 486/1433 | 393 tests |
-| 7e-42 | NEXT → recount (4-line closers: R-G_CORE-68, R-D-35, R-H-8, R-H-1); then 3-line closers; rest of Sourcing 39 / 28 | todo | | |
+| 7e-42 | Products list R-D-35 BUILT + Cover R-D-37 / WAC R-D-38 BUILT, Type chip R-D-25 P (ProductsList, #/products, pricing set, exports, per-user view) | done | 493/1433 | 395 tests |
+| 7e-43 | NEXT → recount (4-line: R-G_CORE-68, R-H-8, R-H-1 – large / external); then 3-line closers (R-FIN-19, R-G_CORE-94, R-G_CORE-8, R-A_SALES-67, R-C-22, R-G_CORE-83, R-D-58, R-H-49 …); rest of Sourcing 39 / 28 | todo | | |
