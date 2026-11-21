@@ -242,6 +242,11 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('cycle/{id}/summary', [BuyingController::class, 'summary'])->whereNumber('id');
         Route::get('cycle/{id}/context', [BuyingController::class, 'cycleContext'])->whereNumber('id');
         Route::post('cycle/{id}/whatsapp', [BuyingController::class, 'cycleWhatsapp'])->whereNumber('id');
+        Route::get('src-pick/cycles', [BuyingController::class, 'pickCycles']);
+        Route::get('src-pick/pos', [BuyingController::class, 'pickPos']);
+        Route::get('po/{id}/documents', [BuyingController::class, 'poDocs'])->whereNumber('id');
+        Route::get('cycle/{id}/documents', [BuyingController::class, 'cycleDocs'])->whereNumber('id');
+        Route::get('src-product/{id}/documents', [BuyingController::class, 'productDocs'])->whereNumber('id');
         Route::get('grn/{id}/pdf', [BuyingController::class, 'grnPdf'])->whereNumber('id');
         Route::post('grn/{id}/claim', [BuyingController::class, 'grnClaim'])->whereNumber('id');
         Route::get('src-doc-requirements', [BuyingController::class, 'docRequirements']);

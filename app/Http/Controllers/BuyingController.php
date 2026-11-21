@@ -119,6 +119,27 @@ class BuyingController extends Controller
     public function shipmentPoSave(Request $r, int $id) { $this->can($r, 'buying.BUY'); return $this->run(fn () => \App\Services\ShipmentLinks::save((int) Context::ent(), $id, $r->only(['po', 'planned', 'actual', 'reason']))); }
     public function shipmentPoRemove(Request $r, int $id, int $po) { $this->can($r, 'buying.BUY'); return $this->run(fn () => \App\Services\ShipmentLinks::remove((int) Context::ent(), $id, $po)); }
     public function cycleOverview(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\CycleAlerts::overview((int) Context::ent(), $id, $r->user())); }
+    /** R-F_SETUP-1 hub pickers (company scope, R-F_SETUP-17): active cycles newest first, searched on code / product / SKU; POs on number or code, of the chosen cycle. */
+    public function pickCycles(Request $r)
+    {
+        $this->can($r, 'buying.SEE'); $q = trim((string) $r->query('q'));
+        return ['rows' => DB::table('t_src_cycles as c')->where('c.fk_id_ent', Context::ent())->where('c.f_active', 1)
+            ->when($q !== '', fn ($w) => $w->where(fn ($x) => $x->where('c.cycle_code', 'like', "%$q%")->orWhere('c.product_name', 'like', "%$q%")->orWhere('c.sku', 'like', "%$q%")
+                ->orWhereExists(fn ($e) => $e->from('t_src_cycle_products as cp')->whereColumn('cp.fk_id_cycle', 'c.id')->where('cp.f_active', 1)->where(fn ($y) => $y->where('cp.sku', 'like', "%$q%")->orWhere('cp.product_name', 'like', "%$q%")))))
+            ->orderByDesc('c.id')->limit(30)->get(['c.id', 'c.cycle_code as code', 'c.product_name as name', 'c.status'])];
+    }
+    public function pickPos(Request $r)
+    {
+        $this->can($r, 'buying.SEE'); $q = trim((string) $r->query('q')); $cy = (int) $r->query('cycle');
+        return ['rows' => DB::table('t_src_po')->where('fk_id_ent', Context::ent())->where('f_active', 1)->when($cy, fn ($w) => $w->where('fk_id_cycle', $cy))
+            ->when($q !== '', fn ($w) => $w->where(fn ($x) => $x->where('po_number', 'like', "%$q%")->orWhere('po_code', 'like', "%$q%")))->orderByDesc('id')->limit(30)
+            ->get(['id', DB::raw('COALESCE(NULLIF(po_number, \'\'), po_code) as code'), 'status', 'fk_id_cycle as cycle'])];
+    }
+
+    /** R-F_SETUP-10: document roll-up of a PO / cycle / product (duplicates merged with every "Linked via"). */
+    public function poDocs(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\DocRollup::forPo((int) Context::ent(), $id)); }
+    public function cycleDocs(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\DocRollup::forCycle((int) Context::ent(), $id)); }
+    public function productDocs(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\DocRollup::forProduct((int) Context::ent(), $id)); }
     /** R-F_SETUP-13: the GRN PDF (made again, kept in the cycle's documents). Labels go through the print routes (kind GRN_LABEL). */
     public function grnPdf(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(function () use ($id) { $x = \App\Services\GrnPrint::store((int) Context::ent(), $id); return response($x['body'], 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="' . $x['file'] . '"']); }); }
     /** R-F_SETUP-2 Cycle Journey / R-F_SETUP-12 Cycle Summary: JSON, or ?pdf=1 for the PDF. */
