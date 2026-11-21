@@ -532,3 +532,5 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - Not clicked in a browser: the hub figures card (no dev shop has a marketplace profile with hub totals).
 - Tests: 341 pass (new `SalesTasksTest` 5).
 - Register after this batch: BUILT 373 of 1,433 (26 %); Sales 95 of 155 (61 %).
+
+- 7e-22 (21 Nov): marketplace profile drives the readers (R-A_SALES-87 rule test, 84 BUILT): Profiles service, migration 000041, profile-first money reader, daily orders report by profile, required-for-close, Marketplaces › Profiles editor. 343 tests.

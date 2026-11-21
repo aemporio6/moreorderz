@@ -190,6 +190,35 @@ class Fulfilment
     }
 
     /** Month Confirm is refused while a fulfilment order of that shop and month has no sale price yet. */
+    /**
+     * Load the marketplace's daily orders report into the queue (R-A_SALES-84 / 87). The columns come from the shop's marketplace profile (report role FULFILMENT),
+     * so a marketplace with a daily orders report needs no saved format and no code. An order already in the queue is skipped, never doubled.
+     */
+    public static function importReport(int $shopId, string $path, string $fileName, ?object $u): array
+    {
+        Perm::need($u, 'orders.fulfilAdd'); $p = Profiles::ofShop($shopId); $rt = $p ? Profiles::report((int) $p->id, 'FULFILMENT') : null;
+        if (! $p) throw new \InvalidArgumentException('This shop has no marketplace profile. Choose the profile on the shop first, or use "Convert file" to map the columns.');
+        if (! $rt || empty($rt['map']['order_no'])) throw new \InvalidArgumentException("The profile \"{$p->name}\" has no daily orders report with its columns. Add the report (role: daily orders) and its columns under Marketplace profiles.");
+        $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION)) ?: 'csv';
+        $rows = in_array($ext, ['xlsx', 'xls'], true) ? \PhpOffice\PhpSpreadsheet\IOFactory::createReaderForFile($path)->setReadDataOnly(true)->load($path)->getActiveSheet()->toArray(null, false, false, false) : MarketplaceFiles::rows($path, $ext);
+        $want = []; foreach ($rt['map'] as $k => $names) $want[$k] = array_map(fn ($x) => MarketplaceFiles::keyOf($x), $names);
+        $hi = null; $col = [];
+        foreach (array_slice($rows, 0, 40, true) as $i => $r) { $h = array_map(fn ($x) => MarketplaceFiles::keyOf($x), $r); $c = []; foreach ($want as $k => $names) { $j = current(array_filter(array_keys($h), fn ($j) => $h[$j] !== '' && in_array($h[$j], $names, true))); if ($j !== false) $c[$k] = $j; } if (isset($c['order_no'])) { $hi = $i; $col = $c; break; } }
+        if ($hi === null) throw new \InvalidArgumentException('No header line with the order number column of the profile (' . implode(' / ', $rt['map']['order_no']) . ') was found in this file. Is this the daily orders report of this marketplace?');
+        if ($rt['detect']) { $h = array_map(fn ($x) => MarketplaceFiles::keyOf($x), $rows[$hi]); $miss = array_values(array_filter($rt['detect'], fn ($x) => ! in_array(MarketplaceFiles::keyOf($x), $h, true))); if ($miss) throw new \InvalidArgumentException('This file is not the profile\'s ' . $rt['type'] . ' report: column(s) ' . implode(', ', $miss) . ' are missing.'); }
+        $new = 0; $skip = 0; $err = [];
+        foreach (array_slice($rows, $hi + 1) as $n => $r) {
+            if (! array_filter($r, fn ($x) => trim((string) $x) !== '')) continue;
+            $d = ['shop' => $shopId]; foreach ($col as $k => $j) $d[$k] = trim((string) ($r[$j] ?? ''));
+            if (isset($d['country_code'])) $d['country_code'] = strtoupper(mb_substr($d['country_code'], 0, 2));
+            if (($d['order_no'] ?? '') === '') continue;
+            try { self::save($d, null, $u); $new++; }
+            catch (\Illuminate\Validation\ValidationException $e) { $m = $e->errors(); if (isset($m['order_no']) && str_contains(implode(' ', $m['order_no']), 'already saved')) $skip++; else $err[] = 'Row ' . ($hi + $n + 2) . ': ' . implode(' ', array_merge(...array_values($m))); }
+        }
+        Audit::log('t_branches', $shopId, 'UPDATE', ['daily orders report' => $fileName, 'new' => $new, 'already' => $skip, 'errors' => count($err)]);
+        return ['message' => "$new order line(s) added to the queue" . ($skip ? ", $skip were already there" : '') . ($err ? ', ' . count($err) . ' row(s) not loaded' : '') . '. Columns came from the profile "' . $p->name . '".', 'new' => $new, 'already' => $skip, 'errors' => array_slice($err, 0, 50)];
+    }
+
     public static function confirmBlock(int $branchId, string $month): ?string
     {
         $n = DB::table('mo_sale_fulfilment as x')->join('t_sales as s', 's.id', '=', 'x.fk_id_sale')->where('s.fk_id_branch', $branchId)->whereRaw("DATE_FORMAT(s.d_order,'%Y-%m') = ?", [$month])->where('s.status', 'Pending')->where('s.total_amount', '<=', 0)->count();

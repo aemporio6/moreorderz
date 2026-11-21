@@ -59,12 +59,21 @@ class CloseService
         // the orders file of the month (IC-6): a monthly sales import, or for a daily-only profile the batch of its daily orders (R-A_SALES-84)
         $mm = (int) substr($from, 5, 2); $yy = (int) substr($from, 0, 4); $ob = DB::table('t_sale_imports')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->where('period_month', $mm)->where('period_year', $yy)->where('import_nature', '<>', 'Totals')->get();
         $shopRow = DB::table('t_branches')->where('id', $branchId)->first(); $dailyOnly = $shopRow && Fulfilment::dailyOnly($shopRow); $real = $ob->where('f_daily', 0)->isNotEmpty(); $daily = $ob->where('f_daily', 1)->isNotEmpty();
-        if (! DB::table('t_sale_imports')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->exists()) $set('ORDERS_FILE', 'NA', 'No sales have ever been imported for this shop, so this check does not apply.');
+        // the shop's marketplace profile says which reports Month Close needs (R-A_SALES-87): a report the profile does not require is not checked, one it requires is checked even before the first file
+        $reqOrders = Profiles::required($branchId, 'ORDERS'); $reqMoney = Profiles::required($branchId, 'MONEY'); $everSales = DB::table('t_sale_imports')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->exists();
+        if ($reqOrders === false) $set('ORDERS_FILE', 'NA', 'The marketplace profile of this shop does not require an orders file for Month Close.');
+        elseif (! $everSales && $reqOrders) $set('ORDERS_FILE', 'RED', 'The marketplace profile requires the orders file, and none is imported for this shop yet.', 1, '#/sales-import');
+        elseif (! $everSales) $set('ORDERS_FILE', 'NA', 'No sales have ever been imported for this shop, so this check does not apply.');
         elseif ($real || ($dailyOnly && $daily)) $set('ORDERS_FILE', 'GREEN', $real ? 'The orders file of the month is imported.' : 'Daily-only shop: the batch of its daily orders counts as the orders file.');
         else $set('ORDERS_FILE', 'RED', $daily ? 'Only daily orders so far: import the monthly orders file of the shop (it merges into them).' : 'No orders file is imported for this month.', 1, '#/sales-import');
 
         // 1 – 5: the marketplace's money file
-        if (! $hasFiles) {
+        if ($reqMoney === false) {
+            foreach (['FILES_PRESENT', 'SETTLEMENT_COMPLETE', 'ORDERS_VS_TXN', 'HUB_TOTALS', 'PAYOUT_VS_BANK'] as $c) $set($c, 'NA', 'The marketplace profile of this shop does not require a money file for Month Close.');
+        } elseif (! $hasFiles && $reqMoney && $everSales) {
+            $set('FILES_PRESENT', 'RED', 'The marketplace profile requires the money file, and none is loaded for this shop yet.', 1, '#/settlements?shop=' . $branchId);
+            foreach (['SETTLEMENT_COMPLETE', 'ORDERS_VS_TXN', 'HUB_TOTALS', 'PAYOUT_VS_BANK'] as $c) $set($c, 'NA', 'Waits for the first money file.');
+        } elseif (! $hasFiles) {
             foreach (['FILES_PRESENT', 'SETTLEMENT_COMPLETE', 'ORDERS_VS_TXN', 'HUB_TOTALS', 'PAYOUT_VS_BANK'] as $c) $set($c, 'NA', 'No money file has ever been loaded for this shop, so this check does not apply.');
         } else {
             // the shop's very first money file may start inside a month: that month counts from the file's first day

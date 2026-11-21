@@ -313,7 +313,9 @@ class MarketplaceFiles
 
     public static function readMapped(string $path, string $ext, array $opt = []): array
     {
-        $hi = null; $rows = []; $find = fn (array $h, string $what) => current(array_filter(array_keys($h), fn ($i) => in_array($h[$i], self::COLS[$what], true))) ;
+        // the shop's marketplace profile comes first (R-A_SALES-87): its column names, then its buckets; the built-in names are only the fall-back
+        $pf = $opt['profile'] ?? null; $pcol = []; foreach ((array) ($pf['map'] ?? []) as $k => $names) $pcol[$k] = array_map(fn ($x) => self::key($x), (array) $names);
+        $hi = null; $rows = []; $find = function (array $h, string $what) use ($pcol) { foreach ([$pcol[$what] ?? [], self::COLS[$what] ?? []] as $names) { if (! $names) continue; $i = current(array_filter(array_keys($h), fn ($i) => $h[$i] !== '' && in_array($h[$i], $names, true))); if ($i !== false) return $i; } return false; };
         // a workbook (Temu gives its statement as .xlsx) can hold several sheets: the first sheet with a usable header line is read
         $sets = in_array($ext, ['xlsx', 'xls'], true) ? array_map(fn ($s) => $s->toArray(null, false, false, false), IOFactory::createReaderForFile($path)->setReadDataOnly(true)->load($path)->getAllSheets()) : [self::rows($path, $ext)];
         foreach ($sets as $try) { foreach (array_slice($try, 0, 40, true) as $i => $r) { $h = array_map(fn ($x) => self::key($x), $r); if (count(array_filter($h, fn ($x) => $x !== '')) >= 3 && $find($h, 'order') !== false) { $hi = $i; $rows = $try; break 2; } } }
@@ -324,11 +326,12 @@ class MarketplaceFiles
         $data = array_values(array_filter(array_slice($rows, $hi + 1), fn ($r) => count(array_filter($r, fn ($x) => trim((string) $x) !== '')) > 0));
         $numeric = function (int $i) use ($data) { $n = 0; $t = 0; foreach (array_slice($data, 0, 200) as $r) { $v = trim((string) ($r[$i] ?? '')); if ($v === '' || $v === '--') continue; $t++; if (preg_match('/^\(?[£$€]?\s*-?[£$€]?\s*[\d.,]+\s*\)?$/u', $v)) $n++; } return $t > 0 && $n / $t >= 0.9; };
         $long = $col['amount'] !== null && ($col['type'] !== null || $col['desc'] !== null);
-        $wide = []; $unused = []; $used = array_filter(array_values($col), fn ($x) => $x !== null);
+        $wide = []; $unused = []; $fromProfile = 0; $used = array_filter(array_values($col), fn ($x) => $x !== null);
         if (! $long) foreach ($h as $i => $name) {
             if ($name === '' || in_array($i, $used, true) || ! $numeric($i)) continue;
             if (preg_match('/\b(id|no|number|qty|quantity|rate|%|percent|postcode|zip|phone|weight|stock)\b/', $name) || str_ends_with($name, ' id')) { $unused[] = $rows[$hi][$i]; continue; }
-            $code = null; foreach (self::WIDE as [$c, $keys]) { foreach ($keys as $k) if (str_contains($name, $k)) { $code = $c; break 2; } }
+            $code = $pf['wide'][$name] ?? null; if ($code) $fromProfile++;
+            if ($code === null) foreach (self::WIDE as [$c, $keys]) { foreach ($keys as $k) if (str_contains($name, $k)) { $code = $c; break 2; } }
             if ($code === null) { $unused[] = $rows[$hi][$i]; continue; }
             $wide[$i] = $code;
         }
@@ -354,7 +357,7 @@ class MarketplaceFiles
             $parts = [];
             if ($long) {
                 $amt = self::num($g('amount')); if ($amt == 0.0) continue; $text = mb_strtolower($g('type') . ' ' . $g('desc')); $code = null;
-                foreach (self::LONG as [$c, $keys]) { foreach ($keys as $k) if (str_contains($text, $k)) { $code = $c; break 2; } }
+                foreach (array_merge((array) ($pf['long'] ?? []), self::LONG) as $li => [$c, $keys]) { foreach ($keys as $k) if (str_contains($text, $k)) { $code = $c; if ($li < count((array) ($pf['long'] ?? []))) $fromProfile++; break 2; } }
                 if ($code === null) { $code = 'MP_OTHER'; $unknown[trim($g('type') . ' ' . $g('desc'))] = true; }
                 $parts[] = [$code, $amt, trim($g('type') . ($g('desc') !== '' ? ' – ' . $g('desc') : ''))];
             } else {
@@ -375,11 +378,13 @@ class MarketplaceFiles
         if (! $lines) throw new \InvalidArgumentException('No amount line was found under the header of this file.');
         $map = []; foreach ($col as $what => $i) if ($i !== null) $map[] = [(string) $rows[$hi][$i], ['order' => 'Order number', 'statement' => 'Payout / settlement number', 'date' => 'Date', 'payout_date' => 'Payout date', 'type' => 'Type', 'desc' => 'Description', 'sku' => 'SKU', 'qty' => 'Quantity', 'currency' => 'Currency', 'net' => 'Net amount (used as the check)', 'amount' => 'Amount'][$what]];
         foreach ($wide as $i => $code) $map[] = [(string) $rows[$hi][$i], ($code === 'NET_SALES' ? 'Sales (settles what the shop owes)' : ($code === 'REFUND' ? 'Refund' : self::BUCKETS[$code][2])) . (in_array($i, $flip, true) ? ' – read as a cost (minus)' : '')];
-        return ['format' => 'MAPPED', 'report_type' => $platform . '_FILE', 'currency' => $cur, 'period' => [$dates ? min($dates) : min(array_column($st, 'date')), $dates ? max($dates) : max(array_column($st, 'date'))], 'statements' => $st, 'lines' => $lines, 'errors' => [], 'refunds' => $refund,
+        $byProfile = $pf && ($pcol || $fromProfile);
+        return ['format' => 'MAPPED', 'report_type' => $byProfile && ! empty($pf['type']) ? mb_substr($pf['type'], 0, 30) : $platform . '_FILE', 'profile' => $byProfile ? ($pf['name'] ?? 'profile') : null, 'currency' => $cur, 'period' => [$dates ? min($dates) : min(array_column($st, 'date')), $dates ? max($dates) : max(array_column($st, 'date'))], 'statements' => $st, 'lines' => $lines, 'errors' => [], 'refunds' => $refund,
             'unknown' => array_keys($unknown), 'skipped' => ['rows' => 0, 'amount' => 0.0], 'mapping' => $map, 'unused' => array_values(array_filter(array_map('strval', $unused), fn ($x) => trim($x) !== '')),
             'checks' => [['ok' => $col['net'] !== null && $bad === 0, 'text' => 'Every line adds up to the file\'s net column', 'detail' => $col['net'] === null ? 'The file has no net / total column, so this could not be checked – compare the payout with the bank' : ($bad ? "$bad line(s) differ – the difference is booked as \"other\"" : count($lines) . ' amount line(s)')],
                 ['ok' => ! $unknown, 'text' => 'Every type is known', 'detail' => $unknown ? 'Booked as "other": ' . implode('; ', array_slice(array_keys($unknown), 0, 8)) : ''],
-                ['ok' => true, 'text' => 'Columns were recognised by their names', 'detail' => 'Check the list of columns shown with this result once: this reader was not built from a published format of this marketplace']]];
+                $byProfile ? ['ok' => true, 'text' => 'Columns came from the marketplace profile "' . ($pf['name'] ?? '') . '"', 'detail' => count($pcol) . ' column role(s) and ' . $fromProfile . ' bucket match(es) were taken from the profile; anything the profile does not name was read by its column name']
+                    : ['ok' => true, 'text' => 'Columns were recognised by their names', 'detail' => 'Check the list of columns shown with this result once: this reader was not built from a published format of this marketplace. Add the columns to the marketplace profile to fix them for good.']]];
     }
 
     // ---------- load ----------
@@ -392,6 +397,7 @@ class MarketplaceFiles
     public static function import(int $ent, int $branchId, string $path, string $fileName, array $opt = []): array
     {
         $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION)) ?: 'csv';
+        if (! isset($opt['profile']) && ($p = Profiles::ofShop($branchId))) { $rt = Profiles::report((int) $p->id, 'MONEY'); $b = Profiles::buckets((int) $p->id); if (($rt && $rt['map']) || $b['wide'] || $b['long']) $opt['profile'] = ['name' => $p->name, 'type' => $rt['type'] ?? null, 'map' => $rt['map'] ?? [], 'wide' => $b['wide'], 'long' => $b['long']]; }
         $x = self::read($path, $ext, $opt);
         if ($x['format'] === 'TIKTOK') return SettlementService::importTikTok($ent, $branchId, $path, $fileName) + ['format' => 'TIKTOK', 'format_name' => self::FORMATS['TIKTOK']];
         $shop = DB::table('t_branches')->where('id', $branchId)->where('fk_id_ent', $ent)->first() ?? throw new \InvalidArgumentException('Choose the shop this file belongs to.');
@@ -445,7 +451,7 @@ class MarketplaceFiles
             Audit::log('fin_import_batches', $batch, 'INSERT', ['type' => $type, 'shop' => $shop->shop_name, 'statements' => $newSt, 'lines' => $new], null, $ent);
             return ['batch' => $batch, 'format' => $x['format'], 'format_name' => self::FORMATS[$x['format']], 'statements_new' => $newSt, 'statements_already' => $oldSt, 'statements_reopened' => $reopened, 'lines_new' => $new, 'lines_already' => $dup, 'refund_proposals' => $proposals,
                 'full_refunds' => count($x['refunds']), 'full_refunds_without_order' => $noSale, 'hub_check' => $ok ? 'OK' : 'DIFF', 'period' => $x['period'], 'report_total' => $fileTotal, 'statements_in_period' => $fileTotal, 'checks' => $checks,
-                'new_columns' => $x['unknown'], 'mapping' => $x['mapping'], 'unused' => $x['unused'] ?? [], 'skipped' => $x['skipped'], 'all_ok' => $ok];
+                'new_columns' => $x['unknown'], 'mapping' => $x['mapping'], 'profile' => $x['profile'] ?? null, 'unused' => $x['unused'] ?? [], 'skipped' => $x['skipped'], 'all_ok' => $ok];
         });
     }
 }
