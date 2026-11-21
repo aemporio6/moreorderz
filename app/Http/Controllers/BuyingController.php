@@ -177,13 +177,13 @@ class BuyingController extends Controller
             ->first(['p.id', 'p.po_number', 'p.po_date', 'p.status', 'p.po_total', 'p.exchange_rate', 'p.deposit_pct', 'p.fk_id_cycle', 'p.fk_id_supplier', 'p.f_paid_in_full', 's.supplier_name as supplier', 'c.currency_code as currency']) ?? abort(404);
         $money = \App\Services\Perm::has($r->user(), 'buying.MONEY');
         $lines = DB::table('t_src_po_lines as l')->leftJoin('t_product_vendors as p', 'p.id', '=', 'l.fk_id_product')->where('l.fk_id_po', $id)->where('l.f_active', 1)
-            ->get(['l.id', 'l.fk_id_product as product_id', 'l.sku', 'p.product_name_vendor as name', 'l.qty_confirmed as qty', 'l.unit_price', 'l.line_total',
+            ->get(['l.id', 'l.fk_id_product as product_id', 'l.sku', 'p.product_name_vendor as name', 'l.qty_confirmed as qty', 'l.unit_price', 'l.line_total', 'l.line_type', 'l.line_notes', 'l.fk_id_sample',
                 DB::raw('(SELECT COALESCE(SUM(k.actual_qty),0) FROM t_src_shipment_po_link k JOIN t_src_shipments s ON s.id=k.fk_id_shipment WHERE k.fk_id_po_line=l.id AND k.f_active=1 AND s.f_active=1) as shipped'),
                 DB::raw('(SELECT COALESCE(SUM(g.received_qty),0) FROM t_src_grn_lines g JOIN t_src_grn h ON h.id=g.fk_id_grn WHERE g.fk_id_po_line=l.id AND h.posting_status="POSTED") as received')]);
         $ships = DB::table('t_src_shipments')->where('fk_id_po', $id)->where('f_active', 1)->orderBy('id')->get(['id', 'shipment_code', 'planned_qty', 'etd', 'eta', 'actual_arrival', 'status']);
         $out = ['po' => $po, 'lines' => $lines, 'shipments' => $ships,
             'grns' => DB::table('t_src_grn')->whereIn('fk_id_shipment', $ships->pluck('id')->all() ?: [0])->where('f_active', 1)->orderBy('id')->get(['id', 'grn_number', 'fk_id_shipment', 'grn_date', 'units_received', 'damaged_units', 'missing_units', 'posting_status']),
-            'lots' => DB::table('fin_lots')->where('po_id', $id)->get(['id', 'lot_code', 'sku', 'qty', 'qty_left', 'unit_cost_gbp', 'landed_status']), 'rights' => $this->rights($r), 'base' => Fx::base(Context::ent())];
+            'lots' => DB::table('fin_lots')->where('po_id', $id)->get(['id', 'lot_code', 'sku', 'qty', 'qty_left', 'unit_cost_gbp', 'landed_status']), 'rights' => $this->rights($r), 'base' => Fx::base(Context::ent()), 'line_types' => \App\Services\PoLines::TYPES, 'line_hint' => \App\Services\PoLines::HINT, 'stock_note' => \App\Services\PoLines::stockNote($id)];
         if ($money) {
             $out['terms'] = DB::table('t_src_payment_terms')->where('fk_id_po', $id)->where('f_active', 1)->orderBy('term_no')->get(['id', 'milestone', 'pct', 'planned_amount', 'paid_amount', 'remaining_amount', 'due_date', 'status']);
             $out['payments'] = DB::table('t_src_payments')->where('fk_id_po', $id)->where('f_active', 1)->orderBy('id')->get(['id', 'payment_code', 'payment_date', 'payment_amount', 'exchange_rate', 'base_amount', 'payment_type', 'status']);
@@ -313,6 +313,20 @@ class BuyingController extends Controller
         $d = $r->validate(['bank' => 'required|integer', 'date' => 'required|date', 'duty' => 'nullable|numeric|min:0', 'import_vat' => 'nullable|numeric|min:0']);
         return $this->run(function () use ($id, $d) { $x = \App\Services\SourcingExtras::payCustoms((int) Context::ent(), $id, (int) $d['bank'], $d['date'], isset($d['duty']) ? (float) $d['duty'] : null, isset($d['import_vat']) ? (float) $d['import_vat'] : null);
             return $x + ['message' => 'Paid: duty ' . number_format($x['duty_base'], 2) . ' (into the goods\' cost) · import VAT ' . number_format($x['vat_base'], 2) . ' (to claim back)']; });
+    }
+
+    /** Add a FEE / COST / SAMPLE (or PRODUCT) line to a draft PO (R-B_SOURCING-6). */
+    public function poLine(Request $r, int $id)
+    {
+        $this->can($r, 'buying.BUY');
+        $d = $r->validate(['line_type' => 'required|string|max:20', 'name' => 'nullable|string|max:300', 'product' => 'nullable|integer', 'qty' => 'nullable|numeric|min:0', 'unit_price' => 'required|numeric|min:0']);
+        return $this->run(function () use ($id, $d) {
+            $po = DB::table('t_src_po')->where('id', $id)->where('fk_id_ent', Context::ent())->first() ?? throw new \RuntimeException('PO not found.');
+            if ($po->status !== 'DRAFT') throw new \InvalidArgumentException('Lines can only be added while the PO is a draft.');
+            $res = \App\Services\RecordService::save('t_src_po_lines', ['fk_id_po' => $id, 'fk_id_cycle' => $po->fk_id_cycle, 'line_type' => $d['line_type'], 'line_notes' => $d['name'] ?? null, 'fk_id_product' => $d['product'] ?? null,
+                'sku' => ! empty($d['product']) ? DB::table('t_product_vendors')->where('id', $d['product'])->value('SKU_VENDOR') : null, 'qty_ordered' => $d['qty'] ?? null, 'qty_confirmed' => $d['qty'] ?? null, 'unit_price' => $d['unit_price']]);
+            return ['id' => $res['id'], 'message' => 'Line added · PO total ' . number_format((float) DB::table('t_src_po')->where('id', $id)->value('po_total'), 2)];
+        });
     }
 
     /** Live duplicate check supplier + order reference (R-B_SOURCING-7). */

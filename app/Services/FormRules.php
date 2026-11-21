@@ -36,6 +36,7 @@ class FormRules
         if ($table === 'cat_ip_burgers') return self::isp($data);
         if ($table === 't_account_job_history') return self::jobHistory($data, $old, $id);
         if ($table === 't_src_cycles' || $table === 't_src_po') return self::srcDuplicate($table, $data, $old, $id);
+        if ($table === 't_src_po_lines') return self::poLine($data, $old);
         if ($formKey !== 'cat_company_house') return [];
         $strict = self::strict($formKey); $e = []; $val = fn (string $c) => array_key_exists($c, $data) ? $data[$c] : ($old[$c] ?? null);
         if (isset($data['company_name']) && is_string($data['company_name']) && $data['company_name'] !== '') $data['company_name'] = mb_strtoupper(mb_substr($data['company_name'], 0, 1)) . mb_substr($data['company_name'], 1);
@@ -72,6 +73,19 @@ class FormRules
         }
         try { if (SrcDuplicate::guard($x, request()->input('dup_reason')) && $cycle) SrcDuplicate::forced($cycle, $x, (string) request()->input('dup_reason'), $ent); }
         catch (SrcDuplicateException $e) { return ['order_ref' => $e->getMessage(), '_dup' => $x->cycle_code . '|' . $x->id] + ($table === 't_src_po' ? ['fk_id_supplier' => $e->getMessage()] : []); }
+        return [];
+    }
+
+    /** PO line types (R-B_SOURCING-6): empty → PRODUCT, unknown → PRODUCT, a PRODUCT line needs a product, a FEE / COST / SAMPLE line a name; amount from qty × price or the lump sum. */
+    private static function poLine(array &$data, array $old): array
+    {
+        $v = fn (string $c) => array_key_exists($c, $data) ? $data[$c] : ($old[$c] ?? null);
+        $log = []; $type = PoLines::type($v('line_type'), (string) ($v('line_notes') ?: $v('sku')), $log);
+        if (array_key_exists('line_type', $data) || ! $old) $data['line_type'] = $type;
+        if ($type === 'PRODUCT' && ! $v('fk_id_product')) return ['fk_id_product' => 'A PRODUCT line needs a product from the product master.'];
+        if ($type === 'PRODUCT' && (float) $v('qty_ordered') <= 0) return ['qty_ordered' => 'A product line needs a quantity above zero.'];
+        if ($type !== 'PRODUCT' && ! $v('fk_id_product') && trim((string) $v('line_notes')) === '') return ['line_notes' => "Say what the $type amount is for (e.g. \"Agent fee\", \"Inspection\")."];
+        if ($v('unit_price') !== null && $v('unit_price') !== '') $data['line_total'] = round(PoLines::amount($v('qty_ordered'), $v('unit_price')) + (float) $v('other_charges'), 2);
         return [];
     }
 

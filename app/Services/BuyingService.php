@@ -134,15 +134,23 @@ class BuyingService
             $po = DB::table('t_src_po')->insertGetId(['fk_id_ent' => $ent, 'po_code' => ($no = Numbering::next('PO', $ent, $date)), 'po_number' => $no, 'po_date' => $date, 'fk_id_cycle' => $d['cycle'] ?? null, 'fk_id_supplier' => $d['supplier'],
                 'fk_id_currency' => self::currencyId($cur), 'fk_id_payment_term' => $d['fk_id_payment_term'] ?? null, 'requested_by' => Context::userId(), 'status' => 'DRAFT', 'created_by' => Context::userId(), 'f_active' => 1, 'created_at' => now(),
                 'deposit_pct' => $d['deposit_pct'] ?? 30, 'po_total' => 0, 'fk_id_repeat_from_po' => $d['repeat_from'] ?? null]);
-            $total = 0.0;
-            foreach ($d['lines'] as $l) {
-                if ((float) $l['qty'] <= 0 || (float) $l['unit_price'] < 0) throw new \InvalidArgumentException('Each line needs a quantity above zero and a price.');
-                $p = DB::table('t_product_vendors')->where('id', $l['product'])->where('fk_id_ent', $ent)->first() ?? throw new \RuntimeException('A PO line needs a product of this company.');
-                $lt = round((float) $l['qty'] * (float) $l['unit_price'] + (float) ($l['other_charges'] ?? 0), 2);
-                DB::table('t_src_po_lines')->insert(['fk_id_ent' => $ent, 'fk_id_cycle' => $d['cycle'] ?? null, 'fk_id_po' => $po, 'sku' => $p->SKU_VENDOR, 'qty_ordered' => $l['qty'], 'qty_confirmed' => $l['qty'], 'unit_price' => $l['unit_price'],
-                    'other_charges' => $l['other_charges'] ?? 0, 'line_total' => $lt, 'created_by' => Context::userId(), 'f_active' => 1, 'created_at' => now(), 'line_type' => 'PRODUCT', 'fk_id_product' => $p->id]);
+            $total = 0.0; $log = []; $ids = [];
+            foreach ($d['lines'] as $l) {      // line types PRODUCT / FEE / COST / SAMPLE (R-B_SOURCING-6)
+                $name = trim((string) ($l['name'] ?? $l['line_notes'] ?? ''));
+                $type = PoLines::type($l['line_type'] ?? null, $name ?: (string) ($l['sku'] ?? (! empty($l['product']) ? DB::table('t_product_vendors')->where('id', $l['product'])->value('SKU_VENDOR') : '')), $log);
+                if ((float) ($l['qty'] ?? 0) < 0 || (float) ($l['unit_price'] ?? -1) < 0) throw new \InvalidArgumentException('Each line needs a price (and no negative quantity).');
+                if ($type === 'PRODUCT' && (float) ($l['qty'] ?? 0) <= 0) throw new \InvalidArgumentException('Each product line needs a quantity above zero and a price.');
+                $p = null;
+                if ($type === 'PRODUCT' || ! empty($l['product'])) $p = DB::table('t_product_vendors')->where('id', $l['product'] ?? 0)->where('fk_id_ent', $ent)->first() ?? throw new \RuntimeException('A PRODUCT line needs a product of this company.');
+                if ($type !== 'PRODUCT' && ! $p && $name === '') throw new \InvalidArgumentException("A $type line needs a name (what the amount is for).");
+                $lt = round(PoLines::amount($l['qty'] ?? 0, $l['unit_price']) + (float) ($l['other_charges'] ?? 0), 2);
+                $ids[] = DB::table('t_src_po_lines')->insertGetId(['fk_id_ent' => $ent, 'fk_id_cycle' => $d['cycle'] ?? null, 'fk_id_po' => $po, 'sku' => $p->SKU_VENDOR ?? null, 'qty_ordered' => (float) ($l['qty'] ?? 0), 'qty_confirmed' => (float) ($l['qty'] ?? 0), 'unit_price' => $l['unit_price'],
+                    'other_charges' => $l['other_charges'] ?? 0, 'line_total' => $lt, 'created_by' => Context::userId(), 'f_active' => 1, 'created_at' => now(), 'line_type' => $type, 'fk_id_product' => $p->id ?? null, 'line_notes' => $name !== '' ? mb_substr($name, 0, 500) : null, 'fk_id_sample' => $l['sample'] ?? null]);
                 $total += $lt;
             }
+            foreach ($ids as $lid) $log = array_merge($log, PoLines::sync((int) $lid));      // FEE / COST freight-cost rows, SAMPLE rows
+            if ($n = PoLines::stockNote((int) $po)) $log[] = $n;
+            if ($log) Audit::log('t_src_po', $po, 'UPDATE', ['line log' => $log], null, $ent);
             DB::table('t_src_po')->where('id', $po)->update(['po_total' => round($total, 2)]);
             Audit::log('t_src_po', $po, 'INSERT', ['po_number' => $no, 'total' => round($total, 2), 'currency' => $cur] + ($forced ? ['DUPLICATE_FORCED' => $forced->cycle_code, 'supplier PI' => $d['order_ref'] ?? null] : []), $forced ? trim((string) $d['dup_reason']) : null, $ent);
             SearchIndex::put((string) RecordService::formOfTable('t_src_po'), 't_src_po', $po, $ent);
@@ -166,6 +174,7 @@ class BuyingService
                     'remaining_amount' => $amt, 'completion_pct' => 0, 'status' => 'DUE', 'created_by' => Context::userId(), 'f_active' => 1, 'created_at' => now(), 'due_date' => $due, 'due_rule' => $rule]);
             }
             DB::table('t_src_po')->where('id', $poId)->update(['status' => 'CONFIRMED', 'exchange_rate' => $rate, 'deposit_amount' => $depAmt, 'balance_amount' => $balAmt, 'approved_by' => (string) Context::userId(), 'approval_date' => date('Y-m-d')]);
+            PoLines::resyncPo($poId);      // FEE / COST / SAMPLE at the order rate (R-B_SOURCING-6)
             Audit::log('t_src_po', $poId, 'UPDATE', ['status' => ['DRAFT', 'CONFIRMED'], 'fx_rate' => $rate], null, $ent);
             EventBus::fire('PO_CONFIRMED', 't_src_po', $poId, ['total' => (float) $po->po_total, 'currency' => $cur, 'terms' => $terms], $ent);
             self::payDueTasks($ent);
@@ -241,12 +250,13 @@ class BuyingService
         return DB::transaction(function () use ($d) {
             $po = self::po((int) $d['po']); $ent = (int) $po->fk_id_ent;
             if (! in_array($po->status, ['CONFIRMED', 'SHIPPED'], true)) throw new \RuntimeException('Confirm the PO before shipping.');
-            $lines = $d['lines'] ?? DB::table('t_src_po_lines')->where('fk_id_po', $po->id)->where('f_active', 1)->get()->map(fn ($l) => ['po_line' => $l->id, 'qty' => $l->qty_confirmed - self::shippedQty($l->id)])->filter(fn ($l) => $l['qty'] > 0)->values()->all();
+            $lines = $d['lines'] ?? DB::table('t_src_po_lines')->where('fk_id_po', $po->id)->where('f_active', 1)->where(fn ($q) => $q->whereNull('line_type')->orWhereIn('line_type', ['', 'PRODUCT']))->get()->map(fn ($l) => ['po_line' => $l->id, 'qty' => $l->qty_confirmed - self::shippedQty($l->id)])->filter(fn ($l) => $l['qty'] > 0)->values()->all();
             if (! $lines) throw new \RuntimeException('Everything on this PO is already on a shipment.');
             $sid = DB::table('t_src_shipments')->insertGetId(['fk_id_ent' => $ent, 'shipment_code' => Numbering::next('SHP', $ent), 'fk_id_cycle' => $po->fk_id_cycle, 'fk_id_po' => $po->id, 'fk_id_supplier' => $po->fk_id_supplier,
                 'planned_qty' => array_sum(array_column($lines, 'qty')), 'shipping_mode' => $d['mode'] ?? null, 'etd' => $d['etd'] ?? null, 'eta' => $d['eta'] ?? null, 'status' => 'IN_TRANSIT', 'created_by' => Context::userId(), 'f_active' => 1, 'created_at' => now(), 'fk_id_forwarder' => $d['forwarder'] ?? null]);
             foreach ($lines as $l) {
                 $pl = DB::table('t_src_po_lines')->where('id', $l['po_line'])->where('fk_id_po', $po->id)->first() ?? throw new \RuntimeException('A shipment line must belong to this PO.');
+                if (! PoLines::isStock($pl->line_type)) throw new \RuntimeException("Line '" . ($pl->line_notes ?: $pl->sku) . "' is a $pl->line_type line – it never goes to stock, so it is not shipped.");
                 if ($l['qty'] > $pl->qty_confirmed - self::shippedQty($pl->id) + 0.0001) throw new \RuntimeException("Line {$pl->sku}: more than is left to ship.");
                 DB::table('t_src_shipment_po_link')->insert(['fk_id_shipment' => $sid, 'fk_id_po' => $po->id, 'planned_qty' => $l['qty'], 'actual_qty' => $l['qty'], 'f_active' => 1, 'created_at' => now(), 'fk_id_po_line' => $pl->id, 'fk_id_product' => $pl->fk_id_product]);
             }
@@ -316,7 +326,7 @@ class BuyingService
             DB::table('t_src_grn')->where('id', $grnId)->update(['posting_status' => 'POSTED', 'status' => 'POSTED', 'approved_by' => (string) Context::userId(), 'approved_at' => date('Y-m-d')]);
             DB::table('t_src_shipments')->where('id', $ship->id)->update(['actual_arrival' => $g->arrival_date ?: $g->grn_date, 'status' => 'ARRIVED']);
             TaskEngine::close('SRC_SHIP_ARRIVING', CycleAlerts::key('SRC_SHIP_ARRIVING', (int) $ship->id), 'Arrived'); TaskEngine::close('SRC_SHIP_OVERDUE', CycleAlerts::key('SRC_SHIP_OVERDUE', (int) $ship->id), 'Arrived');
-            $allIn = ! DB::table('t_src_po_lines as p')->where('p.fk_id_po', $po->id)->where('p.f_active', 1)
+            $allIn = ! DB::table('t_src_po_lines as p')->where('p.fk_id_po', $po->id)->where('p.f_active', 1)->where(fn ($q) => $q->whereNull('p.line_type')->orWhereIn('p.line_type', ['', 'PRODUCT']))
                 ->whereRaw('p.qty_confirmed > (SELECT COALESCE(SUM(l.received_qty + l.missing_qty),0) FROM t_src_grn_lines l JOIN t_src_grn g ON g.id=l.fk_id_grn WHERE l.fk_id_po_line=p.id AND g.posting_status="POSTED")')->exists();
             if ($allIn) DB::table('t_src_po')->where('id', $po->id)->update(['status' => 'RECEIVED']);
             if ($g->missing_units > 0 || $g->damaged_units > 0) {
@@ -369,7 +379,7 @@ class BuyingService
             $costs = []; $method = fn (string $kind) => match ($kind) { 'FREIGHT' => ! empty($d['freight_method']) ? LandedEngine::method($d['freight_method']) : LandedEngine::defaultMethod('FREIGHT', $ent, $hist), 'DUTY' => ! empty($d['duty_method']) ? LandedEngine::method($d['duty_method']) : LandedEngine::defaultMethod('DUTY', $ent, $hist), default => ! empty($d['other_method']) ? LandedEngine::method($d['other_method']) : 'VALUE' };
             if ($cyc) foreach (DB::table('t_src_freight_costs')->where('fk_id_cycle', $cyc->id)->where('f_active', 1)->get() as $f) {
                 $amt = $f->pay_status === 'PAID' && $f->paid_base_amount !== null ? (float) $f->paid_base_amount : (float) $f->base_amount; if ($amt <= 0) continue;      // paid rows use what was paid (R-59)
-                $kind = $f->source_po_line_id ? 'OTHER' : LandedEngine::kindOfCostType($f->cost_type); $costs[] = [($f->cost_type ?: 'Freight') . ' ' . $f->freight_code, $amt, $hist ? 'VALUE' : $method($kind)];
+                $kind = $f->source_po_line_id ? 'OTHER' : LandedEngine::kindOfCostType($f->cost_type); $costs[] = [($f->source_po_line_id ? 'Other ' : '') . ($f->cost_type ?: 'Freight') . ' ' . $f->freight_code, $amt, $hist || $f->source_po_line_id ? 'VALUE' : $method($kind)];      // FEE / COST lines: by value (R-B_SOURCING-6/44)
             }
             if ($cyc) foreach (DB::table('t_src_customs')->where('fk_id_cycle', $cyc->id)->where('f_active', 1)->get() as $c) {
                 $amt = $c->pay_status === 'PAID' && $c->paid_base_amount !== null ? (float) $c->paid_base_amount : (float) $c->base_amount; if ($amt > 0) $costs[] = ['Duty ' . $c->customs_code, $amt, $hist ? 'VALUE' : $method('DUTY')];      // duty only – import VAT never

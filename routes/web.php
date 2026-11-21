@@ -214,6 +214,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('customs/{id}/pay', [BuyingController::class, 'customsPay'])->whereNumber('id');
         Route::post('quick-buy', [BuyingController::class, 'quickBuy']);
         Route::get('buying/duplicate-check', [BuyingController::class, 'duplicateCheck']);
+        Route::post('po/{id}/line', [BuyingController::class, 'poLine'])->whereNumber('id');
         Route::post('bank-lines/{id}/split', [MoneyController::class, 'split'])->whereNumber('id');
         Route::get('split-targets', [MoneyController::class, 'splitTargets']);
         Route::get('cash-forecast', [MoneyController::class, 'forecast']);

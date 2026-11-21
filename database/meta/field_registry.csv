@@ -296,19 +296,19 @@ grn_line,GRN › Lines,child,Claim,2,3,notes,Notes,text,,,,,,,all,,,,,,,,,t_src_
 direct_po_line,Direct PO › Lines,child,Line,1,1,line_type,Line type,select,list:LINE_TYPE,,Y,Y,PRODUCT,,all,,,,,,,const:PRODUCT,,t_src_po_lines,line_type,,QUICK:t_src_po_lines,,,,
 direct_po_line,Direct PO › Lines,child,Line,1,2,fk_id_product,Product,select,table:t_product_vendors,,,Y,,,all,,,,,,,,,t_src_po_lines,fk_id_product,t_product_vendor,QUICK:t_src_po_lines,line_type=PRODUCT,,,
 direct_po_line,Direct PO › Lines,child,Line,1,3,sku,SKU,text,,,,,,,all,auto,,,,,,,,t_src_po_lines,sku,,QUICK:t_src_po_lines,,,,
-direct_po_line,Direct PO › Lines,child,Line,1,4,qty_ordered,Quantity,number,,,Y,Y,,,all,,,,1,,,,,t_src_po_lines,qty_ordered,,QUICK:t_src_po_lines,,,,
-direct_po_line,Direct PO › Lines,child,Line,1,5,unit_price,Unit price,money,,,Y,Y,,,all,,,,,,,,,t_src_po_lines,unit_price,,QUICK:t_src_po_lines,,,,
+direct_po_line,Direct PO › Lines,child,Line,1,4,qty_ordered,Quantity,number,,,,Y,,,all,,,,1,,Units for a PRODUCT line (above zero). Empty for a FEE / COST lump sum.,,,t_src_po_lines,qty_ordered,,QUICK:t_src_po_lines,,,,
+direct_po_line,Direct PO › Lines,child,Line,1,5,unit_price,Unit price,money,,,Y,Y,,,all,,,,,,FEE/COST: put the amount in Unit Price (Qty empty or 1). They never create stock.,,,t_src_po_lines,unit_price,,QUICK:t_src_po_lines,,,,
 direct_po_line,Direct PO › Lines,child,Line,1,6,fk_id_default_branch,Default allocation (shop),select,table:t_branches,,,,,,all,,,,,,,,,t_src_po_lines,fk_id_default_branch,t_branch,QUICK:t_src_po_lines,,line_type=PRODUCT,,
 direct_po_line,Direct PO › Lines,child,Line,1,7,line_total,Line total,money,,,,,,,all,auto,,,,,,,,t_src_po_lines,line_total,,QUICK:t_src_po_lines,,,,
-direct_po_line,Direct PO › Lines,child,Line,1,8,line_notes,Notes,text,,,,,,,all,,,,,,,,,t_src_po_lines,line_notes,,QUICK:t_src_po_lines,,,,
+direct_po_line,Direct PO › Lines,child,Line,1,8,line_notes,Notes,text,,,,,,,all,,,,,,"For a FEE / COST / SAMPLE line: what the amount is for (e.g. Agent fee, Inspection).",,,t_src_po_lines,line_notes,,QUICK:t_src_po_lines,,,,
 old_entry_line,Old entry › Lines,child,Line,1,1,line_type,Line type,select,list:LINE_TYPE,,Y,Y,PRODUCT,,all,,,,,,,const:PRODUCT,,t_src_po_lines,line_type,,QUICK:t_src_po_lines,,,,t_src_historical
 old_entry_line,Old entry › Lines,child,Line,1,2,fk_id_product,Product,select,table:t_product_vendors,,,Y,,,all,,,,,,,,,t_src_po_lines,fk_id_product,t_product_vendor,QUICK:t_src_po_lines,line_type=PRODUCT,,,t_src_historical
 old_entry_line,Old entry › Lines,child,Line,1,3,sku,SKU,text,,,,,,,all,auto,,,,,,,,t_src_po_lines,sku,,QUICK:t_src_po_lines,,,,t_src_historical
-old_entry_line,Old entry › Lines,child,Line,1,4,qty_ordered,Quantity,number,,,Y,Y,,,all,,,,1,,,,,t_src_po_lines,qty_ordered,,QUICK:t_src_po_lines,,,,t_src_historical
-old_entry_line,Old entry › Lines,child,Line,1,5,unit_price,Unit price,money,,,Y,Y,,,all,,,,,,,,,t_src_po_lines,unit_price,,QUICK:t_src_po_lines,,,,t_src_historical
+old_entry_line,Old entry › Lines,child,Line,1,4,qty_ordered,Quantity,number,,,,Y,,,all,,,,1,,Units for a PRODUCT line (above zero). Empty for a FEE / COST lump sum.,,,t_src_po_lines,qty_ordered,,QUICK:t_src_po_lines,,,,t_src_historical
+old_entry_line,Old entry › Lines,child,Line,1,5,unit_price,Unit price,money,,,Y,Y,,,all,,,,,,FEE/COST: put the amount in Unit Price (Qty empty or 1). They never create stock.,,,t_src_po_lines,unit_price,,QUICK:t_src_po_lines,,,,t_src_historical
 old_entry_line,Old entry › Lines,child,Line,1,6,fk_id_sample,Sample,select,table:t_src_samples,,,,,,all,,,,,,,,,t_src_po_lines,fk_id_sample,t_src_samples,QUICK:t_src_po_lines,,line_type=SAMPLE,,t_src_historical
 old_entry_line,Old entry › Lines,child,Line,1,7,line_total,Line total,money,,,,,,,all,auto,,,,,,,,t_src_po_lines,line_total,,QUICK:t_src_po_lines,,,,t_src_historical
-old_entry_line,Old entry › Lines,child,Line,1,8,line_notes,Notes,text,,,,,,,all,,,,,,,,,t_src_po_lines,line_notes,,QUICK:t_src_po_lines,,,,t_src_historical
+old_entry_line,Old entry › Lines,child,Line,1,8,line_notes,Notes,text,,,,,,,all,,,,,,"For a FEE / COST / SAMPLE line: what the amount is for (e.g. Agent fee, Inspection).",,,t_src_po_lines,line_notes,,QUICK:t_src_po_lines,,,,t_src_historical
 old_entry_payment,Old entry › Payments,child,Payment,1,1,payment_date,Payment date,date,,,Y,Y,linked:po.po_date,,all,,,,,,,linked:po.po_date,,t_src_payments,payment_date,,QUICK:t_src_payments,,,,t_src_historical
 old_entry_payment,Old entry › Payments,child,Payment,1,2,payment_amount,Amount,money,,,Y,Y,,,all,,,,0,,,,,t_src_payments,payment_amount,,QUICK:t_src_payments,,,,t_src_historical
 old_entry_payment,Old entry › Payments,child,Payment,1,3,fk_id_currency,Currency,select,table:cat_currency,,Y,,linked:po.fk_id_currency,,all,,,,,,,linked:po.fk_id_currency,,t_src_payments,fk_id_currency,cat_currency,QUICK:t_src_payments,,,,t_src_historical
@@ -2446,7 +2446,7 @@ t_src_direct,Direct PO — repeat order,module,Details,1,2,product,Product,selec
 t_src_direct,Direct PO — repeat order,module,Details,1,3,sku,SKU,text,,,,,,,all,,,,,,Short text. Auto-corrected for spaces and case where it matters.,,,t_src_po_lines,sku,,Y,,,,
 t_src_direct,Direct PO — repeat order,module,Details,1,4,variation,Variation,text,,,,,,,all,,,,,,Short text. Auto-corrected for spaces and case where it matters.,,,t_src_cycle_products,variation,,Y,,,,
 t_src_direct,Direct PO — repeat order,module,Details,1,5,qty,Qty,number,,,,,,,all,,,,,,Use the − / + buttons or type a number.,,,t_src_po_lines,qty_ordered,,Y,,,,
-t_src_direct,Direct PO — repeat order,module,Details,1,6,unit_price,Unit Price,money,,,,,,,all,,,,,,Use the − / + buttons or type a number.,,,t_src_po_lines,unit_price,,Y,,,,
+t_src_direct,Direct PO — repeat order,module,Details,1,6,unit_price,Unit Price,money,,,,,,,all,,,,,,FEE/COST: put the amount in Unit Price (Qty empty or 1). They never create stock.,,,t_src_po_lines,unit_price,,Y,,,,
 t_src_direct,Direct PO — repeat order,module,Details,1,7,units_carton,Units / Carton,number,,,,,,,all,,,,,,Short text. Auto-corrected for spaces and case where it matters.,,,t_src_cartons,units_per_carton,,Y,,,,
 t_src_direct,Direct PO — repeat order,module,Details,1,8,line_total,Line Total,money,,,,,,,all,,,,,,Use the − / + buttons or type a number.,,,t_src_po_lines,line_total,,Y,,,,
 t_src_direct,Direct PO — repeat order,module,Details,1,9,notes,Notes,textarea,,,,,,,all,,,,,,Free text – shown on the record and searchable.,,,t_src_cycles#DIRECT,notes,,Y,,,,
@@ -2574,9 +2574,9 @@ t_src_historical,Historical Entry — old / by-hand purchase,module,Details,1,3,
 t_src_historical,Historical Entry — old / by-hand purchase,module,Details,1,4,brand,Brand,select,table:cat_brands,,,,,,all,,,,,,Short text. Auto-corrected for spaces and case where it matters.,,,t_src_cycle_products,fk_id_brand,cat_brands,Y,,,,
 t_src_historical,Historical Entry — old / by-hand purchase,module,Details,1,5,line_type,Line Type,select,list:LINE_TYPE,,,,,,all,,,,,,Choose from the list. Press + to add a new value – it is saved to the list and selected here.,,,t_src_po_lines,line_type,,Y,,,,
 t_src_historical,Historical Entry — old / by-hand purchase,module,Details,1,6,qty,Qty,number,,,,,,,all,,,,,,Use the − / + buttons or type a number.,,,t_src_po_lines,qty_ordered,,Y,,,,
-t_src_historical,Historical Entry — old / by-hand purchase,module,Details,1,7,unit_price,Unit Price,money,,,,,,,all,,,,,,Use the − / + buttons or type a number.,,,t_src_po_lines,unit_price,,Y,,,,
+t_src_historical,Historical Entry — old / by-hand purchase,module,Details,1,7,unit_price,Unit Price,money,,,,,,,all,,,,,,FEE/COST: put the amount in Unit Price (Qty empty or 1). They never create stock.,,,t_src_po_lines,unit_price,,Y,,,,
 t_src_historical,Historical Entry — old / by-hand purchase,module,Details,1,8,units_ctn,Units/Ctn,number,,,,,,,all,,,,,,Short text. Auto-corrected for spaces and case where it matters.,,,t_src_cartons,units_per_carton,,Y,,,,
-t_src_historical,Historical Entry — old / by-hand purchase,module,Details,1,9,line_notes,Line Notes,text,,,,,,,all,,,,,,Short text. Auto-corrected for spaces and case where it matters.,,,t_src_po_lines,line_notes,,Y,,,,
+t_src_historical,Historical Entry — old / by-hand purchase,module,Details,1,9,line_notes,Line Notes,text,,,,,,,all,,,,,,"For a FEE / COST / SAMPLE line: what the amount is for (e.g. Agent fee, Inspection).",,,t_src_po_lines,line_notes,,Y,,,,
 t_src_historical,Historical Entry — old / by-hand purchase,module,Details,1,10,notes,Notes,textarea,,,,,,,all,,,,,,Free text – shown on the record and searchable.,,,t_src_cycles#HISTORICAL,notes,,Y,,,,
 t_src_historical,Historical Entry — old / by-hand purchase,module,Details,1,11,fk_id_supplier,Supplier,select,table:t_src_suppliers,,Y,,,,all,,,,,,,,,t_src_po,fk_id_supplier,t_src_suppliers,Y,,,,
 t_src_historical,Historical Entry — old / by-hand purchase,module,Details,1,12,order_ref,Order reference,text,,,Y,,,,all,,,,,,,,,t_src_cycles#HISTORICAL,order_ref,,Y,,,,
@@ -2770,7 +2770,7 @@ t_src_po_lines,PO Lines,module,Details,1,3,fk_id_cycle_product,Product,select,ta
 t_src_po_lines,PO Lines,module,Details,1,4,sku,SKU,text,,,,,,,all,,,,,,Short text. Auto-corrected for spaces and case where it matters.,,,t_src_po_lines,sku,,Y,,,,
 t_src_po_lines,PO Lines,module,Details,1,5,qty_ordered,Quantity Ordered,number,,,,,,,all,,,,,,Use the − / + buttons or type a number.,,,t_src_po_lines,qty_ordered,,Y,,,,
 t_src_po_lines,PO Lines,module,Details,1,6,qty_confirmed,Quantity Confirmed,number,,,,,,,all,,,,,,Use the − / + buttons or type a number.,,,t_src_po_lines,qty_confirmed,,Y,,,,
-t_src_po_lines,PO Lines,module,Details,1,7,unit_price,Unit Price,money,,,,,,,all,,,,,,Use the − / + buttons or type a number.,,,t_src_po_lines,unit_price,,Y,,,,
+t_src_po_lines,PO Lines,module,Details,1,7,unit_price,Unit Price,money,,,,,,,all,,,,,,FEE/COST: put the amount in Unit Price (Qty empty or 1). They never create stock.,,,t_src_po_lines,unit_price,,Y,,,,
 t_src_po_lines,PO Lines,module,Details,1,8,discount,Discount,number,,,,,,,all,,,,,,Use the − / + buttons or type a number.,,,t_src_po_lines,discount,,Y,,,,
 t_src_po_lines,PO Lines,module,Details,1,9,other_charges,Other Line Charges,number,,,,,,,all,,,,,,Use the − / + buttons or type a number.,,,t_src_po_lines,other_charges,,Y,,,,
 t_src_po_lines,PO Lines,module,Details,1,10,line_total,Line Total (Auto Calculated),money,,,,,,,all,,,,,,Amount with 2 decimals.,,,t_src_po_lines,line_total,,Y,,,,
@@ -2779,7 +2779,7 @@ t_src_po_lines,PO Lines,module,Line,2,2,fk_id_product,Product,select,table:t_pro
 t_src_po_lines,PO Lines,module,Line,2,3,fk_id_sample,Sample,select,table:t_src_samples,,,,,,all,,,,,,,,,t_src_po_lines,fk_id_sample,t_src_samples,Y,,line_type=SAMPLE,,
 t_src_po_lines,PO Lines,module,Line,2,4,fk_id_default_branch,Default allocation (shop),select,table:t_branches,,,,,,all,,,,,,,,,t_src_po_lines,fk_id_default_branch,t_branch,Y,,line_type=PRODUCT,,
 t_src_po_lines,PO Lines,module,More details,3,1,fk_id_cycle,Cycle,select,table:t_src_cycles,,,,,,all,,,,,,,,,t_src_po_lines,fk_id_cycle,t_src_cycles,Y,,,,
-t_src_po_lines,PO Lines,module,More details,3,2,line_notes,Line notes,textarea,,,,,,,all,,,,,,,,,t_src_po_lines,line_notes,,Y,,,,
+t_src_po_lines,PO Lines,module,More details,3,2,line_notes,Line notes,textarea,,,,,,,all,,,,,,"For a FEE / COST / SAMPLE line: what the amount is for (e.g. Agent fee, Inspection).",,,t_src_po_lines,line_notes,,Y,,,,
 t_src_production,Production,module,Basics,1,1,f_active,Active,check,,,,Y,1,,all,,,,,,Yes / No.,const:1,,t_src_production,f_active,,Y,,,,
 t_src_production,Production,module,Basics,1,2,prod_code,Production Order ID (Auto),text,,,,Y,,,all,,,,,,Short text. Auto-corrected for spaces and case where it matters.,,,t_src_production,prod_code,,Y,,,,
 t_src_production,Production,module,Basics,1,3,progress_pct,Production Progress % (Auto Calculated),number,,,,,,,all,,,,,,Short text. Auto-corrected for spaces and case where it matters.,,,t_src_production,progress_pct,,Y,,,,

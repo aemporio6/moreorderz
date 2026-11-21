@@ -16,7 +16,7 @@ class ShipmentLinks
 
     private static function shipment(int $ent, int $id): object { return DB::table('t_src_shipments')->where('id', $id)->where('fk_id_ent', $ent)->first() ?? throw new \InvalidArgumentException('Shipment not found.'); }
 
-    private static function ordered(int $poId): float { return (float) DB::table('t_src_po_lines')->where('fk_id_po', $poId)->where('f_active', 1)->sum(DB::raw('COALESCE(NULLIF(qty_confirmed, 0), qty_ordered)')); }
+    private static function ordered(int $poId): float { return (float) DB::table('t_src_po_lines')->where('fk_id_po', $poId)->where('f_active', 1)->where(fn ($q) => $q->whereNull('line_type')->orWhereIn('line_type', ['', 'PRODUCT']))->sum(DB::raw('COALESCE(NULLIF(qty_confirmed, 0), qty_ordered)')); }
 
     private static function onShipments(int $poId, ?int $except = null, string $col = 'actual_qty'): float
     {
@@ -48,7 +48,7 @@ class ShipmentLinks
         if ($other + $actual > $ord + 0.0001 && $reason === '') return ['need_reason' => true, 'message' => "PO {$po->po_number}: " . rtrim(rtrim(number_format($other + $actual, 2, '.', ''), '0'), '.') . ' would be on shipments, more than the ' . rtrim(rtrim(number_format($ord, 2, '.', ''), '0'), '.') . ' ordered. Give the reason.'];
         return DB::transaction(function () use ($ent, $s, $po, $planned, $actual, $reason, $shipmentId, $ord, $other) {
             // the units go onto the PO's lines: each up to what it still has to ship, the rest on the last line
-            $lines = DB::table('t_src_po_lines')->where('fk_id_po', $po->id)->where('f_active', 1)->orderBy('id')->get(); if ($lines->isEmpty()) throw new \InvalidArgumentException("PO {$po->po_number} has no lines.");
+            $lines = DB::table('t_src_po_lines')->where('fk_id_po', $po->id)->where('f_active', 1)->where(fn ($q) => $q->whereNull('line_type')->orWhereIn('line_type', ['', 'PRODUCT']))->orderBy('id')->get(); if ($lines->isEmpty()) throw new \InvalidArgumentException("PO {$po->po_number} has no product lines.");
             $leftP = $planned; $leftA = $actual; $n = $lines->count();
             foreach ($lines->values() as $i => $l) {
                 $room = max(0.0, (float) ($l->qty_confirmed ?: $l->qty_ordered) - (float) DB::table('t_src_shipment_po_link as k')->join('t_src_shipments as s', 's.id', '=', 'k.fk_id_shipment')->where('k.fk_id_po_line', $l->id)->where('k.fk_id_shipment', '<>', $shipmentId)->where('k.f_active', 1)->where('s.f_active', 1)->sum('k.actual_qty'));
