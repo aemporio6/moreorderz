@@ -107,6 +107,7 @@ class RecordService
         foreach (self::BLOCKED as $b) unset($row[$b]);
         foreach (Registry::fields($formKey) as $f) if ($f['secret'] && $f['column_name'] && isset($row[$f['column_name']]) && Context::role() !== 'OWNER') $row[$f['column_name']] = '••••';
         $row = Vault::maskRow($table, $row);   // secrets are masked for every role; the Owner reveals one with "Reveal" (logged)
+        if ($table === 't_product_vendors') $row = ProductFamily::forForm($row);      // R-D-1: the Parent / Alone switch from the stored code
         return $row;
     }
 
@@ -198,6 +199,7 @@ class RecordService
             if (! empty($opt['event'])) EventBus::fire($opt['event'], $table, $id, ['form' => $formKey, 'created' => $created], $ent);
             FormAssist::remember($formKey, $data);   // for the "you used this last time" chips
             if ($table === 't_src_po_lines') PoLines::sync((int) $id);
+            if ($table === 't_product_vendors' && $created) ProductFamily::created((int) $id, (int) ($data['fk_id_ent'] ?? $ent ?? 0));      // R-D-1: a 0.00 price row per marketplace
             if ($table === 't_account_branches') ShopAssignments::saved((int) $id, $created);      // R-C-41: event + VA cache      // FEE / COST freight-cost row, SAMPLE row, PO total (R-B_SOURCING-6)
             if (str_starts_with($table, 't_src_') || $table === 'fin_lots') CycleAlerts::touched();      // sourcing alerts run again after the save (R-B_SOURCING-26)
             return ['id' => $id, 'created' => $created];

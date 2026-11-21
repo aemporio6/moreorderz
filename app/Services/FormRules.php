@@ -39,7 +39,7 @@ class FormRules
     {
         $table = Registry::table($formKey);
         if ($table === 't_src_cartons') return self::cartons($data, $old);
-        if ($table === 't_product_vendors') return SkuCheck::onSave($data, $old, $id) + self::productCodes($data, $old);      // R-D-2 exact SKU in the company
+        if ($table === 't_product_vendors') return ProductFamily::check($data, $old, $id) + SkuCheck::onSave($data, $old, $id) + self::productCodes($data, $old);      // R-D-1 family coding / checks, R-D-2 exact SKU in the company
         if (in_array($table, ['t_src_products', 't_product_vendors'], true)) return self::productCodes($data, $old);
         if ($table === 'cat_ip_burgers') return self::isp($data);
         if ($table === 't_account_job_history') return self::jobHistory($data, $old, $id);
