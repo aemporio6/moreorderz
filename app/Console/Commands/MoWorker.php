@@ -13,6 +13,7 @@ class MoWorker extends Command
     public function handle(): int
     {
         $this->info(EventBus::runQueue() . ' events processed');
+        $x = \App\Services\SaleView::runJobs(); if ($x) $this->info("$x export(s) prepared");
         return 0;
     }
 }

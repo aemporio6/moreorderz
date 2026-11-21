@@ -362,3 +362,11 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - Month Close cards of part 5 were clicked through in a browser (question answered with and without a reason): fine.
 - Tests: 290 pass; new `MarketplacesTest` (2), `SalesGapsTest` now 11.
 - Register after this batch: BUILT 315 of 1,433 (22 %); Sales 50 of 155.
+
+## Sales batch 5, part 7 – night tasks, background exports, verdicts brought up to date (21 Nov 2026)
+- **Three night tasks** – `app/Services/SalesWatch.php`, run per company by `mo:nightly`: `SAL_NO_COST` (one task per shop + month while own-stock lines have no cost), `LST_STATUS` (a listing ACTIVE with nothing available, or closed / suppressed by a marketplace report while stock is available), `IMP_WAITING` (an import batch not applied for longer than setting `IMP_WAITING_HOURS`, 24). Each opens once, keeps its title current, closes by itself.
+- **Background export** (R-A_SALES-46): above `SALES_EXPORT_BACKGROUND_LINES` (3,000) the export is queued (`mo_export_jobs`, migration `000031`), built by the minute worker `mo:events` as the person who asked, stored, and announced by bell + e-mail with the file; only that person can download it.
+- **Audit honesty**: 11 lines without a rule had verdicts older than the code (reminders, carrier presets, payslip, generic sales import, marketplaces, drop shipping …). Each was re-judged with evidence; 7 are BUILT, 4 stay PARTIAL with what is missing.
+- How the next work is chosen: by the number of register lines a still-open rule covers (script in the scheduled prompt).
+- Tests: 294 pass; new `SalesWatchTest` (3), one more in `SaleViewTest`.
+- Register after this batch: BUILT 325 of 1,433 (23 %); Sales 60 of 155 (39 %).

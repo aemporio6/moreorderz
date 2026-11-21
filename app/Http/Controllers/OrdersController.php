@@ -415,4 +415,7 @@ class OrdersController extends Controller
     public function marketplaceQuestionSave(Request $r, int $mp) { return $this->run(fn () => $r->boolean('remove') ? \App\Services\Marketplaces::deleteQuestion($mp, (int) $r->input('id'), $r->user()) : \App\Services\Marketplaces::saveQuestion($mp, (string) $r->input('question'), (int) $r->input('id') ?: null, $r->user())); }
     public function shopChecklist(Request $r, int $shop) { return $this->run(function () use ($r, $shop) { $this->can($r, 'orders.SEE'); return \App\Services\Marketplaces::checklist($shop, $r->user()); }); }
     public function shopChecklistTick(Request $r, int $shop) { return $this->run(function () use ($r, $shop) { $this->can($r, 'orders.SEE'); return \App\Services\Marketplaces::tick($shop, (int) $r->input('question'), $r->boolean('done'), $r->input('note'), $r->user()); }); }
+
+    public function saleExportQueue(Request $r) { return $this->run(function () use ($r) { $this->can($r, 'orders.saleExport'); return \App\Services\SaleView::queue($this->saleFilters($r), strtolower((string) $r->input('format', 'xlsx')), $r->user()); }); }
+    public function saleExportJob(Request $r, int $id) { $this->can($r, 'orders.saleExport'); $f = \App\Services\SaleView::jobFile($id, $r->user()); return response(file_get_contents($f['path']), 200, ['Content-Type' => $f['type'], 'Content-Disposition' => 'attachment; filename="' . $f['name'] . '"']); }
 }

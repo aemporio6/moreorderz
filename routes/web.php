@@ -291,6 +291,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('sales/view-columns', [OrdersController::class, 'saleViewColumns']);
         Route::get('sales/extra/{mp}', [OrdersController::class, 'saleExtra'])->whereNumber('mp');
         Route::post('sales/extra/{mp}', [OrdersController::class, 'saleExtraSave'])->whereNumber('mp');
+        Route::post('sales/export/queue', [OrdersController::class, 'saleExportQueue']);
+        Route::get('sales/export/job/{id}', [OrdersController::class, 'saleExportJob'])->whereNumber('id');
         Route::get('sales/export/check', [OrdersController::class, 'saleExportCheck']);
         Route::get('sales/export', [OrdersController::class, 'saleExport']);
         Route::get('sales/unlock', [OrdersController::class, 'saleUnlockInfo']);

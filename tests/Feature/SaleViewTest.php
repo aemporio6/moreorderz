@@ -181,4 +181,20 @@ class SaleViewTest extends TestCase
         // the right can never be handed to a role
         try { \App\Services\Perm::setRole('MANAGER', 'orders.saleUnlock', true, (int) $this->owner->id); $this->fail('no error'); } catch (\Throwable $e) { $this->assertStringContainsString('stays with the Owner', $e->getMessage()); }
     }
+
+    public function test_a_large_export_runs_in_the_background_and_is_sent_when_ready(): void
+    {
+        $this->world(); $this->import(['A-1,05/07/2026,Ann,BOWL-01,Dog bowl,1,9.00,RM', 'A-2,06/07/2026,Bob,BOWL-01,Dog bowl,1,9.00,RM', 'A-3,07/07/2026,Cy,BOWL-01,Dog bowl,1,9.00,RM']);
+        $this->assertFalse(SaleView::exportCheck($this->f(), 'xlsx', $this->owner)['background']);
+        \App\Services\Settings::set('SALES_EXPORT_BACKGROUND_LINES', 100, 1); \App\Services\Settings::flush(); DB::table('t_sales')->update(['raw_csv' => null]); $one = (array) DB::table('t_sales')->first(); unset($one['id']); $bulk = [];
+        for ($i = 0; $i < 120; $i++) $bulk[] = ['order_no' => "B-$i"] + $one; DB::table('t_sales')->insert($bulk);
+        $c = SaleView::exportCheck($this->f(), 'xlsx', $this->owner); $this->assertTrue($c['background']); $this->assertStringContainsString('prepared in the background', $c['message']);
+        $q = $this->postJson('/api/sales/export/queue', $this->f(['format' => 'xlsx']))->assertOk()->json(); $this->get('/api/sales/export/job/' . $q['job'])->assertStatus(404);      // not ready yet
+        $this->assertSame(1, SaleView::runJobs()); $j = DB::table('mo_export_jobs')->where('id', $q['job'])->first(); $this->assertSame(['DONE', 123], [$j->status, (int) $j->lines]); $this->assertSame(0, SaleView::runJobs());
+        $this->assertStringContainsString('Your sales export is ready', (string) DB::table('tm_notifications')->where('user_id', $this->owner->id)->orderByDesc('id')->value('text'));
+        if (filter_var($this->owner->login_id, FILTER_VALIDATE_EMAIL)) $this->assertSame(1, DB::table('email_outbound')->where('link_table', 'mo_export_jobs')->where('link_id', $q['job'])->count());
+        $this->actingAs($this->owner); $this->get('/api/sales/export/job/' . $q['job'])->assertOk();
+        $other = \App\Models\User::find(DB::table('t_users')->insertGetId($this->fill('t_users', ['fk_id_ent' => 1, 'login_id' => 'o2@demo.test', 'display_name' => 'O2', 'role_code' => 'OWNER', 'f_active' => 1]))); $this->actingAs($other); $this->get('/api/sales/export/job/' . $q['job'])->assertStatus(404);      // only the person who asked
+        @unlink(storage_path('app/' . $j->file_path)); @rmdir(dirname(storage_path('app/' . $j->file_path)));
+    }
 }

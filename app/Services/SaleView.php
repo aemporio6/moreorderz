@@ -162,7 +162,49 @@ class SaleView
         $n = (int) SaleLines::list($f + ['per_page' => 20, 'page' => 1], $u)['total']; $name = self::NAMES[$format]; $max = self::LIMITS[$format];
         if ($n === 0) throw new \InvalidArgumentException('There are no sales to export with these filters.');
         if ($n > $max) throw new \InvalidArgumentException("The $name export takes up to $max lines; these filters match $n. Narrow the filters (e.g. dates or shop) and try again.");
-        return ['lines' => $n, 'message' => "Preparing your $name ($n lines). The download starts in a moment."];
+        if ($n > self::backgroundFrom()) return ['lines' => $n, 'background' => true, 'message' => "This $name has $n lines: it is prepared in the background. You get a bell message and an e-mail with the file when it is ready."];
+        return ['lines' => $n, 'background' => false, 'message' => "Preparing your $name ($n lines). The download starts in a moment."];
+    }
+
+    // ---------- larger exports run as a background job; the file is sent when ready ----------
+    public static function backgroundFrom(): int { return max(100, (int) Settings::get('SALES_EXPORT_BACKGROUND_LINES', Context::ent(), 3000)); }
+
+    public static function queue(array $f, string $format, ?object $u): array
+    {
+        $c = self::exportCheck($f, $format, $u);      // same checks and limits as a direct download
+        $id = (int) DB::table('mo_export_jobs')->insertGetId(['fk_id_ent' => Context::ent(), 'user_id' => $u->id, 'kind' => 'sales', 'format' => $format, 'params_json' => json_encode(array_diff_key($f, ['page' => 1, 'per_page' => 1])), 'status' => 'QUEUED', 'lines' => $c['lines'], 'created_at' => now()]);
+        return ['message' => 'Your ' . self::NAMES[$format] . " ({$c['lines']} lines) is being prepared. You get a bell message and an e-mail when it is ready.", 'job' => $id];
+    }
+
+    /** Worker (every minute): builds the waiting exports as the person who asked, stores the file, tells the person by bell and e-mail. Returns the number done. */
+    public static function runJobs(int $max = 3): int
+    {
+        $n = 0;
+        foreach (DB::table('mo_export_jobs')->where('status', 'QUEUED')->orderBy('id')->limit($max)->get() as $j) {
+            if (! DB::table('mo_export_jobs')->where('id', $j->id)->where('status', 'QUEUED')->update(['status' => 'RUNNING'])) continue;      // another worker took it
+            $u = \App\Models\User::find($j->user_id); $old = [Context::ent(), Context::userId()];
+            try {
+                if (! $u || ! (int) $u->f_active) throw new \RuntimeException('The person who asked is not active any more.');
+                Context::set((int) $j->fk_id_ent, (int) $u->id); \Illuminate\Support\Facades\Auth::setUser($u); Perm::flush();
+                $x = self::export((array) json_decode($j->params_json, true), $j->format, $u); $dir = storage_path('app/exports/' . $j->id); if (! is_dir($dir)) mkdir($dir, 0775, true); file_put_contents($dir . '/' . $x['name'], $x['body']);
+                DB::table('mo_export_jobs')->where('id', $j->id)->update(['status' => 'DONE', 'file_path' => 'exports/' . $j->id . '/' . $x['name'], 'file_name' => $x['name'], 'lines' => $x['lines'], 'done_at' => now()]);
+                Notify::push((int) $u->id, 'IMPORT', 'Your sales export is ready: ' . $x['name'] . ' (' . $x['lines'] . ' lines)', '/api/sales/export/job/' . $j->id);
+                if (filter_var((string) $u->login_id, FILTER_VALIDATE_EMAIL)) Connect\Messenger::queueEmail((int) $j->fk_id_ent, (int) $u->fk_id_account ?: null, (string) $u->login_id, 'Your sales export is ready', "The export you asked for is attached: {$x['name']} ({$x['lines']} lines).", $dir . '/' . $x['name'], 'EXPORT', 'mo_export_jobs', (int) $j->id);
+                $n++;
+            } catch (\Throwable $e) {
+                DB::table('mo_export_jobs')->where('id', $j->id)->update(['status' => 'FAILED', 'error' => mb_substr($e->getMessage(), 0, 255), 'done_at' => now()]);
+                if ($u) Notify::push((int) $u->id, 'IMPORT', 'Your sales export could not be made: ' . mb_substr($e->getMessage(), 0, 150), '#/sales');
+            } finally { Context::set($old[0], $old[1]); }
+        }
+        return $n;
+    }
+
+    /** The file of a finished job – only for the person who asked. */
+    public static function jobFile(int $id, ?object $u): array
+    {
+        $j = DB::table('mo_export_jobs')->where('id', $id)->where('user_id', $u->id ?? 0)->first() ?? abort(404, 'Export not found.');
+        if ($j->status !== 'DONE' || ! is_file(storage_path('app/' . $j->file_path))) abort(404, $j->status === 'FAILED' ? 'This export failed: ' . $j->error : 'This export is not ready yet.');
+        return ['name' => $j->file_name, 'path' => storage_path('app/' . $j->file_path), 'type' => ['pdf' => 'application/pdf', 'csv' => 'text/csv; charset=UTF-8', 'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'][$j->format] ?? 'application/octet-stream'];
     }
 
     /** One cell as text. */
