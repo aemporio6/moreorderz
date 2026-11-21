@@ -44,6 +44,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('suggest/{key}/{field}', [AppController::class, 'suggest']);
         Route::get('list/{key}', [AppController::class, 'list']);
         Route::get('record/{key}/{id}', [AppController::class, 'record'])->whereNumber('id');
+        Route::post('record/{key}/draft', [AppController::class, 'draft']);
         Route::post('record/{key}/{id?}', [AppController::class, 'save'])->whereNumber('id');
         Route::post('reveal/{key}/{id}', [AppController::class, 'reveal'])->whereNumber('id');
         Route::get('page/{key}/{id}', [WorkController::class, 'page'])->whereNumber('id');

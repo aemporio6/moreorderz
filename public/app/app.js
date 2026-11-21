@@ -3322,6 +3322,11 @@
         return miniForm('Add to ' + f.label, 'The new value is saved to this list and is there for everybody at once.', [{ name: 'label', label: 'New value', required: true }], v => go2(v.label), 'Add'); }
       // the full form of the thing, with what we know already filled in; it comes back selected (forms stack)
       const preset = { ...(f.add_preset || {}) }; const ent = flds.find(x => x.col === 'fk_id_ent'); if (ent && !empty(ent.name)) preset.fk_id_ent = val[ent.name]; if (text) preset.__label = text;
+      if (String(f.source || '').startsWith('own:t_account_')) {      // R-C-20: the sub-list form opens for the same person; a person not saved yet is saved as a draft first
+        const pf = flds.find(x => x.col === 'fk_id_account');
+        if (pf) { if (empty(pf.name)) return toast('Choose the person first.', 'err'); preset.fk_id_account = val[pf.name]; }
+        else if (def.table === 't_account') { if (!id) { try { const r = await api(`record/${key}/draft`, { method: 'POST', body: { values: val } }); id = r.id; toast(r.message); } catch (e) { return toast(e.message, 'err'); } } preset.fk_id_account = id; }
+      }
       openForm(f.add_form, null, { preset, onSaved: r => { (labels[f.name] = labels[f.name] || {})[String(r.id)] = r.label || String(r.id); typed.add(f.name); change(f.name, f.type === 'multiselect' ? String(val[f.name] || '').split(',').filter(x => x !== '').concat([String(r.id)]).join(',') : String(r.id)); redrawField(f); toast('Added and selected'); afterPick(f); } }); }
     const read = el => el.type === 'checkbox' ? (el.checked ? 1 : 0) : el.value;
     const setVal = (name, v) => { val[name] = v; const f = flds.find(x => x.name === name); if (f && f.has_options) { ensureLabels(f); return redrawField(f); } const el = $(`[data-f="${name}"]`, ov); if (el) { if (el.type === 'checkbox') el.checked = !!+v; else el.value = v; } };

@@ -42,7 +42,7 @@ class PersonChainsTest extends TestCase
         $a1 = $this->f('t_account_addresses', ['fk_id_account' => $this->p, 'line1' => '1 UK Road', 'fk_id_country' => $this->uk, 'f_active' => 1]);
         $this->f('t_account_addresses', ['fk_id_account' => $this->p, 'line1' => '2 PK Road', 'fk_id_country' => $this->pk, 'f_active' => 1]);
         $this->f('t_account_addresses', ['fk_id_account' => $this->other, 'line1' => '3 UK Road', 'fk_id_country' => $this->uk, 'f_active' => 1]);
-        $this->assertSame([[(string) $a1, '1 UK Road']], $this->opts('t_account_mobile', 'fk_id_address', ['fk_id_account' => $this->p, 'fk_id_country' => $this->uk])['options'], "this person's addresses in that country");
+        $this->assertSame([[(string) $a1, 'Home Chainland UK 1 UK Road']], $this->opts('t_account_mobile', 'fk_id_address', ['fk_id_account' => $this->p, 'fk_id_country' => $this->uk])['options'], "this person's addresses in that country");
         $dev = $this->f('t_mobile_devices', ['fk_id_ent' => 1, 'mobile_name' => 'Rack phone', 'tot_slots' => 3, 'f_active' => 1]);
         $this->f('t_account_mobiles', ['fk_id_account' => $this->other, 'mobile_no' => '07000000001', 'fk_id_mobile_device' => $dev, 'slotno' => '2', 'f_active' => 1]);
         $this->assertSame([['1', 'Slot 1'], ['3', 'Slot 3']], $this->opts('t_account_mobile', 'slotno', ['fk_id_mobile_device' => $dev])['options'], 'device → free slots');

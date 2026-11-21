@@ -223,6 +223,14 @@ class AppController extends Controller
         catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
     }
 
+    /** "+ Add" of an own item on a person not yet saved: the person is saved as a DRAFT first (R-C-20). */
+    public function draft(Request $r, string $key)
+    {
+        Rights::check('ADD', $key);
+        try { return ['id' => \App\Services\OwnItems::draft($key, (array) $r->input('values', [])), 'message' => 'The person is saved as a draft – finish the form and press Save.']; }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+    }
+
     public function save(Request $r, string $key, ?int $id = null)
     {
         Rights::check($id ? 'EDIT' : 'ADD', $key);

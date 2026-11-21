@@ -30,6 +30,12 @@ class FormRules
     /** Clean $data in place and return field → message. $old = the stored row on edit. */
     public static function check(string $formKey, array &$data, array $old, ?int $id, array $already = []): array
     {
+        if (Registry::table($formKey) === 't_account' && ($old['record_status'] ?? null) === 'DRAFT') $data['record_status'] = 'ACTIVE';      // the final Save of a draft person (R-C-20 / R-C-9)
+        return OwnItems::check($formKey, $data, $old, $id) + self::checkForm($formKey, $data, $old, $id, $already);      // R-C-20: an own item must be the person's own
+    }
+
+    private static function checkForm(string $formKey, array &$data, array $old, ?int $id, array $already = []): array
+    {
         $table = Registry::table($formKey);
         if ($table === 't_src_cartons') return self::cartons($data, $old);
         if (in_array($table, ['t_src_products', 't_product_vendors'], true)) return self::productCodes($data, $old);

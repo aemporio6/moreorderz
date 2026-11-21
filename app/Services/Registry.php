@@ -146,6 +146,7 @@ class Registry
             $x = DB::table($table)->select($pk . ' as id', $label);
             if ($q) $x->whereRaw("CONCAT_WS(' ', first_name, sur_name) like ?", ["%$q%"]);
             if ($loginOnly) $x->where('f_login', 1);
+            $x->where(fn ($w) => $w->whereNull('record_status')->orWhere('record_status', '<>', 'DRAFT'));      // a draft person never appears in pickers of other forms (R-C-20)
         } else {
             $lc = self::labelColumn($table);
             $x = DB::table($table)->select($pk . ' as id', $lc . ' as lbl');

@@ -119,6 +119,9 @@ class Chains
                 ->map(fn ($r) => [(string) $r->id, trim(($r->bank ?: 'Bank') . ' ••' . substr(preg_replace('/\D/', '', (string) $r->account_no), -4) . ($r->sort_branch_code ? ' · sort code ' . $r->sort_branch_code : ''))])
                 ->filter(fn ($o) => $q === null || $q === '' || mb_stripos($o[1], $q) !== false)->values()->all(), 'narrowed_by' => $narrow];
         }
+        if (in_array($t, ['t_account_addresses', 't_account_mobiles', 't_account_credit_cards'], true)) {      // the rule's labels (R-C-20)
+            return ['options' => $x->orderBy($t . '.id')->get([$t . '.*'])->map(fn ($r) => [(string) $r->id, OwnItems::label($t, $r) ?: '#' . $r->id])->filter(fn ($o) => $q === null || $q === '' || mb_stripos($o[1], $q) !== false)->values()->all(), 'narrowed_by' => $narrow];
+        }
         $rows = $x->orderBy('id')->get(['id', $lc . ' as lbl'] + (Registry::hasColumn($t, 'sort_branch_code') ? [2 => 'sort_branch_code'] : []));
         $opts = $rows->map(fn ($r) => [(string) $r->id, (string) ($r->lbl ?? $r->id) . (! empty($r->sort_branch_code) ? ' · ' . $r->sort_branch_code : '')])->filter(fn ($o) => $q === null || $q === '' || mb_stripos($o[1], $q) !== false)->values()->all();
         return ['options' => $opts, 'narrowed_by' => $narrow];
