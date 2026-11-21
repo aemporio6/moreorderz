@@ -164,6 +164,13 @@ class DispatchService
                 $v = PackService::verify($pl, (array) $d['scans']); if (! $v['ok']) throw new \InvalidArgumentException(PackService::refusal($v));
             }
             $sug = PackService::suggest($ent, $pl);
+            // carrier service: the rule's suggestion; the packer may change it with a reason (R-H-30)
+            $svc = CarrierRules::suggest($ent, CarrierRules::facts($ent, (string) $d['order_no'], (int) $d['branch'], isset($d['weight_g']) ? (int) $d['weight_g'] : ($sug['weight_g'] ?? null)));
+            if (empty($d['service']) && $svc['service']) { $d['service'] = $svc['service']; $d['carrier'] ??= $svc['carrier']; }
+            elseif (! empty($d['service']) && $svc['service'] && (int) $d['service'] !== (int) $svc['service']) {
+                if (! trim((string) ($d['service_reason'] ?? ''))) throw new \InvalidArgumentException('Give the reason for changing the suggested carrier service (' . $svc['why'] . ').');
+                $changed = ['suggested' => $svc['service'], 'chosen' => (int) $d['service'], 'reason' => trim((string) $d['service_reason'])];
+            }
             if (PackService::needsWeight(isset($d['service']) ? (int) $d['service'] : null) && empty($d['weight_g'])) throw new \InvalidArgumentException('Weight is needed for this carrier service – weigh the parcel.');
             $boxId = ! empty($d['box']) ? (int) $d['box'] : $sug['box'];
             $box = $boxId ? DB::table('wh_box_sizes')->where('id', $boxId)->whereIn('fk_id_ent', [$ent, 0])->first() : null;
@@ -177,6 +184,7 @@ class DispatchService
                 DB::table('t_sales')->where('id', $s->id)->update(['wh_status' => 'PACKED', 'tracking_no' => $d['tracking_no'] ?? $s->tracking_no]);
             }
             PackService::useBox($ent, $pid, $box->id ?? null);      // packing materials as stock (WH_PACKING_STOCK)
+            if (isset($changed)) Audit::log('wh_parcels', $pid, 'UPDATE', ['carrier_service' => $changed], $changed['reason'], $ent);
             EventBus::fire('PARCEL_PACKED', 'wh_parcels', $pid, ['order' => $d['order_no']], $ent);
             EventBus::fire('PARCEL_READY', 'wh_parcels', $pid, [], $ent);
             return $pid;

@@ -221,7 +221,7 @@ class OrdersController extends Controller
     public function pack(Request $r)
     {
         $this->can($r, 'orders.WAREHOUSE');
-        $d = $r->validate(['order_no' => 'required|string|max:100', 'branch' => 'required|integer', 'carrier' => 'nullable|integer', 'service' => 'nullable|integer', 'box' => 'nullable|integer', 'weight_g' => 'nullable|integer|min:1', 'tracking_no' => 'nullable|string|max:60', 'scans' => 'nullable|array|max:500', 'scans.*' => 'nullable|string|max:80', 'sales' => 'nullable|array|max:200', 'sales.*' => 'integer']);
+        $d = $r->validate(['order_no' => 'required|string|max:100', 'branch' => 'required|integer', 'carrier' => 'nullable|integer', 'service' => 'nullable|integer', 'box' => 'nullable|integer', 'weight_g' => 'nullable|integer|min:1', 'tracking_no' => 'nullable|string|max:60', 'scans' => 'nullable|array|max:500', 'scans.*' => 'nullable|string|max:80', 'sales' => 'nullable|array|max:200', 'sales.*' => 'integer', 'service_reason' => 'nullable|string|max:255']);
         return $this->run(function () use ($d) { $id = Dispatch::pack(array_filter($d, fn ($v) => $v !== null));
             $pj = \App\Services\PrintService::auto((int) Context::ent(), 'WH_AUTOPRINT_PACKING_SLIP', 'PACKING_SLIP', [$id], 'AUTO_PACK');
             return ['id' => $id, 'print' => $pj && $pj['status'] === 'PRINTED' ? $pj + ['url' => "/api/print-jobs/{$pj['job']}/pdf"] : null, 'parcel_code' => DB::table('wh_parcels')->where('id', $id)->value('parcel_code'), 'message' => 'Parcel packed and ready']; });
@@ -237,7 +237,8 @@ class OrdersController extends Controller
         return ['lines' => array_map(fn ($l) => array_intersect_key($l, array_flip(['sale', 'product', 'sku', 'name', 'qty', 'listing_sku', 'ean', 'wh_status'])), $lines), 'suggest' => \App\Services\PackService::suggest($ent, $lines),
             'scan_required' => \App\Services\PackService::scanOn($ent), 'weight_required' => \App\Services\PackService::needsWeight(isset($d['service']) ? (int) $d['service'] : null),
             'verify' => isset($d['scans']) ? \App\Services\PackService::verify($lines, $d['scans']) : null, 'packing_stock' => \App\Services\PackService::stockOn($ent),
-            'presets' => DB::table('t_carrier_pkg_svc')->where('f_active', 1)->orderBy('pkg_svc_name')->get(['id', 'pkg_svc_name as name', 'needs_weight', 'fk_id_carrier as carrier'])];
+            'presets' => DB::table('t_carrier_pkg_svc')->where('f_active', 1)->orderBy('pkg_svc_name')->get(['id', 'pkg_svc_name as name', 'needs_weight', 'fk_id_carrier as carrier']),
+            'service' => \App\Services\CarrierRules::suggest($ent, \App\Services\CarrierRules::facts($ent, $d['order_no'], (int) $d['branch'], $r->filled('weight_g') ? (int) $r->input('weight_g') : (\App\Services\PackService::suggest($ent, $lines)['weight_g'] ?? null)))];      // R-H-30
     }
 
     public function packShort(Request $r)
