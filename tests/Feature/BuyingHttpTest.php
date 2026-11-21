@@ -16,6 +16,7 @@ class BuyingHttpTest extends TestCase
         $wh = DB::table('cat_inventory_locations')->insertGetId(RecordService::fillNotNull('cat_inventory_locations', ['location_name' => 'Main', 'kind' => 'WAREHOUSE', 'fk_id_ent' => 1, 'f_sellable' => 1, 'f_active' => 1]));
         $bank = DB::table('fin_bank_accounts')->insertGetId(['company_id' => 1, 'bank_name' => 'Test Bank', 'account_label' => 'Main', 'currency' => 'GBP', 'is_active' => 1]);
         $rid = DB::table('src_research')->insertGetId(RecordService::fillNotNull('src_research', ['fk_id_ent' => 1, 'research_code' => 'RES-X-1', 'title' => 'Dog bowl', 'status' => 'IDEA', 'created_by' => $this->owner->id, 'created_at' => now()]));
+        \App\Services\Perm::setRole('SOURCING', 'buying.MONEY', true, $this->owner->id); \App\Services\Perm::flush();      // R-F_SETUP-16: see money is off for SOURCING by default; this buyer works with prices
         $src = $this->makeUser('SOURCING'); $fin = $this->makeUser('FINANCE'); $whu = $this->makeUser('WAREHOUSE'); $va = $this->makeUser('VA');
 
         $this->actingAs($va)->getJson('/api/buying')->assertStatus(403);

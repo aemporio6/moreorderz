@@ -136,6 +136,7 @@ class Perm
         'case.create' => 'orders.saleCase', 'case.remark' => 'orders.saleCaseAdmin', 'case.resolve' => 'orders.saleCase',
         'health.edit_own' => 'orders.healthOwn', 'health.edit_any' => 'orders.healthAny',
         'daily_order.add' => 'orders.fulfilAdd', 'daily_order.status' => 'orders.fulfilManage', 'daily_order.bulk' => 'orders.fulfilManage', 'tiktok.add' => 'orders.fulfilAdd', 'tiktok.status' => 'orders.fulfilManage', 'tiktok.bulk' => 'orders.fulfilManage',
+        'see_money' => 'buying.MONEY',      // R-F_SETUP-16: one field-level permission for every sourcing money figure
         'audit.run' => 'orders.salesAudit', 'report.sales' => 'orders.saleReports', 'va_statement.create' => 'orders.vaStatement', 'va_statement.approve' => 'orders.vaStatementApprove', 'setup.marketplace' => 'setup.marketplaces', 'setup.carrier' => 'setup.carriers',
     ];
     public static function code(string $code): string { return self::ALIASES[$code] ?? $code; }

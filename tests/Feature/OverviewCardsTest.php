@@ -27,7 +27,7 @@ class OverviewCardsTest extends TestCase
         $this->assertSame(['Calculated', 'Provisional', 'Entered by hand', 'Empty'], [$chips['L-FIN'], $chips['L-PRO'], $chips['L-MAN'], $chips['L-MIS']], 'each lot its own source – no global flag');
         $this->assertSame('Olga Owner', collect($x['rows'])->firstWhere('lot', 'L-FIN')['owner']);
         $this->assertEquals(4.5, collect($x['rows'])->firstWhere('lot', 'L-FIN')['cost']); $this->assertSame('Landed Unit Cost', $x['header']);
-        $n = DashCards::lots(1, false); $this->assertNull($n['rows'][0]['cost']); $this->assertSame('Cost source', $n['header'], 'chip only without see money');
+        $n = DashCards::lots(1, false); $this->assertArrayNotHasKey('cost', $n['rows'][0]); $this->assertSame('Cost source', $n['header'], 'chip only without see money');
         $this->assertLessThanOrEqual(10, count($x['rows']));
     }
 
@@ -47,10 +47,10 @@ class OverviewCardsTest extends TestCase
         $po = $this->f('t_src_po', ['fk_id_cycle' => $cy, 'po_number' => 'PO-GL', 'status' => 'CONFIRMED', 'po_total' => 12900, 'exchange_rate' => 1, 'po_date' => '2026-11-01']);
         $this->f('t_src_payments', ['fk_id_cycle' => $cy, 'fk_id_po' => $po, 'payment_code' => 'P-GL', 'payment_amount' => 13000, 'base_amount' => 13000]);
         $sh = $this->f('t_src_shipments', ['fk_id_cycle' => $cy, 'fk_id_po' => $po, 'shipment_code' => 'SHP-GL-LATE', 'eta' => date('Y-m-d', strtotime('-4 days'))]);
-        $g = collect(DashCards::glance(1, true)['rows'])->pluck('value', 'label');
+        $g = collect(DashCards::glance(1, true)['rows'])->pluck('figure', 'label');
         $this->assertSame(['1', '0.00 GBP'], [(string) $g['Open cycles'], $g['PO outstanding']], 'open PO 12,900, paid 13,000 → 0.00');
         $this->assertSame(1, $g['Shipments overdue']);
-        $this->assertArrayNotHasKey('PO outstanding', collect(DashCards::glance(1, false)['rows'])->pluck('value', 'label')->all());
+        $this->assertArrayNotHasKey('PO outstanding', collect(DashCards::glance(1, false)['rows'])->pluck('figure', 'label')->all());
         $link = collect(DashCards::needs(1)['rows'])->firstWhere('code', 'SRC_SHIP_OVERDUE')['link'];
         $this->assertSame("#/cycle/$cy?tab=shipments&hl=SHP-GL-LATE", $link, 'the cycle opens on the Shipments tab with the row highlighted');
     }

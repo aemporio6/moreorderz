@@ -29,7 +29,7 @@ class PermCatalogue
         'app.company_owner' => ['Company – owner', 'Forms and records', ['OWNER']],
         'buying.BUY' => ['Buy', 'Buying', ['OWNER', 'MANAGER', 'SOURCING']],
         'buying.COST' => ['Set costs', 'Buying', ['OWNER', 'MANAGER', 'FINANCE']],
-        'buying.MONEY' => ['See money figures', 'Buying', ['OWNER', 'MANAGER', 'SOURCING', 'FINANCE', 'ACCOUNTANT', 'PARTNER']],
+        'buying.MONEY' => ['See money (see_money): sourcing values, payments, profit, investors, lot costs', 'Buying', ['OWNER', 'MANAGER', 'FINANCE', 'ACCOUNTANT', 'PARTNER']],      // R-F_SETUP-16: OFF for VA, SOURCING, CS, STOCK (owner to confirm)
         'buying.PAY' => ['Pay', 'Buying', ['OWNER', 'FINANCE']],
         'buying.RECEIVE' => ['Receive goods', 'Buying', ['OWNER', 'MANAGER', 'WAREHOUSE', 'SOURCING']],
         'buying.SEE' => ['See', 'Buying', ['OWNER', 'MANAGER', 'SOURCING', 'FINANCE', 'ACCOUNTANT', 'PARTNER', 'WAREHOUSE']],

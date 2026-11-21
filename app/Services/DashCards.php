@@ -125,7 +125,7 @@ class DashCards
             ->get(['l.id', 'l.lot_code', 'l.sku', 'l.qty', 'l.unit_cost_gbp', 'l.cost_source', 'l.landed_status', 'c.id as cycle_id', 'c.cycle_code', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as owner"), 'r.receipt_code'])
             ->map(function ($l) use ($money) { $cs = self::costSource($l);
                 return ['id' => (int) $l->id, 'batch' => $l->receipt_code ?: $l->lot_code, 'sku' => $l->sku, 'lot' => $l->lot_code, 'cycle' => $l->cycle_code, 'cycle_id' => $l->cycle_id ? (int) $l->cycle_id : null, 'qty' => (float) $l->qty,
-                    'owner' => $l->owner ?: '—', 'cost' => $money ? round((float) $l->unit_cost_gbp, 4) : null, 'cost_source' => $cs, 'chip' => self::COST_SOURCES[$cs][0], 'tone' => self::COST_SOURCES[$cs][1]]; })->all();
+                    'owner' => $l->owner ?: '—', 'cost_source' => $cs, 'chip' => self::COST_SOURCES[$cs][0], 'tone' => self::COST_SOURCES[$cs][1]] + ($money ? ['cost' => round((float) $l->unit_cost_gbp, 4)] : []); })->all();      // no cost key without see money
         return ['title' => 'Inventory receiving', 'header' => $money ? 'Landed Unit Cost' : 'Cost source', 'rows' => $rows, 'empty' => 'No inventory lots yet.'];
     }
 
@@ -137,7 +137,7 @@ class DashCards
         $items = (float) DB::table('t_src_po_lines')->whereIn('fk_id_po', $per->pluck('id')->all() ?: [0])->where('f_active', 1)->sum('qty_ordered');
         $last = $q()->max('p.po_date');
         return ['title' => 'Buying Management', 'purchases' => $per->count() . ' · ' . rtrim(rtrim(number_format($items, 3, '.', ''), '0'), '.') . ' items', 'last' => $last ? date('d M Y', strtotime($last)) : '-',
-            'value' => $money ? round($per->sum(fn ($p) => (float) $p->po_total * ((float) $p->exchange_rate ?: 1)), 2) : null, 'link' => '#/list/t_src_po'];
+            'link' => '#/list/t_src_po'] + ($money ? ['value' => round($per->sum(fn ($p) => (float) $p->po_total * ((float) $p->exchange_rate ?: 1)), 2)] : []);      // no value key without see money
     }
 
     /** R-F_SETUP-32: Sourcing Management glance – every count is the full count; PO outstanding = max(0, open PO value − paid) with see money. */
@@ -148,7 +148,7 @@ class DashCards
         $lotsNoCost = (int) DB::table('fin_lots')->where('company_id', $ent)->where('qty_left', '>', 0)->where(fn ($w) => $w->whereNull('unit_cost_gbp')->orWhere('unit_cost_gbp', '<=', 0))->count();
         $rows = [['Open cycles', $open, '#/buying'], ['Needs action', count($n) . ' items', '#/buying'], ['Shipments overdue', $c('SRC_SHIP_OVERDUE'), '#/src-transit'], ['Lots missing landed cost', max($lotsNoCost, $c('SRC_LOT_NO_COST')), '#/stock']];
         if ($money) { $p = self::payments($ent); $rows[] = ['PO outstanding', number_format(max(0, $p['open_po_value'] - $p['paid']), 2) . ' ' . $p['base'], '#/src-outstanding']; }
-        return ['title' => 'Sourcing Management', 'rows' => array_map(fn ($r) => ['label' => $r[0], 'value' => $r[1], 'link' => $r[2]], $rows), 'link' => '#/buying'];
+        return ['title' => 'Sourcing Management', 'rows' => array_map(fn ($r) => ['label' => $r[0], 'figure' => $r[1], 'link' => $r[2]], $rows), 'link' => '#/buying'];
     }
 
     /** R-F_SETUP-20: Needs action over the open cycles – P1 then P2, then due date; top 20 with "show all"; the header counts every item. */
