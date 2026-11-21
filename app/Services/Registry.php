@@ -75,7 +75,7 @@ class Registry
     {
         $fields = self::fields($formKey);
         if (! $fields) abort(404, "Unknown form $formKey");
-        $table = self::table($formKey);
+        $table = self::table($formKey); $extraReq = FormRules::required($formKey);
         $sections = [];
         foreach ($fields as $f) {
             if (! self::visible($f, $role)) continue;
@@ -83,7 +83,7 @@ class Registry
             $stored = $f['column_name'] && self::baseTable($f['table_name']) === $table && self::hasColumn($table, $f['column_name']);
             $sections[$f['section_no']]['fields'][] = [
                 'name' => $f['field_name'], 'col' => $f['column_name'], 'label' => $f['label'], 'type' => $f['type'], 'source' => $f['source'],
-                'required' => (bool) $f['required'] && ! str_starts_with((string) $f['default_rule'], 'numbering:'), 'quick' => (bool) $f['in_quick'], 'readonly' => (bool) $f['readonly'] || ! $stored || Perm::fieldMode(\Illuminate\Support\Facades\Auth::user(), $formKey, (string) $f['field_name']) === 'READONLY',
+                'required' => ((bool) $f['required'] || in_array($f['field_name'], $extraReq, true)) && ! str_starts_with((string) $f['default_rule'], 'numbering:'), 'quick' => (bool) $f['in_quick'], 'readonly' => (bool) $f['readonly'] || ! $stored || Perm::fieldMode(\Illuminate\Support\Facades\Auth::user(), $formKey, (string) $f['field_name']) === 'READONLY',
                 'stored' => $stored, 'help' => $f['help'], 'step' => $f['step'], 'min' => $f['min'], 'max' => $f['max'],
                 'cascades_from' => $f['cascades_from'], 'show_if' => $f['show_if'], 'required_if' => $f['required_if'],
                 'add_form' => ($way = FormAssist::addWay($f))['form'] ?? null, 'add_inline' => ! empty($way['inline']), 'secret' => (bool) $f['secret'], 'auto_correct' => $f['auto_correct'],
@@ -95,8 +95,10 @@ class Registry
         }
         ksort($sections);
         return ['form_key' => $formKey, 'title' => $fields[0]['form_title'], 'kind' => $fields[0]['form_kind'], 'table' => $table, 'sections' => array_values($sections),
-            'lookalike' => FormAssist::lookalikeFields($formKey), 'after_save' => FormAssist::afterSave($formKey)];
+            'lookalike' => FormAssist::lookalikeFields($formKey), 'live' => FormRules::liveFields($formKey), 'after_save' => FormAssist::afterSave($formKey)];
     }
+
+    public static function labelOf(string $formKey, string $col): ?string { foreach (self::fields($formKey) as $f) if ($f['column_name'] === $col || $f['field_name'] === $col) return $f['label']; return null; }
 
     public static function visible(array $f, ?string $role): bool
     {

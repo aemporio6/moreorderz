@@ -148,6 +148,7 @@ class RecordService
             if ($v === '' ) $v = null;
             $data[$col] = is_array($v) ? implode(',', $v) : $v;
         }
+        $errors += FormRules::check($formKey, $data, $old, $id, $errors);      // typed codes, shares, uniqueness of this form (R-F_SETUP-35)
         if ($errors) throw ValidationException::withMessages($errors);
 
         if ($table === 'drp_items') foreach (['ship_address', 'ship_phone'] as $mc) if (isset($data[$mc]) && Vault::isMasked($data[$mc])) unset($data[$mc]);      // a masked value shown to the person is never saved back over the real one
@@ -234,6 +235,7 @@ class RecordService
         $hist = DB::table('sys_audit_log as a')->leftJoin('t_users as u', 'u.id', '=', 'a.user_id')->where('a.table_name', $table)->where('a.record_id', $id)
             ->orderByDesc('a.id')->limit(50)->get(['a.action', 'a.changes_json', 'a.reason', 'a.created_at', 'u.display_name'])
             ->map(fn ($h) => ['action' => $h->action, 'at' => $h->created_at, 'by' => $h->display_name ?: 'System', 'reason' => $h->reason, 'changes' => $h->action === 'UPDATE' ? json_decode($h->changes_json ?: '[]', true) : null])->all();
+        if ($table === 'cat_company_house') $sections['Accountancy Hub (read-only here)'] = AccHub::display($id);      // kept once, in the Hub (IC-17, R-F_SETUP-35)
         $lc = Registry::labelColumn($table);
         return ['form_key' => $formKey, 'id' => $id, 'form_title' => Registry::fields($formKey)[0]['form_title'], 'title' => (string) ($row[$lc] ?? "#$id"),
             'sections' => $sections, 'parents' => $parents, 'children' => array_values($children), 'tasks' => $tasks, 'history' => $hist];

@@ -34,6 +34,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('boot', [AppController::class, 'boot']);
         Route::post('company', [AppController::class, 'company']);
         Route::get('form/{key}', [AppController::class, 'form']);
+        Route::get('form/{key}/live', [AppController::class, 'formLive']);
         Route::get('options/{key}/{field}', [AppController::class, 'options']);
         Route::post('options/{key}/{field}', [AppController::class, 'addOption']);
         Route::get('lookalike/{key}', [AppController::class, 'lookalike']);
@@ -308,6 +309,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('fulfilment/close-daily', [OrdersController::class, 'fulfilmentCloseDaily']);
         Route::post('fulfilment/import', [OrdersController::class, 'fulfilmentImport']);
         Route::get('profiles', [OrdersController::class, 'profiles']);
+        Route::get('acc-company/{id}', [OrdersController::class, 'accCompany'])->whereNumber('id');
+        Route::post('acc-company/{id}', [OrdersController::class, 'accCompanySave'])->whereNumber('id');
         Route::get('profiles/{id}/mappings', [OrdersController::class, 'profileMappings'])->whereNumber('id');
         Route::post('profiles/{id}/report', [OrdersController::class, 'profileReportSave'])->whereNumber('id');
         Route::post('profiles/{id}/bucket', [OrdersController::class, 'profileBucketSave'])->whereNumber('id');

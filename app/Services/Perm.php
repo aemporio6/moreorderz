@@ -193,6 +193,7 @@ class Perm
         $c['orders.shopReminders'] = ['Add, resolve and remove shop monthly reminders', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
         $c['orders.shopReminderTemplates'] = ['Set the monthly reminder templates of the shops', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL']];
         $c['setup.marketplaces'] = ['Set marketplaces and their questions', 'Setup', ['OWNER', 'MANAGER']];
+        $c['setup.accHub'] = ['Set the Accountancy Hub values of a company (year end, VAT, accountant, confirmation statement)', 'Setup', ['OWNER', 'MANAGER', 'FINANCE']];
         $c['setup.carriers'] = ['Set carriers, packages, services, presets, packings and their rates', 'Setup', ['OWNER', 'MANAGER']];
         $c['orders.vaStatement'] = ['Make the VA statement of a shop and month', 'Orders and dispatch', ['OWNER', 'MANAGER', 'FINANCE', 'TL']];
         $c['orders.vaStatementApprove'] = ['Approve or send back a VA statement', 'Orders and dispatch', ['OWNER']];

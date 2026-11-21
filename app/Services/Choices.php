@@ -13,6 +13,9 @@ class Choices
         'PROFIT_SHARE_AFTER_OVERHEADS' => ['Partners share the profit of a shop …', 'Overheads are expenses that belong to no shop. They are split between the shops by their confirmed sales of the month.', '1', [
             '1' => ['after its share of the overheads', 'A partner earns on what is really left. This is what the profit rules of the specification say.'],
             '0' => ['before overheads', 'A partner earns on the shop\'s own profit; the company carries all overheads alone.']]],
+        'COMPANY_FORM_CHECKS' => ['Company form: which checks run on save?', 'The old tool required only the company name; the specification proposes typed code formats, required registrar details, unique ISO code and director shares up to 100 %.', 'STRICT', [
+            'STRICT' => ['All checks', 'Suggested: country, ISO code (unique), registration no (8 characters), telephone 1, e-mail 1 and address required; UTR 10 digits, auth code 6, HMRC activation code 12, VAT GB + 9 / 12 digits, EORI GB + 12 digits; shares 0–100 and together at most 100 %.'],
+            'OLD' => ['As the old tool', 'Only the company name is required; codes are only cleaned (spaces out, upper case); each share still 0–100.']]],
         'CLOSE_FIRST_FILE_PARTIAL' => ['When a shop\'s very first money file starts in the middle of a month …', 'Month close wants the marketplace\'s money file for the whole month.', '1', [
             '1' => ['that first month counts from the file\'s first day', 'The first month can be locked. Later months must be covered completely.'],
             '0' => ['the whole month must be covered', 'Strict: the first month stays open until a file covering it from day 1 is loaded.']]],

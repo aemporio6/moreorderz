@@ -214,6 +214,7 @@
       if (r === '#/printers') return await pagePrinters();
       if (r === '#/print-queue') return await pagePrintQueue();
       if (r === '#/users') return await pageUsers();
+      if (r.startsWith('#/acc-company/')) return await pageAccCompany(+r.split('/')[2]);
       if (r.startsWith('#/marketplaces')) return await pageMarketplaces();
       if (r.startsWith('#/carriers')) return await pageCarriers();
       if (r.startsWith('#/shop-reminders')) return await pageShopReminders();
@@ -479,6 +480,26 @@
   const gbp = v => (+v || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // ---------- marketplaces: the master, the questions of a marketplace, the checklist of a shop ----------
   const MK = { tab: 'list', shop: '', prof: 0 };
+  // ---------- Accountancy Hub values of one company (IC-17): kept only here, shown read-only on the company (R-F_SETUP-35) ----------
+  async function pageAccCompany(id) {
+    busy(true); let d; try { d = await api('acc-company/' + id); } catch (e) { busy(false); $('#main').innerHTML = `<div class="card"><div class="empty">${ic('alert')}<div>${esc(e.message)}</div></div></div>`; return; } busy(false);
+    const v = d.values, o = (l, x) => l.map(([a, b]) => `<option value="${esc(a)}" ${String(a) === String(x ?? '') ? 'selected' : ''}>${esc(b)}</option>`).join(''), ppl = [['', '—'], ...Object.entries(d.people)];
+    const months = [['', '—'], ...[...Array(12)].map((_, i) => [i + 1, new Date(2000, i, 1).toLocaleString('en-GB', { month: 'long' })])], fld = (k, l, h, help) => `<div class="fld" data-w="${k}"><label>${esc(l)}</label>${h}${help ? `<div class="helptext" style="display:block">${esc(help)}</div>` : ''}</div>`;
+    const due = x => x.external ? esc(x.note) : `Confirmation statement due: <b>${x.cs ? esc(x.cs.due) : '—'}</b>${x.cs ? ` <span class="muted">(${esc(x.cs.how)})</span>` : ' <span class="muted">(no review date and no incorporation date)</span>'} · Accounts due: <b>${x.accounts ? esc(x.accounts.due) : '—'}</b>${x.accounts ? ` <span class="muted">(${esc(x.accounts.how)})</span>` : ' <span class="muted">(no year end yet)</span>'}`;
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/rec/cat_company_house/${id}">${esc(d.company.name)}</a> ›</div><h1>Accountancy Hub</h1><div class="sub">Year end, VAT, accountant and the confirmation statement are kept here only; the company shows them read-only. Incorporated: ${esc(d.company.incorporated || '—')} · Companies House next due: ${esc(d.company.file_return_date || '—')}</div></div></div>
+      <div class="card"><div class="card-b"><div id="ahDue" class="small" style="margin-bottom:12px">${due(d.due)}</div><div class="form" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px 16px">
+        ${fld('year_end_day', 'Year end – day', `<input data-h="year_end_day" type="number" min="1" max="31" value="${esc(v.year_end_day ?? '')}">`)}${fld('year_end_month', 'Year end – month', `<select data-h="year_end_month">${o(months, v.year_end_month)}</select>`)}
+        ${fld('first_period_end', 'First period end (if not the year end)', `<input data-h="first_period_end" type="date" value="${esc(v.first_period_end ?? '')}">`)}
+        ${fld('cs_review_date', 'Confirmation statement date', `<input data-h="cs_review_date" type="date" value="${esc(v.cs_review_date ?? '')}">`)}${fld('cs_date_is', 'That date is', `<select data-h="cs_date_is">${o([['REVIEW', 'the review date (due = + 14 days)'], ['DUE', 'the due date (review = − 14 days)']], v.cs_date_is)}</select>`)}
+        ${fld('vat_registered', 'VAT registered', `<label class="chk"><input data-h="vat_registered" type="checkbox" ${+v.vat_registered ? 'checked' : ''}> Yes</label>`)}${fld('vat_scheme', 'VAT scheme', `<input data-h="vat_scheme" value="${esc(v.vat_scheme ?? '')}" list="ahSchemes"><datalist id="ahSchemes"><option>Standard</option><option>Flat Rate</option><option>Cash Accounting</option><option>Annual Accounting</option></datalist>`)}
+        ${fld('vat_frequency', 'VAT returns', `<select data-h="vat_frequency">${o([['Q', 'Quarterly'], ['M', 'Monthly'], ['A', 'Annual']], v.vat_frequency || 'Q')}</select>`)}${fld('vat_stagger', 'VAT quarters', `<select data-h="vat_stagger">${o(Object.entries(d.stagger), v.vat_stagger || 1)}</select>`)}${fld('vat_reg_date', 'VAT registration date', `<input data-h="vat_reg_date" type="date" value="${esc(v.vat_reg_date ?? '')}">`)}
+        ${fld('paye_registered', 'PAYE registered', `<label class="chk"><input data-h="paye_registered" type="checkbox" ${+v.paye_registered ? 'checked' : ''}> Yes</label>`)}${fld('paye_ref', 'PAYE reference', `<input data-h="paye_ref" value="${esc(v.paye_ref ?? '')}">`)}
+        ${fld('fk_accountant', 'Accountant', `<select data-h="fk_accountant">${o(ppl, v.fk_accountant || '')}</select>`)}${fld('fk_compliance_owner', 'Compliance owner', `<select data-h="fk_compliance_owner">${o(ppl, v.fk_compliance_owner || '')}</select>`, 'Gets the compliance tasks of this company.')}
+        ${fld('notes', 'Notes', `<input data-h="notes" value="${esc(v.notes ?? '')}">`)}</div>
+        <div style="margin-top:12px;display:flex;gap:8px;align-items:center"><button class="btn primary" id="ahSave">Save</button><a class="btn" href="#/rec/cat_company_house/${id}">Back to the company</a><span id="ahMsg" class="small muted"></span></div></div></div>`;
+    $('#ahSave').onclick = async () => { const b = {}; $$('[data-h]').forEach(el => { b[el.dataset.h] = el.type === 'checkbox' ? (el.checked ? 1 : 0) : el.value; }); $$('.errtext').forEach(x => x.remove());
+      try { const r = await api('acc-company/' + id, { method: 'POST', body: b }); toast(r.message); $('#ahDue').innerHTML = due(r.due); $('#ahMsg').textContent = ''; } catch (e) { Object.entries(e.errors || {}).forEach(([k, m]) => { const w = $(`[data-w="${k}"]`); w && w.insertAdjacentHTML('beforeend', `<div class="errtext">${esc([].concat(m)[0])}</div>`); }); $('#ahMsg').textContent = e.message; } };
+  }
   // ---------- marketplace profile: its reports with their columns, its fee buckets (R-A_SALES-87) – a new marketplace needs no code ----------
   async function profileEditor() {
     const box = $('#mkProf'); let L; try { L = (await api('profiles')).rows; } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
@@ -1251,7 +1272,7 @@
   // ---------- record page: details, links both ways, tasks, history ----------
   const chipFor = s => ({ DONE: 'done', APPROVED: 'done', DOING: 'prog', STUCK: 'err', TODO: 'pend', REWORK: 'warn', CANCELLED: 'lock' }[s] || 'pend');
   const showVal = f => { const v = f.shown ?? f.value; if (v === null || v === undefined || v === '') return '<span class="faint">—</span>'; if (f.type === 'check') return +v ? 'Yes' : 'No';
-    if (f.type === 'money') return (+v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); if (f.type === 'link') return `<a href="${esc(v)}" target="_blank" rel="noopener">${esc(v)}</a>`; return esc(v); };
+    if (f.type === 'money') return (+v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); if (f.type === 'link') return `<a href="${esc(v)}" target="_blank" rel="noopener">${esc(v)}</a>`; if (f.type === 'applink') return `<a href="${esc(f.value)}">${esc(f.shown || 'Open')}</a>`; return esc(v); };
   async function pageRecord(key, id) {
     busy(true); let d; try { d = await api(`page/${key}/${id}`); } finally { busy(false); }
     const tab = S.recTab || 'details';
@@ -2851,6 +2872,8 @@
     const drawUnder = f => { const u = $(`[data-under="${f.name}"]`, ov); if (u) u.innerHTML = under(f); };
     $('#fBody', ov).addEventListener('focusout', async e => { const el = e.target, name = el.dataset.f; if (!name) return; const f = flds.find(x => x.name === name); if (!f || el.type === 'checkbox' || el.type === 'password') return;
       if (['text', 'email', 'tel'].includes(el.type) && el.value) { const fx = fixOf(f, el.value); if (fx !== el.value && !fixes['!' + name]) { fixes[name] = el.value; el.value = fx; change(name, fx); drawUnder(f); } }
+      if ((def.live || []).includes(name)) { const w = el.closest('.fld') || $(`[data-w="${name}"]`, ov); if (w) { w.classList.remove('has-err'); const m0 = w.querySelector('.errtext.live'); m0 && m0.remove(); }      // typed code checks while typing (R-F_SETUP-35)
+        if (el.value.trim() && !/^•/.test(el.value)) { try { const r = await api(`form/${key}/live?` + new URLSearchParams({ field: name, value: el.value, id: id || '' })); if (r.value && r.value !== el.value) { el.value = r.value; change(name, r.value); } if (!r.ok && w) { w.classList.add('has-err'); w.insertAdjacentHTML('beforeend', `<div class="errtext live">${esc(r.message)}</div>`); } } catch (x) { } } }
       if ((def.lookalike || []).includes(name) && el.value.trim().length >= 3) { try { const r = await api(`lookalike/${key}?` + new URLSearchParams({ field: name, value: el.value, id: id || '' })); alike[name] = r.matches; } catch (x) { alike[name] = []; } drawUnder(f); } else if (alike[name]) { alike[name] = []; drawUnder(f); } });
     $('#fBody', ov).addEventListener('input', e => { if (e.target.dataset.f && e.target.value !== '') { const w = e.target.closest('.fld'); w && $$('.mo-chips', w).forEach(c => c.remove()); } });
     $('#fBody', ov).addEventListener('change', e => { const el = e.target; if (!el.dataset.f) return; typed.add(el.dataset.f); change(el.dataset.f, read(el)); const w = el.closest('.fld'); if (w && w.classList.contains('has-err')) { w.classList.remove('has-err'); const m = w.querySelector('.errtext'); m && m.remove(); } refreshWhy(); });

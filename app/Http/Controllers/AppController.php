@@ -127,6 +127,13 @@ class AppController extends Controller
             ->map(fn ($f) => ['key' => $f->form_key, 'title' => $f->title, 'dept' => $f->department ?: $f->module, 'quick' => (bool) $f->f_quick])->values()->all();
     }
 
+    /** Live check of one typed field while the person types (R-F_SETUP-35: ISO code "already exists", code formats). */
+    public function formLive(\Illuminate\Http\Request $r, string $key)
+    {
+        Rights::check('VIEW', $key);
+        return \App\Services\FormRules::live($key, (string) $r->query('field'), (string) $r->query('value'), (int) $r->query('id') ?: null);
+    }
+
     public function form(string $key)
     {
         Rights::check('VIEW', $key);
