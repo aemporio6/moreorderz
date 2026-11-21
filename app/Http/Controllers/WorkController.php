@@ -90,7 +90,7 @@ class WorkController extends Controller
     public function savePrefs(Request $r, string $page) { \App\Services\ListExports::savePrefs($r->user(), $page, $r->all()); return ['ok' => true]; }
 
     public function alerts(Request $r) { return \App\Services\AlertRules::page($r->user()); }
-    public function alertRule(Request $r, string $code) { return $this->alertTry(fn () => \App\Services\AlertRules::save($r->user(), $code, $r->only(['is_active', 'channels']))); }
+    public function alertRule(Request $r, string $code) { return $this->alertTry(fn () => \App\Services\AlertRules::save($r->user(), $code, $r->only(['is_active', 'channels', 'wait_workday']))); }
     public function alertText(Request $r, string $key, string $lang) { return $this->alertTry(fn () => \App\Services\AlertRules::saveText($r->user(), $key, $lang, (string) $r->input('body'), $r->input('subject'))); }
     public function alertThreshold(Request $r, string $key) { return $this->alertTry(fn () => \App\Services\AlertRules::setThreshold($r->user(), $key, (string) $r->input('value'))); }
     private function alertTry(\Closure $f) { try { return $f(); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
@@ -154,6 +154,7 @@ class WorkController extends Controller
     public function taskCloseRule(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskActions::closeRule($id, $r->user(), (string) $r->input('reason'))); }
     public function taskEndSnooze(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskActions::endSnooze($id, $r->user())); }
     public function taskBulk(Request $r) { $in = $r->only(['owner', 'date', 'reason']); return $this->act(fn () => $r->boolean('apply') ? \App\Services\TaskBulk::apply($r->user(), (string) $r->input('action'), (array) $r->input('ids', []), $in) : \App\Services\TaskBulk::preview($r->user(), (string) $r->input('action'), (array) $r->input('ids', []), $in)); }
+    public function taskDigestPreview(Request $r) { return $this->act(fn () => \App\Services\TaskDigest::preview($r->user(), $r->integer('user') ?: (int) $r->user()->id)); }      // R-G_CORE-45
     public function taskBulkUndo(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskBulk::undo($id, $r->user())); }
 
     /** Approve / send back (R-G_CORE-7) and the score preview (R-G_CORE-8). */

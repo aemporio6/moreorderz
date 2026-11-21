@@ -130,6 +130,7 @@ class TaskCreate
             $l = self::load($realOwner);
             if ($l['open'] > $l['limit']) $warn[] = DB::table('t_users')->where('id', $realOwner)->value('display_name') . " now has {$l['open']} open tasks (limit {$l['limit']}).";
             Audit::log('tasks', $id, 'INSERT', ['title' => $title, 'owner' => $realOwner, 'due' => $due], null, $ent);
+            TaskFlow::announce($id);      // R-G_CORE-3 / N1
             return ['id' => $id, 'ref' => 'T-' . str_pad((string) $id, 4, '0', STR_PAD_LEFT), 'warnings' => $warn, 'message' => 'Task created.'];
         });
     }

@@ -48,6 +48,7 @@ Updated 21 Nov 2026 (batch 7e-101). How to answer: write **OK** next to a line t
 | B19 | R-B_SOURCING-46 | After new freight, customs or GRN rows the landed cost is worked out again as PROVISIONAL by itself, 5 minutes after the last change (never once it is FINAL) | — |
 | B20 | R-G_CORE-15 / 13 | A cancelled task can be undone for 10 minutes (back to its last status). A new due date may not be in the past. The owner (VA) can ask for a new date; the person who assigned it approves (counts as a move) or rejects with a reason | — |
 | B21 | R-G_CORE-97 / 33 | A rule task a Partner closes with a reason stays quiet 7 days (setting rule_snooze_days in Alerts › Thresholds); snoozes are listed under Tasks › Everyone with End snooze. Bulk on tasks is for Owner / Partner / Manager, at most 200 at once, with Undo (not for reminders) | — |
+| B22 | R-G_CORE-48 / 45 | A person may change his own quiet hours, time zone, digest time and WhatsApp / e-mail switches (Tasks › My alerts); a Partner or Manager changes anyone's; only a Partner switches a channel off for someone else; the weekly task limit only a Partner or Manager. An empty digest ("Nothing due. Well done.") is sent because digest_send_empty is 1 today – set it to 0 in Alerts › Thresholds to stop it | — |
 
 ## C. Suggested defaults written in the specification (220 lines)
 

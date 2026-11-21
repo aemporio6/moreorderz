@@ -218,6 +218,7 @@ class RecordService
             $c = $f['column_name'];
             if (! $c || ! array_key_exists($c, $row) || ! Registry::visible($f, Context::role())) continue;
             $v = $row[$c]; $label = null;
+            if ($table === 't_account' && $c === 'whatsapp_number' && $v && (int) (\Illuminate\Support\Facades\Auth::user()->fk_id_account ?? 0) !== (int) $id) { $sections[$f['section'] ?: 'Details'][] = ['label' => $f['label'], 'type' => 'text', 'value' => PersonChannels::mask((string) $v), 'shown' => PersonChannels::mask((string) $v)]; continue; }      // R-G_CORE-48 masked to others
             if ($v !== null && $v !== '' && in_array($f['type'], ['select', 'multiselect'], true) && $f['source']) {
                 foreach (Registry::options($f, Context::ent(), null, 2000) as [$ov, $ol]) if ((string) $ov === (string) $v) { $label = $ol; break; }
                 [$kind, $arg] = array_pad(explode(':', (string) $f['source'], 2), 2, '');

@@ -35,7 +35,8 @@ class FormRules
         $inherit = SourcingInherit::check((string) Registry::table($formKey), $data, $old);      // R-B_SOURCING-21 supplier / SKU of the cycle steps
         $def = [];      // R-D-68: the default item of a list is never switched off
         if ($id && array_key_exists('f_active', $data) && ! (int) $data['f_active'] && (int) ($old['f_active'] ?? 1) && ($t = Registry::table($formKey)) && ($m = ListDefaults::protect($t, $id, (string) ($old[Registry::labelColumn($t) ?: 'id'] ?? $id)))) $def = ['f_active' => str_replace('cannot be deleted', 'cannot be switched off', $m)];
-        return $def + $code + $inherit + OwnItems::check($formKey, $data, $old, $id) + self::checkForm($formKey, $data, $old, $id, $already);      // R-C-20: an own item must be the person's own
+        $ch = Registry::table($formKey) === 't_account' ? PersonChannels::check($data, $old, $id) : [];      // R-G_CORE-48 channels per person
+        return $def + $code + $inherit + $ch + OwnItems::check($formKey, $data, $old, $id) + self::checkForm($formKey, $data, $old, $id, $already);      // R-C-20: an own item must be the person's own
     }
 
     /**

@@ -44,8 +44,7 @@ class MoNightly extends Command
         }
         $subs = \App\Services\Subscriptions::nightly();
         $loans = \App\Services\FinanceExtras::loanTasks(); if ($loans) $this->line("Loan payments due: $loans new task(s)");
-        $dig = \App\Services\Connect\Messenger::digests();
-        $this->line("Subscriptions overdue: $subs new task(s) · task digests queued: $dig");
+        $this->line("Subscriptions overdue: $subs new task(s) · task digests go every minute at each person's digest time (mo:events)");
         \App\Services\SaleLines::purgeBin();   // the recycle bin keeps deleted sale lines for 30 days
         $nd = \App\Services\DsMatch::digest(); if ($nd) $this->line("Not matched digest: $nd person(s) told");
         \App\Services\Carriers::applyDue();      // carrier / packing rates whose start day has come

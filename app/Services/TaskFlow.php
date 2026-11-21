@@ -18,6 +18,19 @@ class TaskFlow
     public const MOVES = ['TODO' => ['DOING', 'STUCK'], 'DOING' => ['STUCK', 'DONE'], 'STUCK' => ['DOING', 'DONE'], 'REWORK' => ['DOING'], 'DONE' => [], 'APPROVED' => [], 'CANCELLED' => []];
     public const COUNTING = ['SCREENSHOT', 'PHOTO', 'FILE', 'LINK', 'REFERENCE'];
 
+    /** R-G_CORE-3: the four priorities (list TASK_PRIORITY, sort URGENT > HIGH > NORMAL > LOW) and the Notify level derived from them (never stored). */
+    public const PRIORITIES = ['URGENT' => 'Urgent', 'HIGH' => 'High', 'NORMAL' => 'Normal', 'LOW' => 'Low'];
+    public static function level(?string $priority): string { return strtoupper((string) $priority) === 'URGENT' ? 'URGENT' : 'NORMAL'; }
+
+    /** N1 "New task" to the owner – at once; only an URGENT task goes through quiet hours (AlertRules::send). */
+    public static function announce(int $id): array
+    {
+        $t = DB::table('tasks')->where('id', $id)->first(); if (! $t || ! $t->owner_user_id) return [];
+        $n = (string) DB::table('t_users')->where('id', $t->owner_user_id)->value('display_name');
+        return AlertRules::send('N1', (int) $t->owner_user_id, ['first_name' => strtok($n, ' ') ?: $n, 'task_ref' => self::ref($id), 'title' => $t->title, 'due' => $t->due_at ? date('D d M', strtotime((string) $t->due_at)) : 'no date',
+            'link' => rtrim((string) config('app.url'), '/') . '/#/tasks'], $id, "N1:$id");
+    }
+
     public static function ref(int $id): string { return 'T-' . str_pad((string) $id, 4, '0', STR_PAD_LEFT); }
 
     public static function mayWork(object $t, object $u): bool { return (int) $t->owner_user_id === (int) $u->id || Perm::has($u, 'work.taskStatus_may'); }

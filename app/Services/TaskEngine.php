@@ -53,7 +53,7 @@ class TaskEngine
         $id = DB::table('tasks')->insertGetId($data);
         if ($follows) self::history($id, 'FOLLOWS', 'Follows ' . TaskFlow::ref((int) $follows->id) . ' – closed with a reason, problem still there');
         self::history($id, 'CREATED', "Opened by rule $ruleCode · owner by " . (['given' => 'the caller', 'cycle' => 'the cycle responsible', 'shop' => "the shop's person", 'category' => "the category's default owner", 'role' => 'the role, fewest open tasks', 'owner' => 'nobody found → Owner'][$step] ?? str_replace('record.', 'the record: ', $step)) . ($note ? " ($note)" : ''));
-        if ($data['owner_user_id']) Notify::push((int) $data['owner_user_id'], 'TASK', $data['title'], $data['fix_url'] ?: '#/tasks', (int) $id);
+        if ($data['owner_user_id'] && ! TaskFlow::announce((int) $id)) Notify::push((int) $data['owner_user_id'], 'TASK', $data['title'], $data['fix_url'] ?: '#/tasks', (int) $id);      // N1 (R-G_CORE-3): bell + WhatsApp by the rule's channels, quiet hours respected unless URGENT
         return $id;
     }
 

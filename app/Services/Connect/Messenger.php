@@ -88,18 +88,8 @@ class Messenger
         return $n;
     }
 
-    /** Morning digest for each user with late or urgent tasks (choice TASK_DIGEST). */
-    public static function digests(): int
-    {
-        $n = 0;
-        foreach (DB::table('tasks as t')->join('t_users as u', 'u.id', '=', 't.owner_user_id')->whereNotIn('t.status', ['DONE', 'APPROVED', 'CANCELLED'])->where('u.f_active', 1)
-            ->groupBy('u.id', 'u.fk_id_account', 'u.display_name', 't.fk_id_ent')->selectRaw("u.id, u.fk_id_account, u.display_name, t.fk_id_ent ent, SUM(t.due_at < CURDATE()) late, SUM(t.priority = 'URGENT') urgent")->get() as $u) {
-            if (Choices::get('TASK_DIGEST', (int) $u->ent) !== 'WHATSAPP' || (! $u->late && ! $u->urgent) || ! $u->fk_id_account || ! ($p = self::whatsappOf((int) $u->fk_id_account))) continue;
-            if (DB::table('wa_outbound')->where('template_code', 'DIGEST')->where('fk_id_account', $u->fk_id_account)->where('queued_at', '>=', today())->exists()) continue;
-            self::queueWa((int) $u->ent, (int) $u->fk_id_account, $p, 'DIGEST', ['name' => $u->display_name, 'late' => (int) $u->late, 'urgent' => (int) $u->urgent, 'link' => self::link('#/tasks')]); $n++;
-        }
-        return $n;
-    }
+    /** R-G_CORE-45: the daily digest is one engine (TaskDigest, N13 at each person's digest time) – kept here for old callers. */
+    public static function digests(): int { return \App\Services\TaskDigest::run(); }
 
     private static function waConnection(int $ent): ?object
     {

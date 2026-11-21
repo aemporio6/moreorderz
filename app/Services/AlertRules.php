@@ -52,8 +52,8 @@ class AlertRules
         'tm_unblocked' => ['[{task_ref}] You can start', 'Hi {first_name}, {cleared_ref} is finished. You can start {task_ref}: {title} now. {link}'],
         'tm_reassigned' => ['[{task_ref}] Reassigned to you', 'Hi {first_name}, {by} gave you {task_ref}: {title}, due {due}. Reason: {reason}. {link}'],
         'tm_stale' => ['[{task_ref}] No update for {days} days', 'Hi {first_name}, {task_ref}: {title} has had no update for {days} days. Please update it. {link}'],
-        'tm_digest' => ['Your tasks today', 'Good morning {first_name}: {late} late, {today} due today, {soon} due soon, {stuck_on_me} stuck on you, {to_approve} to approve. {link}'],
-        'tm_team_digest' => ['Your team today', 'Team today, {first_name}: {late} late, {stuck} stuck, {waiting} waiting approval, {over_limit} over the weekly limit. {link}'],
+        'tm_digest' => ['Your tasks for {date}', '{body}'],      // R-G_CORE-45: the whole digest text (sections) is built by TaskDigest
+        'tm_team_digest' => ['Your team for {date}', '{body}'],
         'tm_weekly_report' => ['Weekly task report {week}', 'Hi {first_name}, the weekly task report for {week} is ready: {done} done, {late} late, {stuck} stuck. {link}'],
         'tm_reminder' => ['[{task_ref}] Reminder', 'Reminder from {by}: {task_ref} {title} (due {due}). {link}'],      // R-G_CORE-32 text
         'tm_approved' => ['[{task_ref}] Approved', 'Well done {first_name}, {task_ref}: {title} is approved – quality {quality}, score {score}. {link}'],
@@ -66,6 +66,8 @@ class AlertRules
         'late_manager_day' => ['3', 'NUMBER', 'Managers told from late day', 'From this many days late the Managers get N5 too.'],
         'approval_repeat_hours' => ['24', 'NUMBER', 'Repeat waiting-approval every (hours)', 'N7 is sent again after this many hours.'],
         'approval_manager_hours' => ['48', 'NUMBER', 'Managers may approve after (hours)', 'After this many hours N7 goes to the Managers too.'],
+        'digest_send_empty' => ['1', 'NUMBER', 'Send an empty digest (1 = yes)', 'With 1 a person with nothing due still gets "Nothing due. Well done."'],
+        'team_digest_offset_min' => ['15', 'NUMBER', 'Team digest after (minutes)', "Bosses get the team digest this many minutes after their own digest time."],
         'rule_snooze_days' => ['7', 'NUMBER', 'Rule task snooze (days)', 'A rule task a Partner closed with a reason is not opened again for this many days (R-G_CORE-97).'],
         'send_retry_max' => ['3', 'NUMBER', 'Retries before FAILED', 'A failed send is tried again this many times.'],
         'send_retry_minutes' => ['10', 'NUMBER', 'Minutes between retries', 'Wait before a failed send is tried again.'],
@@ -144,7 +146,8 @@ class AlertRules
             throw new \InvalidArgumentException("Refused: $code is always WhatsApp + in-app and cannot be switched off.");
         if ($r->is_locked) $ch = self::LOCKED_CHANNELS;
         if ($on && ! $ch) throw new \InvalidArgumentException('Pick at least one channel, or switch the rule off.');
-        DB::table('tm_alert_rules')->where('id', $r->id)->update(['is_active' => $on, 'channels_json' => json_encode($ch), 'updated_by' => $u->id ?? null, 'updated_at' => now()]);
+        $wd = array_key_exists('wait_workday', $in) ? (int) (bool) $in['wait_workday'] : (int) ($r->wait_workday ?? 0);      // R-G_CORE-47 improvement: INFO waits for the next working day
+        DB::table('tm_alert_rules')->where('id', $r->id)->update(['is_active' => $on, 'channels_json' => json_encode($ch), 'wait_workday' => $r->is_locked ? 0 : $wd, 'updated_by' => $u->id ?? null, 'updated_at' => now()]);
         Audit::log('tm_alert_rules', (int) $r->id, 'UPDATE', ['on' => [$r->is_active, $on], 'channels' => [$r->channels_json, json_encode($ch)]]);
         return ['message' => "$code " . ($on ? 'on – ' . implode(' + ', array_map(fn ($c) => self::CHANNELS[$c], $ch)) : 'switched off – it sends nothing') . '.'];
     }
@@ -208,13 +211,17 @@ class AlertRules
         $user = DB::table('t_users')->where('id', $userId)->first(); if (! $user) return [];
         $m = self::render($template ?? $r->template_key, $vars, $lang);
         $ids = []; $key = mb_substr($eventKey . '|u' . $userId, 0, 120);
+        // R-G_CORE-47 quiet hours / R-G_CORE-3: only N1 of an URGENT task goes through at once; the bell (INAPP) is never delayed
+        $acc = PersonChannels::account($userId); $urgent = $code === 'N1' && $taskId && DB::table('tasks')->where('id', $taskId)->value('priority') === 'URGENT';
+        $later = $urgent ? null : (PersonChannels::quietUntil($acc) ?? (! empty($r->wait_workday) ? PersonChannels::workdayFrom($acc) : null));
         foreach (json_decode($r->channels_json, true) ?: [] as $ch) {
             $to = null; $error = null;
+            if (in_array($ch, ['WHATSAPP', 'EMAIL'], true) && ! $r->is_locked && $acc && ! (int) ($acc->{$ch === 'WHATSAPP' ? 'wa_enabled' : 'email_enabled'} ?? 1)) continue;      // R-G_CORE-48: the person switched this channel off
             if ($ch === 'WHATSAPP') { $to = $user->fk_id_account ? Connect\Messenger::whatsappOf((int) $user->fk_id_account) : null; if (! $to) $error = 'No WhatsApp number – add it on Alerts & Messages'; }
             if ($ch === 'EMAIL') { $to = $user->fk_id_account ? Connect\Messenger::emailOf((int) $user->fk_id_account) : null; if (! $to) $error = 'No email on file'; }
             $row = ['user_id' => $userId, 'task_id' => $taskId, 'rule_code' => $code, 'channel' => $ch, 'to_address' => $to, 'direction' => 'OUT', 'template_key' => $template ?? $r->template_key,
                 'subject' => $ch === 'EMAIL' ? mb_substr($m['subject'], 0, 200) : null, 'template_params' => json_encode($m['params']), 'event_key' => $key, 'text' => $m['text'],
-                'status' => $ch === 'INAPP' ? 'SENT' : ($error ? 'FAILED' : 'QUEUED'), 'error' => $error, 'sent_at' => $ch === 'INAPP' ? now() : null, 'failed_at' => $error ? now() : null, 'created_at' => now()];
+                'status' => $ch === 'INAPP' ? 'SENT' : ($error ? 'FAILED' : 'QUEUED'), 'error' => $error, 'send_after' => $ch !== 'INAPP' && ! $error && $later ? $later[0] : null, 'note' => $ch !== 'INAPP' && ! $error && $later ? $later[1] : null, 'sent_at' => $ch === 'INAPP' ? now() : null, 'failed_at' => $error ? now() : null, 'created_at' => now()];
             if (! DB::table('tm_messages')->insertOrIgnore($row)) continue;
             $ids[] = (int) DB::table('tm_messages')->where('event_key', $key)->where('channel', $ch)->value('id');
             if ($ch === 'INAPP') Notify::push($userId, 'TASK', $m['text'], $taskId ? '#/tasks' : null, $taskId);
