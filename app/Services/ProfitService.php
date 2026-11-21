@@ -30,11 +30,11 @@ class ProfitService
         $sales = \App\Services\Perm::mine(DB::table('t_sales as s'), 's.fk_id_branch')->leftJoin('t_product_vendors as p', 'p.id', '=', 's.fk_product_id')->where('s.fk_id_ent', $ent)->where('s.sale_source', 'active')->where('s.status', 'Confirmed')->whereBetween('s.d_order', [$from, $to])
             ->get(['s.id', 's.fk_id_branch', 's.fk_product_id', 'p.SKU_VENDOR as sku', 'p.product_name_vendor as name', 's.d_order', 's.qty', 's.total_amount_gbp', 's.order_no', 's.refunded_at', 's.refund_loss_amount']);
         $cost = DB::table('fin_lot_consumption')->whereIn('fk_id_sale', $sales->pluck('id'))->groupBy('fk_id_sale')->selectRaw('fk_id_sale, SUM(qty * unit_cost_gbp) c')->pluck('c', 'fk_id_sale');
-        $orderKey = []; $refunds = 0.0;
+        $orderKey = []; $refunds = 0.0; $adj = DB::table('t_sale_charges')->whereIn('fk_id_sale', $sales->pluck('id'))->where('kind', 'REFUND_ADJ')->groupBy('fk_id_sale')->selectRaw('fk_id_sale, -SUM(amount_gbp) a')->pluck('a', 'fk_id_sale');      // refunds after Confirm are adjustment lines
         foreach ($sales as $s) {
             [$k, $n] = $keyOf($s->fk_id_branch, $s->fk_product_id, $s->sku, $s->name, $s->d_order); $rows[$k] ??= $blank($k, $n);
             $rows[$k]['units'] += (int) $s->qty; $rows[$k]['sales'] += (float) $s->total_amount_gbp; $rows[$k]['cost'] += (float) ($cost[$s->id] ?? 0);
-            if ((float) $s->refund_loss_amount > 0) { $rows[$k]['mp_costs'] += (float) $s->refund_loss_amount; $refunds += (float) $s->refund_loss_amount; }
+            $rf = (float) ($adj[$s->id] ?? 0) ?: (float) $s->refund_loss_amount; if ($rf > 0) { $rows[$k]['mp_costs'] += $rf; $refunds += $rf; }
             $orderKey[$s->fk_id_branch . '|' . $s->order_no] ??= [$s->fk_product_id, $s->sku, $s->name, $s->d_order];
         }
         // 2. marketplace costs from booked statements (everything in the money file except net sales; a cost is a positive number here)

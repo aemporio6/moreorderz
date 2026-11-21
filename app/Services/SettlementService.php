@@ -301,12 +301,18 @@ class SettlementService
      * a part refund of such a line is refused (change its price instead); a shipped, unconfirmed line must be confirmed first.
      * The goods coming back are a separate step (Returns).
      */
+    /** What was refunded on a confirmed line so far: the adjustment lines in t_sale_charges (the locked line itself is never edited, R-A_SALES-34). */
+    public static function refundedAfterConfirm(int $saleId): float
+    {
+        return round(abs((float) DB::table('t_sale_charges')->where('fk_id_sale', $saleId)->where('kind', 'REFUND_ADJ')->sum('amount_gbp')), 2);
+    }
+
     public static function refund(int $ent, int $saleId, ?float $amount, string $reason, ?int $proposalId = null): array
     {
         return DB::transaction(function () use ($ent, $saleId, $amount, $reason, $proposalId) {
             $s = DB::table('t_sales')->where('id', $saleId)->where('fk_id_ent', $ent)->where('sale_source', 'active')->lockForUpdate()->first() ?? throw new \InvalidArgumentException('Order line not found.');
             if (trim($reason) === '') throw new \InvalidArgumentException('Give the reason for the refund.');
-            $total = round((float) $s->total_amount_gbp, 2); $done = round((float) $s->refund_loss_amount, 2); $left = round($total - $done, 2);
+            $total = round((float) $s->total_amount_gbp, 2); $done = $s->status === 'Confirmed' ? self::refundedAfterConfirm($saleId) : round((float) $s->refund_loss_amount, 2); $left = round($total - $done, 2);
             if ($s->status === 'Pending') {
                 if ($amount !== null && round($amount, 2) < $total) throw new \InvalidArgumentException("Order {$s->order_no} is not confirmed yet: a part refund is not booked – change the line's price instead, or refund it in full.");
                 if ((int) $s->qty_shipped > 0) throw new \InvalidArgumentException("Order {$s->order_no} is shipped but its month is not confirmed yet. Confirm the month first (Selling › Month confirm), then refund.");
@@ -320,11 +326,13 @@ class SettlementService
             $amt = $amount === null ? $left : round($amount, 2);
             if ($amt <= 0) throw new \InvalidArgumentException('The refund must be more than zero.');
             if ($amt > $left + 0.005) throw new \InvalidArgumentException('This is more than the ' . number_format($left, 2) . ' still left on this line.');
-            Ledger::post($ent, date('Y-m-d'), 'REFUND', $saleId, [['account' => '5400', 'debit' => $amt, 'ref_id' => (int) $s->fk_id_branch], ['account' => '1100', 'credit' => $amt, 'ref_id' => (int) $s->fk_id_branch]], ['memo' => ($amt >= $left && $done == 0.0 ? 'Full' : 'Part') . " refund of order {$s->order_no}"]);
-            $full = $amt >= $left - 0.005;
-            DB::table('t_sales')->where('id', $saleId)->update(['refund_loss_amount' => round($done + $amt, 2), 'refund_loss_nature' => $full ? 'FULL' : 'PARTIAL', 'refund_reason' => mb_substr($reason, 0, 250), 'refunded_at' => now(), 'refunded_by' => Context::userId(),
-                'fk_id_refund_proposal' => $proposalId ?? $s->fk_id_refund_proposal, 'updated_at' => now()]);
-            Audit::log('t_sales', $saleId, 'UPDATE', ['refund' => $full ? 'FULL' : 'PARTIAL', 'amount' => $amt, 'refunded_so_far' => round($done + $amt, 2)], $reason, $ent);
+            // a refund after Confirm never edits the locked line: it is an adjustment line of the next open month (today, unless today's month is locked)
+            $day = Ledger::openDate($ent); $full = $amt >= $left - 0.005;
+            Ledger::post($ent, $day, 'REFUND', $saleId, [['account' => '5400', 'debit' => $amt, 'ref_id' => (int) $s->fk_id_branch], ['account' => '1100', 'credit' => $amt, 'ref_id' => (int) $s->fk_id_branch]], ['memo' => ($amt >= $left && $done == 0.0 ? 'Full' : 'Part') . " refund of order {$s->order_no}"]);
+            $cid = DB::table('t_sale_charges')->insertGetId(RecordService::fillNotNull('t_sale_charges', ['fk_id_ent' => $ent, 'fk_id_sale' => $saleId, 'fk_id_branch' => $s->fk_id_branch, 'order_no' => $s->order_no, 'sku' => $s->sku, 'fk_id_product' => (int) $s->fk_product_id, 'kind' => 'REFUND_ADJ', 'amount' => -$amt, 'fk_id_currency' => $s->fk_id_currency,
+                'amount_gbp' => -$amt, 'd_charge' => $day, 'f_estimated' => 0, 'note' => mb_substr(($full ? 'Full' : 'Part') . ' refund after Confirm: ' . $reason, 0, 250), 'created_at' => now(), 'refund_id' => $proposalId]));
+            DB::table('t_sale_change_log')->insert(['fk_id_sale' => $saleId, 'save_key' => uniqid('ra'), 'action' => 'Refund after Confirm', 'field_name' => 't_sale_charges', 'field_label' => 'Adjustment line', 'old_value' => number_format($done, 2, '.', ''), 'new_value' => number_format($done + $amt, 2, '.', '') . ' refunded – booked ' . date('d-m-Y', strtotime($day)) . ': ' . mb_substr($reason, 0, 150), 'fk_id_user' => Context::userId(), 'changed_by' => (string) (DB::table('t_users')->where('id', Context::userId())->value('display_name') ?? 'system'), 'changed_at' => now()]);
+            Audit::log('t_sale_charges', $cid, 'INSERT', ['refund' => $full ? 'FULL' : 'PARTIAL', 'amount' => $amt, 'refunded_so_far' => round($done + $amt, 2), 'booked_on' => $day], $reason, $ent);
             return ['kind' => $full ? 'FULL' : 'PARTIAL', 'amount' => $amt, 'left' => round($left - $amt, 2)];
         });
     }
@@ -337,7 +345,7 @@ class SettlementService
             if ($lines->isEmpty()) throw new \InvalidArgumentException("No open or confirmed line of order $orderNo in this shop.");
             $out = ['lines' => 0, 'amount' => 0.0, 'cancelled' => 0]; $rest = $amount;
             foreach ($lines as $l) {
-                $left = round((float) $l->total_amount_gbp - (float) $l->refund_loss_amount, 2);
+                $left = round((float) $l->total_amount_gbp - ($l->status === 'Confirmed' ? self::refundedAfterConfirm((int) $l->id) : (float) $l->refund_loss_amount), 2);
                 if ($amount === null) { if ($l->status === 'Confirmed' && $left <= 0) continue; $x = self::refund($ent, (int) $l->id, null, $reason); }
                 else { if ($rest <= 0.004) break; if ($l->status !== 'Confirmed' || $left <= 0) continue; $x = self::refund($ent, (int) $l->id, min($rest, $left), $reason); $rest = round($rest - $x['amount'], 2); }
                 $out['lines']++; $out['amount'] = round($out['amount'] + $x['amount'], 2); if ($x['kind'] === 'CANCELLED') $out['cancelled']++;

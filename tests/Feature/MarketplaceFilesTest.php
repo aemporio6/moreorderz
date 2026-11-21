@@ -137,7 +137,7 @@ class MarketplaceFilesTest extends TestCase
         $this->assertSame(2, Settle::postAll(1, $this->shop));
         $this->assertSame([44.41, -35.0], [Ledger::balance(1, '1110', null, $this->shop), Ledger::balance(1, '1100', null, $this->shop)], '20 confirmed − 55 settled: EB-2 is not entered in the tool');
         Settle::decideRefund(1, (int) $p->id, true);
-        $this->assertSame([5.0, 5.0], [Ledger::balance(1, '5400'), (float) DB::table('t_sales')->where('id', $sale)->value('refund_loss_amount')], 'a part refund from the file is booked with its amount');
+        $this->assertSame([5.0, 5.0], [Ledger::balance(1, '5400'), \App\Services\SettlementService::refundedAfterConfirm($sale)], 'a part refund from the file is booked with its amount');
         // next month's file brings one more line of payout 9002: the payout is opened again and booked with all its lines
         $r2 = MF::import(1, $this->shop, $this->file('Transaction_report_oct.csv', $this->ebay(true)), 'Transaction_report_oct.csv');
         $this->assertSame([1, 1, 0], [$r2['lines_new'], $r2['statements_reopened'], $r2['statements_new']]);

@@ -345,3 +345,12 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - **Masking** (26): supplier address (•••) and phone (••••••123) are masked on the drop-shipping list, record page and exports for people without the right `orders.dsSeeContact`; a masked value is never saved back over the real one.
 - Tests: 283 pass (5,445 checks); new `tests/Feature/SalesGapsTest.php` (6).
 - Register after this batch: BUILT 301 of 1,433 (21 %); Sales 45 of 155 (29 %).
+
+## Sales batch 5, part 5 – Month Close parts and corrections after a lock (21 Nov 2026)
+- **Out-of-period question at Month Close** (R-A_SALES-11): the Month Close page of a shop shows "n line(s) of the July 2026 import are dated outside July 2026" with *keep* / *move to their own month* and a required reason (`SalesImport::answerOutOfPeriod`). Keep = not asked again (flag 2, still found by the "Out of period" preset); move = the Pending line goes to the batch of its own month while that month is open. Logged per line.
+- **VA share on Month Close** (65): own card with the VA, %, amount, where the figure comes from (approved statement / waits / import only) and whether the payable is paid.
+- **Refund after Confirm** (34): `SettlementService::refund` no longer edits a confirmed line. It writes an adjustment line (`t_sale_charges`, kind `REFUND_ADJ`) and books it on `Ledger::openDate` – today, or the first day of the next open month when today's month is locked. What is left to refund is worked out from these lines; Profit views read them too.
+- **Returns and landed-cost changes after a lock** (34): `StockService::returnIn` and the landed-cost journal are dated with `Ledger::openDate`; a return keeps `fk_id_reverses` to the original consumption row.
+- The 7e-4 screen parts were clicked through in a browser (Health, date format, Equal matches pick, Daily totals chip, Annual report): no script errors.
+- Tests: 287 pass; `SalesGapsTest` now has 10 tests.
+- Register after this batch: BUILT 309 of 1,433 (22 %); Sales 49 of 155.

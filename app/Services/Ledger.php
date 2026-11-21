@@ -163,6 +163,13 @@ class Ledger
     }
 
     /** A month is locked for the ledger when it is on or before the company setting GL_LOCKED_UPTO (YYYY-MM), set by Month Close. */
+    /** The day a correction is booked on: today, or the first day of the next open month when today's month is locked. */
+    public static function openDate(int $ent, ?string $today = null): string
+    {
+        $d = $today ?: date('Y-m-d'); $upTo = (string) Settings::get('GL_LOCKED_UPTO', $ent, '');
+        return $upTo !== '' && substr($d, 0, 7) <= $upTo ? date('Y-m-01', strtotime($upTo . '-01 +1 month')) : $d;
+    }
+
     public static function periodLocked(int $ent, string $period): bool
     {
         $upTo = (string) Settings::get('GL_LOCKED_UPTO', $ent, '');

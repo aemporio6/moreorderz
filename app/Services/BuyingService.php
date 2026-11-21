@@ -391,7 +391,7 @@ class BuyingService
                 if (abs($toStock) >= 0.01) $lines[] = $toStock > 0 ? ['account' => '1200', 'debit' => $toStock] : ['account' => '1200', 'credit' => -$toStock];
                 if (abs($toCogs) >= 0.01) $lines[] = $toCogs > 0 ? ['account' => '5000', 'debit' => $toCogs] : ['account' => '5000', 'credit' => -$toCogs];
                 $lines[] = $total > 0 ? ['account' => '1210', 'credit' => $total] : ['account' => '1210', 'debit' => -$total];
-                Ledger::post($ent, date('Y-m-d'), 'LANDED_COST', $poId, $lines, ['memo' => "Landed cost {$po->po_number}: freight $freight, duty $duty, other $other"]);
+                Ledger::post($ent, Ledger::openDate($ent), 'LANDED_COST', $poId, $lines, ['memo' => "Landed cost {$po->po_number}: freight $freight, duty $duty, other $other"]);
             }
             $lc = DB::table('t_src_landed_cost')->insertGetId(['fk_id_ent' => $ent, 'lc_code' => Numbering::next('LC', $ent), 'fk_id_cycle' => $po->fk_id_cycle, 'fk_id_po' => $poId, 'product_cost' => round($valAll, 2), 'freight_cost' => $freight, 'customs_duty' => $duty,
                 'other_cost' => $other, 'freight_method' => 'QUANTITY', 'duty_method' => 'VALUE', 'total_cost' => round($valAll + $freight + $duty + $other, 2), 'accepted_qty' => $qtyAll, 'landed_cost_per_unit' => $qtyAll > 0 ? round($weighted / $qtyAll, 4) : 0,

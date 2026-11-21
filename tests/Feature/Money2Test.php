@@ -77,7 +77,7 @@ class Money2Test extends TestCase
         $this->assertSame(40.0, Ledger::balance(1, '1100', null, $this->shop));
         Settle::decideRefund(1, $pa, true);
         $this->assertSame([20.0, 20.0], [Ledger::balance(1, '1100', null, $this->shop), Ledger::balance(1, '5400')]);
-        $this->assertNotNull(DB::table('t_sales')->where('id', $a)->value('refunded_at'));
+        $this->assertNull(DB::table('t_sales')->where('id', $a)->value('refunded_at')); $this->assertSame(1, DB::table('t_sale_charges')->where('fk_id_sale', $a)->where('kind', 'REFUND_ADJ')->count());      // the locked line is not edited: the refund is an adjustment line
         try { Settle::decideRefund(1, $pa, true); $this->fail('twice'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('already decided', $e->getMessage()); }
         try { Settle::decideRefund(1, $pb, false); $this->fail('reason'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('reason', $e->getMessage()); }
         Settle::decideRefund(1, $pb, false, 'Buyer kept the item');
@@ -98,7 +98,8 @@ class Money2Test extends TestCase
         try { Settle::refund(1, $a, 5.0, ' '); $this->fail('reason'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('reason', $e->getMessage()); }
         $this->assertSame('FULL', Settle::refund(1, $a, null, 'Second complaint – rest refunded')['kind']);
         $s = DB::table('t_sales')->where('id', $a)->first();
-        $this->assertSame([40.0, 'FULL', 'Confirmed'], [(float) $s->refund_loss_amount, $s->refund_loss_nature, $s->status]);
+        // the confirmed (locked) line is never edited: the refunds are adjustment lines
+        $this->assertSame([0.0, 'Confirmed', 40.0, 2], [(float) $s->refund_loss_amount, $s->status, Settle::refundedAfterConfirm($a), DB::table('t_sale_charges')->where('fk_id_sale', $a)->where('kind', 'REFUND_ADJ')->count()]);
         try { Settle::refund(1, $a, 1.0, 'again'); $this->fail('full'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('already refunded in full', $e->getMessage()); }
         $this->assertSame([20.0, 40.0], [Ledger::balance(1, '1100', null, $this->shop), Ledger::balance(1, '5400')]);
         // by hand over the API: part of ORD-2, then a not-confirmed order = cancelled

@@ -136,4 +136,33 @@ class SalesGapsTest extends TestCase
         \App\Services\VaStatements::bankPaid(1, 'VA_SHARE_PAYOUT', $this->va, 90.00, 77); $this->assertTrue(\App\Services\VaStatements::closeLine($this->shop, '2026-07')['paid']);
         @unlink(storage_path('app/' . $s['file'])); @rmdir(dirname(storage_path('app/' . $s['file']))); $this->assertNull(\App\Services\VaStatements::closeLine($this->shop, '2025-01'));
     }
+
+    public function test_a_refund_after_confirm_is_an_adjustment_line_of_the_next_open_month_and_never_edits_the_locked_line(): void
+    {
+        $this->world(); $id = DB::table('t_sales')->insertGetId($this->fill('t_sales', ['fk_id_ent' => 1, 'fk_id_branch' => $this->shop, 'fk_id_marketplace' => $this->mp, 'order_no' => 'C-1', 'd_order' => '2026-07-05', 'sku' => 'S', 'qty' => 1, 'sale_rate' => 40, 'total_amount' => 40, 'total_amount_gbp' => 40, 'status' => 'Confirmed', 'f_locked' => 1, 'sale_source' => 'active']));
+        $before = (array) DB::table('t_sales')->where('id', $id)->first();
+        \App\Services\Settings::set('GL_LOCKED_UPTO', date('Y-m'), 1); \App\Services\Settings::flush();      // even this month is locked → the first day of the next open month
+        $next = date('Y-m-01', strtotime(date('Y-m-01') . ' +1 month')); $this->assertSame($next, \App\Services\Ledger::openDate(1));
+        $x = \App\Services\SettlementService::refund(1, $id, 15.0, 'Arrived late'); $this->assertSame(['PARTIAL', 25.0], [$x['kind'], $x['left']]);
+        $after = (array) DB::table('t_sales')->where('id', $id)->first(); $this->assertSame($before, $after);      // the locked line is untouched
+        $c = DB::table('t_sale_charges')->where('fk_id_sale', $id)->first(); $this->assertSame(['REFUND_ADJ', -15.0, $next], [$c->kind, (float) $c->amount_gbp, substr((string) $c->d_charge, 0, 10)]);
+        $this->assertSame($next, substr((string) DB::table('gl_journals')->where('source_type', 'REFUND')->where('source_id', $id)->value('journal_date'), 0, 10));
+        $this->assertContains('Refund after Confirm', collect(SaleLines::history($id))->pluck('action')->all());
+        try { \App\Services\SettlementService::refund(1, $id, 30.0, 'too much'); $this->fail('no error'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('25.00 still left', $e->getMessage()); }
+    }
+
+    public function test_a_return_after_the_month_is_locked_is_a_negative_correction_line_of_the_next_open_month(): void
+    {
+        $this->world(); DB::table('t_branches')->where('id', $this->shop)->update(['fulfilment_channel' => 'SELF']);
+        $pid = DB::table('t_product_vendors')->insertGetId($this->fill('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'S1', 'product_name_vendor' => 'Thing', 'f_active' => 1, 'raw_price' => 4]));
+        $bin = DB::table('cat_inventory_locations')->where('fk_id_ent', 1)->where(fn ($w) => $w->whereNull('kind')->orWhere('kind', 'BIN'))->value('id') ?: DB::table('cat_inventory_locations')->insertGetId($this->fill('cat_inventory_locations', ['fk_id_ent' => 1, 'location_code' => 'A-01', 'location_name' => 'A-01', 'f_active' => 1, 'f_sellable' => 1]));
+        \App\Services\StockService::receive(1, [['product' => $pid, 'qty' => 5, 'unit_cost' => 4.00, 'location' => $bin]], 'OPENING', null);
+        $m = date('Y-m', strtotime('first day of last month')); [$y, $mo] = array_map('intval', explode('-', $m));
+        $this->import([['L-1', date('d/m/Y', strtotime($m . '-05')), 'Ann', '', 'S1', 'T', '2', '9']], ['month' => $mo, 'year' => $y], 'x.csv'); $id = (int) DB::table('t_sales')->where('order_no', 'L-1')->value('id');
+        \App\Services\SalesService::confirmMonth($this->shop, $m, true); $orig = DB::table('fin_lot_consumption')->where('fk_id_sale', $id)->first();
+        \App\Services\Settings::set('GL_LOCKED_UPTO', date('Y-m'), 1); \App\Services\Settings::flush(); $next = date('Y-m-01', strtotime(date('Y-m-01') . ' +1 month'));
+        \App\Services\StockService::returnIn(1, $id, 1); $c = DB::table('fin_lot_consumption')->where('fk_id_sale', $id)->whereNotNull('fk_id_reverses')->first();
+        $this->assertSame([-1, (int) $orig->id, $next], [(int) $c->qty, (int) $c->fk_id_reverses, substr((string) $c->consumed_on, 0, 10)]);
+        $this->assertSame($next, substr((string) DB::table('gl_journals')->where('source_type', 'RETURN')->where('source_id', $id)->value('journal_date'), 0, 10));
+    }
 }
