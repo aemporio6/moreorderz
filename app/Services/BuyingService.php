@@ -317,12 +317,13 @@ class BuyingService
             $lines = []; $owner = DB::table('t_src_cycles')->where('id', $g->fk_id_cycle)->value('fk_id_owner');
             foreach (DB::table('t_src_grn_lines as l')->leftJoin('t_src_po_lines as p', 'p.id', '=', 'l.fk_id_po_line')->where('l.fk_id_grn', $grnId)->get(['l.*', 'p.unit_price']) as $l) {
                 if ($l->received_qty <= 0) continue;
-                $lines[] = ['product' => (int) $l->fk_id_product, 'qty' => (int) $l->received_qty, 'damaged_qty' => (int) $l->damaged_qty, 'location' => (int) $l->fk_id_location, 'unit_cost' => round((float) $l->unit_price * $rate, 4),
+                $lines[] = ['product' => (int) $l->fk_id_product, 'qty' => (int) $l->received_qty, 'damaged_qty' => (int) $l->damaged_qty, 'location' => WarehouseMode::receiveTo($ent, (int) $l->fk_id_product, (int) $l->fk_id_location), 'unit_cost' => round((float) $l->unit_price * $rate, 4),
                     'received_date' => $g->grn_date, 'owner' => $owner ?: null, 'po_id' => $po->id, 'cycle_id' => $g->fk_id_cycle];
                 DB::table('t_product_vendors')->where('id', $l->fk_id_product)->where('f_active', 0)->where('SKU_VENDOR', 'like', 'DRAFT-%')->update(['f_active' => 1]);   // a draft product that has stock is live
             }
             if (! $lines) throw new \RuntimeException('Nothing was received on this GRN.');
             $res = StockService::receive($ent, $lines, 'GRN', $grnId, ['lot_source' => 'GRN', 'contra' => '2000', 'contra_ref' => $po->fk_id_supplier]);
+            if (Settings::get('WH_PUTAWAY_STEP', $ent, 'N') === 'Y') foreach (collect($lines)->groupBy('product') as $pid => $ls) { $good = (int) $ls->sum(fn ($x) => $x['qty'] - $x['damaged_qty']); if ($good > 0) WarehouseMode::openPutaway($ent, $grnId, (int) $pid, $good, (string) $g->grn_number); }
             DB::table('t_src_grn')->where('id', $grnId)->update(['posting_status' => 'POSTED', 'status' => 'POSTED', 'approved_by' => (string) Context::userId(), 'approved_at' => date('Y-m-d')]);
             DB::table('t_src_shipments')->where('id', $ship->id)->update(['actual_arrival' => $g->arrival_date ?: $g->grn_date, 'status' => 'ARRIVED']);
             TaskEngine::close('SRC_SHIP_ARRIVING', CycleAlerts::key('SRC_SHIP_ARRIVING', (int) $ship->id), 'Arrived'); TaskEngine::close('SRC_SHIP_OVERDUE', CycleAlerts::key('SRC_SHIP_OVERDUE', (int) $ship->id), 'Arrived');

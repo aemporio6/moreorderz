@@ -455,7 +455,7 @@ class StockService
     {
         $id = DB::table('cat_inventory_locations')->where('fk_id_ent', $ent)->where('kind', $kind)->orderBy('id')->value('id');
         if ($id) return (int) $id;
-        $names = ['DISPATCH' => 'Dispatch area', 'SHIPPED' => 'Shipped (awaiting month confirm)', 'DAMAGED' => 'Damaged', 'RETURNS' => 'Returns', 'WRITTEN_OFF' => 'Written off', 'QUARANTINE' => 'Quarantine', 'TRANSIT' => 'In transit', 'MISSING' => 'Missing'];
+        $names = ['DISPATCH' => 'Dispatch area', 'RECEIVING' => 'Receiving', 'SHIPPED' => 'Shipped (awaiting month confirm)', 'DAMAGED' => 'Damaged', 'RETURNS' => 'Returns', 'WRITTEN_OFF' => 'Written off', 'QUARANTINE' => 'Quarantine', 'TRANSIT' => 'In transit', 'MISSING' => 'Missing'];
         return (int) DB::table('cat_inventory_locations')->insertGetId(['location_name' => $names[$kind] ?? ucfirst(strtolower($kind)), 'fk_id_location_type' => 0, 'f_active' => 1, 'created_at' => now(),
             'fk_id_ent' => $ent, 'location_code' => substr($kind, 0, 30), 'kind' => $kind, 'f_sellable' => 0]);
     }

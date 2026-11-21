@@ -52,6 +52,12 @@ class StockController extends Controller
         if (! $r->has('per')) $f += ['per' => $v['per'], 'set' => $v['set'], 'status' => $v['status'], 'mp' => $v['mp'] ?? null, 'q' => $v['q'] ?? ''];      // the person's default view
         return \App\Services\ProductsList::page((int) Context::ent(), $f, $r->user());
     }
+    /** Simple / full warehouse by settings (R-H-7) and the putaway step. */
+    public function whMode(Request $r) { \App\Services\Perm::need($r->user(), 'stock.bins'); return \App\Services\WarehouseMode::page((int) Context::ent()); }
+    public function whModeApply(Request $r) { \App\Services\Perm::need($r->user(), 'stock.bins'); return $this->run(fn () => \App\Services\WarehouseMode::apply((int) Context::ent(), (string) $r->input('preset'), $r->user())); }
+    public function putaways(Request $r) { \App\Services\Perm::need($r->user(), 'stock.CHANGE'); return ['rows' => \App\Services\WarehouseMode::putaways((int) Context::ent()), 'bins' => \Illuminate\Support\Facades\DB::table('cat_inventory_locations')->where('fk_id_ent', Context::ent())->where('kind', 'BIN')->where('f_active', 1)->orderBy('pick_seq')->limit(500)->get(['id', 'location_name as name'])]; }
+    public function putaway(Request $r, int $id) { \App\Services\Perm::need($r->user(), 'stock.CHANGE'); return $this->run(fn () => \App\Services\WarehouseMode::putaway((int) Context::ent(), $id, (int) $r->input('bin'), $r->filled('qty') ? (int) $r->input('qty') : null)); }
+
     /** Visibility per marketplace × shop (R-D-20). */
     public function visibility(Request $r, int $id) { \App\Services\Perm::need($r->user(), 'form:product_visibility:VIEW'); return \App\Services\ProductVisibility::get((int) Context::ent(), $id) + ['can_edit' => \App\Services\Perm::has($r->user(), 'form:product_visibility:EDIT'), 'sku' => \Illuminate\Support\Facades\DB::table('t_product_vendors')->where('id', $id)->value('SKU_VENDOR')]; }
     public function visibilitySave(Request $r, int $id)

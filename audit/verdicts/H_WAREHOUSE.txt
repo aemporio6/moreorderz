@@ -4,7 +4,7 @@
 4|P|class LocationGenerator|bin codes from the company format; live preview not built
 5|B|class LocationGenerator|bin generator, never a bin twice
 6|M||deactivate-never-delete / CSV import-export of locations not built
-7|M||simple mode -> full mode by settings not built
+7|B|class WarehouseMode|Warehouse mode #/warehouse-mode: Simple / Full preset buttons fill the 8 switches (each still editable on Settings), WH_PRESET shown (Custom when edited); Simple: GRN posts to the SKU's PRIMARY home bin; Full: GRN posts to RECEIVING and opens WH_PUTAWAY_WAITING per product, #/putaway with the suggested bin, task closes when nothing waits; Full → Simple refused while putaway tasks are open ("1 putaway task open") (WarehouseModeTest)
 8|P|class Context|one warehouse per company; many companies in one site not built
 9|B|class SkuHomes|SKU homes: one main home per site, overflow homes, min / max
 10|B|function suggest|storage modes FIXED / HYBRID / CHAOTIC in the putaway suggestion

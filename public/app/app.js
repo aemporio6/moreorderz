@@ -158,6 +158,8 @@
       if (r.startsWith('#/due')) return await pageDue();
       if (r === '#/products' || r.startsWith('#/products?')) return await pageProducts();
       if ((mt = r.match(/^#\/visibility\/(\d+)/))) return await pageVisibility(+mt[1]);
+      if (r === '#/warehouse-mode') return await pageWhMode();
+      if (r === '#/putaway') return await pagePutaway();
       if (r.startsWith('#/mp-fields')) return await pageMpFields(+((r.match(/mp=(\d+)/) || [])[1] || 0));
       if ((mt = r.match(/^#\/mp-values\/(\d+)/))) return await pageMpValues(+mt[1], +((r.match(/tab=(\d+)/) || [])[1] || 0));
       if (r.startsWith('#/my-account')) return await pageMyAccount(Object.fromEntries(new URLSearchParams(r.split('?')[1] || '')));
@@ -1335,6 +1337,24 @@
   function dupLive(supEl, refEl, outEl, cycle) { let t; const run = () => { clearTimeout(t); t = setTimeout(async () => { const sup = supEl ? +supEl.value : 0, ref = refEl.value.trim(); outEl.textContent = ''; if ((supEl && !sup) || !ref) return;
       try { const r = await api('buying/duplicate-check?' + new URLSearchParams({ supplier: sup || '', ref, cycle: cycle || '' })); if (!r.ok) outEl.innerHTML = `${esc(r.message)} · <a href="#/cycle/${r.existing.id}">open</a>`; } catch (x) { } }, 400); };
     refEl.addEventListener('input', run); supEl && supEl.addEventListener('change', run); }
+  // ---------- simple / full warehouse by settings (R-H-7) and putaway ----------
+  async function pageWhMode() {
+    busy(true); let d; try { d = await api('warehouse/mode'); } finally { busy(false); }
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Warehouse mode</h1><div class="sub">The same module runs a one-room store or a large warehouse – only these switches change. Now: <b>${esc(d.preset === 'CUSTOM' ? 'Custom' : d.preset === 'SIMPLE' ? 'Simple' : 'Full')}</b>${d.open_putaways ? ` · ${d.open_putaways} putaway task(s) open` : ''}</div></div>
+      <div class="actions"><button class="btn ${d.preset === 'SIMPLE' ? 'primary' : ''}" data-whp="SIMPLE">Simple preset</button><button class="btn ${d.preset === 'FULL' ? 'primary' : ''}" data-whp="FULL">Full preset</button><a class="btn" href="#/settings">Edit one switch</a></div></div>
+      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>Switch</th><th>Now</th><th>Simple</th><th>Full</th></tr></thead><tbody>${d.switches.map(x => `<tr><td>${esc(x.label)} <div class="small muted"><code>${esc(x.key)}</code></div></td><td><b>${esc(x.value)}</b></td><td>${esc(x.simple)}</td><td>${esc(x.full)}</td></tr>`).join('')}</tbody></table></div>
+      <div class="small muted" style="margin-top:8px">Simple: a GRN posts straight to the SKU's main home bin. Full: a GRN posts to RECEIVING and a putaway task opens. Going back to Simple waits until every putaway task is done – nothing is lost.</div></div>`;
+    $$('[data-whp]').forEach(b => b.onclick = async () => { try { toast((await api('warehouse/mode', { method: 'POST', body: { preset: b.dataset.whp } })).message); pageWhMode(); } catch (e) { toast(e.message, 'err'); } });
+  }
+  async function pagePutaway() {
+    busy(true); let d; try { d = await api('putaway'); } finally { busy(false); }
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Putaway</h1><div class="sub">Units waiting in RECEIVING (Full mode). Put them in the suggested bin or choose another; the task closes when nothing waits.</div></div></div>
+      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>SKU</th><th>From</th><th class="num">Waiting</th><th>To bin</th><th class="num">Qty</th><th></th></tr></thead><tbody>${d.rows.map(r => `<tr><td><b>${esc(r.sku || '')}</b></td><td class="small">${esc(r.title)}</td><td class="num">${r.qty}</td>
+        <td><select data-pab="${r.task}">${d.bins.map(b => `<option value="${b.id}" ${r.to && +r.to.bin === +b.id ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select>${r.to ? `<div class="small muted">Suggested: ${esc(r.to.name)} (${esc(r.to.why)})</div>` : ''}</td>
+        <td class="num"><input type="number" min="1" max="${r.qty}" value="${r.qty}" data-paq="${r.task}" style="width:80px"></td><td><button class="btn sm primary" data-pa="${r.task}">Put away</button></td></tr>`).join('')}</tbody></table>
+      ${d.rows.length ? '' : `<div class="empty">${ic('check')}<div>Nothing waits in RECEIVING.</div></div>`}</div></div>`;
+    $$('[data-pa]').forEach(b => b.onclick = async () => { const t = b.dataset.pa; try { toast((await api(`putaway/${t}`, { method: 'POST', body: { bin: +$(`[data-pab="${t}"]`).value, qty: +$(`[data-paq="${t}"]`).value } })).message); pagePutaway(); } catch (e) { toast(e.message, 'err'); } });
+  }
   // ---------- visibility per marketplace × shop (R-D-20) ----------
   async function pageVisibility(id) {
     busy(true); let d; try { d = await api(`products/${id}/visibility`); } finally { busy(false); }
