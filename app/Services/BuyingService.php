@@ -125,6 +125,11 @@ class BuyingService
                     'lines' => [['product' => $cp->fk_id_product, 'qty' => $d['qty'] ?? $q->qty, 'unit_price' => $q->final_unit_price ?? $q->quoted_unit_price]]];
             }
             if (empty($d['lines'])) throw new \InvalidArgumentException('A purchase order needs at least one line.');
+            $forced = null;      // duplicate guard supplier + order reference (R-B_SOURCING-7): the supplier PI number given on Direct / Full PO goes onto the cycle
+            if (! empty($d['cycle']) && ($ref = SrcDuplicate::clean($d['order_ref'] ?? '')) !== '' && SrcDuplicate::clean(DB::table('t_src_cycles')->where('id', $d['cycle'])->value('order_ref')) === '') DB::table('t_src_cycles')->where('id', $d['cycle'])->update(['order_ref' => mb_substr($ref, 0, 100)]);
+            if (! empty($d['cycle']) && empty($d['dup_checked'])) $forced = SrcDuplicate::guard(SrcDuplicate::existing($ent, (int) $d['supplier'], DB::table('t_src_cycles')->where('id', $d['cycle'])->value('order_ref'), (int) $d['cycle']), $d['dup_reason'] ?? null);
+            if (empty($d['cycle']) && empty($d['dup_checked']) && ! empty($d['order_ref'])) $forced = SrcDuplicate::guard(SrcDuplicate::existing($ent, (int) $d['supplier'], $d['order_ref']), $d['dup_reason'] ?? null);      // Direct PO without a cycle
+            if ($forced && ! empty($d['cycle'])) SrcDuplicate::forced((int) $d['cycle'], $forced, (string) $d['dup_reason'], $ent);
             $cur = strtoupper($d['currency'] ?? Fx::base($ent)); $date = $d['date'] ?? date('Y-m-d');
             $po = DB::table('t_src_po')->insertGetId(['fk_id_ent' => $ent, 'po_code' => ($no = Numbering::next('PO', $ent, $date)), 'po_number' => $no, 'po_date' => $date, 'fk_id_cycle' => $d['cycle'] ?? null, 'fk_id_supplier' => $d['supplier'],
                 'fk_id_currency' => self::currencyId($cur), 'fk_id_payment_term' => $d['fk_id_payment_term'] ?? null, 'requested_by' => Context::userId(), 'status' => 'DRAFT', 'created_by' => Context::userId(), 'f_active' => 1, 'created_at' => now(),
@@ -139,7 +144,7 @@ class BuyingService
                 $total += $lt;
             }
             DB::table('t_src_po')->where('id', $po)->update(['po_total' => round($total, 2)]);
-            Audit::log('t_src_po', $po, 'INSERT', ['po_number' => $no, 'total' => round($total, 2), 'currency' => $cur], null, $ent);
+            Audit::log('t_src_po', $po, 'INSERT', ['po_number' => $no, 'total' => round($total, 2), 'currency' => $cur] + ($forced ? ['DUPLICATE_FORCED' => $forced->cycle_code, 'supplier PI' => $d['order_ref'] ?? null] : []), $forced ? trim((string) $d['dup_reason']) : null, $ent);
             SearchIndex::put((string) RecordService::formOfTable('t_src_po'), 't_src_po', $po, $ent);
             return (int) $po;
         });

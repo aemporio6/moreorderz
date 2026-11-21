@@ -546,3 +546,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-32 (21 Nov): count variance / recount / approval R-H-46 BUILT (Missing location, write-off). +4 register lines. 372 tests.
 - 7e-33 (21 Nov): ready to dispatch + tracking back R-H-33 BUILT (TrackingPush, cut-off tasks). +4 register lines. 374 tests.
 - 7e-34 (21 Nov): alert rules catalogue R-G_CORE-49 BUILT (N1–N14 + MANUAL + APPROVED, Partner screen #/alerts, texts per language); thresholds + N6 timer partial. +4 register lines. 378 tests.
+- 7e-35 (21 Nov): duplicate guard supplier + order reference R-B_SOURCING-7 BUILT (all entry modes, live hint, Save anyway with reason in history). +4 register lines. 380 tests.

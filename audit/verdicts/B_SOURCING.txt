@@ -4,7 +4,7 @@
 4|M||repeat from cycle (copy products + RFQs) not built
 5|F|form:old_entry|form only; Old entry screen (4 sections, back-dated) not built – old purchases come by the data import
 6|P|line_type|product lines; FEE / COST / SAMPLE line types with their cost rows not built
-7|M||duplicate guard supplier + order reference not built
+7|B|class SrcDuplicate|Duplicate guard supplier + order reference: active cycle with the same order_ref (trimmed, case-insensitive) and a PO of the same supplier; on the cycle / Old-entry form (FormRules, live check "Already exists as SC-…"), PO form, Direct PO / Full PO with the supplier PI number (goes onto the cycle), Quick buy (live hint 400 ms on supplier / reference); Open existing / Save anyway buttons, Save anyway needs a reason kept in history DUPLICATE_FORCED; every save path incl. imports through the form save is guarded (no separate cycle CSV import exists). Rule test passes (SC-…-004 PI-778 + "pi-778 " → warning; no reason → blocked; reason → saved with history)
 8|F|form:old_entry_payment|form only
 9|M||old entry shipment and costs not built
 10|F|form:old_entry_receiving|form only

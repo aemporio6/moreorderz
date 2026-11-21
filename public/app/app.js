@@ -1309,6 +1309,21 @@
     $$('[data-chip]').forEach(b => b.onclick = () => { DUE.chip = b.dataset.chip; pageDue(); }); $('#duDone').onclick = () => { DUE.status = DUE.status ? '' : 'done'; pageDue(); };
     $$('[data-dd]').forEach(b => b.onclick = async () => { try { toast((await api(`due/${b.dataset.dd}/done`, { method: 'POST', body: {} })).message); pageDue(); } catch (e) { toast(e.message, 'err'); } });
   }
+  // ---------- duplicate guard supplier + order reference (R-B_SOURCING-7) ----------
+  // send(extra) posts once; on a duplicate the person picks Open existing / Save anyway (with a reason, kept in history as DUPLICATE_FORCED) / Cancel.
+  function dupOf(e) { if (e && e.data && e.data.duplicate) return e.data.duplicate; const x = e && e.errors && e.errors._dup; if (!x) return null; const [code, id] = String(x[0] || x).split('|'); return { code, id: +id }; }
+  async function withDup(send) {
+    try { return await send({}); } catch (e) { const d = dupOf(e); if (!d) throw e;
+      return await new Promise((ok, no) => { const m = modal('Already exists', `Supplier + order reference already exists as ${d.code}.`, `<div class="fld is-req"><label for="dupWhy"><span>Reason to save anyway</span> <span class="req">*</span></label><textarea id="dupWhy" rows="3" maxlength="300" style="width:100%" placeholder="e.g. the supplier re-used the PI number for a second order"></textarea><div class="helptext" style="display:block">Kept in the history of the cycle as DUPLICATE_FORCED.</div></div><div id="dupErr" class="small" style="color:var(--err)"></div>`,
+        `<button class="btn" id="dupNo">Cancel</button><button class="btn" id="dupOpen">Open existing</button><button class="btn primary" id="dupYes">Save anyway</button>`, false);
+        $('#dupNo', m.ov).onclick = () => { m.close(); no(new Error('Not saved - duplicate.')); };
+        $('#dupOpen', m.ov).onclick = () => { m.close(); no(new Error('Not saved - duplicate.')); go('#/cycle/' + d.id); };
+        $('#dupYes', m.ov).onclick = async () => { const why = $('#dupWhy', m.ov).value.trim(); if (why.length < 3) return ($('#dupErr', m.ov).textContent = 'Say why it is saved anyway.');
+          try { const r = await send({ dup_reason: why }); m.close(); ok(r); } catch (x) { $('#dupErr', m.ov).textContent = x.message; } }; }); }
+  }
+  function dupLive(supEl, refEl, outEl, cycle) { let t; const run = () => { clearTimeout(t); t = setTimeout(async () => { const sup = supEl ? +supEl.value : 0, ref = refEl.value.trim(); outEl.textContent = ''; if ((supEl && !sup) || !ref) return;
+      try { const r = await api('buying/duplicate-check?' + new URLSearchParams({ supplier: sup || '', ref, cycle: cycle || '' })); if (!r.ok) outEl.innerHTML = `${esc(r.message)} · <a href="#/cycle/${r.existing.id}">open</a>`; } catch (x) { } }, 400); };
+    refEl.addEventListener('input', run); supEl && supEl.addEventListener('change', run); }
   // ---------- alert rules (R-G_CORE-49) and thresholds (R-G_CORE-51) ----------
   const AL = { tab: 'rules', q: '' };
   async function pageAlerts() {
@@ -2325,7 +2340,7 @@
     const p = await bpick();
     miniForm('Direct PO', 'A purchase order without research: for a repeat order or a known supplier.', [{ name: 'supplier', label: 'Supplier', required: true, options: opt(p.suppliers, x => [x.id, x.name]) }, { name: 'product', label: 'Product', required: true, options: opt(p.products, x => [x.id, x.name]) },
       { name: 'qty', label: 'Units', type: 'number', required: true }, { name: 'unit_price', label: 'Price per unit', type: 'number', required: true }, { name: 'currency', label: 'Currency', required: true, value: p.base, help: '3 letters, e.g. USD' },
-      { name: 'date', label: 'PO date', type: 'date', required: true, value: S.boot.today }, { name: 'deposit_pct', label: 'Deposit %', type: 'number', value: 30 }], async v => { const r = await api('po', { method: 'POST', body: v }); go('#/po/' + r.id); return r; }, 'Make PO');
+      { name: 'date', label: 'PO date', type: 'date', required: true, value: S.boot.today }, { name: 'deposit_pct', label: 'Deposit %', type: 'number', value: 30 }, { name: 'order_ref', label: 'Supplier PI / order no.', help: 'Exactly as issued. Keep the reference clean - versions/corrections go in the notes.' }], async v => { const r = await withDup(x => api('po', { method: 'POST', body: { ...v, ...x } })); go('#/po/' + r.id); return r; }, 'Make PO');
   }
 
   async function pageResearch(id) {
@@ -2625,16 +2640,16 @@
         <div class="fld is-req"><label for="qbD"><span>Date bought</span> <span class="req">*</span></label><input id="qbD" type="date" value="${S.boot.today}" max="${S.boot.today}"></div>
         <div class="fld is-req"><label for="qbL"><span>Put into</span> <span class="req">*</span></label><select id="qbL">${opt(p.locations, x => [x.id, x.name]).map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('')}</select></div>
         <div class="fld"><label for="qbB"><span>Paid from (empty = pay later)</span></label><select id="qbB"><option value="">Not paid yet</option>${p.banks.map(x => `<option value="${x.id}">${esc(x.name)} (${esc(x.currency)})</option>`).join('')}</select></div>
-        <div class="fld"><label for="qbR"><span>Receipt / reference</span></label><input id="qbR"></div><div class="fld"><label for="qbN"><span>Note</span></label><input id="qbN"></div></div></div>
+        <div class="fld"><label for="qbR"><span>Receipt / reference</span></label><input id="qbR" placeholder="PI / receipt no. exactly as issued"><div class="small" id="qbDup" style="color:var(--err)"></div></div><div class="fld"><label for="qbN"><span>Note</span></label><input id="qbN"></div></div></div>
         <div class="tbl-wrap"><table class="t"><thead><tr><th>Product</th><th class="num">Units</th><th class="num">Price per unit (${esc(p.base)})</th><th class="num">Line</th><th></th></tr></thead><tbody id="qbLines">${lineRow()}</tbody></table></div>
         <div class="card-b" style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><button class="btn sm" id="qbAdd">${ic('plus')} Line</button><div><b>Total <span id="qbTot">0.00</span> ${esc(p.base)}</b></div></div>
         <div class="card-b" style="display:flex;justify-content:flex-end;gap:8px;align-items:center"><span class="small muted" id="qbMsg"></span><button class="btn primary" id="qbSave">Save quick buy</button></div></div>`;
     const sum = () => { let t = 0; $$('#qbLines tr').forEach(tr => { const v = (+$('[data-qq]', tr).value || 0) * (+$('[data-qu]', tr).value || 0); $('[data-qt]', tr).textContent = v.toFixed(2); t += v; }); $('#qbTot').textContent = t.toFixed(2); };
     const wire = () => { $$('#qbLines input').forEach(i => i.oninput = sum); $$('#qbLines [data-qx]').forEach(b => b.onclick = () => { if ($$('#qbLines tr').length > 1) { b.closest('tr').remove(); sum(); } }); };
-    $('#qbAdd').onclick = () => { $('#qbLines').insertAdjacentHTML('beforeend', lineRow()); wire(); }; wire();
+    $('#qbAdd').onclick = () => { $('#qbLines').insertAdjacentHTML('beforeend', lineRow()); wire(); }; wire(); dupLive($('#qbS'), $('#qbR'), $('#qbDup'));
     $('#qbSave').onclick = async () => { const lines = $$('#qbLines tr').map(tr => ({ product: +$('[data-qp]', tr).value || null, qty: +$('[data-qq]', tr).value || 0, unit_price: $('[data-qu]', tr).value === '' ? null : +$('[data-qu]', tr).value })).filter(l => l.product);
       if (!lines.length) return ($('#qbMsg').textContent = 'Add at least one product line.'); if (lines.some(l => l.unit_price === null || l.qty < 1)) return ($('#qbMsg').textContent = 'Each line needs units and a price.');
-      busy(true); try { const r = await api('quick-buy', { method: 'POST', body: { supplier: +$('#qbS').value || null, date: $('#qbD').value, location: +$('#qbL').value || null, bank: +$('#qbB').value || null, reference: $('#qbR').value || null, note: $('#qbN').value || null, lines } }); toast(r.message); go('#/cycle/' + r.cycle); }
+      busy(true); try { const r = await withDup(x => api('quick-buy', { method: 'POST', body: { supplier: +$('#qbS').value || null, date: $('#qbD').value, location: +$('#qbL').value || null, bank: +$('#qbB').value || null, reference: $('#qbR').value || null, note: $('#qbN').value || null, lines, ...x } })); toast(r.message); go('#/cycle/' + r.cycle); }
       catch (e) { $('#qbMsg').textContent = e.message; } busy(false); };
   }
   async function pageCycleExtras(id) {
@@ -2752,8 +2767,8 @@
   // one place for the step buttons, used by the cycle workspace and the PO page
   function buyButtons(pos, again) {
     $$('#main [data-acc]').forEach(b => b.onclick = () => act(`rfq/${b.dataset.acc}/accept`, {}, again));
-    $$('#main [data-mkpo]').forEach(b => b.onclick = () => miniForm('Make PO from this quote', 'Supplier, currency and price come from the accepted quote.', [{ name: 'qty', label: 'Units', type: 'number', required: true, value: b.dataset.qty }, { name: 'date', label: 'PO date', type: 'date', required: true, value: S.boot.today }, { name: 'deposit_pct', label: 'Deposit %', type: 'number', value: 30 }],
-      async v => { const r = await api('po', { method: 'POST', body: { ...v, rfq: +b.dataset.mkpo } }); again(); return r; }, 'Make PO'));
+    $$('#main [data-mkpo]').forEach(b => b.onclick = () => miniForm('Make PO from this quote', 'Supplier, currency and price come from the accepted quote.', [{ name: 'qty', label: 'Units', type: 'number', required: true, value: b.dataset.qty }, { name: 'date', label: 'PO date', type: 'date', required: true, value: S.boot.today }, { name: 'deposit_pct', label: 'Deposit %', type: 'number', value: 30 }, { name: 'order_ref', label: 'Supplier PI / order no.', help: 'Exactly as issued. Keep the reference clean - versions/corrections go in the notes.' }],
+      async v => { const r = await withDup(x => api('po', { method: 'POST', body: { ...v, rfq: +b.dataset.mkpo, ...x } })); again(); return r; }, 'Make PO'));
     $$('#main [data-conf]').forEach(b => b.onclick = () => act(`po/${b.dataset.conf}/confirm`, {}, again));
     $$('#main [data-pay]').forEach(b => b.onclick = async () => { const p = await bpick(); if (!p.banks.length) return toast('Add a bank account first (Create › Bank account).', 'err');
       miniForm('Pay the supplier', `Open on this term: ${money(b.dataset.open)} ${b.dataset.cur}. The payment is posted to the ledger at the exchange rate of its date.`, [{ name: 'amount', label: 'Amount (' + b.dataset.cur + ')', type: 'number', required: true, value: b.dataset.open }, { name: 'date', label: 'Paid on', type: 'date', required: true, value: S.boot.today },
@@ -2792,7 +2807,7 @@
       <div class="card" style="margin-top:12px"><div class="card-h"><h3>Lots made from this PO</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Lot</th><th>SKU</th><th class="num">Units</th><th class="num">Left</th>${M ? '<th class="num">Unit cost</th>' : ''}<th>Cost</th></tr></thead><tbody>${d.lots.map(l => `<tr><td>${esc(l.lot_code)}</td><td>${esc(l.sku)}</td><td class="num">${l.qty}</td><td class="num">${l.qty_left}</td>${M ? `<td class="num">${(+l.unit_cost_gbp).toFixed(4)}</td>` : ''}<td>${stChip(l.landed_status)}</td></tr>`).join('')}</tbody></table>${d.lots.length ? '' : '<div class="empty">Lots appear when the GRN is posted.</div>'}</div></div>`;
     buyButtons([p], again);
     if ($('#poPrint')) $('#poPrint').onclick = () => printNow('PO', [id]);
-    if ($('#poRep')) $('#poRep').onclick = () => miniForm('Repeat this order', 'A new draft PO for the same supplier at the last price.', [{ name: 'qty', label: 'Units', type: 'number', required: true }, { name: 'date', label: 'PO date', type: 'date', required: true, value: S.boot.today }], async v => { const r = await api('po', { method: 'POST', body: { ...v, repeat_from: id } }); go('#/po/' + r.id); return r; }, 'Make PO');
+    if ($('#poRep')) $('#poRep').onclick = () => miniForm('Repeat this order', 'A new draft PO for the same supplier at the last price.', [{ name: 'qty', label: 'Units', type: 'number', required: true }, { name: 'date', label: 'PO date', type: 'date', required: true, value: S.boot.today }, { name: 'order_ref', label: 'Supplier PI / order no.', help: 'Exactly as issued. Keep the reference clean - versions/corrections go in the notes.' }], async v => { const r = await withDup(x => api('po', { method: 'POST', body: { ...v, repeat_from: id, ...x } })); go('#/po/' + r.id); return r; }, 'Make PO');
   }
   async function pageFx() {
     busy(true); let d; try { d = await api('fx'); } finally { busy(false); }
@@ -3099,10 +3114,10 @@
       const miss = missing(); if (miss.length) { refreshWhy(true); $('#fMsg', ov).textContent = miss.length + ' required field(s) are empty'; return gotoField(miss[0].name); }
       const values = {}; flds.filter(f => !f.readonly && (shown(f) || id)).forEach(f => { values[f.name] = val[f.name]; });
       busy(true);
-      try { const r = await api(`record/${key}` + (id ? '/' + id : ''), { method: 'POST', body: { values, quick: mode === 'quick' } });
+      try { const r = await withDup(x => api(`record/${key}` + (id ? '/' + id : ''), { method: 'POST', body: { values, quick: mode === 'quick', ...x } }));
         lastSaved[key] = values; try { localStorage.setItem('mo_last_forms', JSON.stringify(lastSaved)); } catch (x) {}
         close(); toast(r.message, 'ok', r.open_record || r.open); opt.onSaved ? opt.onSaved(r) : go(r.open); }
-      catch (e) { if (e.status === 422) { draw(e.errors); $('#fMsg', ov).textContent = e.errors._form ? (e.errors._form[0] || e.errors._form) : Object.keys(e.errors).length + ' field(s) need attention'; if (e.errors._form) toast(e.errors._form[0] || e.errors._form, 'err'); const first = Object.keys(e.errors).find(n => $(`[data-w="${n}"]`, ov)); first && gotoField(first); } else toast(e.message, 'err'); }
+      catch (e) { if (e.message === 'Not saved - duplicate.') { $('#fMsg', ov).textContent = e.message; } else if (e.status === 422) { draw(e.errors); $('#fMsg', ov).textContent = e.errors._form ? (e.errors._form[0] || e.errors._form) : Object.keys(e.errors).length + ' field(s) need attention'; if (e.errors._form) toast(e.errors._form[0] || e.errors._form, 'err'); const first = Object.keys(e.errors).find(n => $(`[data-w="${n}"]`, ov)); first && gotoField(first); } else toast(e.message, 'err'); }
       busy(false); };
     // a name typed in the dropdown's "Add …" goes into the first name-like field of the new form
     if (opt.preset && opt.preset.__label) { const f = flds.find(x => (def.lookalike || []).includes(x.name) && !x.numbered && !x.readonly && ['text'].includes(x.type)) || flds.find(x => x.type === 'text' && !x.numbered && !x.readonly && x.required); if (f && empty(f.name)) { val[f.name] = opt.preset.__label; typed.add(f.name); } }

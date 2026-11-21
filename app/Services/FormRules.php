@@ -35,6 +35,7 @@ class FormRules
         if (in_array($table, ['t_src_products', 't_product_vendors'], true)) return self::productCodes($data, $old);
         if ($table === 'cat_ip_burgers') return self::isp($data);
         if ($table === 't_account_job_history') return self::jobHistory($data, $old, $id);
+        if ($table === 't_src_cycles' || $table === 't_src_po') return self::srcDuplicate($table, $data, $old, $id);
         if ($formKey !== 'cat_company_house') return [];
         $strict = self::strict($formKey); $e = []; $val = fn (string $c) => array_key_exists($c, $data) ? $data[$c] : ($old[$c] ?? null);
         if (isset($data['company_name']) && is_string($data['company_name']) && $data['company_name'] !== '') $data['company_name'] = mb_strtoupper(mb_substr($data['company_name'], 0, 1)) . mb_substr($data['company_name'], 1);
@@ -51,6 +52,27 @@ class FormRules
         if ($strict) foreach (self::COMPANY_REQUIRED as $c) { $v = $val($c); if (($v === null || $v === '') && ! isset($already[$c]) && ! isset($e[$c])) $e[$c] = (Registry::labelOf('cat_company_house', $c) ?? $c) . ' is required.'; }
         $iso = $val('iso_code'); if ($strict && is_string($iso) && $iso !== '' && ! isset($e['iso_code']) && self::isoTaken($iso, $id)) $e['iso_code'] = 'This ISO code already exists. Please add another';
         return $e;
+    }
+
+    /**
+     * Duplicate guard supplier + order reference (R-B_SOURCING-7) on the cycle form and the PO form.
+     * Checked when the reference, the supplier or the cycle changes; "Save anyway" sends dup_reason, kept in history as DUPLICATE_FORCED.
+     */
+    private static function srcDuplicate(string $table, array &$data, array $old, ?int $id): array
+    {
+        $ent = (int) Context::ent();
+        if ($table === 't_src_cycles') {
+            if (array_key_exists('order_ref', $data) && $data['order_ref'] !== null) $data['order_ref'] = SrcDuplicate::clean($data['order_ref']) ?: null;
+            if (! array_key_exists('order_ref', $data) || (string) $data['order_ref'] === SrcDuplicate::clean($old['order_ref'] ?? '')) return [];
+            $x = SrcDuplicate::forCycle($ent, $id, $data['order_ref']); $cycle = $id;
+        } else {
+            $sup = (int) ($data['fk_id_supplier'] ?? $old['fk_id_supplier'] ?? 0); $cycle = (int) ($data['fk_id_cycle'] ?? $old['fk_id_cycle'] ?? 0) ?: null;
+            if ($id && $sup === (int) ($old['fk_id_supplier'] ?? 0) && $cycle === ((int) ($old['fk_id_cycle'] ?? 0) ?: null)) return [];
+            $x = $cycle ? SrcDuplicate::existing($ent, $sup, DB::table('t_src_cycles')->where('id', $cycle)->value('order_ref'), $cycle) : null;
+        }
+        try { if (SrcDuplicate::guard($x, request()->input('dup_reason')) && $cycle) SrcDuplicate::forced($cycle, $x, (string) request()->input('dup_reason'), $ent); }
+        catch (SrcDuplicateException $e) { return ['order_ref' => $e->getMessage(), '_dup' => $x->cycle_code . '|' . $x->id] + ($table === 't_src_po' ? ['fk_id_supplier' => $e->getMessage()] : []); }
+        return [];
     }
 
     /** Carton figures (R-B_SOURCING-34): every calculated column is worked out on save from the typed ones – never typed. */
@@ -139,12 +161,13 @@ class FormRules
     }
 
     /** Fields checked live while the person types. */
-    public static function liveFields(string $formKey): array { $t = Registry::table($formKey); return $formKey === 'cat_company_house' ? array_keys(self::COMPANY) : (in_array($t, ['t_src_products', 't_product_vendors'], true) ? ['hs_code'] : ($t === 'cat_ip_burgers' ? ['isp_code'] : [])); }
+    public static function liveFields(string $formKey): array { $t = Registry::table($formKey); return $formKey === 'cat_company_house' ? array_keys(self::COMPANY) : (in_array($t, ['t_src_products', 't_product_vendors'], true) ? ['hs_code'] : ($t === 'cat_ip_burgers' ? ['isp_code'] : ($t === 't_src_cycles' ? ['order_ref'] : []))); }
 
     /** Live check while typing (the old screen's message). */
     public static function live(string $formKey, string $field, string $value, ?int $id): array
     {
         if (in_array($field, ['hs_code', 'isp_code'], true)) { $d = [$field => $value]; $e = $field === 'hs_code' ? self::productCodes($d, []) : self::isp($d); return ['ok' => ! $e, 'message' => $e[$field] ?? null, 'value' => $d[$field] ?? $value]; }
+        if ($field === 'order_ref' && Registry::table($formKey) === 't_src_cycles') return SrcDuplicate::live((int) Context::ent(), null, $value, $id) + ['value' => SrcDuplicate::clean($value)];
         if ($formKey !== 'cat_company_house') return ['ok' => true];
         if ($field === 'iso_code' && self::strict($formKey)) { $taken = trim($value) !== '' && self::isoTaken($value, $id); return ['ok' => ! $taken, 'message' => $taken ? 'This ISO code already exists. Please add another' : null]; }
         $d = [$field => $value]; $e = isset(self::COMPANY[$field]) ? self::check($formKey, $d, [], $id, array_fill_keys(self::COMPANY_REQUIRED, 1)) : [];

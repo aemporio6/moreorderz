@@ -131,10 +131,11 @@ class SourcingExtrasTest extends TestCase
         $this->actingAs($src)->postJson('/api/quick-buy', $body + ['bank' => $this->bank])->assertStatus(422)->assertJsonFragment(['message' => 'Only the Owner or Finance pays from the bank. Save the quick buy without a bank account; Finance pays it from the purchase order.']);
         $unpaid = $this->actingAs($src)->postJson('/api/quick-buy', $body)->assertOk()->json();
         $this->assertNull($unpaid['paid']); $this->assertStringContainsString('not paid yet', $unpaid['message']);
-        $x = $this->actingAs($this->owner)->postJson('/api/quick-buy', $body + ['bank' => $this->bank])->assertOk()->json();
+        $this->actingAs($this->owner)->postJson('/api/quick-buy', $body + ['bank' => $this->bank])->assertStatus(422)->assertJsonPath('duplicate.id', $unpaid['cycle']);      // same supplier + receipt again → duplicate (R-B_SOURCING-7)
+        $x = $this->actingAs($this->owner)->postJson('/api/quick-buy', ['reference' => 'Receipt 779'] + $body + ['bank' => $this->bank])->assertOk()->json();
         $this->assertSame([14, 'PAID'], [$x['units'], $x['paid'][0]['status']]);
         $c = DB::table('t_src_cycles')->where('id', $x['cycle'])->first();
-        $this->assertSame(['QUICK', 'Completed', 'Receipt 778'], [$c->cycle_type, $c->status, $c->order_ref]);
+        $this->assertSame(['QUICK', 'Completed', 'Receipt 779'], [$c->cycle_type, $c->status, $c->order_ref]);
         $this->assertSame(['RECEIVED', 'PURCHASE'], [DB::table('t_src_po')->where('id', $x['po'])->value('status'), DB::table('t_src_grn')->where('id', $x['grn'])->value('grn_source')]);
         $this->assertSame([20, 8], [Stock::balance($this->p, $this->wh), Stock::balance($other, $this->wh)], 'two quick buys of 10 and 4');
         $this->assertSame(74.0, Stock::value(1)); $this->assertSame(Stock::value(1), Ledger::balance(1, '1200'));

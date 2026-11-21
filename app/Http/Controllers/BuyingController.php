@@ -28,6 +28,7 @@ class BuyingController extends Controller
     private function run(callable $fn)
     {
         try { return $fn(); }
+        catch (\App\Services\SrcDuplicateException $e) { return response()->json($e->payload(), 422); }
         catch (\Illuminate\Database\QueryException $e) { report($e); return response()->json(['message' => 'Something went wrong on our side. Nothing was saved. The details are in the system log.'], 500); }   // never show database text to a user
         catch (\InvalidArgumentException|\RuntimeException $e) { return response()->json(['message' => $e->getMessage(), 'errors' => ['_form' => [$e->getMessage()]]], 422); }
     }
@@ -152,17 +153,18 @@ class BuyingController extends Controller
     public function createPo(Request $r)
     {
         $this->can($r, 'buying.BUY');
-        $d = $r->validate(['rfq' => 'nullable|integer', 'repeat_from' => 'nullable|integer', 'supplier' => 'nullable|integer', 'currency' => 'nullable|string|size:3', 'product' => 'nullable|integer', 'qty' => 'required|numeric|min:1', 'unit_price' => 'nullable|numeric|min:0', 'date' => 'nullable|date', 'deposit_pct' => 'nullable|numeric|min:0|max:100']);
-        return $this->run(function () use ($d) {
+        $d = $r->validate(['rfq' => 'nullable|integer', 'repeat_from' => 'nullable|integer', 'supplier' => 'nullable|integer', 'currency' => 'nullable|string|size:3', 'product' => 'nullable|integer', 'qty' => 'required|numeric|min:1', 'unit_price' => 'nullable|numeric|min:0', 'date' => 'nullable|date', 'deposit_pct' => 'nullable|numeric|min:0|max:100', 'order_ref' => 'nullable|string|max:100', 'dup_reason' => 'nullable|string|max:300']);
+        $dup = array_filter(['order_ref' => $d['order_ref'] ?? null, 'dup_reason' => $d['dup_reason'] ?? null]);
+        return $this->run(function () use ($d, $dup) {
             if (! empty($d['repeat_from'])) {      // direct PO: same supplier, last price, no research
                 $old = DB::table('t_src_po')->where('id', $d['repeat_from'])->where('fk_id_ent', Context::ent())->first() ?? throw new \RuntimeException('The PO to repeat was not found.');
                 $lines = DB::table('t_src_po_lines')->where('fk_id_po', $old->id)->where('f_active', 1)->get()->map(fn ($l) => ['product' => $l->fk_id_product, 'qty' => $d['qty'], 'unit_price' => $l->unit_price])->all();
-                $id = Buy::createPo(['supplier' => $old->fk_id_supplier, 'currency' => Fx::code($old->fk_id_currency, Context::ent()), 'date' => $d['date'] ?? null, 'lines' => $lines, 'deposit_pct' => $d['deposit_pct'] ?? $old->deposit_pct, 'repeat_from' => $old->id]);
+                $id = Buy::createPo(['supplier' => $old->fk_id_supplier, 'currency' => Fx::code($old->fk_id_currency, Context::ent()), 'date' => $d['date'] ?? null, 'lines' => $lines, 'deposit_pct' => $d['deposit_pct'] ?? $old->deposit_pct, 'repeat_from' => $old->id] + $dup);
             } elseif (! empty($d['rfq'])) {
-                $id = Buy::createPo(array_filter(['rfq' => $d['rfq'], 'qty' => $d['qty'], 'date' => $d['date'] ?? null, 'deposit_pct' => $d['deposit_pct'] ?? null], fn ($v) => $v !== null));
+                $id = Buy::createPo(array_filter(['rfq' => $d['rfq'], 'qty' => $d['qty'], 'date' => $d['date'] ?? null, 'deposit_pct' => $d['deposit_pct'] ?? null], fn ($v) => $v !== null) + $dup);
             } else {
                 if (empty($d['supplier']) || empty($d['product']) || ! isset($d['unit_price'])) throw new \InvalidArgumentException('Choose the supplier, the product and the price.');
-                $id = Buy::createPo(['supplier' => $d['supplier'], 'currency' => $d['currency'] ?? Fx::base(Context::ent()), 'date' => $d['date'] ?? null, 'deposit_pct' => $d['deposit_pct'] ?? 30, 'lines' => [['product' => $d['product'], 'qty' => $d['qty'], 'unit_price' => $d['unit_price']]]]);
+                $id = Buy::createPo(['supplier' => $d['supplier'], 'currency' => $d['currency'] ?? Fx::base(Context::ent()), 'date' => $d['date'] ?? null, 'deposit_pct' => $d['deposit_pct'] ?? 30, 'lines' => [['product' => $d['product'], 'qty' => $d['qty'], 'unit_price' => $d['unit_price']]]] + $dup);
             }
             return ['id' => $id, 'message' => 'Purchase order made (draft)'];
         });
@@ -313,9 +315,12 @@ class BuyingController extends Controller
             return $x + ['message' => 'Paid: duty ' . number_format($x['duty_base'], 2) . ' (into the goods\' cost) · import VAT ' . number_format($x['vat_base'], 2) . ' (to claim back)']; });
     }
 
+    /** Live duplicate check supplier + order reference (R-B_SOURCING-7). */
+    public function duplicateCheck(Request $r) { return \App\Services\SrcDuplicate::live((int) Context::ent(), $r->integer('supplier') ?: null, (string) $r->input('ref'), $r->integer('cycle') ?: null); }
+
     public function quickBuy(Request $r)
     {
-        $d = $r->validate(['supplier' => 'required|integer', 'location' => 'required|integer', 'date' => 'required|date', 'currency' => 'nullable|string|size:3', 'bank' => 'nullable|integer', 'reference' => 'nullable|string|max:150', 'note' => 'nullable|string|max:500',
+        $d = $r->validate(['supplier' => 'required|integer', 'location' => 'required|integer', 'date' => 'required|date', 'currency' => 'nullable|string|size:3', 'bank' => 'nullable|integer', 'reference' => 'nullable|string|max:150', 'dup_reason' => 'nullable|string|max:300', 'note' => 'nullable|string|max:500',
             'lines' => 'required|array|min:1', 'lines.*.product' => 'nullable|integer', 'lines.*.sku' => 'nullable|string|max:80', 'lines.*.qty' => 'required|integer|min:1', 'lines.*.unit_price' => 'required|numeric|min:0']);
         return $this->run(function () use ($d) { $x = \App\Services\SourcingExtras::quickBuy((int) Context::ent(), $d);
             $paid = $x['paid'] ? (collect($x['paid'])->contains(fn ($p) => $p['status'] === 'WAITING') ? ' · payment waits for approval' : ' · paid') : ' · not paid yet';
