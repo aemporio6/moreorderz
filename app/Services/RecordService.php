@@ -238,7 +238,7 @@ class RecordService
             $n = DB::table($ct)->where($r->column_name, $id)->count();
             if ($n) $children[$ct] = ['form_key' => $r->form_key, 'title' => $r->form_title, 'count' => $n, 'url' => "#/list/{$r->form_key}?f[{$r->column_name}]=$id"];
         }
-        $tasks = DB::table('tasks')->where('linked_module', $table)->where('linked_record_id', $id)->orderByDesc('id')->limit(20)->get(['id', 'title', 'status', 'priority', 'due_at', 'rule_code'])->all();
+        $tasks = DB::table('tasks')->where('linked_module', $table)->where('linked_record_id', $id)->orderByDesc('id')->limit(20)->get(['id', 'title', 'status', 'priority', 'due_at', 'rule_code', 'depends_on_task_id'])->map(fn ($t) => (object) ((array) $t + ['health' => TaskHealth::of($t)]))->all();      // R-G_CORE-21
         $hist = DB::table('sys_audit_log as a')->leftJoin('t_users as u', 'u.id', '=', 'a.user_id')->where('a.table_name', $table)->where('a.record_id', $id)
             ->orderByDesc('a.id')->limit(50)->get(['a.action', 'a.changes_json', 'a.reason', 'a.created_at', 'u.display_name'])
             ->map(fn ($h) => ['action' => $h->action, 'at' => $h->created_at, 'by' => $h->display_name ?: 'System', 'reason' => $h->reason, 'changes' => $h->action === 'UPDATE' ? json_decode($h->changes_json ?: '[]', true) : null])->all();

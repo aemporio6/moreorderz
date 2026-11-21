@@ -55,7 +55,7 @@ class AlertRules
         'tm_digest' => ['Your tasks today', 'Good morning {first_name}: {late} late, {today} due today, {soon} due soon, {stuck_on_me} stuck on you, {to_approve} to approve. {link}'],
         'tm_team_digest' => ['Your team today', 'Team today, {first_name}: {late} late, {stuck} stuck, {waiting} waiting approval, {over_limit} over the weekly limit. {link}'],
         'tm_weekly_report' => ['Weekly task report {week}', 'Hi {first_name}, the weekly task report for {week} is ready: {done} done, {late} late, {stuck} stuck. {link}'],
-        'tm_reminder' => ['[{task_ref}] Reminder', 'Hi {first_name}, reminder from {by}: {task_ref}: {title}, due {due}. {link}'],
+        'tm_reminder' => ['[{task_ref}] Reminder', 'Reminder from {by}: {task_ref} {title} (due {due}). {link}'],      // R-G_CORE-32 text
         'tm_approved' => ['[{task_ref}] Approved', 'Well done {first_name}, {task_ref}: {title} is approved – quality {quality}, score {score}. {link}'],
     ];
 
@@ -66,6 +66,7 @@ class AlertRules
         'late_manager_day' => ['3', 'NUMBER', 'Managers told from late day', 'From this many days late the Managers get N5 too.'],
         'approval_repeat_hours' => ['24', 'NUMBER', 'Repeat waiting-approval every (hours)', 'N7 is sent again after this many hours.'],
         'approval_manager_hours' => ['48', 'NUMBER', 'Managers may approve after (hours)', 'After this many hours N7 goes to the Managers too.'],
+        'rule_snooze_days' => ['7', 'NUMBER', 'Rule task snooze (days)', 'A rule task a Partner closed with a reason is not opened again for this many days (R-G_CORE-97).'],
         'send_retry_max' => ['3', 'NUMBER', 'Retries before FAILED', 'A failed send is tried again this many times.'],
         'send_retry_minutes' => ['10', 'NUMBER', 'Minutes between retries', 'Wait before a failed send is tried again.'],
         'stuck_alert_days' => ['3', 'NUMBER', 'Stuck alert after (days)', 'N6 goes after a task is stuck this many days.'],

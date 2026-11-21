@@ -27,6 +27,12 @@ class TaskEngine
         $key = $ruleCode . ':' . implode(':', $keyParts);
         $open = DB::table('tasks')->where('dedupe_key', $key)->first();
         if ($open && ! in_array($open->status, ['DONE', 'APPROVED', 'CANCELLED'], true)) return $open->id;
+        $follows = null;      // R-G_CORE-97: a Partner closed it with a reason – quiet for rule_snooze_days, then a new task that links to the closed one
+        if ($open && $open->status === 'CANCELLED' && str_contains((string) $open->flags, 'SNOOZED')) {
+            if (TaskActions::snoozedUntil($open)) return null;
+            DB::table('tasks')->where('id', $open->id)->update(['dedupe_key' => mb_substr($key . '#' . $open->id, 0, 190)]);
+            $follows = $open; $open = null;
+        }
         [$owner, $note, $step] = TaskOwner::resolve($rule, (int) $ent, $opt);      // owner order (R-G_CORE-94)
         $data = [
             'fk_id_ent' => $ent, 'title' => mb_substr($title, 0, 255), 'description' => trim(($opt['description'] ?? '') . ($note ? "\n(Given to the Owner: $note.)" : '')) ?: null,
@@ -43,7 +49,9 @@ class TaskEngine
             self::history($open->id, 'REOPENED', 'Problem is back');
             return $open->id;
         }
+        if ($follows) $data['description'] = trim('Follows ' . TaskFlow::ref((int) $follows->id) . ' (closed with a reason, the problem is still there).' . "\n" . ($data['description'] ?? ''));
         $id = DB::table('tasks')->insertGetId($data);
+        if ($follows) self::history($id, 'FOLLOWS', 'Follows ' . TaskFlow::ref((int) $follows->id) . ' – closed with a reason, problem still there');
         self::history($id, 'CREATED', "Opened by rule $ruleCode · owner by " . (['given' => 'the caller', 'cycle' => 'the cycle responsible', 'shop' => "the shop's person", 'category' => "the category's default owner", 'role' => 'the role, fewest open tasks', 'owner' => 'nobody found → Owner'][$step] ?? str_replace('record.', 'the record: ', $step)) . ($note ? " ($note)" : ''));
         if ($data['owner_user_id']) Notify::push((int) $data['owner_user_id'], 'TASK', $data['title'], $data['fix_url'] ?: '#/tasks', (int) $id);
         return $id;

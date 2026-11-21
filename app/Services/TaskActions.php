@@ -252,6 +252,75 @@ class TaskActions
         return 'Evidence hidden – the file is kept in the history.';
     }
 
+    /* ---------- R-G_CORE-32 send reminder now ---------- */
+
+    public const REMIND_OPEN = ['TODO', 'DOING', 'STUCK', 'REWORK'];
+
+    public static function remind(int $id, object $u): string
+    {
+        $t = self::task($id);
+        if ((int) $t->owner_user_id === (int) $u->id) throw new \InvalidArgumentException('Refused: that is your own task.');
+        if (! self::boss($u) && (int) $t->assigned_by_user_id !== (int) $u->id) throw new \InvalidArgumentException('Refused: only the person who assigned it, a Partner or a Manager can send a reminder.');
+        if (! in_array($t->status, self::REMIND_OPEN, true)) throw new \InvalidArgumentException('Refused: only open work can be reminded.');
+        if (! $t->owner_user_id) throw new \InvalidArgumentException('Refused: the task has no owner.');
+        $ids = AlertRules::send('MANUAL', (int) $t->owner_user_id, ['first_name' => self::first((int) $t->owner_user_id), 'by' => self::name((int) $u->id), 'task_ref' => TaskFlow::ref($id), 'title' => $t->title,
+            'due' => $t->due_at ? date('D d M', strtotime((string) $t->due_at)) : 'no date', 'link' => self::link()], $id, "R:$id:" . date('YmdHi'));
+        if (! $ids) throw new \InvalidArgumentException('Reminder already sent this minute (or the person has no WhatsApp number - see the message list).');
+        self::hist($id, (int) $u->id, 'reminder_sent', null, (string) $t->owner_user_id, null);
+        $failed = DB::table('tm_messages')->whereIn('id', $ids)->where('status', 'FAILED')->value('error');
+        return 'Reminder sent to ' . self::name((int) $t->owner_user_id) . ($failed ? " (in-app only – $failed)" : '') . '.';
+    }
+
+    /* ---------- R-G_CORE-97 rule tasks: "Close with reason" snoozes ---------- */
+
+    public static function snoozeDays(): int { return max(1, (int) AlertRules::threshold('rule_snooze_days') ?: 7); }
+
+    /** Until when a closed rule task keeps its rule quiet (null = not snoozed / ended / over). */
+    public static function snoozedUntil(object $t): ?string
+    {
+        $f = explode(',', (string) $t->flags);
+        if ($t->status !== 'CANCELLED' || ! in_array('SNOOZED', $f, true) || in_array('SNOOZE_ENDED', $f, true) || ! $t->cancelled_at) return null;
+        $until = date('Y-m-d H:i:s', strtotime((string) $t->cancelled_at . ' +' . self::snoozeDays() . ' days'));
+        return $until > now()->toDateTimeString() ? $until : null;
+    }
+
+    public static function closeRule(int $id, object $u, string $reason): string
+    {
+        return DB::transaction(function () use ($id, $u, $reason) {
+            $t = DB::table('tasks')->where('id', $id)->lockForUpdate()->first() ?? throw new \InvalidArgumentException('Task not found.');
+            if (! self::partner($u)) throw new \InvalidArgumentException('Refused: only a Partner can close a rule task with a reason.');
+            if ($t->source !== 'RULE') throw new \InvalidArgumentException('Refused: only a task opened by a rule is closed with a reason – cancel this one.');
+            self::open($t);
+            if (trim($reason) === '') throw new \InvalidArgumentException('Refused: a reason is required.');
+            $f = array_values(array_diff(array_filter(explode(',', (string) $t->flags)), ['SNOOZE_ENDED'])); $f[] = 'SNOOZED';
+            DB::table('tasks')->where('id', $id)->update(['status' => 'CANCELLED', 'cancelled_at' => now(), 'cancelled_by_user_id' => $u->id, 'flags' => implode(',', array_unique($f)), 'last_update_at' => now()]);
+            $d = self::snoozeDays();
+            self::hist($id, (int) $u->id, 'status', $t->status, 'CANCELLED', 'Closed with reason: ' . trim($reason) . " – the rule stays quiet $d days");
+            Audit::log('tasks', $id, 'UPDATE', ['status' => [$t->status, 'CANCELLED'], 'snooze_days' => $d], trim($reason));
+            self::unblock($id, 'closed with reason');
+            return TaskFlow::ref($id) . " closed – {$t->rule_code} will not open this again for $d days.";
+        });
+    }
+
+    public static function endSnooze(int $id, object $u): string
+    {
+        $t = self::task($id);
+        if (! self::partner($u)) throw new \InvalidArgumentException('Refused: only a Partner can end a snooze.');
+        if (! self::snoozedUntil($t)) throw new \InvalidArgumentException('Refused: this task is not snoozed.');
+        DB::table('tasks')->where('id', $id)->update(['flags' => trim((string) $t->flags . ',SNOOZE_ENDED', ',')]);
+        self::hist($id, (int) $u->id, 'snooze', 'SNOOZED', 'ENDED', null);
+        return 'Snooze ended – the rule opens a new task when the problem is still there.';
+    }
+
+    /** Open snoozes of the company (for the Everyone view). */
+    public static function snoozes(int $ent): array
+    {
+        return DB::table('tasks')->where('source', 'RULE')->where('status', 'CANCELLED')->where('flags', 'like', '%SNOOZED%')->where(fn ($w) => $w->where('fk_id_ent', $ent)->orWhereNull('fk_id_ent')->orWhere('fk_id_ent', 0))
+            ->orderByDesc('cancelled_at')->limit(100)->get()->filter(fn ($t) => self::snoozedUntil($t))->map(fn ($t) => ['id' => (int) $t->id, 'ref' => TaskFlow::ref((int) $t->id), 'title' => $t->title, 'rule' => $t->rule_code,
+                'until' => substr((string) self::snoozedUntil($t), 0, 10), 'by' => $t->cancelled_by_user_id ? self::name((int) $t->cancelled_by_user_id) : '',
+                'reason' => (string) DB::table('task_history')->where('task_id', $t->id)->where('new_value', 'CANCELLED')->orderByDesc('id')->value('reason')])->values()->all();
+    }
+
     /* ---------- the panel of one task ---------- */
 
     public static function panel(int $id, object $u): array
@@ -274,7 +343,10 @@ class TaskActions
                 'move_due' => $canDue && ((int) $t->due_changes < $lim || self::partner($u)), 'request_due' => $open && (int) $t->owner_user_id === (int) $u->id && ! $req && ! $canDue,
                 'decide_due' => (bool) $req && $canDue, 'reassign' => $open && $u->role_code !== 'VA', 'cancel' => $open && self::boss($u),
                 'undo' => $t->status === 'CANCELLED' && $t->cancelled_at && strtotime((string) $t->cancelled_at) >= time() - self::UNDO_MIN * 60 && (self::boss($u) || (int) $t->cancelled_by_user_id === (int) $u->id),
-                'subtask' => ! $t->parent_task_id && in_array($t->status, ['TODO', 'DOING', 'STUCK', 'REWORK'], true), 'waits' => $canDue],
-            'people' => $open && $u->role_code !== 'VA' ? self::people((int) Context::ent()) : []];
+                'subtask' => ! $t->parent_task_id && in_array($t->status, ['TODO', 'DOING', 'STUCK', 'REWORK'], true), 'waits' => $canDue,
+                'remind' => in_array($t->status, self::REMIND_OPEN, true) && (int) $t->owner_user_id !== (int) $u->id && (self::boss($u) || (int) $t->assigned_by_user_id === (int) $u->id),
+                'close_rule' => $open && $t->source === 'RULE' && self::partner($u), 'end_snooze' => self::partner($u) && self::snoozedUntil($t) !== null],
+            'people' => $open && $u->role_code !== 'VA' ? self::people((int) Context::ent()) : [], 'health' => TaskHealth::of($t), 'rule' => $t->source === 'RULE' ? $t->rule_code : null,
+            'snoozed_until' => self::snoozedUntil($t)];
     }
 }

@@ -554,5 +554,10 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('tasks/{id}/reassign', [WorkController::class, 'taskReassign'])->whereNumber('id');
         Route::post('tasks/{id}/undo-cancel', [WorkController::class, 'taskUndo'])->whereNumber('id');
         Route::post('task-evidence/{id}/hide', [WorkController::class, 'taskHideEvidence'])->whereNumber('id');
+        Route::post('tasks/{id}/remind', [WorkController::class, 'taskRemind'])->whereNumber('id');
+        Route::post('tasks/{id}/close-rule', [WorkController::class, 'taskCloseRule'])->whereNumber('id');
+        Route::post('tasks/{id}/end-snooze', [WorkController::class, 'taskEndSnooze'])->whereNumber('id');
+        Route::post('tasks/bulk', [WorkController::class, 'taskBulk']);
+        Route::post('tasks/bulk/{id}/undo', [WorkController::class, 'taskBulkUndo'])->whereNumber('id');
     });
 });

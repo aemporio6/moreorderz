@@ -18,7 +18,7 @@
 18|P|weekly_task_limit|workload warning on New task over t_account.weekly_task_limit (default 6), never a block; TaskCreateTest. Open: the same warning on reassign, Team page load bar, OVER LIMIT in the team digest, load bar in owner pickers
 19|P|function tasks|Mine / Everyone views; confidential / helper / cover visibility not built
 20|P|class Rights|roles from the rights list
-21|P|function tasks|late and urgent counts; the 9 health chips not built
+21|B|class TaskHealth|health chip computed, never stored, in the rule order CLOSED · WAITING · STUCK · NO_DUE · LATE ("Late n days", company today) · BLOCKED · DUE_TODAY · DUE_SOON ("Due tomorrow") · ON_TRACK with the old colours (BLOCKED dashed border) on the task list (web + phone), the record Tasks tab and the task panel; the morning digest counts late tasks by the same date rule; TaskBatch2Test r21 (06 Nov examples); browser desktop + phone
 22|M||8 hard rules not built
 23|F|form:task_category|form only
 24|F|form:task_template|form only; create-from-template not built
@@ -29,8 +29,8 @@
 29|F|form:task_evidence|form only
 30|P|function page|history per record
 31|B|function page|record page with Linked records, Tasks and History for every form
-32|M||send reminder now not built
-33|M||bulk actions on tasks not built
+32|B|function remind|assigner or boss, not own task ("Refused: that is your own task."), open work only ("Refused: only open work can be reminded."), WhatsApp tm_reminder + in-app, once per minute per task (R:{task}:{YmdHi}), history reminder_sent, text "Reminder from <name>: T-0012 <title> (due Fri 06 Nov). <link>", no WhatsApp → that row FAILED "No WhatsApp number…" and in-app still sent, second press → the spec text; on the task panel and in bulk; TaskBatch2Test r32
+33|B|class TaskBulk|boss only: Reassign to…, Move due date…, Send reminder now, Cancel; tick rows + "Select page" (selection kept while switching views), the action shows only its inputs, one reason written on every task, max 200, spec refusals, confirm "n task(s): … - continue?", preview old → new per row with each row's own refusal (due-move limit, absence cover, weekly-limit warning) – nothing written, result "n of N done. Not done - T-0001: … (first 5)", one bulk_jobs row with Undo (not for reminders); TaskBatch2Test r33; browser preview desktop + phone
 34|F|form:task_import|form only
 35|P|schedule|every scheduled command runs withoutOverlapping (lock); finance jobs log one line per run in sys_job_runs (JobLog). Open: task worker run log line ("another run is still busy - skipped") and the order repeats → triggers → schedule → dispatch
 36|P|function tasks|My tasks list; tiles / waiting-on-me groups / score not built
@@ -94,7 +94,7 @@
 94|B|class TaskOwner|TaskOwner: P1/P2/P3 → HIGH/NORMAL/LOW, URGENT by level / ICC_RED / money > TASK_URGENT_MONEY; owner order record user (PO requested_by, GRN received_by, batch importer) → cycle → shop → category default → role fewest open (absent skipped, cover used) → Owner "no ROLE set"; old role names mapped; why-owner shown on Tasks (TaskOwnerTest). FA1–FA10 rows arrive with R-FIN-66
 95|P|class EventBus|event bus with retry; name catalogue check not built
 96|B|function importCartons|printers, templates, one log row per copy, reprint needs a reason, carrier label import; inbound shipments (fba_shipments / fba_cartons SINGLE or MIXED + carton items) with the carton file import (row per carton × SKU or the Box-column pack list, SKU or item code, event INBOUND_CARTONS_IMPORTED), carton / item labels and packing list, each carton line → the two-step transfer (R-H-49); InboundShipmentsTest
-97|M||rule-task snooze not built
+97|B|function closeRule|RULE task: Approve refused while the problem is there ("Refused: problem still present: …"); a Partner "Close with reason" → CANCELLED with the reason, the rule does not open the same dedupe key for rule_snooze_days (setting, default 7); after that, problem still there → a new task "Follows T-xxxx" linked to the closed one; snoozes listed under Tasks › Everyone with "End snooze" (the Team page itself is R-G_CORE-40); TaskBatch2Test r97
 98|M||2FA re-ask after 60 min not built
 99|P|function synonyms|built: every registry field as "Form › Field" (help text, opens the form with the field focused), screens, reports, settings, synonyms from sys_search_synonyms (alias, abbreviation, Roman Urdu, direct page), sound + typing-mistake layer, by rights, secrets never; open: help topics do not exist yet, and "sku" lists screens before the field
 100|P|function amountRange|built: amount within 0.5 % and ranges, phone digits, e-mail, Enter / arrows / Esc, recent searches (SEARCH_RECENT_KEEP) and pinned, no-result guidance with "Did you mean", misses logged, scope chips, scan-to-search (SKU / EAN / UPC / tracking / order / bin), record buttons by right; open: the buttons "Create PO for <product>" and "Print label for <order>", and the 200-real-queries acceptance test

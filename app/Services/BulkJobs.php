@@ -151,6 +151,7 @@ class BulkJobs
     public static function undo(int $jobId, ?object $u): array
     {
         $j = DB::table('bulk_jobs')->where('id', $jobId)->first() ?? abort(404, 'Job not found.');
+        if ($j->list_key === 'task_bulk') return TaskBulk::undo($jobId, $u);      // R-G_CORE-33: task jobs put back by their own rules
         if ((int) $j->fk_id_account !== (int) $u->id && ! Perm::has($u, 'admin.owner') && ($u->role_code ?? '') !== 'MANAGER') abort(403, 'Only the person who did it, a Manager or the Owner can undo it.');
         if ($j->status !== 'APPLIED') throw new \InvalidArgumentException($j->status === 'UNDONE' ? 'This was already undone.' : 'This job cannot be undone.');
         $c = json_decode((string) $j->change_json, true); $formKey = $j->list_key; $table = Registry::table($formKey); $pk = Registry::pk($table); $back = 0; $kept = 0;
