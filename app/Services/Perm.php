@@ -157,6 +157,9 @@ class Perm
         $c['orders.saleRefund'] = ['Refund a sale line with the nature of the loss', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
         $c['orders.saleDelete'] = ['Delete a sale line (to the recycle bin)', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
         $c['orders.saleDeleteMonth'] = ['Delete a whole month of sales of a shop', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL']];
+        $c['orders.dsRematch'] = ['Run Re-match of not matched lines against drop shipping orders', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
+        $c['orders.dsLink'] = ['Link or unlink a drop shipping item by hand (with a reason)', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL']];
+        $c['orders.dsSeeContact'] = ['See the address and phone of a drop shipping order unmasked', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL']];
         $c['orders.saleExport'] = ['Export the sales list (PDF, Word, Excel, CSV)', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'FINANCE']];
         $c['orders.saleUnlock'] = ['Unlock a confirmed month of sales (with a reason)', 'Orders and dispatch', ['OWNER']];
         $c['orders.saleImport'] = ['Import the monthly sales file of a shop', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];

@@ -317,12 +317,8 @@ class OrdersController extends Controller
     public function saleImportErrors(Request $r, int $id) { $this->can($r, 'orders.saleImport'); return \App\Services\SalesImport::errors($id); }
     public function saleImportUnmatched(Request $r, int $id)
     {
-        $this->can($r, 'orders.saleImport'); $rows = \App\Services\SalesImport::unmatched($id);
-        if ($r->query('format') !== 'csv') return ['rows' => $rows];
-        $b = \App\Services\SalesImport::batch($id); $out = fopen('php://temp', 'w+'); fputcsv($out, ['Line', 'Order No', 'SKU', 'Buyer', 'Product', 'Qty', 'Total', 'Order Date', 'Why not matched'], ',', '"', '\\');
-        foreach ($rows as $x) fputcsv($out, array_map(fn ($v) => is_string($v) && preg_match('/^[=+\-@]/', $v) ? "'" . $v : $v, [$x['line'], $x['order_no'], $x['sku'], $x['buyer'], $x['product'], $x['qty'], $x['total'], $x['d_order'], $x['why']]), ',', '"', '\\');
-        rewind($out); $csv = stream_get_contents($out);
-        return response("\xEF\xBB\xBF" . $csv, 200, ['Content-Type' => 'text/csv; charset=UTF-8', 'Content-Disposition' => 'attachment; filename="not-matched-' . sprintf('%04d-%02d', $b->period_year, $b->period_month) . '.csv"']);
+        $this->can($r, 'orders.saleImport'); if ($r->query('format') !== 'csv') return ['rows' => \App\Services\SalesImport::unmatched($id)];
+        return $this->run(function () use ($r, $id) { $x = \App\Services\DsMatch::csv(['batch' => $id], $r->user()); return response($x['body'], 200, ['Content-Type' => 'text/csv; charset=UTF-8', 'Content-Disposition' => 'attachment; filename="' . $x['name'] . '"']); });
     }
     public function saleImportSku(Request $r) { $this->can($r, 'orders.saleImport'); return $r->query('q') !== null ? ['rows' => \App\Services\SalesImport::skuSearch((string) $r->query('q'))] : \App\Services\SalesImport::skuCheck((string) $r->query('sku')); }
     public function saleImportLink(Request $r, int $id) { return $this->run(fn () => \App\Services\SalesImport::link($id, (string) $r->input('sku'), $r->user())); }
@@ -352,4 +348,12 @@ class OrdersController extends Controller
     }
     public function saleUnlockInfo(Request $r) { $this->can($r, 'orders.saleUnlock'); return Sales::unlockInfo((int) $r->query('shop'), (string) $r->query('month')); }
     public function saleUnlock(Request $r) { return $this->run(fn () => Sales::unlockMonth((int) $r->input('shop'), (string) $r->input('month'), (string) $r->input('reason'), $r->user())); }
+
+    // ---------- drop-shipping match (R-A_SALES-19 … 26) ----------
+    public function saleRematch(Request $r) { return $this->run(fn () => \App\Services\DsMatch::rematch($this->saleFilters($r), $r->user())); }
+    public function saleNotMatchedCsv(Request $r) { return $this->run(function () use ($r) { $this->can($r, 'orders.SEE'); $x = \App\Services\DsMatch::csv($this->saleFilters($r), $r->user()); return response($x['body'], 200, ['Content-Type' => 'text/csv; charset=UTF-8', 'Content-Disposition' => 'attachment; filename="' . $x['name'] . '"']); }); }
+    public function saleMatch(Request $r, int $id) { return $this->run(function () use ($r, $id) { $this->can($r, 'orders.SEE'); return \App\Services\DsMatch::explain($id, $r->user()); }); }
+    public function saleDsCandidates(Request $r, int $id) { $this->can($r, 'orders.dsLink'); return \App\Services\DsMatch::candidates($id, $r->user()); }
+    public function saleDsLink(Request $r, int $id) { return $this->run(fn () => \App\Services\DsMatch::link($id, (int) $r->input('item'), (string) $r->input('reason'), $r->user())); }
+    public function saleDsUnlink(Request $r, int $id) { return $this->run(fn () => \App\Services\DsMatch::unlink($id, (string) $r->input('reason'), $r->user())); }
 }

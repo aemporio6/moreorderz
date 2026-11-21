@@ -135,7 +135,7 @@ class SalesImportTest extends TestCase
     {
         $this->world();
         $r = $this->go($this->file([$this->row('N-1', '05/07/2026', '', '1', '£5.00', '', 'Mystery item')]));
-        $s = DB::table('t_sales')->where('order_no', 'N-1')->first(); $this->assertMatchesRegularExpression('/^NOSKU-[0-9a-f]{12}$/', $s->sku); $this->assertSame(['unmatched', 'No SKU in the file'], [$s->sale_source, $s->ds_note]);
+        $s = DB::table('t_sales')->where('order_no', 'N-1')->first(); $this->assertMatchesRegularExpression('/^NOSKU-[0-9a-f]{12}$/', $s->sku); $this->assertSame(['unmatched', 'No SKU; no drop shipping item matched (best 0 of 5, 3 needed)'], [$s->sale_source, $s->ds_note]);
         $this->assertSame(SalesImport::noSku('N-1', 'Mystery item', 1, 5.0), SalesImport::noSku('n-1', 'MYSTERY item', 1, 5.0));
         // the same line in the August file → duplicate error that names the month, not a second line
         $r2 = $this->go($this->file([$this->row('N-1', '05/07/2026', '', '1', '£5.00', '', 'Mystery item'), $this->row('Z-9', '03/08/2026')]), ['month' => 8], true, '101A_aug26.csv');

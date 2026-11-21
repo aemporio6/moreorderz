@@ -28,6 +28,8 @@ class AppServiceProvider extends ServiceProvider
         \App\Services\Approvals::handler('EXPENSE', function (object $a, bool $ok) {
             if ($ok) { \Illuminate\Support\Facades\DB::table('fin_expenses')->where('id', $a->entity_id)->update(['f_active' => 1]); \App\Services\MoneyService::postExpense((int) $a->entity_id); }
         });
+        // a supplier-orders file of a shop + month was applied: its not-matched sale lines are matched again by themselves (R-A_SALES-25)
+        EventBus::listen('DS_BATCH_APPLIED', function (array $e) { $p = $e['payload']; if (! empty($p['month']) && ! empty($p['year'])) \App\Services\DsMatch::afterDsBatch((int) ($p['shop'] ?? $e['entity_id']), (int) $p['month'], (int) $p['year']); });
         EventBus::listen('GRN_POSTED', function (array $e) {
             foreach (DB::table('fin_lots')->whereIn('id', $e['payload']['lots'] ?? [])->pluck('fk_id_product')->unique() as $pid) DispatchService::fillShorts((int) $pid);
         });

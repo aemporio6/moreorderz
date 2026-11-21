@@ -251,6 +251,12 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('print-routes', [PrintController::class, 'route']);
         Route::get('orders', [OrdersController::class, 'board']);
         Route::get('sales', [OrdersController::class, 'saleLines']);
+        Route::post('sales/rematch', [OrdersController::class, 'saleRematch']);
+        Route::get('sales/not-matched.csv', [OrdersController::class, 'saleNotMatchedCsv']);
+        Route::get('sales/{id}/match', [OrdersController::class, 'saleMatch'])->whereNumber('id');
+        Route::get('sales/{id}/ds-candidates', [OrdersController::class, 'saleDsCandidates'])->whereNumber('id');
+        Route::post('sales/{id}/ds-link', [OrdersController::class, 'saleDsLink'])->whereNumber('id');
+        Route::post('sales/{id}/ds-unlink', [OrdersController::class, 'saleDsUnlink'])->whereNumber('id');
         Route::post('sales/view-columns', [OrdersController::class, 'saleViewColumns']);
         Route::get('sales/extra/{mp}', [OrdersController::class, 'saleExtra'])->whereNumber('mp');
         Route::post('sales/extra/{mp}', [OrdersController::class, 'saleExtraSave'])->whereNumber('mp');

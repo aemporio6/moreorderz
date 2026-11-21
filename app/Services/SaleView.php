@@ -122,7 +122,7 @@ class SaleView
     public static function strip($q, bool $money): array
     {
         $t = (clone $q)->selectRaw("COUNT(*) n, COALESCE(SUM(s.qty),0) qty, COALESCE(SUM(s.total_amount),0) sale, COALESCE(SUM(s.buy_amount),0) buy, COALESCE(SUM(s.profit),0) profit, COALESCE(SUM(CASE WHEN s.profit < 0 THEN -s.profit ELSE 0 END),0) loss")->first();
-        $out = ['records' => (int) $t->n, 'qty' => (int) $t->qty, 'sale' => round((float) $t->sale, 2)];
+        $out = ['records' => (int) $t->n, 'qty' => (int) $t->qty, 'sale' => round((float) $t->sale, 2), 'no_cost' => (int) (clone $q)->where('s.sale_source', 'unmatched')->count()];
         if (! $money) return $out;
         $per = (clone $q)->where('s.fk_id_import', '>', 0)->groupBy('s.fk_id_import')->selectRaw('s.fk_id_import b, COALESCE(SUM(s.profit),0) profit')->pluck('profit', 'b'); $fee = 0.0; $va = 0.0; $pcts = [];
         foreach (DB::table('t_sale_imports')->whereIn('id', $per->keys())->get(['id', 'marketplace_fee', 'va_share_percentage']) as $b) {
@@ -175,7 +175,7 @@ class SaleView
             'qty' => (string) (int) $r['qty'], 'sale_rate', 'total_amount', 'raw_price', 'buy_rate', 'buy_amount', 'profit' => $m($r[$key] ?? 0),
             'carrier' => $m($r['carrier_rate'] ?? 0) . (! empty($r['carrier_name']) ? "\n" . $r['carrier_name'] : ''), 'packing' => $m($r['packing_rate'] ?? 0) . (! empty($r['packing_name']) ? "\n" . $r['packing_name'] : ''),
             'visibility' => $r['kind'] === 'DS' ? 'Drop shipping' . (! empty($r['ds_platform']) ? " ({$r['ds_platform']})" : '') : (string) $r['visibility'],
-            'investor' => (string) ($r['investor'] ?? 'None'), 'url' => (string) ($r['product_url'] ?? ''),
+            'investor' => ! empty($r['ds']) ? trim(($r['ds']['buyer'] ?? '') . "\n" . ($r['ds']['platform'] ?? '') . "\nDS qty: " . ($r['ds']['qty'] ?? '')) : (string) ($r['investor'] ?? 'None'), 'url' => (string) ($r['product_url'] ?? ''),
             default => str_starts_with($key, 'xc_') ? (string) ($r['xc'][$key] ?? '') : (string) ($r[$key] ?? ''),
         };
     }

@@ -247,7 +247,7 @@ class SalesImport
                 $line = ['fk_id_ent' => $ent, 'fk_id_import' => $target, 'fk_id_branch' => $shop->id, 'fk_id_marketplace' => (int) $shop->fk_id_marketplace, 'fk_product_id' => $product->id ?? 0, 'order_no' => $v['order_no'], 'd_order' => $date, 'cust_name' => $v['cust_name'], 'cust_contacts' => $v['cust_contacts'], 'sku' => $sku,
                     'product_info' => $v['product_info'] !== '' ? $v['product_info'] : (string) ($product->product_name_vendor ?? ''), 'qty' => $qty, 'sale_rate' => $rate, 'total_amount' => $total, 'f_out_of_period' => $flag, 'status' => 'Pending', 'f_stock_deducted' => 0, 'sale_source' => $product ? 'active' : 'unmatched',
                     'raw_csv' => json_encode($row, JSON_UNESCAPED_UNICODE), 'fk_id_currency' => BuyingService::currencyId($cur), 'total_amount_gbp' => Fx::toBase((float) $total, $cur, $date, $ent), 'batch_row_no' => $ln, 'line_status' => 'OPEN', 'fulfilment_channel' => $shop->fulfilment_channel ?: 'SELF', 'fk_id_sell_location' => $shop->fk_id_main_location,
-                    'fk_id_company' => (int) ($shop->fk_id_company ?? 0) ?: null, 'ds_note' => $product ? '' : ($isNo ? 'No SKU in the file' : 'SKU not in inventory')];
+                    'fk_id_company' => (int) ($shop->fk_id_company ?? 0) ?: null, 'ds_note' => $product ? '' : ($isNo ? 'No SKU' : 'SKU not in inventory')];
                 if ($product) { $line = array_merge($line, SaleLines::intakeCost($product, $shop, $date, $qty, (float) $rate, (float) $total, $ent), ['d_buy' => $product->d_purchase_date ?? null, 'product_url' => isset($product->url_ebay) ? mb_substr((string) $product->url_ebay, 0, 500) : null, 'fk_id_vendor' => (int) ($product->fk_id_vendor ?? 0) ?: null]);
                     if ($line['cost_source'] === 'current') $st['cost_current']++; if ($line['cost_source'] === 'product') $st['cost_product']++; }
                 if ($dup && ! (int) $dup->fk_id_import) {      // daily intake line: the monthly file is merged into it, the line is not replaced
@@ -262,6 +262,16 @@ class SalesImport
                 $newKeys[$key] = [(float) $total, $qty];
                 if (! $product && count($unmatchedRows) < 200) $unmatchedRows[] = ['id' => $id, 'order_no' => $v['order_no'], 'sku' => $isNo ? '-' : $sku, 'buyer' => $v['cust_name'], 'product' => mb_substr($v['product_info'], 0, 120), 'qty' => $qty, 'total' => (float) $total, 'why' => $line['ds_note']];
                 if ((float) $total <= 0) TaskEngine::open('SAL_ZERO', [$id], "Sale line with zero value: order {$v['order_no']} · $sku", ['ent' => $ent, 'module' => 't_sales', 'record_id' => $id]);
+            }
+            // lines without a product of ours are compared with the supplier orders of this shop and month (R-A_SALES-19 … 23); one run at a time
+            $nmIds = DB::table('t_sales')->where('fk_id_import', $batch)->where('sale_source', 'unmatched')->pluck('id')->all(); $st['conflicts'] = 0;
+            if ($nmIds && ! $totals) {
+                $ds = DsMatch::locked(fn () => DsMatch::run($nmIds, (int) $shop->id, $m, $y, $old->id ?? null));
+                $st['ds'] = $ds['matched']; $st['unmatched'] -= $ds['matched']; $st['conflicts'] = count($ds['conflicts']); $warnings = array_merge($warnings, $ds['warnings']);
+                if ($ds['conflicts']) $warnings[] = count($ds['conflicts']) . ' drop shipping line(s) had two supplier orders with the same score – check them on the Sales page (the match badge)';
+                $dsl = DB::table('t_sales')->where('fk_id_import', $batch)->where('sale_source', 'ds')->selectRaw('COALESCE(SUM(buy_amount),0) b, COALESCE(SUM(profit),0) p')->first(); $st['buy'] += (float) $dsl->b; $st['profit'] += (float) $dsl->p;
+                $now = DB::table('t_sales')->whereIn('id', array_column($unmatchedRows, 'id'))->get(['id', 'sale_source', 'ds_match_count', 'ds_note'])->keyBy('id');
+                $unmatchedRows = array_values(array_filter(array_map(fn ($r) => ($now[$r['id']]->sale_source ?? '') === 'unmatched' ? ['best' => (int) $now[$r['id']]->ds_match_count . '/5', 'why' => $now[$r['id']]->ds_note] + $r : null, $unmatchedRows)));
             }
             foreach (['sale', 'buy', 'profit'] as $k) $st[$k] = round($st[$k], 2);
             if ($st['saved'] + $st['errors'] + $st['skipped'] === 0) throw new \InvalidArgumentException('The CSV has a header row but no sale rows.');
@@ -350,7 +360,7 @@ class SalesImport
     public static function unmatched(int $batchId, int $limit = 2000): array
     {
         self::batch($batchId);
-        return DB::table('t_sales')->where('fk_id_import', $batchId)->where('sale_source', 'unmatched')->orderBy('batch_row_no')->limit($limit)->get(['id', 'batch_row_no as line', 'order_no', 'sku', 'cust_name as buyer', 'product_info as product', 'qty', 'total_amount as total', 'd_order', 'ds_note as why'])
+        return DB::table('t_sales')->where('fk_id_import', $batchId)->where('sale_source', 'unmatched')->orderBy('batch_row_no')->limit($limit)->get(['id', 'batch_row_no as line', 'order_no', 'sku', 'cust_name as buyer', 'product_info as product', 'qty', 'total_amount as total', 'd_order', 'ds_note as why', 'ds_match_count as best'])
             ->map(fn ($r) => ['sku' => str_starts_with((string) $r->sku, 'NOSKU-') ? '' : $r->sku, 'no_sku' => str_starts_with((string) $r->sku, 'NOSKU-')] + (array) $r)->all();
     }
 

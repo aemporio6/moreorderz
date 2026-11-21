@@ -362,6 +362,9 @@ class SaleLines
 
     public const PAGE_SIZES = [20, 50, 100, 200];
 
+    /** The filtered query of the list (alias s), for other services (export, Re-match, the not-matched CSV). */
+    public static function query(array $f, ?object $u) { if (empty($f['batch']) && empty($f['from']) && empty($f['to']) && ! empty($f['marketplace'])) { $f['from'] = date('Y-m-01'); $f['to'] = date('Y-m-t'); } return self::filtered($f, $u); }
+
     private static function filtered(array $f, ?object $u)
     {
         $ent = (int) Context::ent();
@@ -407,7 +410,7 @@ class SaleLines
         $shops = Perm::mine(DB::table('t_branches as b')->leftJoin('cat_marketplaces as m', 'm.id', '=', 'b.fk_id_marketplace'), 'b.id')->where('b.fk_id_ent', $ent)->orderBy('b.shop_no')
             ->get(['b.id', 'b.fk_id_marketplace as marketplace', DB::raw("CONCAT(COALESCE(NULLIF(m.marketplace_short,''), m.marketplace_descr, ''), ' - ', COALESCE(b.shop_no,''), ' ', COALESCE(b.shop_name,''), IF(b.f_active = 1, '', ' (inactive)')) as name")]);
         $base = ['marketplaces' => $mps, 'shops' => $shops, 'periods' => self::periods(), 'page_sizes' => self::PAGE_SIZES, 'natures' => self::NATURES, 'source_tags' => self::SOURCE_TAGS,
-            'rights' => ['see_cost' => $u && Perm::has($u, 'orders.MONEY'), 'delete_month' => $u && Perm::has($u, 'orders.saleDeleteMonth'), 'export' => $u && Perm::has($u, 'orders.saleExport'), 'unlock' => $u && Perm::has($u, 'orders.saleUnlock'), 'import' => $u && Perm::has($u, 'orders.saleImport'), 'confirm' => $u && Perm::has($u, 'orders.CONFIRM')],
+            'rights' => ['see_cost' => $u && Perm::has($u, 'orders.MONEY'), 'delete_month' => $u && Perm::has($u, 'orders.saleDeleteMonth'), 'export' => $u && Perm::has($u, 'orders.saleExport'), 'rematch' => $u && Perm::has($u, 'orders.dsRematch'), 'ds_link' => $u && Perm::has($u, 'orders.dsLink'), 'unlock' => $u && Perm::has($u, 'orders.saleUnlock'), 'import' => $u && Perm::has($u, 'orders.saleImport'), 'confirm' => $u && Perm::has($u, 'orders.CONFIRM')],
             'self_check' => SalesImport::selfCheckMessage()];
         if (! empty($f['batch']) && ($bt = DB::table('t_sale_imports as i')->join('t_branches as b', 'b.id', '=', 'i.fk_id_branch')->where('i.id', (int) $f['batch'])->where('i.fk_id_ent', $ent)->first(['i.id', 'i.status', 'i.error_rows', 'i.period_month', 'i.period_year', 'i.fk_id_branch', 'b.shop_no', 'b.shop_name'])))
             $base['batch_info'] = ['id' => $bt->id, 'label' => 'Showing one import only: ' . $bt->shop_no . ' (' . $bt->shop_name . ') - ' . SalesImport::monthName((int) $bt->period_month, (int) $bt->period_year), 'status' => $bt->status, 'errors' => (int) $bt->error_rows, 'shop' => (int) $bt->fk_id_branch, 'month' => sprintf('%04d-%02d', $bt->period_year, $bt->period_month)];
@@ -427,15 +430,18 @@ class SaleLines
                 'b.shop_no', 'b.shop_name', DB::raw("CONCAT(cc.carrier_name, '-', cv.pkg_svc_name) as carrier_name"), 'pk.packing_name', 'co.ent_name as company']);
         $money = $base['rights']['see_cost'];
         $invs = []; foreach (DB::table('t_product_investors as pi')->join('t_account as a', 'a.id', '=', 'pi.fk_id_account')->whereIn('pi.fk_id_product', $rows->pluck('fk_product_id')->filter()->unique())->get(['pi.fk_id_product', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as n")]) as $i) $invs[$i->fk_id_product][] = $i->n;
-        $plats = $rows->pluck('fk_drp_item')->filter()->isEmpty() ? [] : DB::table('drp_items as d')->leftJoin('drp_platforms as p', 'p.id', '=', 'd.fk_platform')->whereIn('d.id', $rows->pluck('fk_drp_item')->filter()->unique())->pluck('p.platform_name', 'd.id')->all();
-        $out = $rows->map(function ($s) use ($u, $money, $invs, $plats) {
+        $dsi = $rows->pluck('fk_drp_item')->filter()->isEmpty() ? collect() : DB::table('drp_items as d')->leftJoin('drp_platforms as p', 'p.id', '=', 'd.fk_platform')->whereIn('d.id', $rows->pluck('fk_drp_item')->filter()->unique())->get(['d.id', 'd.ship_name', 'd.qty', 'p.platform_name'])->keyBy('id');
+        $plats = $dsi->map(fn ($x) => $x->platform_name)->all();
+        $out = $rows->map(function ($s) use ($u, $money, $invs, $plats, $dsi) {
             $kind = self::kind($s); $a = self::actions($s, $u);
             $row = ['id' => $s->id, 'order_no' => $s->order_no, 'd_order' => $s->d_order, 'cust_name' => $s->cust_name, 'cust_contacts' => $s->cust_contacts, 'sku' => $kind === 'DS' && preg_match('/^(NOSKU|DS-\d+)/', (string) $s->sku) ? '-' : $s->sku, 'product_info' => $s->product_info, 'qty' => (int) $s->qty,
                 'sale_rate' => (float) $s->sale_rate, 'total_amount' => (float) $s->total_amount, 'status' => $s->status, 'confirmed' => self::confirmed($s), 'kind' => $kind, 'edited' => (bool) $s->f_edited, 'out_of_period' => (bool) $s->f_out_of_period, 'shop' => trim($s->shop_no . ' ' . $s->shop_name), 'shop_no' => $s->shop_no, 'fk_id_branch' => $s->fk_id_branch,
                 'visibility' => $kind === 'DS' ? 'Drop shipping' : ($kind === 'NM' ? 'Not matched' : ($s->visibility_mode === 'POOL' ? 'Pool' : ($s->visibility_mode === 'PRIVATE' ? 'Private' : 'Not set'))), 'company' => $s->company, 'nm_note' => $kind === 'NM' ? $s->ds_note : null, 'product_id' => (int) $s->fk_product_id ?: null, 'ds_item' => (int) $s->fk_drp_item ?: null,
                 'refund' => $s->status === 'Refunded' ? ['nature' => self::NATURES[$s->refund_loss_nature] ?? $s->refund_loss_nature, 'loss' => (float) $s->refund_loss_amount, 'reason' => $s->refund_reason] : null,
                 'actions' => array_map(fn ($x) => ['ok' => (bool) $x[0], 'why' => $x[0] ? null : $x[1]], $a), 'month' => substr((string) $s->d_order, 0, 7),
-                'investor' => $kind === 'OWN' ? (implode(', ', $invs[$s->fk_product_id] ?? []) ?: 'None') : ($kind === 'DS' ? 'Drop shipping' : 'None'), 'ds_platform' => $plats[$s->fk_drp_item] ?? null, 'xc' => SaleView::extraValues($s->raw_csv, (int) $s->fk_id_marketplace)];
+                'investor' => $kind === 'OWN' ? (implode(', ', $invs[$s->fk_product_id] ?? []) ?: 'None') : ($kind === 'DS' ? 'Drop shipping' : 'None'), 'ds_platform' => $plats[$s->fk_drp_item] ?? null,
+                'ds' => $kind === 'DS' ? ['n' => (int) $s->ds_match_count, 'colour' => (int) $s->ds_match_count >= 5 ? '#28a745' : ((int) $s->ds_match_count === 4 ? '#20c997' : '#ffc107'), 'buyer' => $dsi[$s->fk_drp_item]->ship_name ?? null, 'platform' => $plats[$s->fk_drp_item] ?? null, 'qty' => isset($dsi[$s->fk_drp_item]) ? (int) $dsi[$s->fk_drp_item]->qty : null,
+                    'differs' => isset($dsi[$s->fk_drp_item]) && (int) $dsi[$s->fk_drp_item]->qty !== (int) $s->qty ? 'Not the same as the sale quantity (' . (int) $s->qty . ')' : null, 'gone' => ! isset($dsi[$s->fk_drp_item])] : null, 'best' => $kind === 'NM' ? 'best ' . (int) $s->ds_match_count . '/5' : null, 'xc' => SaleView::extraValues($s->raw_csv, (int) $s->fk_id_marketplace)];
             if ($money) $row += ['raw_price' => $kind === 'OWN' ? (float) $s->raw_price : 0.0, 'carrier_rate' => $kind === 'OWN' ? (float) $s->carrier_rate : 0.0, 'packing_rate' => $kind === 'OWN' ? (float) $s->packing_rate : 0.0, 'buy_rate' => $kind === 'DS' ? 0.0 : (float) $s->buy_rate, 'buy_amount' => (float) $s->buy_amount, 'profit' => (float) $s->profit,
                 'carrier_name' => $s->carrier_name, 'packing_name' => $s->packing_name, 'cost_source' => $s->cost_source, 'cost_tag' => self::SOURCE_TAGS[$s->cost_source] ?? null, 'd_buy' => $s->d_buy, 'product_url' => $s->product_url, 'loss' => (float) $s->profit < 0];
             return $row;
