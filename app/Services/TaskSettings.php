@@ -14,13 +14,15 @@ class TaskSettings
     private static function role(): string { return (string) (Auth::user()->role_code ?? Context::role() ?? ''); }
     private static function boss(): bool { return in_array(self::role(), ['OWNER', 'PARTNER', 'MANAGER'], true); }
     private static function partner(): bool { return in_array(self::role(), ['OWNER', 'PARTNER'], true); }
+    /** Settings › Choices role lists (owner rule 22 Nov): ABSENCE_ROLES, DELEGATION_ROLES, CATEGORY_ROLES. */
+    private static function may(string $key, ?string $role = null): bool { return Choices::has($key, (int) (Context::ent() ?: 0) ?: null, $role ?? self::role()); }
     private static function v(array $data, array $old, string $k) { return array_key_exists($k, $data) ? $data[$k] : ($old[$k] ?? null); }
     private static function name(int $acc): string { return (string) DB::table('t_account')->where('id', $acc)->selectRaw("TRIM(CONCAT_WS(' ', first_name, sur_name)) n")->value('n'); }
 
     /** R-G_CORE-16 form check of an absence (user_id / cover_user_id are persons). */
     public static function absence(array &$data, array $old, ?int $id): array
     {
-        if (Auth::user() && ! self::boss()) return ['_form' => 'Refused: only a Partner or Manager can set absences.'];
+        if (Auth::user() && ! self::may('ABSENCE_ROLES')) return ['_form' => 'Refused: only a Partner or Manager can set absences.'];
         $who = (int) self::v($data, $old, 'user_id'); $cov = (int) self::v($data, $old, 'cover_user_id'); $from = (string) self::v($data, $old, 'from_date'); $to = (string) self::v($data, $old, 'to_date');
         if (! $from || ! $to || $to < $from) return ['to_date' => 'Refused: give a from-date and a to-date on or after it.'];
         if ($cov && $cov === $who) return ['cover_user_id' => 'Refused: someone cannot cover for themselves.'];
@@ -34,7 +36,7 @@ class TaskSettings
     /** "Back today" / "End now": to_date = yesterday; an absence that starts today or later is cancelled (to_date = from_date − 1). Never deleted. */
     public static function endAbsence(int $id, object $u): string
     {
-        if (! in_array($u->role_code, ['OWNER', 'PARTNER', 'MANAGER'], true)) throw new \InvalidArgumentException('Refused: only a Partner or Manager can set absences.');
+        if (! self::may('ABSENCE_ROLES', $u->role_code)) throw new \InvalidArgumentException('Refused: only a Partner or Manager can set absences.');
         $a = DB::table('user_absence')->where('id', $id)->first() ?? throw new \InvalidArgumentException('Absence not found.');
         $y = date('Y-m-d', strtotime('-1 day'));
         $to = $a->from_date >= date('Y-m-d') ? date('Y-m-d', strtotime($a->from_date . ' -1 day')) : $y;
@@ -61,7 +63,7 @@ class TaskSettings
     /** R-G_CORE-17 form check of a delegation (logins). */
     public static function delegation(array &$data, array $old, ?int $id): array
     {
-        if (Auth::user() && ! self::partner()) return ['_form' => 'Refused: only a Partner can set delegations.'];
+        if (Auth::user() && ! self::may('DELEGATION_ROLES')) return ['_form' => 'Refused: only a Partner can set delegations.'];
         $f = (int) self::v($data, $old, 'from_user_id'); $t = (int) self::v($data, $old, 'to_user_id');
         $act = fn ($x) => $x && DB::table('t_users')->where('id', $x)->where('f_active', 1)->exists();
         if (! $f || ! $t || $f === $t || ! $act($f) || ! $act($t)) return ['to_user_id' => 'Refused: pick two different active people.'];
@@ -73,7 +75,7 @@ class TaskSettings
 
     public static function endDelegation(int $id, object $u): string
     {
-        if (! in_array($u->role_code, ['OWNER', 'PARTNER'], true)) throw new \InvalidArgumentException('Refused: only a Partner can set delegations.');
+        if (! self::may('DELEGATION_ROLES', $u->role_code)) throw new \InvalidArgumentException('Refused: only a Partner can set delegations.');
         $d = DB::table('tm_delegations')->where('id', $id)->first() ?? throw new \InvalidArgumentException('Delegation not found.');
         $y = date('Y-m-d', strtotime('-1 day')); DB::table('tm_delegations')->where('id', $id)->update(['to_date' => max($y, date('Y-m-d', strtotime($d->from_date . ' -1 day')))]);
         Audit::log('tm_delegations', $id, 'UPDATE', ['to_date' => [$d->to_date, $y]], 'End now');
@@ -91,7 +93,7 @@ class TaskSettings
     /** R-G_CORE-23 form check of a category (Partner only). */
     public static function category(array &$data, array $old, ?int $id): array
     {
-        if (Auth::user() && ! self::partner()) return ['_form' => 'Refused: only a Partner can change task categories.'];
+        if (Auth::user() && ! self::may('CATEGORY_ROLES')) return ['_form' => 'Refused: only a Partner can change task categories.'];
         $name = trim((string) self::v($data, $old, 'name'));
         if ($name === '') return ['name' => 'Refused: the category name is required.'];
         if (mb_strlen($name) > 100) return ['name' => 'Refused: the category name is longer than 100 characters.'];

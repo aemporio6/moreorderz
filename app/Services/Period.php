@@ -27,7 +27,10 @@ class Period
             'LAST_6_MONTHS' => [$t->modify('-6 months'), $t], 'THIS_YEAR' => [$t->setDate((int) $t->format('Y'), 1, 1), $t],
             'CUSTOM' => [new \DateTimeImmutable(self::ymd($from) ?? $d($t->modify('first day of this month'))), new \DateTimeImmutable(self::ymd($to) ?? $d($t))],
         };
-        if ($f > $e) [$f, $e] = [$e, $f];
+        if ($f > $e) {      // Settings › Choices PERIOD_FROM_AFTER_TO (default: swap)
+            if ($key === 'CUSTOM' && Choices::get('PERIOD_FROM_AFTER_TO', Context::ent() ? (int) Context::ent() : null) === 'REFUSE') throw new \InvalidArgumentException('From is after To – change the dates.');
+            [$f, $e] = [$e, $f];
+        }
         return ['key' => $key, 'label' => self::OPTIONS[$key], 'from' => $d($f), 'to' => $d($e)];
     }
 

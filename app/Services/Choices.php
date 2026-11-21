@@ -104,11 +104,18 @@ class Choices
             'ANY' => ['on any marketplace × shop', 'Suggested (K5).'], 'ALL' => ['on every marketplace × shop it is listed on', 'Private only when it is never pool anywhere.']]],
         'FREE_CASH_COMMITTED' => ['Free cash (alert FA1): which supplier payments are taken off the bank?', 'Free cash = bank − supplier payments still open − approved withdrawals. Recommended: every open payment – money promised to suppliers is not free.', 'ALL_OPEN', [
             'ALL_OPEN' => ['every open supplier payment', 'Suggested.'], 'DUE_30' => ['only payments due in the next 30 days', 'Later payments are left out (more free cash shown).'], 'DUE_7' => ['only payments due in the next 7 days', '']]],
+        'PERIOD_FROM_AFTER_TO' => ['Period filter: a custom range whose From is after its To …', 'Recommended: swap the two dates – the person clearly meant that range, nothing is lost.', 'SWAP', [
+            'SWAP' => ['is swapped', 'Suggested.'], 'REFUSE' => ['is refused with a message', 'The card says "From is after To" and shows nothing until it is fixed.']]],
+        'ABSENCE_ROLES' => ['Tasks › Team & settings: who may set an absence (and its cover)?', 'Recommended: Owner, Partner and Manager – the people who plan the work.', 'OWNER,PARTNER,MANAGER', []],
+        'DELEGATION_ROLES' => ['Tasks › Team & settings: who may set a delegation (someone approves for someone else)?', 'Recommended: Owner and Partner – a delegation hands over approval rights.', 'OWNER,PARTNER', []],
+        'CATEGORY_ROLES' => ['Tasks › Team & settings: who may change task categories (SLA, default owner, escalation)?', 'Recommended: Owner and Partner – categories decide who is chased and when.', 'OWNER,PARTNER', []],
+        'DELEGATION_ALL_MONEY' => ['A delegation with rights "ALL" also lets the person decide money approvals?', 'Recommended: Yes – "ALL" means everything the absent person may do; use rights "APPROVE" for tasks only.', '1', [
+            '1' => ['Yes', 'Suggested.'], '0' => ['No, money approvals stay with their own approvers', '']]],
         'HIDDEN_MARGIN_ROLES' => ['Owner Home › Invoicing / Profit: who sees the row "Hidden margin"?', 'Recommended: Owner only – a partner\'s share is worked out on the net profit, so the margin kept by the company stays with the Owner.', 'OWNER', []],
     ];
 
     /** Multiple choices: key → where the options come from (party roles = roles of people, login roles = roles of logins). Value = comma list or ALL. */
-    public const MULTI = ['DIRECTOR_ROLES' => 'party_roles', 'HIDDEN_MARGIN_ROLES' => 'login_roles', 'FBA_LOCATION_KINDS' => 'list:LOCATION_KIND', 'TASK_PROOF_OFF_ROLES' => 'login_roles', 'CHANNEL_SWITCH_ROLES' => 'login_roles'];
+    public const MULTI = ['DIRECTOR_ROLES' => 'party_roles', 'HIDDEN_MARGIN_ROLES' => 'login_roles', 'FBA_LOCATION_KINDS' => 'list:LOCATION_KIND', 'TASK_PROOF_OFF_ROLES' => 'login_roles', 'CHANNEL_SWITCH_ROLES' => 'login_roles', 'ABSENCE_ROLES' => 'login_roles', 'DELEGATION_ROLES' => 'login_roles', 'CATEGORY_ROLES' => 'login_roles'];
 
     /** [code => [label, effect]] of a multiple choice (All first). */
     public static function options(string $key): array

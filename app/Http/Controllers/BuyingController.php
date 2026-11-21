@@ -134,7 +134,7 @@ class BuyingController extends Controller
         if (in_array($card, ['payments', 'investors', 'invoicing'], true) && ! \App\Services\Perm::has($r->user(), 'buying.MONEY')) abort(403, 'This card needs the right to see money.');
         $money = \App\Services\Perm::has($r->user(), 'buying.MONEY');
         if ($card === 'sales' && ! \App\Services\Perm::has($r->user(), 'orders.SEE')) abort(403, 'This card needs the right to see sales.');
-        $per = in_array($card, ['investors', 'invoicing', 'team', 'buyingcard', 'sales'], true) ? \App\Services\Period::forCard((int) $r->user()->id, $card, $r->query('period'), $r->query('from'), $r->query('to')) : null;      // R-F_SETUP-27
+        try { $per = in_array($card, ['investors', 'invoicing', 'team', 'buyingcard', 'sales'], true) ? \App\Services\Period::forCard((int) $r->user()->id, $card, $r->query('period'), $r->query('from'), $r->query('to')) : null; } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }      // Choices PERIOD_FROM_AFTER_TO = REFUSE      // R-F_SETUP-27
         $fn = match ($card) {
             'contacts' => ['Contact today', fn () => \App\Services\SourcingBoard::contactToday($ent)], 'shipments' => ['Shipments on the way', fn () => \App\Services\SourcingBoard::shipments($ent, $r->boolean('all') ? 500 : 15)],
             'payments' => ['Supplier payments', fn () => \App\Services\DashCards::payments($ent)], 'needs' => ['Needs action', fn () => \App\Services\DashCards::needs($ent, $r->boolean('all'))],
