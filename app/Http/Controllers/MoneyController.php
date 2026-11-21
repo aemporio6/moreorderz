@@ -134,6 +134,28 @@ class MoneyController extends Controller
     /** R-FIN-25 report status board per shop × report type. */
     public function reportBoard(Request $r) { $this->can($r, 'money.SEE'); return \App\Services\FinanceExports::board((int) Context::ent()); }
 
+    /** R-FIN-67 alerts screen: rules (Owner switches), open alerts, messages sent. */
+    public function alerts(Request $r)
+    {
+        $this->can($r, 'money.SEE');
+        return \App\Services\FinanceAlerts::screen((int) Context::ent(), max(1, (int) $r->query('page', 1)), $r->query('q') ?: null, max(1, (int) $r->query('mpage', 1)))
+            + ['may_edit' => $r->user()->role_code === 'OWNER', 'may_run' => in_array($r->user()->role_code, ['OWNER', 'FINANCE'], true)];
+    }
+
+    public function alertRule(Request $r, string $code)
+    {
+        abort_unless($r->user()->role_code === 'OWNER', 403, 'Only the Owner switches finance alerts.');
+        $d = $r->validate(['on' => 'nullable|boolean', 'to_roles' => 'nullable|array', 'channels' => 'nullable|array']);
+        return $this->run(fn () => \App\Services\FinanceAlerts::saveRule(strtoupper($code), array_filter($d, fn ($v) => $v !== null)));
+    }
+
+    public function alertsRun(Request $r)
+    {
+        abort_unless(in_array($r->user()->role_code, ['OWNER', 'FINANCE'], true), 403, 'Only the Owner or Finance runs the checks.');
+        $n = \App\Services\FinanceAlerts::run((int) Context::ent());
+        return $n + ['message' => "Checked: {$n['raised']} new, {$n['repeated']} sent again, {$n['resolved']} resolved."];
+    }
+
     public function bankCreate(Request $r)
     {
         $this->can($r, 'money.EDIT');

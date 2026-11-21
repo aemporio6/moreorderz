@@ -1,6 +1,6 @@
 FIN-1|P|class PermCatalogue|finance rights are data now (matrix per role, switchable); open: the spec's fin.* action names and the PARTNER_ACCOUNT own-partner right are not mapped one to one
 FIN-2|P|function partnerOfUser|a PARTNER login sees only his own account and asks only his own withdrawal; route-level whitelist of 12 actions not built
-FIN-3|M||partner onboarding gate (6 items) not built
+FIN-3|B|class PartnerOnboarding|six items in fin_onboarding, old denial text with missing labels at login, ticks by events (agreement, capital, login link) + records (party, signed doc, ID doc), Owner ticks audited, staff login refused as Partner Account; existing partner logins grandfathered; FinanceAlertsTest r3
 FIN-4|P|vat_rate|VAT rate + corporation tax rate per company used for the reserve; the full settings form with checks not built
 FIN-5|F|form:fin_marketplace_setting|form only
 FIN-6|P|class Settings|some finance settings (overdue days, limits); the full key list with help / min / max not built
@@ -12,7 +12,7 @@ FIN-12|P|function overview|company switch; "All companies (added up)" and the Ne
 FIN-8|B|function saveAgreement|agreements with scope, %, fee, dates; history kept, paid agreement cannot be edited; "Change share" versioning partly
 FIN-13|B|function scopeTotals|share total per scope, over 100 % warning + close check
 FIN-15|P|ended_reason|agreement end with reason; automatic end when the PO is sold out not verified
-FIN-16|P|function account|partner balance (capital, profit, withdrawn); annualised return not built
+FIN-16|B|function annualReturn|profit / capital x 365 / days since first capital x 100, 2 dp, null at 0 capital, as-of; partner page KPI 'after tax reserve'; FinanceAlertsTest r16 (24.20)
 FIN-17|B|function requestWithdrawal|withdrawal request -> approval -> paid, never above balance
 FIN-18|B|function reinvestable|PartnerAccount::reinvest: refusal text as spec, PROFIT -x + CAPITAL_IN +x ref REINVEST, POOL agreement ended+copied (in place when it starts today), Owners told, GL 2100->2150; My Account confirm with new capital + Owner action; PartnerReinvestTest (3000/1000/2500 refused, allowed 2000)
 FIN-14|B|function callNew|capital calls: ask partners, answer, money received = capital; WhatsApp OK / NO answer and auto-match MC not built
@@ -52,8 +52,8 @@ FIN-62|B|function loanNew|loans given / taken, payments, balance, due task
 FIN-63|P|function vatCalc|VAT return 9 boxes; quarters from the Accountancy Hub stagger not built
 FIN-64|P|function budgets|budgets per month and category; Bank & cash page parts partly
 FIN-65|P|money|Money dashboard tiles + to-do list; forecast tiles, partners table partly
-FIN-66|P|FIN_BANK_STALE|3 of the 10 finance alerts as rule tasks (bank stale, settlement overdue, loan due); FA1, FA2, FA5-FA8, FA10 not built
-FIN-67|M||alerts screen with on / off not built
+FIN-66|B|class FinanceAlerts|FA1-FA10 in fin_alert_rules (on/off, roles, channels), hourly run, OPEN/RESOLVED with dedupe code+subject, repeat every alert_repeat_days, TASK FIN_<code>:<alert id>, WhatsApp FIN_ALERT / e-mail, settings thresholds; FA3/FA4/FA9 messages-only by default (their tasks come from existing rules); FA7 reads live lots (no snapshot table yet, FIN-51); free cash leaves out the unpaid tax reserve (not tracked); FinanceAlertsTest
+FIN-67|B|function screen|#/fin-alerts: rules with On/Off + roles + channels (Owner), open alerts paged, Messages sent with search, Run the checks now (Owner/Finance); FinanceAlertsTest r67 (FA6 off -> none raised)
 FIN-33|B|LEDGER_COLS|FinanceExports::ledger year export, spec column order, proof_link per line, Owner/Accountant only, audited, CSV BOM + XLSX logo; FinanceExportsTest
 FIN-69|P|class MarketplaceFiles|money reports per marketplace placed in shop x month; mappings are code, not profile data
 FIN-70|P|function split|bank layouts, auto-match, split lines; M6 invoice match, sum matching, provider profiles not built

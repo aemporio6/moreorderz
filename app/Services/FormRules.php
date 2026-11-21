@@ -50,6 +50,7 @@ class FormRules
         if ($table === 't_src_po_lines') return self::poLine($data, $old);
         if ($table === 't_product_marketplace_shipping') return self::mpFees($data, $old);
         if ($table === 't_account_branches') return ShopAssignments::check($data, $old, $id);      // R-C-41
+        if ($table === 'fin_partner_users' && ($e = PartnerOnboarding::checkLink(isset($data['user_id']) ? (int) $data['user_id'] : (isset($old['user_id']) ? (int) $old['user_id'] : null)))) return ['user_id' => $e];      // R-FIN-3
         if ($table === 'cat_marketplace_fields') return MarketplaceFields::prepare($data, $old, $id);      // R-A_SALES-67: slug name fixed after the first save, options → JSON
         if (isset(SecurityQuestions::KIT[$table]) && ($e = SecurityQuestions::check($table, $data, $old))) return $e;      // R-C-22
         if ($formKey !== 'cat_company_house') return [];

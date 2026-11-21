@@ -318,6 +318,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('partners/{id}/capital', [PartnerController::class, 'capital'])->whereNumber('id');
         Route::post('partners/{id}/withdraw', [PartnerController::class, 'withdraw'])->whereNumber('id');
         Route::post('partners/{id}/reinvest', [PartnerController::class, 'reinvest'])->whereNumber('id');
+        Route::post('partners/{id}/onboarding', [PartnerController::class, 'onboarding'])->whereNumber('id');
         Route::get('close', [CloseController::class, 'overview']);
         Route::get('close/month', [CloseController::class, 'page']);
         Route::post('close/check', [CloseController::class, 'check']);
@@ -339,6 +340,9 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('money/export/ledger', [MoneyController::class, 'exportLedger']);
         Route::get('money/export/valuation', [MoneyController::class, 'exportValuation']);
         Route::get('money/report-board', [MoneyController::class, 'reportBoard']);
+        Route::get('money/alerts', [MoneyController::class, 'alerts']);
+        Route::post('money/alerts/run', [MoneyController::class, 'alertsRun']);
+        Route::post('money/alerts/{code}', [MoneyController::class, 'alertRule'])->where('code', 'FA[0-9]+');
         Route::get('expenses', [MoneyController::class, 'expenses']);
         Route::post('expenses', [MoneyController::class, 'expenseAdd']);
         Route::post('expenses/{id}/cancel', [MoneyController::class, 'expenseCancel'])->whereNumber('id');

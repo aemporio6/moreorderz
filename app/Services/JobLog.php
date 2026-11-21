@@ -36,6 +36,7 @@ class JobLog
         $n = 0;
         foreach (DB::table('fin_bank_accounts')->where('company_id', $ent)->where('is_active', 1)->pluck('id') as $b) $n += MoneyService::autoMatch($ent, (int) $b);
         MoneyService::unmatchedTasks($ent); MoneyService::staleTasks($ent); $n += FxMissing::sweep();
+        $a = FinanceAlerts::run($ent); $n += $a['raised'] + $a['resolved'];      // R-FIN-66 the ten finance alerts
         return $n;
     }
 }

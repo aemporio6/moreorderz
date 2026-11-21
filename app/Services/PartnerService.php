@@ -71,6 +71,7 @@ class PartnerService
             DB::table('fin_investor_agreements')->where('id', $old->id)->update($row); $id = (int) $old->id;
         } else $id = (int) DB::table('fin_investor_agreements')->insertGetId($row + ['created_by' => Context::userId(), 'created_at' => now()]);
         Audit::log('fin_investor_agreements', $id, empty($d['id']) ? 'INSERT' : 'UPDATE', ['partner' => self::name((int) $d['investor_id']), 'scope' => $scope, 'pct' => $pct], null, $ent);
+        PartnerOnboarding::refresh((int) $d['investor_id'], 'Agreement saved');      // R-FIN-3 scope_entered
         $warn = null; $on = max($d['effective_from'], date('Y-m-d'));
         foreach (self::scopeTotals($ent, $on) as $k => $t) if ($t > 100.0001) $warn = 'WARNING: total share is over 100% in ' . self::scopeName($ent, $k) . ' (' . rtrim(rtrim(number_format($t, 3), '0'), '.') . '%). The period cannot close until this is fixed.';
         return ['id' => $id, 'warning' => $warn];
@@ -236,6 +237,22 @@ class PartnerService
         return ['capital' => round($g('CAPITAL_IN') + abs($g('REINVEST')), 2), 'profit_to_date' => round($g('PROFIT') + $g('MANAGEMENT_FEE'), 2), 'adjustments' => $g('ADJUSTMENT'), 'withdrawn' => abs($g('WITHDRAWAL')), 'balance' => round($earned - $out, 2)];
     }
 
+    /**
+     * R-FIN-16 annualised return: profit (PROFIT + MANAGEMENT_FEE) ÷ capital (Σ CAPITAL_IN) × 365 ÷ days since the first CAPITAL_IN (≥ 1) × 100, 2 dp;
+     * null when capital is 0. Profit is already after the tax reserve (R-FIN-41). Optional as-of date.
+     */
+    public static function annualReturn(int $ent, int $partner, ?string $asOf = null): array
+    {
+        $asOf ??= date('Y-m-d');
+        $q = DB::table('fin_investor_ledger')->where('company_id', $ent)->where('investor_id', $partner)->where('entry_date', '<=', $asOf);
+        $cap = round((float) (clone $q)->where('type', 'CAPITAL_IN')->sum('amount'), 2);
+        $profit = round((float) (clone $q)->whereIn('type', ['PROFIT', 'MANAGEMENT_FEE'])->sum('amount'), 2);
+        $first = (clone $q)->where('type', 'CAPITAL_IN')->min('entry_date');
+        $days = $first ? max(1, (int) round((strtotime($asOf) - strtotime($first)) / 86400)) : null;
+        return ['capital' => $cap, 'profit' => $profit, 'first_capital' => $first, 'days' => $days, 'as_of' => $asOf,
+            'return_pct_annualised' => $cap != 0.0 && $days ? round($profit / $cap * 365 / $days * 100, 2) : null];
+    }
+
     public static function capitalIn(int $ent, int $partner, float $amount, int $bankId, string $date, ?string $note = null): int
     {
         return DB::transaction(function () use ($ent, $partner, $amount, $bankId, $date, $note) {
@@ -246,6 +263,7 @@ class PartnerService
             $id = DB::table('fin_investor_ledger')->insertGetId(['investor_id' => $partner, 'company_id' => $ent, 'entry_date' => $date, 'type' => 'CAPITAL_IN', 'amount' => $base, 'note' => $note ? mb_substr($note, 0, 255) : null, 'created_by' => Context::userId(), 'created_at' => now()]);
             Ledger::post($ent, $date, 'PARTNER_CAPITAL', $id, [['account' => '1000', 'debit' => $base, 'ref_id' => (int) $bank->id, 'amount_cur' => $amount], ['account' => '2150', 'credit' => $base, 'ref_id' => $partner]], ['memo' => 'Capital in · ' . self::name($partner), 'currency' => $bank->currency ?: 'GBP']);
             Audit::log('fin_investor_ledger', $id, 'INSERT', ['type' => 'CAPITAL_IN', 'amount' => $base], $note, $ent);
+            PartnerOnboarding::refresh($partner, 'Capital received');      // R-FIN-3 capital_received
             return $id;
         });
     }

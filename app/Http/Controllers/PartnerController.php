@@ -53,6 +53,7 @@ class PartnerController extends Controller
         $ent = (int) Context::ent(); $own = $this->own($r); abort_if($own && $own !== $id, 403, 'You can only see your own partner account.');
         $p = Partners::partners($ent, $id)[0] ?? abort(404);
         return ['partner' => $p, 'base' => Fx::base($ent), 'own' => (bool) $own, 'statements' => Partners::statements($ent, $id), 'files' => Waterfall::statementFiles($ent, $id),
+            'annual' => Partners::annualReturn($ent, $id, $r->query('as_of') ?: null), 'onboarding' => \App\Services\PartnerOnboarding::refresh($id),
             'ledger' => DB::table('fin_investor_ledger')->where('company_id', $ent)->where('investor_id', $id)->orderByDesc('entry_date')->orderByDesc('id')->limit(300)->get(['id', 'entry_date', 'type', 'amount', 'reference_no', 'note']),
             'withdrawals' => DB::table('fin_withdrawals')->where('company_id', $ent)->where('investor_id', $id)->orderByDesc('id')->limit(50)->get(['id', 'amount', 'status', 'requested_at', 'paid_at', 'note']),
             'banks' => DB::table('fin_bank_accounts')->where('company_id', $ent)->where('is_active', 1)->get(['id', 'account_label as name']),
@@ -172,6 +173,14 @@ class PartnerController extends Controller
         [$id] = $this->accountOf($r, true); abort_unless($id, 403, 'Only a partner login has these switches.');
         $d = $r->validate(['whatsapp' => 'nullable|boolean', 'email' => 'nullable|boolean']);
         return \App\Services\PartnerAccount::setNotify($id, $d);
+    }
+
+    /** R-FIN-3: the Owner ticks an onboarding item. */
+    public function onboarding(Request $r, int $id)
+    {
+        abort_unless($r->user()->role_code === 'OWNER', 403, 'Only the Owner ticks onboarding.');
+        $d = $r->validate(['item' => 'required|string|max:40', 'on' => 'required|boolean']);
+        return $this->run(fn () => \App\Services\PartnerOnboarding::tick($id, $d['item'], (bool) $d['on']) + ['message' => 'Saved']);
     }
 
     /** R-FIN-18: the Owner reinvests for any partner. */

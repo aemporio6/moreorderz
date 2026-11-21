@@ -3288,7 +3288,7 @@ fin_statement_query,Partner statement question,module,Details,1,5,task_id,Task,s
 fin_statement_query,Partner statement question,module,Details,1,6,asked_at,Asked at,date,,,,,,,all,auto,,,,,,,,fin_statement_queries,asked_at,,Y,,,,finance_partners
 fin_statement_query,Partner statement question,module,Details,1,7,answered_at,Answered at,date,,,,,,,all,auto,,,,,,,,fin_statement_queries,answered_at,,Y,,,,finance_partners
 fin_statement_query,Partner statement question,module,Details,1,8,answered_by,Answered by,select,table:t_account?login=1,,,,,,all,auto,,,,,,,,fin_statement_queries,answered_by,,Y,,,,finance_partners
-fin_partner_user,Partner portal login,module,Details,1,1,user_id,User,select,table:t_account?login=1,,Y,,,,all,,,,,,,,,fin_partner_users,user_id,t_account,Y,,,,finance_partners
+fin_partner_user,Partner portal login,module,Details,1,1,user_id,Partner login,select,table:t_users?role_code=PARTNER,,Y,,,,all,,,,,,,,,fin_partner_users,user_id,,Y,,,,finance_partners
 fin_partner_user,Partner portal login,module,Details,1,2,investor_id,Investor,select,party:INVESTOR,,Y,,,,all,,,,,,,,,fin_partner_users,investor_id,party,Y,,,,finance_partners
 fin_period_close,Finance period (month close),module,Details,1,1,company_id,Company,select,table:cat_company_house,,,,,,all,auto,,,,,,,,fin_periods,company_id,,Y,,,,finance_partners
 fin_period_close,Finance period (month close),module,Details,1,2,branch_id,Branch,select,table:t_branches,,,,,,all,auto,,,,,,,,fin_periods,branch_id,,Y,,,,finance_partners

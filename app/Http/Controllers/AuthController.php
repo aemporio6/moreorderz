@@ -34,6 +34,10 @@ class AuthController extends Controller
             \App\Services\Access::attempt($data['login'], $r->ip(), false); Audit::log('t_users', $u->id, 'LOGIN_FAIL', ['reason' => 'address not allowed', 'ip' => $r->ip()], null, $u->fk_id_ent ?? 0);
             return back()->withErrors(['login' => 'Signing in from this network is not allowed for your login. Ask the Owner.'])->onlyInput('login');
         }
+        if ($why = \App\Services\PartnerOnboarding::blocked($u)) {      // R-FIN-3 onboarding gate
+            \App\Services\Access::attempt($data['login'], $r->ip(), false); Audit::log('t_users', $u->id, 'LOGIN_FAIL', ['reason' => 'partner onboarding'], $why, $u->fk_id_ent ?? 0);
+            return back()->withErrors(['login' => $why])->onlyInput('login');
+        }
         RateLimiter::clear($key);
         if ($u->totp_secret) {      // 2-step sign-in: the password was right, now ask for the code of the phone app
             $r->session()->put('login_2fa', ['id' => $u->id, 'remember' => $r->boolean('remember'), 'at' => time()]);

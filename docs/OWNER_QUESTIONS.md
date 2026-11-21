@@ -37,6 +37,9 @@ Updated 21 Nov 2026 (batch 7e-101). How to answer: write **OK** next to a line t
 | B8 | R-B_SOURCING-4 | A repeated cycle takes the last agreed price (latest PO line, else the supplier's RFQ final price, else the old target) | — |
 | B9 | R-F_SETUP-28 | A product counts as Private when it is private on any marketplace × shop | — |
 | B10 | Form standard | Every dropdown has + Add, except 67 fixed lists whose values the program uses (statuses, modes like FIFO / FBA) and 6 lists only the system makes (sales orders, bank statements, printer drivers, device slots) – these show the reason instead (docs/FORM_STANDARD_AUDIT.md) | the developer adds a value to a fixed list |
+| B11 | R-FIN-66 | Finance alerts go to the **Owner** only at first. FA3 (no settlement), FA4 (no bank lines) and FA9 (supplier payment due) send WhatsApp only, because their tasks already come from the existing rules; FA7 (slow / dead stock) makes a task only (one per SKU, no WhatsApp flood). You change roles and channels on the Finance alerts screen | — |
+| B12 | R-FIN-66 FA1 | Free cash = bank − supplier payments still open − approved withdrawals. The unpaid tax reserve is not taken off yet because the system does not keep it as its own figure | — |
+| B13 | R-FIN-3 | Partners who already had a login keep working: the system ticked all six onboarding items for them once (new partners must complete all six) | — |
 
 ## C. Suggested defaults written in the specification (220 lines)
 
