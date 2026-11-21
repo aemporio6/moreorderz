@@ -67,6 +67,7 @@ class FormAssist
     public static function options(string $formKey, string $name, ?string $q, array $parents = [], int $limit = 200): array
     {
         $f = self::field($formKey, $name) ?? abort(404);
+        if (($c = Chains::options($formKey, $f, $parents, $q)) !== null) return $c + ['more' => false, 'recent' => self::recent($formKey, $name)];      // person chains (R-C-21)
         $ent = Context::ent(); $filters = []; $t = self::sourceTable($f);
         if ($t && Schema::hasTable($t)) {
             $names = array_filter(array_map('trim', explode(',', (string) $f['cascades_from'])));

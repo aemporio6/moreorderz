@@ -552,3 +552,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-38 (21 Nov): shipping per marketplace incl. 3PL fees R-D-23 BUILT (company tariff defaults, per order / per unit, PRD_FEE_MISSING). +4 register lines. 387 tests.
 - 7e-39 (21 Nov): Gen-2 money values for the migration compare R-A_SALES-52 BUILT (copied unchanged, status map, history, compare report per shop / month). 388 tests.
 - 7e-40 (21 Nov): VA share – the one definition R-C-40 BUILT (shop row wins, No VA share set chip, per-line commission, salary GBP, Team engagements report). +6 register lines. 390 tests.
+- 7e-41 (21 Nov): dependent dropdowns of the person forms R-C-21 BUILT (all chains, golden test per chain). +4 register lines. 393 tests.

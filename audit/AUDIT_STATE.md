@@ -97,4 +97,5 @@ How to work each step: build → test → change the verdict lines in `audit/ver
 | 7e-38 | 3PL fees per marketplace R-D-23 BUILT (ThreePlTariff: company tariff defaults, per order / per unit, PRD_FEE_MISSING nightly, tariff screen on prices) | done | 472/1433 | 387 tests |
 | 7e-39 | Gen-2 money values kept + compare report R-A_SALES-52 BUILT (legacy columns, status map, SAL_ZERO + change log history, Old profit compare screen) | done | 476/1433 | 388 tests |
 | 7e-40 | VA share – the one definition R-C-40 BUILT (JobPay: shop row first, No VA share set, per-line commission, salary GBP month-end FX, Team engagements xlsx) | done | 482/1433 | 390 tests |
-| 7e-41 | NEXT → recount (4-line closers: R-C-21, R-G_CORE-68, R-D-35, R-H-8, R-H-1); then 3-line closers; rest of Sourcing 39 / 28 | todo | | |
+| 7e-41 | Dependent dropdowns of the person forms R-C-21 BUILT (Chains: networks, addresses, 6 questions, bank accounts, PayPal debit cards, shops, free slots, owner companies; own lists per person) | done | 486/1433 | 393 tests |
+| 7e-42 | NEXT → recount (4-line closers: R-G_CORE-68, R-D-35, R-H-8, R-H-1); then 3-line closers; rest of Sourcing 39 / 28 | todo | | |
