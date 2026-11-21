@@ -118,6 +118,7 @@ class SalesService
         $pre = self::confirmPreview($branchId, $month);
         if ($pre['already_confirmed']) throw new \RuntimeException('This month is already confirmed.');
         if ($pre['lines'] === 0) throw new \RuntimeException('There are no sale lines to confirm in this month.');
+        if ($why = RefundProposals::confirmBlock($branchId, $month)) throw new \RuntimeException($why);      // open refund proposals block Confirm (R-A_SALES-86)
         if ($why = Fulfilment::confirmBlock($branchId, $month)) throw new \RuntimeException($why);      // a daily fulfilment order without its sale price blocks Confirm (R-A_SALES-75)
         $shop = DB::table('t_branches')->where('id', $branchId)->first();
         if ($pre['shortages']) {

@@ -83,7 +83,7 @@
 83|B|feeBucket|fee buckets + month totals from the money files; hub compare (SAL_HUB_MISMATCH task) not built
 84|P|fulfilment_channel|orders by file / API / hand with tracking + label; monthly merge and "Close daily orders" not built
 85|B|class CarrierLabels|carrier label PDF import, match, service map; one label per page only
-86|P|function decideRefund|refund proposals accept / reject; kinds Half / Outside, block of Confirm, unknown-SKU grid not built
+86|P|class RefundProposals|built: one information charge row per order + SKU + refund id (a second import adds nothing); kinds Full (±0.01) / Half (band of the marketplace profile, default 49–51 %) / Partial / Outside (marked by a person) / To classify; a line without price uses the money report's own sale amount, else waits and gets its kind when the price arrives (Accept refused before); "Sold £x → Refund £y (kind)"; Accept opens the filled-in refund form and saves, Reject needs a reason; open proposals and refunds without a matching line block Month Confirm; unknown order + SKU is saved and listed in "Refunds without a matching line" with pick-the-line / correct-the-SKU / reject. Rule tests pass; clicked in a browser. Missing: the money-file readers give refunds per order, not per SKU; Outside matched from a bank line (R-FIN-70); a refund on a confirmed line still comes as a proposal first (the adjustment of R-A_SALES-34 is made at Accept); the grid is on Money › Refunds, not on the batch view
 87|P|form:mp_profile|profile forms exist; readers do not take mappings / buckets from the profile (formats are code)
 88|P|SAL_STOCK_SHORT|SAL_UNMATCHED, SAL_ZERO, SAL_STOCK_SHORT built; other 11 sales task codes not built
 89|F|form:crm_customer|form only; customer record page / retention job not built

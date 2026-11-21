@@ -165,12 +165,8 @@ class SettlementService
                     $newLines++;
                 }
                 if ($r['full_refund']) {   // gross > 0 and net sales 0 = the whole order was refunded (owner rule R7): a proposal a person confirms, never an automatic refund
-                    $sale = DB::table('t_sales')->where('fk_id_ent', $ent)->where('fk_id_branch', $shop->id)->where('order_no', $r['order_id'])->orderBy('id')->value('id');
-                    if (! $sale) { $noSale++; continue; }
-                    if (! DB::table('t_sale_refund_proposals')->where('fk_id_sale', $sale)->where('refund_id', $r['statement_id'] . ':' . $r['order_id'])->exists()) {
-                        DB::table('t_sale_refund_proposals')->insert(RecordService::fillNotNull('t_sale_refund_proposals', ['fk_id_sale' => $sale, 'fk_id_batch' => $batch, 'refund_id' => mb_substr($r['statement_id'] . ':' . $r['order_id'], 0, 60), 'refund_kind' => 'FULL', 'amount' => abs($r['gross_refund']), 'status' => 'PROPOSED', 'created_at' => now()]));
-                        $proposals++;
-                    }
+                    $res = RefundProposals::fromReport($ent, ['shop' => (int) $shop->id, 'order_no' => (string) $r['order_id'], 'sku' => '', 'refund_id' => mb_substr($r['statement_id'] . ':' . $r['order_id'], 0, 80), 'amount' => abs($r['gross_refund']), 'batch' => $batch, 'date' => $r['statement_date'] ?? date('Y-m-d'), 'report_sale' => abs($r['gross_refund']), 'order_level' => true]);
+                    if ($res === 'proposal') $proposals++; elseif ($res === 'unknown') $noSale++;
                 }
             }
             DB::table('fin_import_batches')->where('id', $batch)->update(['rows_total' => $newLines + $dupLines, 'rows_new' => $newLines, 'rows_duplicate' => $dupLines, 'rows_error' => 0]);
@@ -282,6 +278,7 @@ class SettlementService
     {
         DB::transaction(function () use ($ent, $proposalId, $accept, $reason) {
             $p = DB::table('t_sale_refund_proposals')->where('id', $proposalId)->lockForUpdate()->first() ?? throw new \InvalidArgumentException('Refund proposal not found.');
+            if ($p->status === 'UNKNOWN') throw new \InvalidArgumentException('This refund has no sale line yet. Link it to its line first, or reject it there.');
             $s = DB::table('t_sales')->where('id', $p->fk_id_sale)->where('fk_id_ent', $ent)->first() ?? throw new \InvalidArgumentException('Refund proposal not found.');
             if ($p->status !== 'PROPOSED') throw new \InvalidArgumentException('This proposal was already decided.');
             if (! $accept) {
@@ -289,8 +286,9 @@ class SettlementService
                 DB::table('t_sale_refund_proposals')->where('id', $p->id)->update(['status' => 'REJECTED', 'reject_reason' => $reason, 'decided_by' => Context::userId(), 'decided_at' => now()]);
                 return;
             }
+            if ($p->refund_kind === 'TO_CLASSIFY') throw new \InvalidArgumentException('The sale line has no price yet, so the kind of this refund is not known. Accept is possible once the line has its price.');
             $amount = $p->refund_kind === 'FULL' ? null : (float) $p->amount;
-            $x = self::refund($ent, (int) $s->id, $amount, 'Marketplace money file', (int) $p->id);
+            $x = self::refund($ent, (int) $s->id, $amount, 'Marketplace money file' . (isset(RefundProposals::LABELS[$p->refund_kind]) ? ' – ' . RefundProposals::LABELS[$p->refund_kind] . ' refund' : ''), (int) $p->id);
             DB::table('t_sale_refund_proposals')->where('id', $p->id)->update(['status' => 'ACCEPTED', 'decided_by' => Context::userId(), 'decided_at' => now()]);
         });
     }

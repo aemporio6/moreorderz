@@ -445,3 +445,16 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - Reviewed the 27 open Sales register lines without a rule: 8 are "retired with a reason" (status N, nothing to build); the others wait for large pieces (Import Center steps, marketplace APIs, purchase audits, old Gen-1 importers).
 - Tests: 318 pass; `SaleViewTest` has one new test and a longer strip test.
 - Register after this batch: BUILT 355 of 1,433 (25 %); Sales 87 of 155 (56 %).
+
+### Batch 7e-14 (21 Nov 2026)
+- **Refund proposals** (R-A_SALES-86, still PARTIAL): service `RefundProposals`, migration `000035` (new columns on `t_sale_refund_proposals`; `fk_id_sale` may now be empty for a refund without a matching line).
+  - `kind()` – Full (refund = line total ±0.01), Half (band of the shop's marketplace profile in `mp_profile_refund_kinds`, default 49–51 %), Partial, To classify (no total known). Outside is marked by a person.
+  - `fromReport()` is the one entry for money-file refunds; `MarketplaceFiles` and `SettlementService` both call it. A second import of the same report adds nothing.
+  - A line without price takes the money report's own sale amount for the kind; with none it waits as "To classify" and cannot be accepted until the line has a price. The price on the line is never written here.
+  - A refund whose order + SKU has no sale line is kept with status `UNKNOWN`; a person picks the line, corrects the SKU, or rejects with a reason.
+  - `SalesService::confirmMonth` refuses while a proposal or an unknown refund of that shop and month is open.
+  - Money › Refunds: kind chip, "Sold £x → Refund £y (kind)", accept form filled in, "paid outside the marketplace?", grid "Refunds without a matching line".
+- Changed behaviour to know: a month with an open refund proposal could be confirmed before; now it cannot (the rule asks for this). `Money2Test` was changed to match.
+- Not built yet (honest): refunds per SKU from the money-file readers (they give them per order), Outside matched from a bank line, the proposal chip on the sale line, the grid on the batch view.
+- Tests: 321 pass; new `RefundProposalsTest` (3).
+- Register after this batch: BUILT 355 of 1,433 (25 %); Sales 87 of 155 (56 %) – no line closed in this batch.

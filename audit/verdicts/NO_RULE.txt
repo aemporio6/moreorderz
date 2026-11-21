@@ -4,7 +4,7 @@ MR-1259|P|function options|Create everywhere, searchable multi-select with All /
 MR-1260|B|class Finder|one search for every module: no exact spelling (stems, sound, typing mistakes, synonyms), results in categories with scope chips, suggestions from the first letter, records of every form (indexed on save), the same word search inside every list; FinderTest
 MR-1261|B|function narrow|filters on every field of every list: per-column filter and a filter builder (operators per type, AND / OR groups, multi-select values, date presets); the list narrows as rules are added; ListStandardTest
 MR-1262|M||importer that recommends "goes to X, could go to Y" not built
-MR-1263|P|function decideRefund|full / part refunds as proposals shown on the order; half-refund kind not built
+MR-1263|P|class RefundProposals|full / half / partial refunds from the money files as proposals with the amount and "Sold → Refund (kind)"; zero-price lines classified from the report's sale amount. Missing: the proposal shown on the order line itself in the sales list; AliExpress / OnBuy files not proven
 MR-1264|M||ad spend per product not built
 MR-1265|P|quick-buy|Quick / Full form modes and Quick buy; old entry short form not built
 MR-1266|F|form:document|document forms; one Documents module per order with View / Open in Drive not built

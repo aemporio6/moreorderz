@@ -429,13 +429,9 @@ class MarketplaceFiles
             $proposals = 0; $noSale = 0;
             foreach ($x['refunds'] as $key => $amt) {
                 [$sid, $order] = explode('|', $key, 2); if (isset($latePaid[$sid])) continue;
-                $sale = DB::table('t_sales')->where('fk_id_ent', $ent)->where('fk_id_branch', $shop->id)->where('order_no', $order)->where('sale_source', 'active')->orderBy('id')->first();
-                if (! $sale) { $noSale++; continue; }
-                $rid = mb_substr($sid . ':' . $order, 0, 80);
-                if (DB::table('t_sale_refund_proposals')->where('fk_id_sale', $sale->id)->where('refund_id', $rid)->exists()) continue;
-                $orderTotal = (float) DB::table('t_sales')->where('fk_id_ent', $ent)->where('fk_id_branch', $shop->id)->where('order_no', $order)->where('sale_source', 'active')->sum('total_amount_gbp');
-                DB::table('t_sale_refund_proposals')->insert(RecordService::fillNotNull('t_sale_refund_proposals', ['fk_id_sale' => $sale->id, 'fk_id_batch' => $batch, 'refund_id' => $rid, 'refund_kind' => abs($amt) >= $orderTotal - 0.005 ? 'FULL' : 'PARTIAL', 'amount' => abs($amt), 'status' => 'PROPOSED', 'created_at' => now()]));
-                $proposals++;
+                // one place decides the kind (Full / Half / Partial), keeps a refund without a matching line, and never adds the same refund twice (R-A_SALES-86)
+                $res = RefundProposals::fromReport($ent, ['shop' => (int) $shop->id, 'order_no' => $order, 'sku' => '', 'refund_id' => mb_substr($sid . ':' . $order, 0, 80), 'amount' => abs($amt), 'batch' => $batch, 'date' => $x['period'][1] ?? date('Y-m-d'), 'order_level' => true]);
+                if ($res === 'proposal') $proposals++; elseif ($res === 'unknown') $noSale++;
             }
             DB::table('fin_import_batches')->where('id', $batch)->update(['rows_total' => $new + $dup, 'rows_new' => $new, 'rows_duplicate' => $dup, 'rows_error' => array_sum($latePaid)]);
             $checks = $x['checks'];

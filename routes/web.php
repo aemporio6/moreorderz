@@ -222,6 +222,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('refunds', [MoneyController::class, 'refunds']);
         Route::post('refunds/manual', [MoneyController::class, 'refundManual']);
         Route::post('refunds/{id}', [MoneyController::class, 'refundDecide'])->whereNumber('id');
+        Route::get('refunds/{id}/candidates', [MoneyController::class, 'refundCandidates'])->whereNumber('id');
+        Route::post('refunds/{id}/{what}', [MoneyController::class, 'refundExtra'])->whereNumber('id');
         Route::get('bank', [MoneyController::class, 'bank']);
         Route::post('bank', [MoneyController::class, 'bankCreate']);
         Route::post('bank/{id}/import', [MoneyController::class, 'bankImport'])->whereNumber('id');

@@ -72,9 +72,14 @@ class MoneyController extends Controller
     {
         $this->can($r, 'money.SEE');
         $ent = (int) Context::ent();
-        return ['rows' => $this->refundRows($ent), 'base' => Fx::base($ent), 'shops' => $this->lists($ent)['shops'], 'can_edit' => \App\Services\Perm::has($r->user(), 'money.refunds_may'),
-            'decided' => \App\Services\Perm::mine(DB::table('t_sale_refund_proposals as p'), 's.fk_id_branch')->join('t_sales as s', 's.id', '=', 'p.fk_id_sale')->leftJoin('t_users as u', 'u.id', '=', 'p.decided_by')->where('s.fk_id_ent', $ent)->where('p.status', '<>', 'PROPOSED')->orderByDesc('p.decided_at')->limit(30)
-                ->get(['p.id', 'p.status', 'p.reject_reason', 'p.decided_at', 's.order_no', 's.sku', 's.total_amount_gbp', 'u.display_name as by'])];
+        $x = \App\Services\RefundProposals::page($r->user());
+        return $x + ['base' => Fx::base($ent), 'shops' => $this->lists($ent)['shops'], 'can_edit' => \App\Services\Perm::has($r->user(), 'money.refunds_may')];
+    }
+    public function refundCandidates(Request $r, int $id) { try { return \App\Services\RefundProposals::candidates($id, (string) $r->query('q'), $r->user()); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
+    public function refundExtra(Request $r, int $id, string $what)
+    {
+        try { return match ($what) { 'link' => \App\Services\RefundProposals::link($id, $r->input('sale') ? (int) $r->input('sale') : null, $r->input('sku'), $r->user()), 'reject-unknown' => \App\Services\RefundProposals::rejectUnknown($id, $r->input('reason'), $r->user()), 'outside' => \App\Services\RefundProposals::markOutside($id, $r->boolean('outside', true), $r->user()), default => abort(404) }; }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
     }
 
     /** A refund entered by hand: the whole order, or an amount of it. */

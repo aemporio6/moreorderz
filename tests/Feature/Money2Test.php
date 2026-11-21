@@ -66,14 +66,14 @@ class Money2Test extends TestCase
     {
         $a = $this->confirmed('ORD-1', 1); $b = $this->confirmed('ORD-2', 1);
         $mk = fn ($sale, $ref) => DB::table('t_sale_refund_proposals')->insertGetId(['fk_id_sale' => $sale, 'refund_id' => $ref, 'refund_kind' => 'FULL', 'amount' => 20, 'status' => 'PROPOSED', 'created_at' => now()]);
-        $pa = $mk($a, 'R1'); $pb = $mk($b, 'R2');
         // a full refund of an order that is not confirmed and not shipped = the line is cancelled, its stock is free again, nothing is booked
         $c = $this->confirmed('ORD-3', 2); $free = fn () => Stock::available($this->p);
         $before = $free(); Settle::decideRefund(1, $mk($c, 'R3'), true);
         $this->assertSame(['Cancelled', 'FULL'], [DB::table('t_sales')->where('id', $c)->value('status'), DB::table('t_sales')->where('id', $c)->value('refund_loss_nature')]);
         $this->assertSame([0.0, true], [Ledger::balance(1, '5400'), $free() >= $before]);
         try { Settle::refund(1, $a, 5.0, 'part before confirm'); $this->fail('part'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('not confirmed yet', $e->getMessage()); }
-        Sales::confirmMonth($this->shop, '2026-09', true);
+        $open = $mk($a, 'R0'); try { Sales::confirmMonth($this->shop, '2026-09', true); $this->fail('open proposal'); } catch (\RuntimeException $e) { $this->assertStringContainsString('1 refund proposal(s) of this month wait for Accept or Reject', $e->getMessage()); }      // an open proposal blocks Confirm (R-A_SALES-86)
+        DB::table('t_sale_refund_proposals')->where('id', $open)->delete(); Sales::confirmMonth($this->shop, '2026-09', true); $pa = $mk($a, 'R1'); $pb = $mk($b, 'R2');
         $this->assertSame(40.0, Ledger::balance(1, '1100', null, $this->shop));
         Settle::decideRefund(1, $pa, true);
         $this->assertSame([20.0, 20.0], [Ledger::balance(1, '1100', null, $this->shop), Ledger::balance(1, '5400')]);
