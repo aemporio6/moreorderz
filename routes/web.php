@@ -173,7 +173,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('inbound', [StockController::class, 'inboundList']);
         Route::post('inbound', [StockController::class, 'inboundCreate']);
         Route::get('inbound/{id}', [StockController::class, 'inboundShow'])->whereNumber('id');
-        Route::post('inbound/{id}/{act}', [StockController::class, 'inboundAction'])->whereNumber('id')->whereIn('act', ['reserve', 'pick', 'ship', 'receive']);
+        Route::post('inbound/{id}/{act}', [StockController::class, 'inboundAction'])->whereNumber('id')->whereIn('act', ['reserve', 'pick', 'ship', 'receive', 'cartons-file']);
         Route::post('putaway/{id}', [StockController::class, 'putaway'])->whereNumber('id');
         Route::get('products/{id}/visibility', [StockController::class, 'visibility'])->whereNumber('id');
         Route::post('products/{id}/visibility', [StockController::class, 'visibilitySave'])->whereNumber('id');

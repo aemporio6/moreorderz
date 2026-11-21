@@ -93,7 +93,7 @@
 93|N||documentation rule
 94|B|class TaskOwner|TaskOwner: P1/P2/P3 → HIGH/NORMAL/LOW, URGENT by level / ICC_RED / money > TASK_URGENT_MONEY; owner order record user (PO requested_by, GRN received_by, batch importer) → cycle → shop → category default → role fewest open (absent skipped, cover used) → Owner "no ROLE set"; old role names mapped; why-owner shown on Tasks (TaskOwnerTest). FA1–FA10 rows arrive with R-FIN-66
 95|P|class EventBus|event bus with retry; name catalogue check not built
-96|P|label_print_log|printers, templates, one log row per copy, reprint needs a reason, carrier label import; inbound cartons not built
+96|B|function importCartons|printers, templates, one log row per copy, reprint needs a reason, carrier label import; inbound shipments (fba_shipments / fba_cartons SINGLE or MIXED + carton items) with the carton file import (row per carton × SKU or the Box-column pack list, SKU or item code, event INBOUND_CARTONS_IMPORTED), carton / item labels and packing list, each carton line → the two-step transfer (R-H-49); InboundShipmentsTest
 97|M||rule-task snooze not built
 98|M||2FA re-ask after 60 min not built
 99|P|function synonyms|built: every registry field as "Form › Field" (help text, opens the form with the field focused), screens, reports, settings, synonyms from sys_search_synonyms (alias, abbreviation, Roman Urdu, direct page), sound + typing-mistake layer, by rights, secrets never; open: help topics do not exist yet, and "sku" lists screens before the field

@@ -71,6 +71,79 @@ class InboundShipments
         });
     }
 
+    /**
+     * The marketplace's carton file (Imp_inbound_cartons, R-G_CORE-96): CSV or Excel, two shapes —
+     * one row per carton × SKU (Carton / Box no, SKU, Qty, Weight kg, Length / Width / Height cm), or the pack-list grid
+     * (one row per SKU with "Box 1 …", "Box 2 …" quantity columns, and rows "Box weight", "Box length / width / height").
+     * Only a DRAFT shipment; the cartons of the file replace the typed ones; SKUs are matched by SKU or the listing's item code. Event INBOUND_CARTONS_IMPORTED.
+     */
+    public static function importCartons(int $ent, int $id, string $path, string $name): array
+    {
+        $s = self::ship($ent, $id);
+        if ($s->status !== 'DRAFT') throw new \InvalidArgumentException('Cartons can be imported only while the shipment is a draft.');
+        $rows = self::sheet($path, $name);
+        $hi = null; foreach (array_slice($rows, 0, 15, true) as $i => $r) if (in_array('sku', array_map(fn ($c) => Parse::header($c), $r), true) || in_array('merchant sku', array_map(fn ($c) => Parse::header($c), $r), true)) { $hi = $i; break; }
+        if ($hi === null) throw new \InvalidArgumentException('No header row with "SKU" was found in the first 15 lines.');
+        $h = array_map(fn ($c) => Parse::header($c), $rows[$hi]); $col = fn (array $names) => ($k = array_values(array_intersect($names, $h))) ? array_search($k[0], $h, true) : null;
+        $sku = $col(['sku', 'merchant sku']); $boxCols = []; foreach ($h as $i => $x) if (preg_match('/^box\s*#?\s*(\d+)/', $x, $m)) $boxCols[$i] = (int) $m[1];
+        $cartons = []; $errors = [];
+        if ($boxCols) {      // pack-list grid
+            foreach (array_slice($rows, $hi + 1, null, true) as $ln => $r) {
+                $first = Parse::header($r[0] ?? ''); $code = trim((string) ($r[$sku] ?? ''));
+                foreach (['weight' => 'weight_kg', 'length' => 'length_cm', 'width' => 'width_cm', 'height' => 'height_cm'] as $w => $f)
+                    if (preg_match("/box $w/", $first) || preg_match("/box $w/", Parse::header($code))) { foreach ($boxCols as $i => $b) if (is_numeric($r[$i] ?? null)) $cartons[$b][$f] = (float) $r[$i]; continue 2; }
+                if ($code === '') continue;
+                $p = self::resolveItem($ent, (int) $s->fk_id_branch, $code); if (! $p) { $errors[] = 'Line ' . ($ln + 1) . ": SKU $code not found"; continue; }
+                foreach ($boxCols as $i => $b) if ((int) ($r[$i] ?? 0) > 0) $cartons[$b]['items'][] = ['product' => $p, 'qty' => (int) $r[$i]];
+            }
+        } else {
+            $cn = $col(['carton', 'carton no', 'carton number', 'box', 'box no', 'box number']); $q = $col(['qty', 'quantity', 'units']);
+            if ($cn === null || $q === null) throw new \InvalidArgumentException('The file needs the columns Carton (or Box), SKU and Qty.');
+            $dim = ['weight_kg' => $col(['weight', 'weight kg', 'weight (kg)', 'gross weight']), 'length_cm' => $col(['length', 'length cm', 'length (cm)']), 'width_cm' => $col(['width', 'width cm', 'width (cm)']), 'height_cm' => $col(['height', 'height cm', 'height (cm)'])];
+            foreach (array_slice($rows, $hi + 1, null, true) as $ln => $r) {
+                $code = trim((string) ($r[$sku] ?? '')); $b = (int) preg_replace('/\D/', '', (string) ($r[$cn] ?? ''));
+                if ($code === '' && ! $b) continue;
+                if (! $b) { $errors[] = 'Line ' . ($ln + 1) . ': carton number missing'; continue; }
+                $p = self::resolveItem($ent, (int) $s->fk_id_branch, $code); if (! $p) { $errors[] = 'Line ' . ($ln + 1) . ": SKU $code not found"; continue; }
+                if ((int) ($r[$q] ?? 0) <= 0) { $errors[] = 'Line ' . ($ln + 1) . ': quantity must be more than 0'; continue; }
+                $cartons[$b]['items'][] = ['product' => $p, 'qty' => (int) $r[$q]];
+                foreach ($dim as $f => $i) if ($i !== null && is_numeric($r[$i] ?? null) && (float) $r[$i] > 0) $cartons[$b][$f] = (float) $r[$i];
+            }
+        }
+        $cartons = array_filter($cartons, fn ($c) => ! empty($c['items'])); ksort($cartons);
+        foreach ($cartons as $b => $c) if ((float) ($c['weight_kg'] ?? 0) <= 0) $errors[] = "Carton $b: weight missing";
+        if ($errors) throw new ValidationErrors(['file' => implode(' · ', array_slice($errors, 0, 20)) . (count($errors) > 20 ? ' · …' : '')]);
+        if (! $cartons) throw new \InvalidArgumentException('No carton lines in the file.');
+        return DB::transaction(function () use ($ent, $id, $cartons, $name) {
+            $old = DB::table('fba_cartons')->where('fk_id_fba_shipment', $id)->pluck('id')->all();
+            DB::table('fba_carton_items')->whereIn('fk_id_fba_carton', $old ?: [0])->delete(); DB::table('fba_cartons')->where('fk_id_fba_shipment', $id)->delete();
+            $n = 0; $lines = 0;
+            foreach ($cartons as $c) {
+                $n++; $items = []; foreach ($c['items'] as $i) $items[$i['product']] = ($items[$i['product']] ?? 0) + $i['qty'];
+                $single = count($items) === 1;
+                $cid = (int) DB::table('fba_cartons')->insertGetId(['fk_id_fba_shipment' => $id, 'carton_no' => $n, 'carton_kind' => $single ? 'SINGLE' : 'MIXED', 'fk_id_product' => $single ? array_key_first($items) : null, 'qty' => $single ? array_sum($items) : null,
+                    'weight_kg' => (float) $c['weight_kg'], 'length_cm' => (float) ($c['length_cm'] ?? 0), 'width_cm' => (float) ($c['width_cm'] ?? 0), 'height_cm' => (float) ($c['height_cm'] ?? 0)]);
+                foreach ($items as $p => $q) { DB::table('fba_carton_items')->insert(['fk_id_fba_carton' => $cid, 'fk_id_product' => $p, 'sku' => DB::table('t_product_vendors')->where('id', $p)->value('SKU_VENDOR'), 'qty' => $q]); $lines++; }
+            }
+            Audit::log('fba_shipments', $id, 'UPDATE', ['cartons_file' => $name, 'cartons' => $n, 'lines' => $lines], 'Cartons imported', $ent);
+            EventBus::fire('INBOUND_CARTONS_IMPORTED', 'fba_shipments', $id, ['cartons' => $n, 'lines' => $lines, 'file' => $name], $ent);
+            return ['cartons' => $n, 'lines' => $lines, 'message' => "$n carton(s), $lines line(s) imported – they replace the cartons typed before."];
+        });
+    }
+
+    /** Rows of a CSV or the first sheet of an Excel file. */
+    private static function sheet(string $path, string $name): array
+    {
+        $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+        if (in_array($ext, ['xlsx', 'xls'], true)) return \PhpOffice\PhpSpreadsheet\IOFactory::createReaderForFile($path)->setReadDataOnly(true)->load($path)->getSheet(0)->toArray(null, true, false, false);
+        if (! in_array($ext, ['csv', 'txt', 'tsv'], true)) throw new \InvalidArgumentException('Upload the carton file as CSV or Excel.');
+        $raw = (string) file_get_contents($path); $raw = preg_replace('/^\xEF\xBB\xBF/', '', $raw); $first = strtok($raw, "\n") ?: '';
+        $del = substr_count($first, "\t") > substr_count($first, ',') ? "\t" : (substr_count($first, ';') > substr_count($first, ',') ? ';' : ',');
+        $fh = fopen('php://temp', 'w+'); fwrite($fh, $raw); rewind($fh); $out = [];
+        while (($r = fgetcsv($fh, 0, $del, '"', '\\')) !== false) $out[] = array_map(fn ($c) => trim((string) $c), $r);
+        fclose($fh); return $out;
+    }
+
     /** Reserve the units and build the pick task. Refused (nothing saved) when a SKU is short. */
     public static function reserve(int $ent, int $id): array
     {

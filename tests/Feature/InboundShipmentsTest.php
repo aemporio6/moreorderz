@@ -115,4 +115,41 @@ class InboundShipmentsTest extends TestCase
         $p = $this->getJson("/api/inbound/$id")->assertOk()->json();
         $this->assertSame(['PICKING', 2], [$p['shipment']['status'], count($p['cartons'])]); $this->assertNotEmpty($p['lines']);
     }
+
+    public function test_carton_file_import_both_shapes_and_three_copies_three_log_rows(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('local');
+        $id = $this->postJson('/api/inbound', ['shop' => $this->shop, 'from_location' => $this->site, 'cartons' => [['items' => [['product' => $this->a, 'qty' => 1]], 'weight_kg' => 1]]])->assertOk()->json('id');
+        // one row per carton × SKU; the item code of the listing works as SKU
+        $csv = "Carton,SKU,Qty,Weight kg,Length cm,Width cm,Height cm\n1,IN-A,24,12,40,30,30\n2,X00INA0001,10,9.5,40,30,20\n2,IN-B,6,,,,\n";
+        $f = \Illuminate\Http\UploadedFile::fake()->createWithContent('cartons.csv', $csv);
+        $r = $this->post("/api/inbound/$id/cartons-file", ['file' => $f], ['Accept' => 'application/json'])->assertOk()->json();
+        $this->assertSame([2, 3], [$r['cartons'], $r['lines']]);
+        $c = In::cartons($id);
+        $this->assertSame(['SINGLE', 'MIXED'], array_column($c, 'kind'));
+        $this->assertCount(2, $c[1]['items'], 'MIXED carton with 2 SKUs → 2 carton item rows');
+        $this->assertSame(9.5, $c[1]['kg']);
+        $this->assertTrue(DB::table('sys_events')->where('event_code', 'INBOUND_CARTONS_IMPORTED')->where('entity_id', $id)->exists());
+
+        // the pack-list grid shape (Box 1 / Box 2 columns), and a bad SKU refused with its line
+        $grid = "SKU,Box 1 quantity,Box 2 quantity\nIN-A,24,10\nIN-B,,6\nBox weight (kg),12,9.5\nBox length (cm),40,40\nBox width (cm),30,30\nBox height (cm),30,20\n";
+        $r2 = $this->post("/api/inbound/$id/cartons-file", ['file' => \Illuminate\Http\UploadedFile::fake()->createWithContent('pack.csv', $grid)], ['Accept' => 'application/json'])->assertOk()->json();
+        $this->assertSame([2, 3], [$r2['cartons'], $r2['lines']]);
+        $this->assertSame(1, DB::table('fba_cartons')->where('fk_id_fba_shipment', $id)->where('carton_no', 2)->where('carton_kind', 'MIXED')->count(), 'the file replaces the cartons');
+        $this->post("/api/inbound/$id/cartons-file", ['file' => \Illuminate\Http\UploadedFile::fake()->createWithContent('bad.csv', "Carton,SKU,Qty,Weight\n1,NOPE,3,2\n")], ['Accept' => 'application/json'])->assertStatus(422)->assertJsonPath('errors.file.0', 'Line 2: SKU NOPE not found');
+
+        // MIXED carton → 2 pick (transfer) lines; then only drafts take a file
+        $this->postJson("/api/inbound/$id/reserve")->assertOk();
+        $c2 = DB::table('fba_cartons')->where('fk_id_fba_shipment', $id)->where('carton_no', 2)->value('id');
+        $this->assertSame(2, DB::table('wh_pick_task_lines')->where('fk_id_fba_carton', $c2)->distinct()->count('fk_id_product'));
+        $this->post("/api/inbound/$id/cartons-file", ['file' => \Illuminate\Http\UploadedFile::fake()->createWithContent('late.csv', $csv)], ['Accept' => 'application/json'])->assertStatus(422);
+
+        // print 3 copies of a carton label → 3 log rows per carton; a reprint without a reason is refused
+        $th = DB::table('printer_profiles')->where('code', 'SETUP_THERMAL_1')->value('id'); $m = DB::table('label_media')->pluck('id', 'code');
+        \App\Services\PrintService::calibrate(1, $th, $m['SETUP_ROLL_100X150'], true);
+        $j = $this->postJson('/api/print', ['kind' => 'FBA_CARTON', 'ids' => [$id], 'copies' => 3])->assertOk()->json();
+        $this->assertSame(3, DB::table('label_print_log')->where('fk_id_print_job', $j['job'])->count());
+        $this->postJson('/api/print', ['kind' => 'FBA_CARTON', 'ids' => [$id]])->assertStatus(422);
+        @unlink(storage_path('app/' . $j['file']));
+    }
 }

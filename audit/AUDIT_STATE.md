@@ -129,4 +129,5 @@ How to work each step: build → test → change the verdict lines in `audit/ver
 | 7e-70 | R-B_SOURCING-51 typed sourcing settings (SourcingSettings page with history; QC pass chip from SRC_QC_PASS_GREEN; old divisor 0 → 5000) → MR-0439, MR-0599, MR-0769 BUILT | done | 584 / 1,433 (41%) | 435 tests |
 | 7e-71 | R-H-57 Settings › Warehouse (WarehouseSettings, 14 tabs, typed checks, history; shared TypedSettings engine) → MR-0084, MR-0200, MR-1356 BUILT | done | 587 / 1,433 (41%) | 436 tests |
 | 7e-72 | R-G_CORE-2 new task form (TaskCreate: SLA prefill, pick-only record link, dependency by name, absence cover, weekly-limit warning, Refused texts) → MR-0494, MR-1178, MR-1234 BUILT | done | 590 / 1,433 (41%) | 438 tests |
-| 7e-73 | NEXT → recount; 3-line R-H-19, R-A_SALES-87, R-FIN-22, R-FIN-47, R-G_CORE-96, R-G_CORE-3 …; rest of Sourcing 39 / 28 | todo | | |
+| 7e-73 | R-G_CORE-96 inbound carton file import (row per carton × SKU or Box-column pack list, INBOUND_CARTONS_IMPORTED) completes printers / labels / inbound cartons → MR-0363, MR-0571, MR-0598 BUILT | done | 593 / 1,433 (41%) | 439 tests |
+| 7e-74 | NEXT → recount; 3-line R-H-19, R-A_SALES-87, R-FIN-22, R-FIN-47, R-G_CORE-72, R-G_CORE-75 …; rest of Sourcing 39 / 28 | todo | | |

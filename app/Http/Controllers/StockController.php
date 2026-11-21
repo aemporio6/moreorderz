@@ -117,6 +117,7 @@ class StockController extends Controller
     {
         \App\Services\Perm::need($r->user(), 'stock.CHANGE'); $ent = (int) Context::ent();
         return $this->run(fn () => match ($act) {
+            'cartons-file' => $r->hasFile('file') ? (function () use ($ent, $id, $r) { try { return \App\Services\InboundShipments::importCartons($ent, $id, $r->file('file')->getRealPath(), $r->file('file')->getClientOriginalName()); } catch (\App\Services\ValidationErrors $e) { return response()->json(['message' => $e->getMessage(), 'errors' => array_map(fn ($m) => [$m], $e->errors)], 422); } })() : response()->json(['message' => 'Choose the carton file.'], 422),
             'reserve' => \App\Services\InboundShipments::reserve($ent, $id),
             'pick' => \App\Services\InboundShipments::pick($ent, $id, (string) $r->input('carton', ''), (string) $r->input('item', ''), (int) $r->input('qty', 1)),
             'ship' => \App\Services\InboundShipments::shipped($ent, $id, $r->only(['date', 'carrier', 'tracking'])),
