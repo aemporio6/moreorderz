@@ -232,6 +232,9 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('reports/{key}', [ReportController::class, 'show'])->where('key', '[a-z_]+');
         Route::get('reports/{key}/csv', [ReportController::class, 'csv'])->where('key', '[a-z_]+');
         Route::get('reports/team_engagements/xlsx', [ReportController::class, 'teamXlsx']);
+        Route::get('my-account', [PartnerController::class, 'myAccount']);
+        Route::post('my-account/notify', [PartnerController::class, 'myNotify']);
+        Route::post('my-account/reinvest', [PartnerController::class, 'myReinvest']);
         Route::get('partners', [PartnerController::class, 'index']);
         Route::get('partners/waterfall', [PartnerController::class, 'waterfall']);
         Route::post('partners/split', [PartnerController::class, 'split']);

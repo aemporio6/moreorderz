@@ -16,7 +16,7 @@ FIN-16|P|function account|partner balance (capital, profit, withdrawn); annualis
 FIN-17|B|function requestWithdrawal|withdrawal request -> approval -> paid, never above balance
 FIN-18|M||reinvest action not built (the ledger type exists only)
 FIN-14|B|function callNew|capital calls: ask partners, answer, money received = capital; WhatsApp OK / NO answer and auto-match MC not built
-FIN-19|P|function account|My Partner Account (own account, statements, withdraw); stock at cost x %, profit by product, view-as not built
+FIN-19|B|function myAccount|My Partner Account #/my-account: as-of vs compare cards, return % after reserve, stock share (damaged/returned/written off apart), profit by product top 50, statements, capital calls, agreements, Withdraw/Reinvest, notify switches; never-shows strip; Owner view-as read-only + REVEAL audit; staff explanation (MyPartnerAccountTest)
 FIN-20|P|opening_balance|opening balance of bank accounts and opening lots; the wizard with types + lock not built
 FIN-21|N||legacy investor migration – old-tool cut-over step, not run (old investments copied as documents only)
 FIN-22|P|class MarketplaceFiles|money files of TikTok, Amazon (2 formats), eBay, any table + bank CSV / Excel with dedupe; ADS / FBA_STOCK / RETURNS / REIMB / STORAGE types not built

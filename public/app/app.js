@@ -157,6 +157,7 @@
       if (r.startsWith('#/variations/')) return await pageVariations(+r.split('/')[2]);
       if (r.startsWith('#/due')) return await pageDue();
       if (r === '#/products' || r.startsWith('#/products?')) return await pageProducts();
+      if (r.startsWith('#/my-account')) return await pageMyAccount(Object.fromEntries(new URLSearchParams(r.split('?')[1] || '')));
       if (r.startsWith('#/not-listed')) return await pageNotListed(Object.fromEntries(new URLSearchParams(r.split('?')[1] || '')));
       if (r.startsWith('#/alerts')) return await pageAlerts();
       if (r.startsWith('#/tasks')) return await pageTasks(r.includes('scope=all') ? 'all' : r.includes('scope=stuck_on_me') ? 'stuck_on_me' : r.includes('scope=to_approve') ? 'to_approve' : 'mine');
@@ -1331,6 +1332,47 @@
   function dupLive(supEl, refEl, outEl, cycle) { let t; const run = () => { clearTimeout(t); t = setTimeout(async () => { const sup = supEl ? +supEl.value : 0, ref = refEl.value.trim(); outEl.textContent = ''; if ((supEl && !sup) || !ref) return;
       try { const r = await api('buying/duplicate-check?' + new URLSearchParams({ supplier: sup || '', ref, cycle: cycle || '' })); if (!r.ok) outEl.innerHTML = `${esc(r.message)} · <a href="#/cycle/${r.existing.id}">open</a>`; } catch (x) { } }, 400); };
     refEl.addEventListener('input', run); supEl && supEl.addEventListener('change', run); }
+  // ---------- My Partner Account (R-FIN-19) ----------
+  async function pageMyAccount(f = {}) {
+    busy(true); let d; try { d = await api('my-account?' + new URLSearchParams(Object.entries(f).filter(([, v]) => v))); } catch (e) { busy(false); toast(e.message, 'err'); return; } finally { busy(false); }
+    const go4 = ch => go('#/my-account?' + new URLSearchParams(Object.entries({ ...f, ...ch }).filter(([, v]) => v)));
+    if (d.staff) {
+      $('#main').innerHTML = `<div class="page-head"><div><h1>My Partner Account</h1><div class="sub">The page a partner sees about his own money</div></div></div>
+        <div class="card"><p>${esc(d.message)}</p>${d.partners.length ? `<div style="display:flex;gap:8px;align-items:center"><select id="maAs"><option value="">Choose a partner…</option>${d.partners.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select><button class="btn sm" id="maGo">View as partner</button></div>` : ''}
+        <p class="small muted" style="margin-top:10px">A partner never sees bank balances, other partners, supplier names, unit costs or the company ledger.</p></div>`;
+      if ($('#maGo')) $('#maGo').onclick = () => { const v = $('#maAs').value; if (!v) return toast('Choose a partner first.', 'err'); go4({ partner: v }); };
+      return;
+    }
+    const m = x => x === null || x === undefined ? '—' : (+x).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const diff = (a, b) => { const v = +a - +b; return `<span class="small ${v >= 0 ? '' : 'muted'}" style="color:${v > 0 ? 'var(--ok,#2f855a)' : v < 0 ? 'var(--err)' : ''}">${v >= 0 ? '+' : ''}${m(v)}</span>`; };
+    const card = (k, label) => `<div class="card" style="flex:1;min-width:150px"><div class="small muted">${label}</div><div style="font-size:22px;font-weight:700">${m(d.now[k])}</div><div class="small muted">${esc(d.compare)}: ${m(d.then[k])} ${diff(d.now[k], d.then[k])}</div></div>`;
+    $('#main').innerHTML = `<div class="page-head"><div><h1>My Partner Account${d.view_as ? ` · <span class="chip warn">Viewing as ${esc(d.name)} · read-only</span>` : ''}</h1><div class="sub">${esc(d.name)} · amounts in ${esc(d.base)} · Capital + Profit − Withdrawn = Balance</div></div>
+      <div class="actions" style="display:flex;gap:6px;align-items:center"><label class="small">As of <input type="date" id="maAsOf" value="${esc(d.as_of)}"></label><label class="small">Compare with <input type="date" id="maCmp" value="${esc(d.compare)}"></label></div></div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">${card('capital', 'Capital')}${card('profit', 'Profit')}${card('withdrawn', 'Withdrawn')}${card('balance', 'Balance')}
+        <div class="card" style="flex:1;min-width:150px"><div class="small muted">Return per year</div><div style="font-size:22px;font-weight:700">${d.return_pct === null ? '—' : d.return_pct + ' %'}</div><div class="small muted">last 12 months, after the ${d.reserve_pct} % tax reserve</div></div></div>
+      ${d.read_only ? '' : `<div class="card" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>Money</b><input type="number" step="0.01" min="0" id="maAmt" placeholder="Amount" style="width:120px">
+        <select id="maBank">${d.banks.map(b => `<option value="${b.id}">${esc(b.name)}</option>`).join('')}</select><button class="btn sm" id="maWd">Withdraw</button><button class="btn sm" id="maRe">Reinvest</button><span class="small muted">Withdraw waits for approval; reinvest moves balance into capital.</span></div>`}
+      <div class="card" style="margin-top:12px"><div class="card-h"><h3>My stock share (at cost × my POOL ${d.pool_pct} %)</h3></div>
+        <div class="tbl-wrap"><table class="t"><tbody><tr><td>Now (${esc(d.as_of)})</td><td class="num"><b>${m(d.stock.now)}</b></td></tr><tr><td>Then (${esc(d.compare)})</td><td class="num">${m(d.stock.then)} ${diff(d.stock.now, d.stock.then)}</td></tr>
+        <tr class="muted"><td>Damaged (apart)</td><td class="num">${m(d.stock.damaged)}</td></tr><tr class="muted"><td>Returned (apart)</td><td class="num">${m(d.stock.returned)}</td></tr><tr class="muted"><td>Written off (apart)</td><td class="num">${m(d.stock.written_off)}</td></tr></tbody></table></div>
+        <div class="small muted">${esc(d.stock.note)}</div></div>
+      <div class="card" style="margin-top:12px"><div class="card-h"><h3>Statements to accept · ${d.statements_to_accept.length}</h3></div>${d.statements_to_accept.length ? `<div class="tbl-wrap"><table class="t"><thead><tr><th>Month</th><th class="num">My profit</th><th>Status</th></tr></thead><tbody>
+        ${d.statements_to_accept.map(s => `<tr><td>${esc(s.period_month)}</td><td class="num">${m(s.partner_profit)}</td><td><span class="chip warn">${esc(s.partner_status || 'TO ACCEPT')}</span></td></tr>`).join('')}</tbody></table></div>` : `<div class="empty">${ic('check')}<div>Nothing to accept.</div></div>`}</div>
+      <div class="card" style="margin-top:12px"><div class="card-h"><h3>Profit by product · closed months up to ${esc(d.as_of.slice(0, 7))} · top 50</h3></div>${d.profit_by_product.length ? `<div class="tbl-wrap"><table class="t"><thead><tr><th>SKU</th><th>Product</th><th class="num">Units</th><th class="num">Profit</th><th class="num">My share</th></tr></thead><tbody>
+        ${d.profit_by_product.map(p => `<tr><td>${esc(p.sku || '')}</td><td>${esc(p.product || '')}</td><td class="num">${p.units}</td><td class="num">${m(p.profit)}</td><td class="num"><b>${m(p.my_share)}</b></td></tr>`).join('')}</tbody></table></div>
+        <div class="small muted">My share = profit × my POOL % × (1 − tax reserve ${d.reserve_pct} %).</div>` : `<div class="empty">${ic('check')}<div>No closed month yet.</div></div>`}</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">
+        <div class="card" style="flex:1;min-width:260px"><div class="card-h"><h3>Capital calls</h3></div>${d.capital_calls.length ? `<table class="t"><thead><tr><th>Reason</th><th>Due</th><th class="num">Asked</th><th>Status</th></tr></thead><tbody>${d.capital_calls.map(c => `<tr><td>${esc(c.reason || '')}</td><td>${esc(c.due_date || '')}</td><td class="num">${m(c.amount_asked)}</td><td>${esc(c.status || '')}</td></tr>`).join('')}</tbody></table>` : '<div class="small muted">None.</div>'}</div>
+        <div class="card" style="flex:1;min-width:260px"><div class="card-h"><h3>My agreements</h3></div>${d.agreements.length ? `<table class="t"><thead><tr><th>Scope</th><th>Type</th><th class="num">%</th><th>From – to</th></tr></thead><tbody>${d.agreements.map(a => `<tr><td>${esc(a.scope_name || '')}</td><td>${esc(a.type || '')}</td><td class="num">${a.pct}</td><td>${esc(a.from || '')} – ${esc(a.to || 'open')} ${a.live ? '<span class="chip done">live</span>' : ''}</td></tr>`).join('')}</tbody></table>` : '<div class="small muted">None.</div>'}</div>
+        <div class="card" style="flex:1;min-width:220px"><div class="card-h"><h3>Messages to me</h3></div><label><input type="checkbox" id="maWa" ${d.notify.whatsapp ? 'checked' : ''} ${d.read_only ? 'disabled' : ''}> WhatsApp</label><br><label><input type="checkbox" id="maEm" ${d.notify.email ? 'checked' : ''} ${d.read_only ? 'disabled' : ''}> E-mail</label><div class="small muted">${esc(d.notify.note)}</div></div></div>`;
+    $('#maAsOf').onchange = e => go4({ as_of: e.target.value }); $('#maCmp').onchange = e => go4({ compare: e.target.value });
+    if (d.read_only) return;
+    const amt = () => +$('#maAmt').value;
+    $('#maWd').onclick = async () => { if (!(amt() > 0)) return toast('Enter the amount.', 'err'); try { toast((await api(`partners/${d.partner}/withdraw`, { method: 'POST', body: { amount: amt(), bank: +$('#maBank').value } })).message); pageMyAccount(f); } catch (e) { toast(e.message, 'err'); } };
+    $('#maRe').onclick = async () => { if (!(amt() > 0)) return toast('Enter the amount.', 'err'); try { toast((await api('my-account/reinvest', { method: 'POST', body: { amount: amt() } })).message); pageMyAccount(f); } catch (e) { toast(e.message, 'err'); } };
+    const sw = async () => { try { toast((await api('my-account/notify', { method: 'POST', body: { whatsapp: $('#maWa').checked, email: $('#maEm').checked } })).message); } catch (e) { toast(e.message, 'err'); } };
+    $('#maWa').onchange = sw; $('#maEm').onchange = sw;
+  }
   // ---------- products not listed per shop (R-D-58) ----------
   async function pageNotListed(f = {}) {
     busy(true); let d; try { d = await api('not-listed?' + new URLSearchParams(Object.entries(f).filter(([, v]) => v))); } finally { busy(false); }

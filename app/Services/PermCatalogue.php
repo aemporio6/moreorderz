@@ -79,6 +79,7 @@ class PermCatalogue
         'partners.EDIT' => ['Add and change', 'Partners', ['OWNER']],
         'partners.MONEY' => ['See money figures', 'Partners', ['OWNER', 'FINANCE']],
         'partners.SEE' => ['See', 'Partners', ['OWNER', 'MANAGER', 'FINANCE', 'ACCOUNTANT', 'PARTNER']],
+        'partners.viewAs' => ['View as partner (read-only, audited)', 'Partners', ['OWNER']],
         'partners.show_may' => ['Show – may', 'Partners', ['OWNER', 'FINANCE', 'PARTNER']],
         'partners.waterfall' => ['Waterfall', 'Partners', ['OWNER', 'MANAGER', 'FINANCE', 'ACCOUNTANT']],
         'partners.waterfall_owner' => ['Waterfall – owner', 'Partners', ['OWNER']],

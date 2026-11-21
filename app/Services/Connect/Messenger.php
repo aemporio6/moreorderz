@@ -17,14 +17,17 @@ use Illuminate\Support\Facades\Storage;
  */
 class Messenger
 {
-    public static function whatsappOf(int $accountId): ?string
+    /** $optional = a message the person may switch off (t_account.wa_enabled / email_enabled); statements are never optional. */
+    public static function whatsappOf(int $accountId, bool $optional = false): ?string
     {
+        if ($optional && ! (int) (DB::table('t_account')->where('id', $accountId)->value('wa_enabled') ?? 1)) return null;
         $n = preg_replace('/\D/', '', (string) DB::table('t_account')->where('id', $accountId)->value('whatsapp_number'));
         return strlen($n) >= 8 ? $n : null;
     }
 
-    public static function emailOf(int $accountId): ?string
+    public static function emailOf(int $accountId, bool $optional = false): ?string
     {
+        if ($optional && ! (int) (DB::table('t_account')->where('id', $accountId)->value('email_enabled') ?? 1)) return null;
         $e = DB::table('t_account_emails')->where('fk_id_account', $accountId)->where('f_active', 1)->orderBy('id')->value('email')
             ?? DB::table('t_users')->where('fk_id_account', $accountId)->where('f_active', 1)->value('login_id');
         return $e && filter_var($e, FILTER_VALIDATE_EMAIL) ? $e : null;

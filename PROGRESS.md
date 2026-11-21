@@ -558,3 +558,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-44 (21 Nov): security questions per provider R-C-22 BUILT. +3 register lines (501). 398 tests.
 - 7e-45 (21 Nov): shop health metrics R-G_CORE-83 BUILT. +3 register lines (504). 399 tests.
 - 7e-46 (21 Nov): products not listed per shop R-D-58 BUILT. +3 register lines. 400 tests.
+- 7e-47 (21 Nov): My Partner Account R-FIN-19 BUILT (page #/my-account, Owner view-as read-only + audited, Reinvest, message switches). +3 register lines (510). 401 tests.

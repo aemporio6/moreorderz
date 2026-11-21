@@ -138,4 +138,46 @@ class PartnerController extends Controller
         $d = $r->validate(['amount' => 'required|numeric|gt:0', 'bank' => 'required|integer', 'note' => 'nullable|string|max:255']);
         return $this->run(function () use ($id, $d) { $x = Partners::requestWithdrawal((int) Context::ent(), $id, (float) $d['amount'], (int) $d['bank'], $d['note'] ?? null); return $x + ['message' => $x['status'] === 'PAID' ? 'Withdrawal paid and booked' : 'Request saved – it waits for approval']; });
     }
+
+    /**
+     * My Partner Account (R-FIN-19). A partner login sees his own account; the Owner may "view as partner" (?partner=ID, read-only, audited as REVEAL);
+     * any other login gets the explanation page (no data).
+     */
+    private function accountOf(Request $r, bool $write = false): array
+    {
+        if ($r->user()->role_code === 'PARTNER') return [$this->own($r), false];
+        if ($r->filled('partner') && \App\Services\Perm::has($r->user(), 'partners.viewAs')) {
+            abort_if($write, 403, 'View as partner is read-only.');
+            return [(int) $r->input('partner'), true];
+        }
+        return [null, false];
+    }
+
+    public function myAccount(Request $r)
+    {
+        [$id, $viewAs] = $this->accountOf($r); $ent = (int) Context::ent();
+        if (! $id) return ['staff' => true, 'message' => 'My Partner Account is the page a partner sees about his own money: capital, profit, withdrawals, balance, stock share, profit by product and statements to accept. Your login is not a partner login, so there is nothing to show here.'
+            . (\App\Services\Perm::has($r->user(), 'partners.viewAs') ? ' As Owner you can choose a partner below and view the page as he sees it (read-only).' : ''),
+            'partners' => \App\Services\Perm::has($r->user(), 'partners.viewAs') ? collect(Partners::partners($ent))->map(fn ($p) => ['id' => $p['id'], 'name' => $p['name']])->values()->all() : []];
+        abort_unless(DB::table('fin_investor_agreements')->where('company_id', $ent)->where('investor_id', $id)->exists() || DB::table('fin_investor_ledger')->where('company_id', $ent)->where('investor_id', $id)->exists(), 404, 'No partner account.');
+        $d = $r->validate(['as_of' => 'nullable|date', 'compare' => 'nullable|date']);
+        try { $page = \App\Services\PartnerAccount::page($ent, $id, $d['as_of'] ?? null, $d['compare'] ?? null); }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage(), 'errors' => ['compare' => [$e->getMessage()]]], 422); }
+        if ($viewAs) \App\Services\Audit::log('t_account', $id, 'REVEAL', ['view_as_partner' => $id], 'Owner viewed My Partner Account as the partner', $ent);
+        return $page + ['partner' => $id, 'view_as' => $viewAs, 'read_only' => $viewAs, 'banks' => $viewAs ? [] : DB::table('fin_bank_accounts')->where('company_id', $ent)->where('is_active', 1)->get(['id', 'account_label as name'])];
+    }
+
+    public function myNotify(Request $r)
+    {
+        [$id] = $this->accountOf($r, true); abort_unless($id, 403, 'Only a partner login has these switches.');
+        $d = $r->validate(['whatsapp' => 'nullable|boolean', 'email' => 'nullable|boolean']);
+        return \App\Services\PartnerAccount::setNotify($id, $d);
+    }
+
+    public function myReinvest(Request $r)
+    {
+        [$id] = $this->accountOf($r, true); abort_unless($id, 403, 'Only a partner login can reinvest.');
+        $d = $r->validate(['amount' => 'required|numeric|gt:0', 'note' => 'nullable|string|max:200']);
+        return $this->run(fn () => \App\Services\PartnerAccount::reinvest((int) Context::ent(), $id, (float) $d['amount'], $d['note'] ?? null));
+    }
 }

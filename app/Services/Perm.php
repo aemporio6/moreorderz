@@ -94,6 +94,7 @@ class Perm
         'partners.MONEY' => 'See partner money',
         'partners.SEE' => 'See partners',
         'partners.show_may' => 'See any partner (not only himself)',
+        'partners.viewAs' => 'View My Partner Account as a partner (read-only, audited)',
         'partners.waterfall' => 'See the profit share',
         'partners.waterfall_owner' => 'Run and post the profit share',
         'partners.withdraw' => 'Enter a partner withdrawal',

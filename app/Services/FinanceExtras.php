@@ -225,8 +225,8 @@ class FinanceExtras
                 DB::table('fin_capital_call_responses')->insert(['call_id' => $id, 'investor_id' => $inv, 'amount_accepted' => 0, 'amount_asked' => $ask, 'status' => 'SENT']);
                 try {
                     $vars = ['amount' => number_format($ask, 2), 'cycle' => $reason, 'reason' => $reason, 'due' => ($d['due_date'] ?? '') ?: date('Y-m-d', strtotime('+7 days')), 'link' => rtrim((string) config('app.url'), '/') . '/#/partners/' . $inv, 'name' => (string) DB::table('t_account')->where('id', $inv)->value('first_name')];
-                    if ($p = Connect\Messenger::whatsappOf($inv)) Connect\Messenger::queueWa($ent, $inv, $p, 'CAPITAL_CALL', $vars, 'fin_capital_calls', $id);
-                    if ($e = Connect\Messenger::emailOf($inv)) Connect\Messenger::queueEmail($ent, $inv, $e, 'Capital call: ' . $reason, Connect\Messenger::render('CAPITAL_CALL', $vars)[0], null, 'CAPITAL_CALL', 'fin_capital_calls', $id);
+                    if ($p = Connect\Messenger::whatsappOf($inv, true)) Connect\Messenger::queueWa($ent, $inv, $p, 'CAPITAL_CALL', $vars, 'fin_capital_calls', $id);
+                    if ($e = Connect\Messenger::emailOf($inv, true)) Connect\Messenger::queueEmail($ent, $inv, $e, 'Capital call: ' . $reason, Connect\Messenger::render('CAPITAL_CALL', $vars)[0], null, 'CAPITAL_CALL', 'fin_capital_calls', $id);
                 } catch (\InvalidArgumentException) {}
             }
             Audit::log('fin_capital_calls', $id, 'INSERT', ['amount' => $amt, 'partners' => count($by)], $reason, $ent);
@@ -290,7 +290,7 @@ class FinanceExtras
         DB::table('fin_statement_queries')->where('id', $queryId)->update(['answer' => mb_substr(trim($answer), 0, 2000), 'answered_at' => now(), 'answered_by' => Context::userId()]);
         if ($q->task_id) DB::table('tasks')->where('id', $q->task_id)->update(['status' => 'DONE', 'done_at' => now(), 'last_update_at' => now()]);
         if (! DB::table('fin_statement_queries')->where('statement_id', $q->statement_id)->whereNull('answered_at')->exists()) DB::table('fin_statements')->where('id', $q->statement_id)->update(['partner_status' => 'NEW']);
-        try { if ($p = Connect\Messenger::whatsappOf((int) $q->investor_id)) Connect\Messenger::queueWa($ent, (int) $q->investor_id, $p, 'TASK_NEW', ['name' => (string) DB::table('t_account')->where('id', $q->investor_id)->value('first_name'), 'task' => 'answer to your statement question: ' . mb_substr(trim($answer), 0, 300), 'due' => date('Y-m-d'), 'link' => rtrim((string) config('app.url'), '/') . '/#/partners/' . $q->investor_id], 'fin_statement_queries', $queryId); } catch (\InvalidArgumentException) {}
+        try { if ($p = Connect\Messenger::whatsappOf((int) $q->investor_id, true)) Connect\Messenger::queueWa($ent, (int) $q->investor_id, $p, 'TASK_NEW', ['name' => (string) DB::table('t_account')->where('id', $q->investor_id)->value('first_name'), 'task' => 'answer to your statement question: ' . mb_substr(trim($answer), 0, 300), 'due' => date('Y-m-d'), 'link' => rtrim((string) config('app.url'), '/') . '/#/partners/' . $q->investor_id], 'fin_statement_queries', $queryId); } catch (\InvalidArgumentException) {}
         Audit::log('fin_statements', (int) $q->statement_id, 'UPDATE', ['answered' => $queryId], null, $ent);
     }
 }
