@@ -21,6 +21,10 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::get('/login/code', [AuthController::class, 'codeForm']);
 Route::post('/login/code', [AuthController::class, 'code']);
 Route::post('/logout', [AuthController::class, 'logout']);
+Route::get('/forgot', [AuthController::class, 'forgotForm']);      // R-G_CORE-65
+Route::post('/forgot', [AuthController::class, 'forgot'])->middleware('throttle:5,10');
+Route::get('/reset/{token}', [AuthController::class, 'resetForm'])->where('token', '[0-9a-f]{48}');
+Route::post('/reset/{token}', [AuthController::class, 'reset'])->where('token', '[0-9a-f]{48}')->middleware('throttle:10,10');
 // print helper on the packing PC: no sign-in, its own token (connection PRINT_AGENT)
 Route::get('/print-agent/next', [\App\Http\Controllers\PrintController::class, 'agentNext'])->middleware('throttle:240,1');
 Route::post('/print-agent/{id}/done', [\App\Http\Controllers\PrintController::class, 'agentDone'])->whereNumber('id')->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class])->middleware('throttle:240,1');
@@ -53,6 +57,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('record/{key}/draft', [AppController::class, 'draft']);
         Route::post('record/{key}/{id?}', [AppController::class, 'save'])->whereNumber('id');
         Route::post('reveal/{key}/{id}', [AppController::class, 'reveal'])->whereNumber('id');
+        Route::post('me/secure-code', [AppController::class, 'secureCode']);
         Route::get('page/{key}/{id}', [WorkController::class, 'page'])->whereNumber('id');
         Route::get('search', [WorkController::class, 'search']);
         Route::get('guide/list/{key}', [WorkController::class, 'guideList']);

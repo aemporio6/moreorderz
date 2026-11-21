@@ -17,6 +17,7 @@ class SetContext
             if ($request->hasSession() && ! app()->runningUnitTests() && ! \App\Services\Access::touch($request, $u)) { Auth::logout(); $request->session()->invalidate(); abort(401, 'This sign-in was ended. Sign in again.'); }
             $ent = (int) ($request->session()->get('ent') ?: $u->fk_id_ent);
             Context::set($ent ?: null, $u->id);
+            \App\Services\SecureStep::seen($request);      // R-G_CORE-98 activity for the 2FA re-ask
             // shop scope: a person limited to some shops cannot name another shop on any screen
             foreach (['shop', 'shop_id', 'branch', 'branch_id', 'fk_id_branch', 'fk_id_shop'] as $k) {
                 $v = $request->input($k) ?? $request->route($k);

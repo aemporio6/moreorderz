@@ -138,6 +138,12 @@ class Choices
             '0' => ['exactly that amount (± 0.01)', ''], '0.5' => ['± 0.5 %', 'Suggested.'], '1' => ['± 1 %', ''], '2' => ['± 2 %', '']]],
         'CONTRACT_RENEWAL_DAYS' => ['Job history: a contract renewal date shows amber when it is within …', 'Recommended: 30 days – a month to talk about the new contract.', '30', [
             '14' => ['14 days', ''], '30' => ['30 days', 'Suggested.'], '60' => ['60 days', ''], '90' => ['90 days', '']]],
+        'SECURE_2FA' => ['Opening a secret (Reveal, secure pages) needs two-step sign-in …', 'Recommended: from everyone – a password alone is not enough for bank and card secrets; a login without the phone app is asked to set it up first.', 'REQUIRE', [
+            'REQUIRE' => ['from everyone (set it up first)', 'Suggested (specification).'], 'IF_SET_UP' => ['only from logins that have it set up', 'Others reveal with their password sign-in only (every reveal is still logged).']]],
+        'SECURE_REASK_MINUTES' => ['Secrets: the code of the phone app is asked again after … without activity', 'Recommended: 60 minutes (owner decision #107) – a normal working hour goes on, a forgotten open screen closes.', '60', [
+            '15' => ['15 minutes', 'The old proposal.'], '30' => ['30 minutes', ''], '60' => ['60 minutes', 'Suggested.'], '120' => ['2 hours', '']]],
+        'RESET_LINK_MINUTES' => ['Forgot password: the reset link works for …', 'Recommended: 30 minutes – enough to open the e-mail, short enough that an old mail is useless.', '30', [
+            '15' => ['15 minutes', ''], '30' => ['30 minutes', 'Suggested.'], '60' => ['1 hour', ''], '1440' => ['1 day', '']]],
         'HIDDEN_MARGIN_ROLES' => ['Owner Home › Invoicing / Profit: who sees the row "Hidden margin"?', 'Recommended: Owner only – a partner\'s share is worked out on the net profit, so the margin kept by the company stays with the Owner.', 'OWNER', []],
     ];
 

@@ -243,9 +243,17 @@ class AppController extends Controller
             'never' => array_keys(array_filter($kinds, fn ($k) => $k === 'NEVER')), 'may_reveal' => \App\Services\Vault::mayReveal(Context::role())];
     }
 
+    /** R-G_CORE-98: the code of the phone app opens secrets for this session. */
+    public function secureCode(Request $r)
+    {
+        try { return \App\Services\SecureStep::verify($r, $r->user(), (string) $r->input('code')); }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+    }
+
     /** Reveal one secret of a record (logged as REVEAL: SHOWN or DENIED; never the value). */
     public function reveal(Request $r, string $key, int $id)
     {
+        if ($need = \App\Services\SecureStep::needed($r, $r->user())) return response()->json($need, 428);      // R-G_CORE-59 / 98 2FA before a secret
         try { return \App\Services\Vault::reveal($key, $id, (string) $r->input('field')); }
         catch (\Illuminate\Auth\Access\AuthorizationException $e) { return response()->json(['message' => $e->getMessage()], 403); }
         catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }

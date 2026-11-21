@@ -27,11 +27,42 @@ body{display:grid;place-items:center;min-height:100vh;padding:20px}
   <button class="btn primary" type="submit">Continue</button>
   <p style="margin-top:14px"><a href="/login">Start again</a></p>
 </form>
+@elseif (($step ?? '') === 'forgot')
+<form class="login" method="post" action="/forgot">
+  @csrf
+  <h1>{{ config('app.name') }}</h1>
+  <p>Forgot your password? Type your login and the e-mail address on file – we send a link to choose a new one.</p>
+  <label for="login">Login</label>
+  <input id="login" name="login" type="text" autocomplete="username" autofocus required>
+  <label for="email">E-mail</label>
+  <input id="email" name="email" type="email" autocomplete="email" required>
+  <button class="btn primary" type="submit">Send the link</button>
+  <p style="margin-top:14px"><a href="/login">Back to sign in</a></p>
+</form>
+@elseif (($step ?? '') === 'sent')
+<div class="login">
+  <h1>{{ config('app.name') }}</h1>
+  <p>{{ $message ?? '' }}</p>
+  <p style="margin-top:14px"><a href="/login">Back to sign in</a></p>
+</div>
+@elseif (($step ?? '') === 'reset')
+<form class="login" method="post" action="/reset/{{ $token }}">
+  @csrf
+  <h1>{{ config('app.name') }}</h1>
+  <p>Choose a new password (at least 10 characters). Every other sign-in of your login ends.</p>
+  @if ($errors->any())<div class="errbox">{{ $errors->first() }}</div>@endif
+  <label for="password">New password</label>
+  <input id="password" name="password" type="password" autocomplete="new-password" minlength="10" autofocus required>
+  <label for="password_again">New password again</label>
+  <input id="password_again" name="password_again" type="password" autocomplete="new-password" minlength="10" required>
+  <button class="btn primary" type="submit">Save the new password</button>
+</form>
 @else
 <form class="login" method="post" action="/login">
   @csrf
   <h1>{{ config('app.name') }}</h1>
   <p>Sign in to continue.</p>
+  @if (session('status'))<div class="errbox" style="background:var(--done-bg, #e7f6ee);color:var(--done, #1d6b46);border-color:var(--done-line, #b7e0c8)">{{ session('status') }}</div>@endif
   @if ($errors->any())<div class="errbox">{{ $errors->first() }}</div>@endif
   <label for="login">Login</label>
   <input id="login" name="login" type="text" value="{{ old('login') }}" autocomplete="username" autofocus required>
@@ -39,6 +70,7 @@ body{display:grid;place-items:center;min-height:100vh;padding:20px}
   <input id="password" name="password" type="password" autocomplete="current-password" required>
   <label style="font-weight:400;display:flex;gap:8px;align-items:center"><input type="checkbox" name="remember" value="1"> Keep me signed in on this device</label>
   <button class="btn primary" type="submit">Sign in</button>
+  <p style="margin-top:14px"><a href="/forgot">Forgot your password?</a></p>
 </form>
 @endif
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});</script>

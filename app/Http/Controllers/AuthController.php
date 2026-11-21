@@ -46,6 +46,21 @@ class AuthController extends Controller
         return $this->finish($r, $u, $r->boolean('remember'));
     }
 
+    /* ---------- R-G_CORE-65 forgot password ---------- */
+    public function forgotForm() { return view('login', ['step' => 'forgot']); }
+    public function forgot(Request $r)
+    {
+        $msg = \App\Services\PasswordReset::request((string) $r->input('login'), (string) $r->input('email'), $r->ip());
+        return view('login', ['step' => 'sent', 'message' => $msg]);
+    }
+    public function resetForm(string $token) { return \App\Services\PasswordReset::valid($token) ? view('login', ['step' => 'reset', 'token' => $token]) : view('login', ['step' => 'sent', 'message' => 'This link has expired or was used already. Ask for a new one.']); }
+    public function reset(Request $r, string $token)
+    {
+        try { $m = \App\Services\PasswordReset::reset($token, (string) $r->input('password'), (string) $r->input('password_again')); }
+        catch (\InvalidArgumentException $e) { return back()->withErrors(['password' => $e->getMessage()]); }
+        return redirect('/login')->with('status', $m);
+    }
+
     public function codeForm(Request $r)
     {
         return $r->session()->has('login_2fa') ? view('login', ['step' => 'code']) : redirect('/login');

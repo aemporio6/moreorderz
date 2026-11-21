@@ -60,7 +60,7 @@ Updated 21 Nov 2026 (batch 7e-101). How to answer: write **OK** next to a line t
 
 ## C. Suggested defaults written in the specification (220 lines)
 
-Each line already works with the default shown. **Classified 22 Nov (7e-132):** [S] already a setting 109 · [B] made a setting in 7e-127…135 19 · [D] design rule with no real alternative 79 · [C] real choice that waits for a feature not built yet 13 (each line says which feature; the switch is built together with it).
+Each line already works with the default shown. **Classified 22 Nov (7e-132):** [S] already a setting 109 · [B] made a setting in 7e-127…136 22 · [D] design rule with no real alternative 79 · [C] real choice that waits for a feature not built yet 10 (each line says which feature; the switch is built together with it).
 
 
 ### Stock/Warehouse (33)
@@ -176,7 +176,7 @@ Each line already works with the default shown. **Classified 22 Nov (7e-132):** 
 | MR-0496 | R-G_CORE-15 | Undo of a task cancel within 10 minutes? — **[B] now a setting**: Choices › Task undo minutes (7e-132) |
 | MR-0498 | R-G_CORE-31 | Search starts at 2 characters (old: 1)? — **[B] now a setting**: Choices › search starts at … characters (recommended 2) (7e-135) |
 | MR-0500 | R-G_CORE-56 | Search: recently opened pages ranked higher, records shown after pages? — **[D] design rule (no real alternative)**: search ranking |
-| MR-0501 | R-G_CORE-59 | Opening a secret asks for 2FA once per session and again after 15 minutes idle; every open is logged? — **[C] real choice – later**: the 2FA re-ask for secrets is not built yet (R-G_CORE-59 partial) – its minutes come with it |
+| MR-0501 | R-G_CORE-59 | Opening a secret asks for 2FA once per session and again after 15 minutes idle; every open is logged? — **[B] now a setting**: Choices › SECURE_REASK_MINUTES (the old 15 minutes is one option; owner decision #107 = 60) and SECURE_2FA (7e-136) |
 | MR-0503 | R-G_CORE-66 | List page sizes 25 / 50 / 100 / 250? — **[D] design rule (no real alternative)**: page sizes offered on every list |
 | MR-0504 | R-G_CORE-75 | Clean-up job nightly at 02:30 company time; import uploads kept 1 day, generated files the same day only? — **[S] already a setting**: Settings: retention_import_upload_days / retention_generator_days |
 | MR-0505 | R-G_CORE-83 | Shop health thresholds per marketplace (example eBay-type: defect rate ≤ 0.5 % green, ≤ 2 % amber; late shipment ≤ 3 % / ≤ 7 %)? — **[S] already a setting**: marketplace profile: shop health thresholds |
@@ -303,7 +303,7 @@ Each line already works with the default shown. **Classified 22 Nov (7e-132):** 
 | MR-0494 | R-G_CORE-2 | New task form: offer "give it to the person with the fewest open tasks" as the owner? — **[D] design rule (no real alternative)**: offered, not forced |
 | MR-0497 | R-G_CORE-28 | Task comments up to 2,000 characters? — **[B] now a setting**: Choices › Task comment length (7e-132) |
 | MR-0499 | R-G_CORE-45 | New task form: Amount £ and Confidential for the Partner, "Tell on WhatsApp now" switched on? — **[S] already a setting**: Choices › Task proof / import tell (7e-129); amount & confidential are Partner fields |
-| MR-0502 | R-G_CORE-65 | Password reset link valid for 30 minutes? — **[C] real choice – later**: forgot-password is not built yet (R-G_CORE-65) – its link minutes come with it |
+| MR-0502 | R-G_CORE-65 | Password reset link valid for 30 minutes? — **[B] now a setting**: Choices › reset link minutes (recommended 30) (7e-136) |
 | MR-0511 | R-G_CORE-94 | Above what amount is a money task URGENT? → proposed: £1,000 in base currency (setting TASK_URGENT_MONEY) for 6 codes — **[S] already a setting**: setting: TASK_URGENT_MONEY |
 | MR-0512 | R-G_CORE-97 | How long does "Close with reason" snooze a rule task? → proposed: 7 days (setting rule_snooze_days) — **[S] already a setting**: setting: rule_snooze_days |
 | MR-0551 | 06C §9 | WH_PARCEL_LOST as a money code → Yes: claim amount > TASK_URGENT_MONEY → URGENT (7th money code) — **[S] already a setting**: setting: TASK_URGENT_MONEY |
@@ -329,7 +329,7 @@ Each line already works with the default shown. **Classified 22 Nov (7e-132):** 
 | Line | Rule | Default (question) |
 |---|---|---|
 | MR-0041 | R-C-49 | IP_ALLOWLIST_MODE = OFF; SESSION_IDLE_MINUTES = 120 — **[S] already a setting**: setting: IP_ALLOWLIST_MODE, SESSION_IDLE_MINUTES |
-| MR-0513 | R-G_CORE-98 | How long is a 2FA check valid for sensitive actions? → proposed: 60 minutes, then asked again — **[C] real choice – later**: the 2FA check for sensitive actions is not built yet (R-G_CORE-98) – its minutes come with it |
+| MR-0513 | R-G_CORE-98 | How long is a 2FA check valid for sensitive actions? → proposed: 60 minutes, then asked again — **[B] now a setting**: Choices › secrets: code asked again after … idle (recommended 60) (7e-136) |
 | MR-1305 | 02_Decisions.md D5 | confirm in writing before Phase 2: Kept in a password manager (e.g. Bitwarden). The tool keeps only a vault_ref link — **[D] design rule (no real alternative)**: design / one-time project decision – no runtime alternative |
 | MR-1472 | 19_Old_Tool_Audit/COVERAGE_ROUND_v1.7.md §3 | agree "Supplier portal login / password, shop password-manager link" is vault only — **[D] design rule (no real alternative)**: design / one-time project decision – no runtime alternative |
 | MR-1475 | 19_Old_Tool_Audit/COVERAGE_ROUND_v1.7.md §3 | agree "CVV / PIN columns (9)" is emptied in Phase 0, dropped — **[D] design rule (no real alternative)**: design / one-time project decision – no runtime alternative |

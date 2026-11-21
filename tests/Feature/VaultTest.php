@@ -12,6 +12,9 @@ use Tests\TestCase;
 /** Round 2 part 5: secrets in the vault – encrypted, masked on every screen, revealed only with the right (logged), CVV / PIN never kept, cards 4 digits. */
 class VaultTest extends TestCase
 {
+    /** These tests are about the rights and the vault; the 2FA step of R-G_CORE-98 is tested in SecurityStepsTest. */
+    protected function setUp(): void { parent::setUp(); \App\Services\Choices::set('SECURE_2FA', 'IF_SET_UP', 1); }
+
     private function person(): int
     {
         return (int) DB::table('t_account')->insertGetId(\App\Services\RecordService::fillNotNull('t_account', ['fk_id_ent' => 1, 'account_code' => 'V' . random_int(1000, 9999), 'first_name' => 'Vault', 'sur_name' => 'Test', 'f_active' => 1]));

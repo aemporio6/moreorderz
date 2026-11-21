@@ -4490,8 +4490,12 @@
     ov.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); $('#fmSave', ov).click(); } });
     // a secret: shown only on request, and every reveal is logged
     $('#fBody', ov).addEventListener('click', async e => { const b = e.target.closest('[data-reveal]'); if (!b) return; const el = $(`[data-f="${b.dataset.reveal}"]`, ov);
-      try { const x = await api(`reveal/${key}/${id}`, { method: 'POST', body: { field: b.dataset.reveal } }); if (x.value == null) return toast('Nothing is kept for this field.', 'warn');
-        el.type = 'text'; el.value = x.value; val[b.dataset.reveal] = x.value; b.remove(); toast('Shown – this reveal is in the audit log.'); } catch (x) { toast(x.message, 'err'); } });
+      const go = async () => { const x = await api(`reveal/${key}/${id}`, { method: 'POST', body: { field: b.dataset.reveal } }); if (x.value == null) return toast('Nothing is kept for this field.', 'warn');
+        el.type = 'text'; el.value = x.value; val[b.dataset.reveal] = x.value; b.remove(); toast('Shown – this reveal is in the audit log.'); };
+      try { await go(); } catch (x) {
+        if (x.status === 428 && x.data && x.data.need === 'CODE') return miniForm('Two-step check', x.data.message, [{ name: 'code', label: '6-digit code', required: true }], async v => { const r = await api('me/secure-code', { method: 'POST', body: { code: v.code } }); await go(); return r; });      // R-G_CORE-98
+        if (x.status === 428 && x.data && x.data.need === 'SETUP') { toast(x.message, 'warn'); return; }
+        toast(x.message, 'err'); } });
     // suggestions on every empty field: at most 2 chips with the reason; one click fills the field
     const showChips = async (f, anchor) => { $$('.mo-chips', ov).forEach(c => c.remove()); if (!f || f.readonly || f.secret || f.numbered || !empty(f.name)) return;
       let chips = []; try { const qs = new URLSearchParams(); Object.entries(parentsOf()).forEach(([k, v]) => qs.set(`form[${k}]`, v)); chips = (await api(`suggest/${key}/${f.name}?` + qs)).chips || []; } catch (x) {}
