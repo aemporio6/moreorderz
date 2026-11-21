@@ -8,14 +8,14 @@
 8|B|class TaskScore|score at approval in task_scores + tasks.score, never recalculated: late days = close day − due day, on time = max(0, 40 − 5 × late), proof 20 with ≥ 1 counting evidence (voice not counted), quality 40/30/20/10, rework −10 each, clamp 0..100; history line "on time 40 + evidence 20 + quality 30 - rework 10"; preview on waiting tasks; rule tasks closed by the system scored GOOD; colour bands teal/green ≥ 80, ochre/cream ≥ 65, rust/peach below; weights and bands are tm_settings score_* (a change applies only to later approvals); person score = rounded average of the last 30 × 24 h with "On time n of N · Proof n of N · Rework n" on the tasks screen. Rule test passes (due 03 Nov, approved 05 Nov GOOD, proof, 1 rework → 70 amber; later weight change leaves 70)
 9|B|function rework|Send back only from DONE, by an approver, reason required (rule texts), REWORK + rework_count + done_at cleared, comment REWORK: <reason>, N8 to the owner; web and WhatsApp (TaskScoreTest, WaCommandsTest)
 10|M||acknowledge not built
-11|M||dependencies not built
-12|M||subtasks not built
+11|P|depends_on_task_id|dependency picked on New task (TaskCreate), reminders skip blocked tasks (AlertRules::isBlocked; AlertRulesTest), N10 "You can start" to waiting owners when the dependency is approved (TaskScore). Open: start refused while blocked, loop check, unblock on cancel, "waits for" chip check
+12|P|function missing|parent Done gate: a parent cannot go Done while a subtask is not APPROVED / CANCELLED ("Refused: n subtask is not approved yet…"); StaleSweepTest. Open: "+ Subtask" with ?parent=, one-level check, automatic parent DONE when the last subtask is approved, progress bar
 13|M||due-date move limit not built
 14|M||reassign with reason not built
-15|M||cancel with reason / never delete not built as rule
+15|P|function cancel|cancel by Owner / Partner / Manager only, reason required, CANCELLED + cancelled_at / by, history row, event TASK_CANCELLED; tasks never deleted; StaleSweepTest. Open: cancel unblocks waiting tasks, 10-minute Undo (owner to confirm), hide wrong evidence with reason; refusal text differs slightly from the spec
 16|F|form:task_absence|form only
 17|F|form:task_delegation|form only
-18|M||workload limit not built
+18|P|weekly_task_limit|workload warning on New task over t_account.weekly_task_limit (default 6), never a block; TaskCreateTest. Open: the same warning on reassign, Team page load bar, OVER LIMIT in the team digest, load bar in owner pickers
 19|P|function tasks|Mine / Everyone views; confidential / helper / cover visibility not built
 20|P|class Rights|roles from the rights list
 21|P|function tasks|late and urgent counts; the 9 health chips not built
@@ -32,7 +32,7 @@
 32|M||send reminder now not built
 33|M||bulk actions on tasks not built
 34|F|form:task_import|form only
-35|P|schedule|scheduler jobs every minute / hour / night; one lock + run log line not built
+35|P|schedule|every scheduled command runs withoutOverlapping (lock); finance jobs log one line per run in sys_job_runs (JobLog). Open: task worker run log line ("another run is still busy - skipped") and the order repeats → triggers → schedule → dispatch
 36|P|function tasks|My tasks list; tiles / waiting-on-me groups / score not built
 37|P|function tasks|tasks list with filters; chips with counts, export columns not built
 38|M||tasks dashboard not built
@@ -107,7 +107,7 @@
 107|B|function playbookCoverage|playbooks per workflow step (title, checklist, video link) shown as "How to do this" on the screens of the workflow, ticks are a guide only, the Admin sees every step with written / missing; GuideTest
 108|M||data-quality score not built
 109|N||old tool key rotation – outside the new code
-110|P|job|job runs written by pulls; one job log for every scheduled job + Health "late" not built
+110|P|class JobLog|one run log (sys_job_runs: start, end, items, error, LOCKED) for the finance jobs and pulls; open: every other scheduled job through JobLog + Health "late"
 111|B|class PrintService|printer profiles as capabilities, statuses, add / edit
 112|B|function fit|template is a size; fit check, turn 90 degrees, refuse with reason
 113|B|class PrintAdapters|adapters DRIVER_PDF, IPP, RAW TSPL / ZPL / EPL, print helper, cloud

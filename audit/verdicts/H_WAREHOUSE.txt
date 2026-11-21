@@ -38,7 +38,7 @@
 38|P|function receiveReturn|return before / after Confirm; cancel / refund around Confirm partly
 39|P|function receiveReturn|return intake with condition; scan intake partly
 40|P|function receiveReturn|unmatched return -> task
-41|P|function receiveReturn|refund review task; supplier claim not built
+41|P|function receiveReturn|refund review task WH_RETURN_REFUND_REVIEW to the VA on a booked return. Open: grade SUPPLIER_FAULT → claim line on the lot's GRN claim section (the claim section itself exists since 7e-110, SupplierClaims) + QUARANTINE wait
 42|B|function transfer|bin transfer; site transfer two-step not built
 43|B|function move|change a SKU's home, units moved, 2 labels queued
 44|B|function refill|refill of a main home + nightly WH_REPLEN task
