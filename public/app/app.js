@@ -2792,6 +2792,22 @@
 
   // R-F_SETUP-19: the 12-stage strip of the stage engine (done teal, current black, pending grey, record missing amber, skipped hatched)
   const stageStrip = (steps, pct) => `<div style="display:flex;gap:2px;align-items:center" data-strip>${steps.map(s => `<span data-st="${s.key}" data-state="${s.state}" title="${esc(s.name)}: ${s.state === 'missing' ? 'record missing' : s.state}${s.count ? ' (' + s.count + ')' : ''}" style="flex:1;min-width:10px;height:10px;border-radius:2px;background:${s.strip === 'hatched' ? 'repeating-linear-gradient(45deg,#0F5E63,#0F5E63 2px,#fff 2px,#fff 5px)' : s.strip}"></span>`).join('')}${pct !== undefined ? `<b class="small" style="margin-left:6px;white-space:nowrap">${pct}%</b>` : ''}</div>`;
+  // R-F_SETUP-22 Contact today + R-F_SETUP-23 Shipments board (each card loads on its own; a failing card shows a short note)
+  async function buyingCards() {
+    const tone = { teal: '#d9f0ee', amber: '#fff1d6', red: '#fde2e0', grey: '#eceeec' }, chip = (t, c) => `<span class="chip" style="background:${tone[c]}">${esc(t)}</span>`;
+    const box = $('#bContacts'); if (box) try { const d = await api('buying/contacts');
+      box.innerHTML = `<div class="card"><div class="card-h"><h3>Contact today</h3></div><div class="card-b" id="ctList">${d.people.length ? d.people.map(p => `<div style="display:flex;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)"><span class="chip plain" style="border-radius:50%;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center">${esc(p.initials)}</span>
+        <div style="flex:1;min-width:0"><div><b>${esc(p.name)}</b> <span class="small muted">· ${esc(p.label)}</span></div><div class="small muted">${p.items.map(i => esc(i.item)).join(', ')}</div></div>${p.whatsapp ? `<button class="btn sm" data-ct="${esc(p.key)}">WhatsApp</button>` : '<span class="small muted">no WhatsApp</span>'}</div>`).join('') : `<div class="empty">${esc(d.empty)}</div>`}</div></div>`;
+      $$('[data-ct]', box).forEach(b => b.onclick = () => { const p = d.people.find(x => x.key === b.dataset.ct);
+        miniForm('WhatsApp ' + p.name, 'The chat opens in WhatsApp; the message is logged on the cycle.', [{ name: 'text', label: 'Message', value: p.message }],
+          async v => { const r = await api('buying/contacts/whatsapp', { method: 'POST', body: { key: p.key, cycle: p.cycle, item: p.items[0].item, text: v.text } }); window.open(r.url, '_blank', 'noopener'); return r; }, 'Open WhatsApp'); });
+    } catch (e) { box.innerHTML = `<div class="card"><div class="card-b muted">Contact today could not load: ${esc(e.message)}</div></div>`; }
+    const sb = $('#bShips'); if (sb) try { const d = await api('buying/shipments');
+      sb.innerHTML = `<div class="card"><div class="card-h"><h3>Shipments under way</h3><span class="small muted">${d.total}</span>${d.show_all ? `<a href="${d.show_all}" class="small" style="margin-left:auto">show all</a>` : ''}</div>${d.rows.length ? `<div class="tbl-wrap"><table class="t" id="shB"><thead><tr><th>PO</th><th>Products</th><th>Cycle</th><th>Forwarder</th><th>Mode</th><th class="num">Units</th><th>Departed</th><th>ETA</th><th>Customs / Import</th><th>Landing / GRN</th><th></th></tr></thead><tbody>
+        ${d.rows.map(r => `<tr><td>${r.po_id ? `<a href="#/po/${r.po_id}">${esc(r.po)}</a>` : esc(r.po)}</td><td>${r.products.map(esc).join('<br>')}</td><td>${r.cycle_id ? `<a href="#/cycle/${r.cycle_id}">${esc(r.cycle)}</a>` : ''}</td><td>${esc(r.forwarder || '')}</td><td>${esc(r.mode || '')}</td><td class="num">${(+r.units).toLocaleString()}</td><td>${esc(r.departed)}</td>
+          <td title="${esc(r.eta_history || '')}">${esc(r.eta)}${r.eta_changes ? ` <span class="small muted">(${r.eta_changes}×)</span>` : ''}</td><td>${chip(r.customs, r.customs_tone)}</td><td>${chip(r.grn, r.grn_tone)}</td><td>${r.tracking_url ? `<a href="${esc(r.tracking_url)}" target="_blank" rel="noopener" class="small">tracking</a>` : ''}</td></tr>`).join('')}</tbody></table></div>` : `<div class="empty">${esc(d.empty)}</div>`}</div>`;
+    } catch (e) { sb.innerHTML = `<div class="card"><div class="card-b muted">Shipments board could not load: ${esc(e.message)}</div></div>`; }
+  }
   async function pageBuying(page = 1) {
     busy(true); let d; try { d = await api('buying?page=' + page); } finally { busy(false); }
     const k = d.kpi, card = (lbl, val, foot, tone, goto) => `<div class="card kpi ${tone || ''}" ${goto ? `data-go="${goto}" style="cursor:pointer"` : ''}><div class="bar"></div><div class="lbl">${lbl}</div><div class="val">${val}</div><div class="foot">${foot || ''}</div></div>`;
@@ -2809,6 +2825,7 @@
       ${d.stages.total > d.stages.per_page ? `<div style="display:flex;gap:8px;padding:8px;justify-content:flex-end">${page > 1 ? `<button class="btn sm" id="bPrev">← Previous</button>` : ''}<span class="small muted">Page ${page} of ${Math.ceil(d.stages.total / d.stages.per_page)}</span>${page * d.stages.per_page < d.stages.total ? `<button class="btn sm" id="bNext">Next →</button>` : ''}</div>` : ''}${d.cycles.length ? '' : `<div class="empty">${ic('search')}<div>No open cycle. Start with a research idea and press GO, or make a Direct PO.</div></div>`}</div></div>`;
     $$('#main [data-go]').forEach(x => x.onclick = () => go(x.dataset.go));
     $$('#main tr[data-id]').forEach(tr => tr.onclick = () => go('#/cycle/' + tr.dataset.id));
+    $('#main').insertAdjacentHTML('beforeend', '<div style="display:grid;grid-template-columns:minmax(260px,1fr) 2.4fr;gap:12px;margin-top:12px;align-items:start"><div id="bContacts"></div><div id="bShips"></div></div>'); buyingCards();
     if ($('#bPrev')) $('#bPrev').onclick = () => pageBuying(page - 1); if ($('#bNext')) $('#bNext').onclick = () => pageBuying(page + 1);
     if (d.rights.buy) { $('#bRes').onclick = () => openForm('src_research', null, { onSaved: r => go('#/research/' + r.id) }); $('#bPo').onclick = () => directPo(); }
   }

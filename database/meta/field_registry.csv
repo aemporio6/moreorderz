@@ -4093,3 +4093,4 @@ research_supplier,Research › Supplier candidates,child,Supplier,1,9,sample_ava
 research_supplier,Research › Supplier candidates,child,Supplier,1,10,note,Note,text,,,,,,,all,,,,,,,,,src_research_suppliers,note,,Y,,,,
 t_src_suppliers,Supplier / forwarder,module,Terms,5,8,f_print_cn,Print Chinese labels,check,,,,,,,all,,,,,,On the PO PDF every row gets a second line with the product name / spec in Chinese.,,,t_src_suppliers,f_print_cn,,Y,,,,
 product,Product,library,Supplier,3,8,product_name_cn,Product name (Chinese),text,,,,,,,all,,,,,,"Printed under the English name on POs of suppliers with ""Print Chinese labels"".",,,t_product_vendors,product_name_cn,,Y,,,,
+t_src_shipments,Shipments,module,More details,4,2,tracking_url,Tracking link,link,,,,,,,all,,,,,,The forwarder's tracking page for this shipment – shown on the shipments board.,,,t_src_shipments,tracking_url,,Y,,,,

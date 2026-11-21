@@ -121,6 +121,10 @@ class BuyingController extends Controller
     public function cycleOverview(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\CycleAlerts::overview((int) Context::ent(), $id, $r->user())); }
     /** R-F_SETUP-3 / 4 / 9: landed cost per cycle, outstanding supplier payments, PO payment position (money: buying.MONEY). */
     public function repLanded(Request $r, int $id) { $this->can($r, 'buying.MONEY'); return $this->run(fn () => \App\Services\SourcingReports::landed((int) Context::ent(), $id)); }
+    /** R-F_SETUP-22 / 23: Contact today and the shipments board on the buying dashboard. */
+    public function contactsToday(Request $r) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\SourcingBoard::contactToday((int) Context::ent())); }
+    public function contactsWa(Request $r) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\SourcingBoard::whatsapp((int) Context::ent(), (string) $r->input('key'), (int) $r->input('cycle'), (string) $r->input('item'), trim((string) $r->input('text')))); }
+    public function shipBoard(Request $r) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\SourcingBoard::shipments((int) Context::ent(), $r->boolean('all') ? 500 : 15)); }
     public function repTransit(Request $r) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\SourcingReports::inTransit((int) Context::ent())); }
     public function repSuppliers(Request $r) { $this->can($r, 'buying.SEE'); return $this->run(function () use ($r) { $x = \App\Services\SourcingReports::supplierPerf((int) Context::ent(), (string) ($r->query('from') ?: date('Y-01-01')), (string) ($r->query('to') ?: date('Y-m-d')));
         if (! \App\Services\Perm::has($r->user(), 'buying.MONEY')) foreach ($x['rows'] as &$row) $row['value'] = null; return $x; }); }
