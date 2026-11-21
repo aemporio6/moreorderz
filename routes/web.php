@@ -396,6 +396,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('tracking-due/{shop}/export', [OrdersController::class, 'trackingDueExport'])->whereNumber('shop');
         Route::post('tracking-layouts', [OrdersController::class, 'saveTrackingLayout']);
         Route::get('import-history', [AdminController::class, 'importHistory']);
+        Route::get('legacy-compare', [AdminController::class, 'legacyCompare']);
         Route::get('merges', [AdminController::class, 'merges']);
         Route::post('merges', [AdminController::class, 'mergeDo']);
         Route::post('merges/{id}/undo', [AdminController::class, 'mergeUndo'])->whereNumber('id');

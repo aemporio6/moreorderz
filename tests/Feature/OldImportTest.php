@@ -112,6 +112,7 @@ class OldImportTest extends TestCase
         $this->assertSame(['A-1', 'A-2', 'OLD-7'], $h->pluck('order_no')->all());
         $this->assertSame(['Confirmed', 't_sale_orders_new', 20.0, 14.0, 1, '2025-05-01'], [$h[0]->status, $h[0]->legacy_table, (float) $h[0]->total_amount, (float) $h[0]->profit, (int) $h[0]->f_locked, $h[0]->d_order]);
         $this->assertSame(['Refunded', 'Changed mind'], [$h[1]->status, $h[1]->refund_reason]);
+        $this->assertSame([14.0, 0.0, 6.0, 3.0, 'Success', 0], [(float) $h[0]->legacy_profit, (float) $h[0]->legacy_loss, (float) $h[0]->legacy_pur_amount, (float) $h[0]->legacy_pur_rate, $h[0]->legacy_status, (int) $h[0]->f_loss_line], 'Gen-2 values copied as they are (R-A_SALES-52)');
         $this->assertStringNotContainsString('Buyer', $h[0]->cust_name);
         $this->assertSame(0.0, \App\Services\ProfitService::view(1, 'shop', '2022-01-01', '2026-12-31')['total']['sales'], 'history lines are not in the profit figures');
         // opening stock: lots = old stock, value = books; the product without a cost gets a zero-cost lot and the report says so
@@ -179,5 +180,42 @@ class OldImportTest extends TestCase
         $this->assertSame('OK', $c['cat_references.reference_heading']['status']);
         $this->assertSame('OK', $c['reference_items.reference_name']['status']);
         $this->assertSame('OK', $c['reference_items.fk_reference_id']['status']);
+    }
+
+    /** R-A_SALES-52: Gen-2 values copied unchanged, status mapping, SAL_ZERO history, change log into history, compare report per shop / month. */
+    public function test_gen2_money_values_are_kept_and_the_compare_report_explains_each_difference(): void
+    {
+        $c = config('database.connections.' . config('database.default'));
+        $pdo = new \PDO("mysql:host={$c['host']};port={$c['port']};dbname=mo_old_test", $c['username'], $c['password'], [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
+        $pdo->exec('ALTER TABLE t_sale_orders_new ADD price_single_raw DECIMAL(10,2) NULL, ADD loss_nature VARCHAR(40) NULL');
+        $pdo->exec("INSERT INTO t_sale_orders_new (id, fk_id_vendor_inventory, fk_id_branch, ebay_order_no, d_ebay_order, cust_name, cust_phone, cust_address, product_info, qty_ordered, sale_rate, c_grand_total, pur_rate, pur_amount, d_purchase, sku_ebay, product_profit, product_loss, sale_order_status, refunded_at, refunded_reason, price_single_raw, loss_nature) VALUES
+            (101,0,9501,'G-1','2025-06-01 10:00:00','X','','','Lamp',1,10,10,8.25,6,'2025-06-01','SKU-G',1.75,0,'Success',NULL,NULL,6,NULL),
+            (102,0,9501,'G-2','2025-06-02 10:00:00','X','','','Lamp',1,0,0,8.25,6,'2025-06-02','SKU-G',0,-8.25,'Loss_Sale',NULL,NULL,6,NULL),
+            (103,0,9501,'G-3','2025-06-03 10:00:00','X','','','Lamp',1,0,0,8.25,6,'2025-06-03','SKU-G',-10,0,'Refunded','2025-06-05 10:00:00','Broken',6,'damaged_lost')");
+        $pdo->exec('CREATE TABLE t_product_sale_change_log (id BIGINT PRIMARY KEY, fk_user_id INT, changed_by VARCHAR(255), changed_fields LONGTEXT, fk_product_id INT, product_profit DECIMAL(10,2), created_at TIMESTAMP NULL)');
+        $pdo->exec("INSERT INTO t_product_sale_change_log VALUES (1, 9001, 'TL - Made Up', '{\"carrier\":{\"old\":\"1.50\",\"new\":\"2.00\"}}', 9701, 1.75, '2025-06-01 11:00:00')");
+        try {
+            DB::table('t_branches')->insert(\App\Services\RecordService::fillNotNull('t_branches', ['id' => 9501, 'fk_id_ent' => 1, 'fk_id_marketplace' => 1, 'shop_no' => 'OS1', 'iso_branch' => 'OS1', 'shop_name' => 'Old Shop', 'f_active' => 1]));
+            OldImport::run('mo_old_test', ['mask' => true]);
+            OldImport::transactions('mo_old_test', ['mask' => true]);
+            $g = DB::table('t_sales')->where('legacy_table', 't_sale_orders_new')->whereIn('order_no', ['G-1', 'G-2', 'G-3'])->orderBy('order_no')->get()->keyBy('order_no');
+            // the rule example: qty 1, total 10, product sale price 8.25 (raw 6, carrier 2, packing 0.25) → legacy pur_amount 6.00 and profit 1.75, unchanged
+            $this->assertSame([6.0, 1.75, 8.25, 6.0, 'Confirmed'], [(float) $g['G-1']->legacy_pur_amount, (float) $g['G-1']->legacy_profit, (float) $g['G-1']->legacy_pur_rate, (float) $g['G-1']->legacy_raw, $g['G-1']->status]);
+            $this->assertSame(['Confirmed', 1, 'Loss_Sale'], [$g['G-2']->status, (int) $g['G-2']->f_loss_line, $g['G-2']->legacy_status]);
+            $this->assertSame(['Refunded', 'damaged+lost', 10.0], [$g['G-3']->status, $g['G-3']->refund_loss_nature, (float) $g['G-3']->refund_loss_amount], 'natures with "_" shown as "+"');
+            $this->assertSame('Gen-2 Loss_Sale (task type SAL_ZERO)', DB::table('sys_audit_log')->where('table_name', 't_sales')->where('record_id', $g['G-2']->id)->value('reason'));
+            $this->assertSame('Gen-2 change log · TL - Made Up', DB::table('sys_audit_log')->where('table_name', 't_product_vendors')->where('record_id', 9701)->where('reason', 'like', 'Gen-2 change log%')->value('reason'));
+            OldImport::transactions('mo_old_test', ['mask' => true]);      // again: no second history line
+            $this->assertSame(1, DB::table('sys_audit_log')->where('table_name', 't_sales')->where('record_id', $g['G-2']->id)->count());
+
+            $x = \App\Services\SalesLegacy::compare(1, ['month' => '2025-06']);
+            $r = $x['rows'][0];
+            $this->assertSame(['Old Shop', '2025-06', 3, 3, 10.0, 18.0, 24.75], [$r['shop_name'], $r['month'], $r['lines'], $r['qty'], $r['sale'], $r['old_purchase'], $r['new_purchase']]);
+            $this->assertSame([1, 2.25], [$r['explained']['qty = 1 postage']['lines'], $r['explained']['qty = 1 postage']['amount']], 'G-1: the qty-1 purchase left carrier + packing out (8.25 against 6.00)');
+            $this->assertSame([1, 1, 0], [$r['explained']['loss line']['lines'], $r['explained']['refund']['lines'], $r['explained']['not explained']['lines']]);
+            $this->actingAs($this->owner)->getJson('/api/legacy-compare?month=2025-06')->assertOk()->assertJsonPath('rows.0.lines', 3);
+        } finally {
+            $pdo->exec('DELETE FROM t_sale_orders_new WHERE id IN (101,102,103)'); $pdo->exec('ALTER TABLE t_sale_orders_new DROP COLUMN price_single_raw, DROP COLUMN loss_nature'); $pdo->exec('DROP TABLE IF EXISTS t_product_sale_change_log');
+        }
     }
 }

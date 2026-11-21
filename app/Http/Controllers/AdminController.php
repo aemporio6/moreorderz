@@ -285,6 +285,14 @@ class AdminController extends Controller
     }
 
     // ───────────── import hub, history, merges, field registry, calculator, tracking upload ─────────────
+    /** Gen-2 money compare per shop / month (R-A_SALES-52). */
+    public function legacyCompare(Request $r)
+    {
+        \App\Services\Perm::need($r->user(), 'admin.importHistory');
+        $f = $r->validate(['shop' => 'nullable|integer', 'month' => ['nullable', 'regex:/^\d{4}-\d{2}$/']]);
+        return \App\Services\SalesLegacy::compare((int) \App\Services\Context::ent(), $f);
+    }
+
     public function importHistory(Request $r)
     {
         \App\Services\Perm::need($r->user(), 'admin.importHistory');

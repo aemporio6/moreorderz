@@ -213,11 +213,16 @@ class OldImport
     /** The old sales tables in order of trust (the first that has a shop + order + SKU wins) and how each maps to a sale line. SQL expressions on alias o. */
     private static function salesSources(string $oldDb): array
     {
+        $cols = array_flip(array_map(fn ($r) => $r->c, DB::select('SELECT column_name AS c FROM information_schema.columns WHERE table_schema = ? AND table_name = ?', [$oldDb, 't_sale_orders_new'])));
+        $opt = fn (string $c, string $else = 'NULL') => isset($cols[$c]) ? 'o.' . $c : $else;      // a Gen-2 column the old copy may not have
         $so = fn (string $t, string $extra) => ['table' => $t, 'from' => "`$t` o", 'where' => "o.ebay_order_no IS NOT NULL AND o.ebay_order_no <> '' AND o.d_ebay_order > '1971-01-01'", 'cols' => ['branch' => 'o.fk_id_branch', 'order_no' => 'o.ebay_order_no', 'd_order' => 'DATE(o.d_ebay_order)',
             'sku' => "IF(o.sku_ebay IS NULL OR o.sku_ebay = '', CONCAT('NO-SKU-', o.id), o.sku_ebay)", 'qty' => 'o.qty_ordered', 'rate' => 'o.sale_rate', 'total' => 'o.c_grand_total', 'cust_name' => 'o.cust_name', 'cust_contacts' => 'o.cust_phone', 'ship_to_address' => 'o.cust_address',
             'buy_rate' => 'o.pur_rate', 'd_buy' => 'o.d_purchase'] + self::sqlCols($extra)];
         return [
-            $so('t_sale_orders_new', "product=IF(o.fk_id_vendor_inventory > 0, o.fk_id_vendor_inventory, NULL)|buy_amount=o.pur_amount|profit=COALESCE(o.product_profit,0) - COALESCE(o.product_loss,0)|refunded=IF(o.sale_order_status = 'Refunded', 1, 0)|refunded_at=o.refunded_at|refund_reason=o.refunded_reason|info=o.product_info"),
+            $so('t_sale_orders_new', "product=IF(o.fk_id_vendor_inventory > 0, o.fk_id_vendor_inventory, NULL)|buy_amount=o.pur_amount|profit=COALESCE(o.product_profit,0) - COALESCE(o.product_loss,0)|refunded=IF(o.sale_order_status = 'Refunded', 1, 0)|refunded_at=o.refunded_at|refund_reason=o.refunded_reason|info=o.product_info"
+                // Gen-2 money values copied as they are for the compare (R-A_SALES-52)
+                . '|legacy_profit=o.product_profit|legacy_loss=o.product_loss|legacy_pur_amount=o.pur_amount|legacy_pur_rate=o.pur_rate|legacy_status=o.sale_order_status'
+                . '|legacy_raw=' . $opt('price_single_raw') . '|nature=' . $opt('loss_nature') . '|refund_loss=' . $opt('refund_loss_amount', 'IF(o.sale_order_status = \'Refunded\', -COALESCE(NULLIF(o.product_loss,0), o.product_profit, 0), NULL)')),
             $so('t_sale_orders', 'buy_amount=COALESCE(o.qty_pur,0) * COALESCE(o.pur_rate,0)|profit=COALESCE(o.product_profit,0) - COALESCE(o.product_loss,0)'),
             $so('t_sale_orders_1', 'buy_amount=COALESCE(o.qty_pur,0) * COALESCE(o.pur_rate,0)'),
             ['table' => 'ebay', 'from' => '`ebay` o', 'where' => "o.Order_number IS NOT NULL AND o.Order_number <> '' AND STR_TO_DATE(o.Sale_date, '%d-%b-%y') IS NOT NULL", 'cols' => ['branch' => 'o.fk_id_branch', 'order_no' => 'o.Order_number', 'd_order' => "STR_TO_DATE(o.Sale_date, '%d-%b-%y')",
@@ -229,6 +234,16 @@ class OldImport
             ['table' => 't_tiktok_sale', 'from' => '`t_tiktok_sale` o', 'where' => "o.order_no IS NOT NULL AND o.order_no <> '' AND o.d_order_date > '1971-01-01'", 'cols' => ['branch' => 'o.fk_id_shop', 'order_no' => 'o.order_no', 'd_order' => 'o.d_order_date',
                 'sku' => "IF(o.item_sku IS NULL OR o.item_sku = '', CONCAT('NO-SKU-', o.id), o.item_sku)", 'qty' => 'o.item_qty', 'rate' => '0', 'total' => '0', 'cust_name' => 'o.buyer_full_name', 'cust_contacts' => 'o.recipient_phone', 'ship_to_address' => "CONCAT_WS(', ', o.address_line_1, o.buyer_city, o.buyer_postal_code)", 'info' => 'o.item_name']],
         ];
+    }
+
+    /** Gen-2 values as they are (never recomputed) and the status mapping: Success → Confirmed; Loss_Sale → Confirmed + loss flag; Refunded → Refunded with its nature ("_" shown as "+"). */
+    private static function legacyMoney(object $r): array
+    {
+        $st = $r->legacy_status ?? null; $n = fn ($v) => $v === null || $v === '' ? null : round((float) $v, 2);
+        $out = ['legacy_profit' => $n($r->legacy_profit ?? null), 'legacy_loss' => $n($r->legacy_loss ?? null), 'legacy_pur_amount' => $n($r->legacy_pur_amount ?? null), 'legacy_pur_rate' => $n($r->legacy_pur_rate ?? null),
+            'legacy_raw' => $n($r->legacy_raw ?? null), 'legacy_status' => $st !== null ? mb_substr((string) $st, 0, 20) : null, 'f_loss_line' => $st === 'Loss_Sale' ? 1 : 0, 'refund_loss_nature' => '', 'refund_loss_amount' => 0];
+        if ($st === 'Refunded') { $out['refund_loss_nature'] = isset($r->nature) && $r->nature !== null && $r->nature !== '' ? mb_substr(str_replace('_', '+', (string) $r->nature), 0, 40) : ''; $out['refund_loss_amount'] = $n($r->refund_loss ?? null) ?? 0; }
+        return $out;
     }
 
     private static function sqlCols(string $spec): array { $o = []; foreach (array_filter(explode('|', $spec)) as $p) { [$k, $v] = explode('=', $p, 2); $o[$k] = $v; } return $o; }
@@ -252,11 +267,12 @@ class OldImport
                     'sale_rate' => round((float) $r->rate, 2), 'total_amount' => $total, 'total_amount_gbp' => $total, 'buy_rate' => round((float) ($r->buy_rate ?? 0), 2), 'buy_amount' => round((float) ($r->buy_amount ?? 0), 2), 'profit' => round((float) ($r->profit ?? 0), 2),
                     'd_buy' => isset($r->d_buy) && $r->d_buy && ! str_starts_with((string) $r->d_buy, '0000') ? substr((string) $r->d_buy, 0, 10) : null, 'status' => ! empty($r->refunded) ? 'Refunded' : 'Confirmed',
                     'refunded_at' => ! empty($r->refunded) && ! empty($r->refunded_at) && ! str_starts_with((string) $r->refunded_at, '0000') ? $r->refunded_at : null, 'refund_reason' => $r->refund_reason ?? null, 'ship_to_address' => isset($r->ship_to_address) ? mb_substr((string) $m($r->ship_to_address), 0, 300) : null,
-                    'sale_source' => 'history', 'f_locked' => 1, 'f_stock_deducted' => 1, 'legacy_table' => $t, 'legacy_id' => $r->_id, 'created_by' => 0, 'created_at' => now()]);
+                    'sale_source' => 'history', 'f_locked' => 1, 'f_stock_deducted' => 1, 'legacy_table' => $t, 'legacy_id' => $r->_id, 'created_by' => 0, 'created_at' => now()] + self::legacyMoney($r));
                 $ok++; $okValue += $total;
             }
             if (! $dry && $batch) foreach (array_chunk($batch, 500) as $ch) DB::table('t_sales')->insertOrIgnore($ch);
         }
+        if (! $dry && $t === 't_sale_orders_new') SalesLegacy::afterImport($t);      // SAL_ZERO history of loss lines, the Gen-2 change log into history
         $filtered = $line['old_rows'] - $ok - $noShop;   // no order number / no usable date
         if ($dry) { $line['note'] = "Dry run: $ok row(s) usable (value " . number_format($okValue, 2) . "), $noShop without a shop in the new tool, $filtered without an order number or date."; return $line; }
         $now = DB::table('t_sales')->where('legacy_table', $t)->selectRaw('COUNT(*) n, COALESCE(SUM(total_amount),0) v')->first();
