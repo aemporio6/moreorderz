@@ -135,12 +135,12 @@ MR-0116|F|form:t_account_address|the person sub-lists exist as forms
 MR-0120|N||process rule
 MR-0121|P|class BuyingService|buying chain idea -> PO -> pay -> ship -> GRN -> landed cost; cartons, production, allocations, transfers, documents as forms only
 MR-0122|P|class StockService|stock, lots, prices, counts built; product master tabs, variations, duplicate, alerts page not built
-MR-0123|P|class SalesService|order intake, dispatch, month confirm built; sale edit / refund forms, reminders, old reports not built
+MR-0123|P|class SaleLines|sales list + columns, edit / refund / carrier per sale, sale log, delete with Undo, reminders, annual + detailed reports, month confirm built; bulk delete with preview, daily order entry screen, health view not built
 MR-0124|F|form:t_account|person master and sub-lists as forms; vault built
 MR-0125|P|class MoneyService|bank, expenses, approvals, money files, close, partners built; alerts, old invoicing not built
 MR-0126|P|class TaskEngine|tasks list + rule tasks; most task features not built
 MR-0127|F|form:acc_obligation|forms only
-MR-0128|F|form:drp_inventory|forms only
+MR-0128|P|class DsMatch|drop-shipping match, explanation, link / unlink, masking of address and phone on list / record / export built; DS upload with preview + save, platforms per shop, imports + errors not built (forms only)
 MR-0129|F|form:cat_country|all catalogue lists as registry forms
 MR-0130|P|function attempt|login, hashed passwords, 2-step, lock-out, sessions; forgot password not built
 MR-0131|P|class ReportService|one report engine with 25 reports + CSV; charts, annual / detailed sale reports not built
@@ -257,19 +257,19 @@ MR-1462|P|class Fx|currency from the row / company setting, no fixed default in 
 MR-1464|M||ICC stages not built
 MR-1483|N||seed wording
 MR-1485|N||spec document
-MR-1503|M||SAL_NO_COST not raised
+MR-1503|B|function noCost|night job: one task SAL_NO_COST per shop + month while own-stock lines have no cost, closed by itself; tested
 MR-1504|P|FIN_APPROVE|approval task raised
 MR-1505|B|SYS_API_SYNC|raised when a connection's keys are refused, closes when it works
 MR-1506|M||DQ_ITEM_NOTE not raised
 MR-1507|M||DQ_PARENT_INACTIVE not raised
 MR-1508|M||SYS_ERROR not raised
-MR-1509|M||LST_STATUS not raised
+MR-1509|B|function listingStatus|night job: LST_STATUS when a listing is ACTIVE with nothing available, or closed / suppressed by a marketplace report while stock is available; closed by itself; tested
 MR-1511|M||STK_FC_DIFF not raised
 MR-1512|M||FIN_CASH_LOW not raised (warning line on the forecast only)
 MR-1513|P|ACC_SUBSCRIPTION_DUE|only the subscription due task
 MR-1514|B|SYS_WA_FAILING|raised after 3 failed tries
 MR-1515|M||old entry not built
-MR-1517|M||IMP_WAITING not raised
+MR-1517|B|function importWaiting|night job: IMP_WAITING when an import batch is uploaded / mapped / checked but not applied for longer than IMP_WAITING_HOURS (24); closed when applied or discarded; tested
 MR-1518|N||spec note
 MR-1519|N||spec note
 MR-1521|N||migration role map (roles set by the Owner after import)
@@ -307,22 +307,22 @@ MR-0225|F|form:t_products_shop_not_listed_summary|listing CSV import not built
 MR-0226|B|form:t_vendor|standard form + list with role rights and history
 MR-0227|F|form:cat_vendors|form; secrets go to the vault
 MR-0228|F|form:csv_generator|tool not built
-MR-0229|F|form:cat_marketplace|mappings / questions / profile logic not built
+MR-0229|P|class Marketplaces|marketplace master with ISO checks, CSV column mapping sets, questions + shop checklist built; product fields per marketplace (field builder) not built
 MR-0230|P|class OrderFiles|eBay orders report read into the one sales list
 MR-0231|M||eBay vs supplier purchase audit not built
 MR-0232|F|form:supplier_order_history|import not built
 MR-0233|F|form:t_audit_main|audit run not built
-MR-0234|F|form:t_branch_reminders|form only
+MR-0234|B|class ShopReminders|shop-month reminders with rights and shop scope, Pending / Resolved, and monthly templates that open a task (the rule's "replace by Tasks")
 MR-0235|F|form:t_buy|Gen-1 import not built (old rows imported as history)
 MR-0236|B|form:t_carrier_packages|standard form + list with role rights and history
 MR-0238|B|form:t_carrier_services|standard form + list with role rights and history
 MR-0239|B|form:t_carriers|standard form + list with role rights and history
 MR-0240|B|form:t_packings|standard form + list with role rights and history
 MR-0241|F|form:t_sale|Gen-1 import not built (old rows imported as history)
-MR-0242|F|form:t_sale_buy_main|payslip not built
-MR-0243|P|class SalesService|orders list, manual order, refund; edit, bulk delete, old reports not built
+MR-0242|B|class VaStatements|the shop + month payslip is the VA statement: computed, saved with versions, PDF, Owner approval, payables
+MR-0243|P|class SaleLines|sales listing, edit, refund, delete line / month with Undo, annual + detailed reports built; manual order entry is the New order form; bulk delete with preview / approval not built
 MR-0244|F|form:t_sale_order_reminders|form only
-MR-0246|P|function confirmMonth|import, list, refund, month confirm built; DS match, sale edit not built
+MR-0246|B|class SalesImport|generic sales import with pre-checks that stop the import, listing, edit, refund, drop-shipping match, month confirm – all built and tested
 MR-0247|F|form:t_shop_feedback|form only
 MR-0248|P|tracking-upload|orders by file / hand with tracking upload layouts; the TikTok wizard screens not built
 MR-0249|B|form:card_categories|standard form + list with role rights and history
@@ -410,7 +410,7 @@ MR-0339|F|form:invoice_document|old invoicing not built
 MR-0340|P|class TaskEngine|tasks list + rule tasks; approve flow, evidence, templates, CSV import not built
 MR-0341|P|schedule|minute job for events and messages; repeats / reminders not built
 MR-0342|P|function inbound|signed webhook, receipts, DONE on a task
-MR-0237|F|form:t_carrier_pkg_svc|form + list (real row id); effective-dated rates not built
+MR-0237|B|function rateOn|preset = carrier × package × service with a real row id; rates carry a start date, matrix with gaps, rate history
 MR-0390|P|function bookSample|of rules 56-63: sample cost and customs / freight payments built; claims partly; landed versions, lot owner split, claim in the books not built
 MR-0395|P|class TaskEngine|of rules 94-98: codes with dedupe / auto-close and printing partly; snooze and 2FA re-ask not built
 MR-1479|M||probation due item / one active employment row not built

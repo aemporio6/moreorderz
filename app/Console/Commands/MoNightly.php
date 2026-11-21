@@ -26,6 +26,7 @@ class MoNightly extends Command
             \App\Services\MoneyService::staleTasks((int) $ent);
             \App\Services\CloseService::openTasks((int) $ent);
             \App\Services\SkuHomes::tasks((int) $ent);
+            \App\Services\SalesWatch::nightly((int) $ent);      // SAL_NO_COST, LST_STATUS, IMP_WAITING
             $this->line("Company $ent: stock mismatches {$r['mismatch']}, negative balances {$r['negative_balances']}, value = ledger: " . ($r['value_matches_ledger'] ? 'yes' : 'NO') . ", low stock tasks open {$low['open']}");
         }
         $subs = \App\Services\Subscriptions::nightly();
