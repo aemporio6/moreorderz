@@ -24,6 +24,40 @@ class Brand
         return 'data:image/' . $type . ';base64,' . base64_encode((string) file_get_contents($f));
     }
 
+    public const WATERMARK = 'resources/brand/moreorderz-watermark.png';
+    /** Pages smaller than this (labels, thermal slips) get no watermark and no extra header logo. */
+    public const MIN_MM = 120;
+
+    /**
+     * Owner 21 Nov 2026: every A4 / letter-size PDF page carries a very light watermark (the seal + "VARTLEAVES LIMITED"), and the
+     * logo at the top when the document has none of its own. position:fixed repeats it on every page in dompdf.
+     */
+    public static function stamp(string $html, float $wMm, float $hMm, ?int $ent = null): string
+    {
+        if (min($wMm, $hMm) < self::MIN_MM || str_contains($html, 'data-wm="1"')) return $html;
+        $w = round(min($wMm, $hMm) * 0.55); $left = round(($wMm - $w) / 2); $top = round(($hMm - $w * 1.03) / 2);
+        $wm = '<div data-wm="1" style="position:fixed;left:' . $left . 'mm;top:' . $top . 'mm;width:' . $w . 'mm;z-index:-1"><img src="data:image/png;base64,' . base64_encode((string) file_get_contents(base_path(self::WATERMARK))) . '" style="width:' . $w . 'mm"></div>';
+        $logo = str_contains($html, 'alt="logo"') ? '' : '<div style="text-align:right;margin:0 0 2mm">' . self::img($ent, 12) . '</div>';
+        if (preg_match('~<body[^>]*>~i', $html, $m, PREG_OFFSET_CAPTURE)) { $at = $m[0][1] + strlen($m[0][0]); return substr($html, 0, $at) . $wm . $logo . substr($html, $at); }
+        return $wm . $logo . $html;
+    }
+
+    /**
+     * The logo on every Excel export (owner 21 Nov 2026): a picture at the top right of each sheet, next to the table (the data keeps row 1,
+     * so a file can still be imported again), and in the printed page header with "Vartleaves Limited". A CSV file cannot hold a picture.
+     */
+    public static function xlsx(\PhpOffice\PhpSpreadsheet\Spreadsheet $book, ?int $ent = null): void
+    {
+        foreach ($book->getAllSheets() as $sh) {
+            $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($sh->getHighestColumn()) + 2;
+            $d = new \PhpOffice\PhpSpreadsheet\Worksheet\Drawing(); $d->setName('MoreOrderz'); $d->setDescription('logo'); $d->setPath(self::file($ent)); $d->setHeight(64);
+            $d->setCoordinates(\PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($col) . '1'); $d->setWorksheet($sh);
+            $h = new \PhpOffice\PhpSpreadsheet\Worksheet\HeaderFooterDrawing(); $h->setName('logo'); $h->setPath(self::file($ent)); $h->setHeight(36);
+            $sh->getHeaderFooter()->addImage($h, \PhpOffice\PhpSpreadsheet\Worksheet\HeaderFooter::IMAGE_HEADER_LEFT);
+            $sh->getHeaderFooter()->setOddHeader('&L&G&RVartleaves Limited');
+        }
+    }
+
     /** <img> for a PDF header; $mm = height in millimetres. */
     public static function img(?int $ent = null, int $mm = 16): string
     {

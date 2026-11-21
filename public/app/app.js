@@ -117,12 +117,15 @@
     v.querySelector('button').onclick = async () => { await api('permissions/view-as', { method: 'POST', body: { role: '' } }); location.reload(); };
     document.body.appendChild(v);
   }
+  // Owner 21 Nov 2026: a very light watermark on every screen – the approved seal + "Vartleaves Limited"; never takes a click, hidden in print
+  function drawWatermark() { if (document.getElementById('wm')) return;
+    document.body.insertAdjacentHTML('beforeend', `<div id="wm" aria-hidden="true">${MO.seal ? MO.seal(400, { mono: true }) : ''}<div class="wm-co">VARTLEAVES LIMITED</div></div>`); }
   function drawTop() {
-    drawViewAs();
+    drawViewAs(); drawWatermark();
     const b = S.boot, ini = b.user.name.split(/\s+/).map(x => x[0]).join('').slice(0, 2).toUpperCase();
     $('#top').innerHTML = `
       <button class="tb-btn icon" id="btnSide" title="Menu">${ic('menu')}</button>
-      <div class="brand" id="brand" title="Home">${MO.logo ? MO.logo(30) : ''}<div><div class="wm-text">More<b>Orderz</b></div></div></div>
+      <div class="brand" id="brand" title="Home">${MO.logo ? MO.logo(30) : ''}<div><div class="wm-text">More<b>Orderz</b></div><div class="by" id="brandCo"><i></i>${esc((b.companies.find(c => c.id == b.ent) || {}).name || '')}<i></i></div></div></div>
       <select class="tb-sel hide-m" id="selEnt" title="Company">${b.companies.map(c => `<option value="${c.id}" ${c.id == b.ent ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>
       <div class="searchbox" id="sbox">${ic('search')}<input id="q" placeholder="Search everything – SKU, order, PO, person, task…" autocomplete="off"><span class="kbd">/</span></div>
       <button class="tb-btn primary" id="btnCreate" title="Create (N)">${ic('plus')}<span class="hide-m">Create</span></button>
@@ -167,7 +170,8 @@
     const m = $('#main'), r = S.route; let mt;
     drawSide();
     try {
-      if ((mt = r.match(/^#\/list\/([\w-]+)(?:\?(.*))?/))) { const f = {}; new URLSearchParams(mt[2] || '').forEach((v, k) => { const m2 = k.match(/^f\[(\w+)\]$/); if (m2) f[m2[1]] = v; }); return await pageList(mt[1], { filter: f }); }
+      if ((mt = r.match(/^#\/list\/([\w-]+)(?:\?(.*))?/))) { const f = {}, u = {}; new URLSearchParams(mt[2] || '').forEach((v, k) => { const m2 = k.match(/^f\[(\w+)\]$/); if (m2) f[m2[1]] = v; else if (['q', 'page', 'sort', 'dir'].includes(k)) u[k] = k === 'page' ? +v : v; else if (k === 'where') { try { u.where = JSON.parse(v); } catch (e) {} } });
+        return await pageList(mt[1], Object.keys(f).length ? { ...u, filter: f, _url: 1 } : { ...u, ...(Object.keys(u).length ? { _url: 1 } : {}) }); }      // R-G_CORE-101: the list state lives in the address, so Back returns with its filters
       if ((mt = r.match(/^#\/rec\/([\w-]+)\/(\d+)/))) return await pageRecord(mt[1], +mt[2]);
       if (r.startsWith('#/variations/')) return await pageVariations(+r.split('/')[2]);
       if (r.startsWith('#/due')) return await pageDue();
@@ -331,12 +335,17 @@
     let V = { views: [], can_share: false }, P = { list: {}, all: {} };
     try { [V, P, FMETA] = await Promise.all([api('views/list:' + key), api('prefs/list:' + key).catch(() => P), FMETA || api('filter-meta')]); } catch (e) { /* the list still works without its views */ }
     if (DENSITY === null) DENSITY = (P.all || {}).density || 'comfortable';
-    if (!st._touched) { const dv = V.views.find(v => v.default); st = dv ? { ...dv.state, _touched: true, _view: dv.id } : { cols: P.list.cols || [], widths: P.list.widths || {}, per: P.list.per, _touched: true }; }
+    if (!st._touched) { const dv = V.views.find(v => v.default), url = st._url ? Object.fromEntries(Object.entries(st).filter(([k]) => ['filter', 'q', 'page', 'sort', 'dir', 'where'].includes(k))) : {};
+      st = { ...(dv ? { ...dv.state, _view: dv.id } : { cols: P.list.cols || [], widths: P.list.widths || {}, per: P.list.per }), ...url, _touched: true }; }      // filters in the address win over the default view
     const per = st.per || P.list.per || 100, widths = st.widths || {};
     const qs = new URLSearchParams({ page: st.page || 1, q: st.q || '', sort: st.sort || '', dir: st.dir || 'desc', per_page: per }); if ((st.cols || []).length) qs.set('cols', st.cols.join(','));
     Object.entries(st.filter || {}).forEach(([k, v]) => { if (v !== '') qs.append(`filter[${k}]`, v); });
     if (st.where) qs.set('where', JSON.stringify(st.where));
     let d; try { d = await api(`list/${key}?` + qs); } finally { busy(false); }
+    { const u = new URLSearchParams(); Object.entries(st.filter || {}).forEach(([k, v]) => { if (v !== '' && v != null) u.append(`f[${k}]`, v); }); if (st.q) u.set('q', st.q); if (st.page > 1) u.set('page', st.page); if (st.sort) { u.set('sort', st.sort); u.set('dir', st.dir || 'desc'); } if (st.where) u.set('where', JSON.stringify(st.where));
+      const step = (S.route.match(/[?&]step=(\w+)/) || [])[1]; if (step) u.set('step', step);
+      const h = '#/list/' + key + (u.toString() ? '?' + u.toString().replace(/%5B/g, '[').replace(/%5D/g, ']') : '');
+      if (S.route.split('?')[0] === '#/list/' + key && S.route !== h) { S.route = h; try { history.replaceState(null, '', h); } catch (e) {} } }      // R-G_CORE-101: the address carries the list state
     const [, it] = findItem(i => i.route === '#/list/' + key);
     const pages = Math.max(1, Math.ceil(d.total / d.per_page)), nF = countRules(d.where) + Object.values(st.filter || {}).filter(v => v !== '').length;
     const colOf = n => d.all_columns.find(c => c.name === n) || { name: n, label: n, group: 'text' };

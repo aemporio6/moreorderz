@@ -198,7 +198,7 @@ class ProductsList
             $x = new \PhpOffice\PhpSpreadsheet\Spreadsheet(); $sh = $x->getActiveSheet(); $sh->setTitle('Products');
             foreach ($head as $i => $hh) $sh->setCellValue([$i + 1, 1], $hh);
             foreach ($grid as $n => $g) foreach ($g as $i => $v) $sh->setCellValueExplicit([$i + 1, $n + 2], $v, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-            $tmp = tempnam(sys_get_temp_dir(), 'pl'); (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($x))->save($tmp); $body = file_get_contents($tmp); @unlink($tmp);
+            $tmp = tempnam(sys_get_temp_dir(), 'pl'); \App\Services\Brand::xlsx($x); (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($x))->save($tmp); $body = file_get_contents($tmp); @unlink($tmp);
             return ['name' => "$name.xlsx", 'type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'body' => $body, 'rows' => count($grid)];
         }
         $e = fn ($s) => htmlspecialchars((string) $s, ENT_QUOTES);

@@ -200,7 +200,7 @@ class PrintService
         try {
             $cal = DB::table('printer_calibrations')->where(['fk_id_printer_profile' => $printer->id, 'fk_id_label_media' => $media->id])->first();
             $html = self::html($ent, $kind, $ids, $tpl, $w, $h, $copies, $cal, ['printer' => $printer, 'media' => $media, 'start_cell' => (int) ($opt['start_cell'] ?? 1), 'job_code' => $code]);
-            $pdf = self::pdf($html, $w, $h);
+            $pdf = self::pdf($html, $w, $h, in_array($kind, self::DOC_KINDS, true));      // labels never get the watermark
             $dir = storage_path('app/print'); if (! is_dir($dir)) mkdir($dir, 0775, true);
             file_put_contents("$dir/$code.pdf", $pdf);
         } catch (\InvalidArgumentException $e) {
@@ -352,7 +352,10 @@ class PrintService
     /** The PDF maker class (a test can point it at a missing class). */
     public static string $maker = Dompdf::class;
 
-    public static function pdf(string $html, float $wMm, float $hMm): string
+    /** Print kinds that are documents (they get the logo and the watermark); the others are labels and stay clean. */
+    public const DOC_KINDS = ['PICK_SHEET', 'MANIFEST', 'PO', 'FBA_PACKLIST', 'GRN', 'PACKING_SLIP'];
+
+    public static function pdf(string $html, float $wMm, float $hMm, bool $brand = true): string
     {
         if (! class_exists(self::$maker)) {      // R-G_CORE-72: no PDF maker → an error and a System › Health warning, never an HTML file
             $fp = sha1('pdf_maker_missing'); $old = DB::table('sys_error_log')->where('fingerprint', $fp)->first();
@@ -365,6 +368,7 @@ class PrintService
         $o = new Options(); $o->setIsRemoteEnabled(false); $o->setIsPhpEnabled(false); $o->setDefaultFont('DejaVu Sans'); $o->setFontDir($dir); $o->setFontCache($dir); $o->setTempDir($dir); $o->setDpi(203);
         $d = new (self::$maker)($o);
         $d->setPaper([0, 0, $wMm * 72 / 25.4, $hMm * 72 / 25.4]);
+        if ($brand) $html = Brand::stamp($html, $wMm, $hMm, Context::ent() ? (int) Context::ent() : null);      // logo watermark on every A4 page, logo on top (owner 21 Nov 2026)
         $d->loadHtml($html, 'UTF-8'); $d->render();
         $out = $d->output();
         if (! str_starts_with($out, '%PDF')) throw new \RuntimeException('PDF maker returned no PDF.');

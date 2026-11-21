@@ -262,7 +262,7 @@ class SaleView
                 if (in_array($k, ['qty', 'sale_rate', 'total_amount', 'raw_price', 'buy_rate', 'buy_amount', 'profit'], true)) $sh->setCellValue([$i + 1, $rn], (float) $v); else $sh->setCellValueExplicit([$i + 1, $rn], $v, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING); } }
             foreach ($rows as $ri => $r) if ($c = self::rowColour((array) $r)) $sh->getStyle([1, 5 + $ri, count($cols), 5 + $ri])->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setRGB(strtoupper(ltrim($c, '#')));      // the same row colours as the PDF
             $rn += 2; foreach ($sum as $x2) { $sh->setCellValue([1, $rn], $x2[0]); $sh->setCellValueExplicit([2, $rn], $x2[1], \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING); $rn++; }
-            $tmp = tempnam(sys_get_temp_dir(), 'sx'); (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($x))->save($tmp); $body = file_get_contents($tmp); @unlink($tmp);
+            $tmp = tempnam(sys_get_temp_dir(), 'sx'); \App\Services\Brand::xlsx($x); (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($x))->save($tmp); $body = file_get_contents($tmp); @unlink($tmp);
             return ['name' => $file, 'type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'body' => $body, 'lines' => $n];
         }
         if ($format === 'docx') return ['name' => $file, 'type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'body' => self::docx($title, $sub, $sum, $cols, $grid, $rows), 'lines' => $n];

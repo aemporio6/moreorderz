@@ -52,7 +52,7 @@ class JobPay
         foreach ($rows as $n => $r) foreach (array_values([$r['code'], $r['name'], $r['marketplace'], $r['shop'], $r['start'], $r['renewal'], $r['share'], $r['salary'], $r['currency'], $r['salary_gbp']]) as $i => $v)
             $sh->setCellValueExplicit([$i + 1, $n + 2], $v ?? '', is_float($v) || is_int($v) ? \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC : \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
         $last = count($rows) + 2; $sh->setCellValue([1, $last], 'Total'); $sh->setCellValue([10, $last], round(array_sum(array_map(fn ($r) => (float) $r['salary_gbp'], $rows)), 2));
-        $tmp = tempnam(sys_get_temp_dir(), 'te'); (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($x))->save($tmp); $body = file_get_contents($tmp); @unlink($tmp);
+        $tmp = tempnam(sys_get_temp_dir(), 'te'); \App\Services\Brand::xlsx($x); (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($x))->save($tmp); $body = file_get_contents($tmp); @unlink($tmp);
         return ['name' => "team_engagements_$month.xlsx", 'body' => $body, 'rows' => count($rows)];
     }
 }

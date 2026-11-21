@@ -128,7 +128,7 @@ class WaterfallService
     private static function pdf(string $html): string
     {
         $o = new Options(); $o->set('isRemoteEnabled', false); $o->set('defaultFont', 'DejaVu Sans');
-        $d = new Dompdf($o); $d->loadHtml($html, 'UTF-8'); $d->setPaper('A4'); $d->render();
+        $d = new Dompdf($o); $html = Brand::stamp($html, 210, 297, Context::ent() ? (int) Context::ent() : null); $d->loadHtml($html, 'UTF-8'); $d->setPaper('A4'); $d->render();
         return $d->output();
     }
 

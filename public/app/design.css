@@ -41,8 +41,12 @@ h1,h2,h3,h4{margin:0;font-weight:600;letter-spacing:-.01em}
 .num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
 
 /* watermark */
-#wm{position:fixed;left:calc(var(--side) + (100vw - var(--side))/2);top:56%;transform:translate(-50%,-50%);width:min(46vw,540px);opacity:.04;color:var(--accent);pointer-events:none;z-index:0}
+#wm{position:fixed;left:calc(var(--side) + (100vw - var(--side))/2);top:56%;transform:translate(-50%,-50%);width:min(46vw,440px);opacity:.035;color:var(--accent);pointer-events:none;z-index:25;text-align:center;user-select:none}
+#wm svg{width:100%;height:auto;display:block}
+#wm .wm-co{margin-top:14px;font:700 clamp(14px,2.4vw,26px)/1 system-ui,sans-serif;letter-spacing:.32em}
 :root[data-theme="dark"] #wm{opacity:.05}
+@media (max-width:760px){#wm{left:50%;width:70vw}}
+@media print{#wm{display:none}}
 body.side-collapsed #wm{left:50%}
 
 /* top bar */
@@ -270,7 +274,7 @@ body.side-collapsed #loader{left:0}
 .routing td.rec{min-width:270px}.routing td:nth-child(2){min-width:170px}
 .orbit{transform-origin:50px 50px}
 .searching .brand .orbit,.spinning .orbit{animation:spin 2.2s linear infinite}
-.brand .by{display:flex;align-items:center;gap:4px;font-size:6px;letter-spacing:.3em;color:var(--faint);font-weight:700;text-transform:uppercase;margin-top:4px}
+.brand .by{display:flex;align-items:center;gap:4px;font-size:7px;letter-spacing:.24em;white-space:nowrap;color:var(--faint);font-weight:700;text-transform:uppercase;margin-top:4px}
 .brand .by i{display:block;width:8px;height:1px;background:var(--line-2)}
 
 /* tabs */

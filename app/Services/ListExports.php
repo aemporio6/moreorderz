@@ -28,7 +28,7 @@ class ListExports
             $sh->fromArray([$head], null, 'A1'); $n = 2;
             foreach ($rows as $row) { $c = 1; foreach ($row as $v) { $cell = $sh->getCell([$c++, $n]); is_numeric($v) && ! preg_match('/^0\d|^\+/', (string) $v) && strlen((string) $v) < 15 ? $cell->setValueExplicit($v + 0, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC) : $cell->setValueExplicit((string) $v, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING); } $n++; }
             $sh->getStyle('1:1')->getFont()->setBold(true); $sh->freezePane('A2');
-            $tmp = tempnam(sys_get_temp_dir(), 'moxl'); (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($book))->save($tmp); $bytes = file_get_contents($tmp); @unlink($tmp);
+            $tmp = tempnam(sys_get_temp_dir(), 'moxl'); \App\Services\Brand::xlsx($book); (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($book))->save($tmp); $bytes = file_get_contents($tmp); @unlink($tmp);
         } elseif ($format === 'DOCX') {
             $bytes = DocxWriter::table($title ?: $formKey, count($rows) . ' rows · ' . date('j M Y H:i'), [], $head, array_slice($rows, 0, 5000), [], [], 'No rows match these filters.');
         } else {

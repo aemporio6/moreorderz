@@ -13,7 +13,7 @@ Updated 21 Nov 2026 (batch 7e-101). How to answer: write **OK** next to a line t
 | B5 | Hidden margin only for the Owner – yes | kept |
 | B6 | Custom period From after To → swapped – yes | kept |
 | A1 | Google Drive: a Drive link that is there counts as correct | no Drive API check; only the http(s) form is checked |
-| A2 | Logo: the approved MoreOrderz seal | on the header of every A4 PDF (PO, GRN, prints, cycle reports); next: faint watermark with "Vartleaves Limited" on every screen and every PDF page, and the logo on Excel sheets (CSV files cannot hold a picture) |
+| A2 | Logo: the approved MoreOrderz seal | on the header of every A4 PDF, a very light watermark (seal + VARTLEAVES LIMITED) on every screen and every PDF page (labels stay clean), and the logo on every Excel export (top right + print header). CSV files cannot hold a picture. |
 
 ## A. Needs you before it can be finished (outside things)
 
