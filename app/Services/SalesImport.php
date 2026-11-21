@@ -179,8 +179,10 @@ class SalesImport
     /** The VA of the shop and the VA % of the job-history row valid on the period end of the batch – frozen on the batch at import (R-A_SALES-31, R-C-40). */
     public static function vaOf(object $shop, int $month, int $year): array
     {
-        $va = (int) ($shop->fk_id_seller ?? 0); if (! $va) return ['va_share_percentage' => 0];
         $end = date('Y-m-t', mktime(0, 0, 0, $month, 1, $year));
+        // who is the VA: the person holding the shop assignment role VA (alias SELLER) valid on the period end; the shop's seller field is only the fallback (R-C-41)
+        $va = (int) DB::table('t_account_branches')->where('fk_id_branch', $shop->id)->whereIn('role_code', ['VA', 'SELLER'])->where(fn ($w) => $w->whereNull('f_active')->orWhere('f_active', 1))->where(fn ($w) => $w->whereNull('d_from')->orWhere('d_from', '<=', $end))->where(fn ($w) => $w->whereNull('d_to')->orWhere('d_to', '>=', $end))->orderByDesc('d_from')->orderByDesc('id')->value('fk_id_account');
+        if (! $va) $va = (int) ($shop->fk_id_seller ?? 0); if (! $va) return ['va_share_percentage' => 0];
         $row = DB::table('t_account_job_history')->where('fk_id_account', $va)->where('fk_id_marketplace', (int) $shop->fk_id_marketplace)->where(fn ($w) => $w->whereNull('d_job_start_date')->orWhere('d_job_start_date', '<=', $end))
             ->where(fn ($w) => $w->whereNull('d_end_date')->orWhere('d_end_date', '>=', $end))->orderByDesc('d_job_start_date')->orderByDesc('id')->first();
         return ['fk_id_va_account' => $va, 'va_share_percentage' => round((float) ($row->share_percentage ?? 0), 2)];

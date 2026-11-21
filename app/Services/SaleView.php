@@ -124,13 +124,20 @@ class SaleView
         $t = (clone $q)->selectRaw("COUNT(*) n, COALESCE(SUM(s.qty),0) qty, COALESCE(SUM(s.total_amount),0) sale, COALESCE(SUM(s.buy_amount),0) buy, COALESCE(SUM(s.profit),0) profit, COALESCE(SUM(CASE WHEN s.profit < 0 THEN -s.profit ELSE 0 END),0) loss")->first();
         $out = ['records' => (int) $t->n, 'qty' => (int) $t->qty, 'sale' => round((float) $t->sale, 2), 'no_cost' => (int) (clone $q)->where('s.sale_source', 'unmatched')->count()];
         if (! $money) return $out;
-        $per = (clone $q)->where('s.fk_id_import', '>', 0)->groupBy('s.fk_id_import')->selectRaw('s.fk_id_import b, COALESCE(SUM(s.profit),0) profit')->pluck('profit', 'b'); $fee = 0.0; $va = 0.0; $pcts = [];
-        foreach (DB::table('t_sale_imports')->whereIn('id', $per->keys())->get(['id', 'marketplace_fee', 'va_share_percentage']) as $b) {
-            $fee += (float) $b->marketplace_fee; $pcts[(string) (float) $b->va_share_percentage] = 1; $va += round(((float) $per[$b->id] - (float) $b->marketplace_fee) * (float) $b->va_share_percentage / 100, 2);
+        $per = (clone $q)->where('s.fk_id_import', '>', 0)->groupBy('s.fk_id_import')->selectRaw('s.fk_id_import b, COALESCE(SUM(s.profit),0) profit, COUNT(*) n')->get()->keyBy('b'); $fee = 0.0; $va = 0.0; $pcts = []; $batches = []; $closed = 0; $expFirst = 0; $ent = (int) Context::ent();
+        $all = DB::table('t_sales')->whereIn('fk_id_import', $per->keys())->groupBy('fk_id_import')->selectRaw('fk_id_import b, COUNT(*) n')->pluck('n', 'b');
+        foreach (DB::table('t_sale_imports as i')->leftJoin('t_branches as b', 'b.id', '=', 'i.fk_id_branch')->whereIn('i.id', $per->keys())->orderBy('i.period_year')->orderBy('i.period_month')->orderBy('i.id')->get(['i.*', 'b.shop_no', 'b.shop_name']) as $b) {
+            $bp = (float) $per[$b->id]->profit; $bf = (float) $b->marketplace_fee; $pct = (float) $b->va_share_percentage; $after = round($bp - $bf, 2); $whole = (int) $per[$b->id]->n === (int) ($all[$b->id] ?? 0); $exp = 0.0; $src = 'now';
+            if (Choices::get('VA_EXPENSES_BEFORE_SHARE', $ent, (int) $b->fk_id_branch) === '1' && $whole) {      // expenses come off before the VA share: the basis says so
+                $exp = (float) DB::table('va_statements')->where('fk_id_ent', $ent)->where('fk_id_branch', $b->fk_id_branch)->where('period_month', sprintf('%04d-%02d-01', $b->period_year, $b->period_month))->where('status', '<>', 'REJECTED')->orderByDesc('version_no')->value('expenses'); $expFirst++; }
+            $share = round(($after - $exp) * $pct / 100, 2);
+            if ($b->status === 'Confirmed' && $whole && $b->va_share_amount !== null) { $share = round((float) $b->va_share_amount, 2); $src = 'close'; $closed++; }      // a closed month: the saved Month Close figure, never worked out again
+            $fee += $bf; $va += $share; $pcts[(string) $pct] = 1;
+            $batches[] = ['id' => (int) $b->id, 'label' => trim((string) $b->shop_no) . ' (' . trim((string) $b->shop_name) . ') · ' . SalesImport::monthName((int) $b->period_month, (int) $b->period_year), 'status' => $b->status, 'lines' => (int) $per[$b->id]->n, 'profit' => round($bp, 2), 'fee' => round($bf, 2), 'after_fee' => $after, 'expenses' => round($exp, 2), 'pct' => $pct, 'va_share' => $share, 'net' => round($after - $share, 2), 'source' => $src];
         }
-        $pct = count($pcts) === 1 ? (float) array_key_first($pcts) : null; $profit = round((float) $t->profit, 2);
-        return $out + ['buy' => round((float) $t->buy, 2), 'profit' => $profit, 'fee' => round($fee, 2), 'va_share' => round($va, 2), 'va_label' => count($pcts) > 1 ? 'VA share (mixed %)' : 'VA share (' . rtrim(rtrim(number_format((float) $pct, 2, '.', ''), '0'), '.') . '%)',
-            'net' => round($profit - $fee - $va, 2), 'loss' => round((float) $t->loss, 2)];
+        $pct = count($pcts) === 1 ? (float) array_key_first($pcts) : null; $profit = round((float) $t->profit, 2); $tail = $expFirst ? ', after expenses' : '';
+        return $out + ['buy' => round((float) $t->buy, 2), 'profit' => $profit, 'fee' => round($fee, 2), 'va_share' => round($va, 2), 'va_label' => count($pcts) > 1 ? "VA share (mixed %$tail)" : 'VA share (' . rtrim(rtrim(number_format((float) $pct, 2, '.', ''), '0'), '.') . "%$tail)",
+            'net' => round($profit - $fee - $va, 2), 'loss' => round((float) $t->loss, 2), 'batches' => $batches, 'basis' => $expFirst ? 'after-fee profit less expenses' : 'after-fee profit', 'from_close' => $closed, 'close_note' => $closed ? ($closed === count($batches) ? 'Figures of the closed month(s), as saved at Month Close.' : "$closed of " . count($batches) . ' month(s) are closed: their VA share is the figure saved at Month Close.') : null];
     }
 
     // ---------- R-A_SALES-46: export ----------

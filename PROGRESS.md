@@ -434,3 +434,14 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - Dev database note: while cleaning up after the browser check, 11 stock reservations that pointed to sale lines that no longer exist were removed from the dev demo data.
 - Tests: 317 pass; new `FulfilmentTest` (3).
 - Register after this batch: BUILT 351 of 1,433 (24 %); Sales 84 of 155 (54 %).
+
+### Batch 7e-13 (21 Nov 2026)
+- **Rule R-A_SALES-31 completed** (VA % on the batch and the totals strip):
+  - `SalesImport::vaOf` – the VA of a batch is the person in `t_account_branches` with role `VA` or `SELLER` whose dates cover the batch period end; `t_branches.fk_id_seller` is used only when no such row exists.
+  - `SaleView::strip` now also returns `batches` (per month: lines, profit, fee, after fee, expenses, VA %, VA share, net, source), `basis`, `from_close`, `close_note`.
+  - A Confirmed batch shown whole reads its saved `va_share_amount` (source `close`) – it is not worked out again.
+  - With the choice `VA_EXPENSES_BEFORE_SHARE` = 1 for the shop, the share of an open month is worked out after the expenses of the month's VA statement and the label says "after expenses".
+  - Sales screen: every figure of the strip can be clicked – Records / sale / buy / profit show the lines, Total loss shows the loss lines, fee / VA share / net open "The months behind these figures" with a link to each month's lines.
+- Reviewed the 27 open Sales register lines without a rule: 8 are "retired with a reason" (status N, nothing to build); the others wait for large pieces (Import Center steps, marketplace APIs, purchase audits, old Gen-1 importers).
+- Tests: 318 pass; `SaleViewTest` has one new test and a longer strip test.
+- Register after this batch: BUILT 355 of 1,433 (25 %); Sales 87 of 155 (56 %).

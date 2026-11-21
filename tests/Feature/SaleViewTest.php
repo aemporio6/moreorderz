@@ -124,6 +124,25 @@ class SaleViewTest extends TestCase
         DB::table('t_sales')->where('order_no', 'A-1')->update(['profit' => 500]); DB::table('t_sales')->where('order_no', 'A-2')->update(['profit' => 300]);
         $t = SaleLines::list(['marketplace' => $this->mp, 'from' => '2026-07-01', 'to' => '2026-08-31'], $this->owner)['totals'];
         $this->assertSame([800.0, 40.0, 'VA share (mixed %)', 91.0, 669.0], [$t['profit'], $t['fee'], $t['va_label'], $t['va_share'], $t['net']]);
+        // a figure can be opened: the months behind it, each with its own fee, %, VA share and net
+        $this->assertSame([[460.0, 10.0, 46.0, 414.0, 'now'], [300.0, 15.0, 45.0, 255.0, 'now']], array_map(fn ($b) => [$b['after_fee'], $b['pct'], $b['va_share'], $b['net'], $b['source']], $t['batches'])); $this->assertStringContainsString('101A', $t['batches'][0]['label']); $this->assertSame('after-fee profit', $t['basis']);
+        // a closed month reads the figure saved at Month Close, also when the lines or the % change afterwards
+        DB::table('t_sale_imports')->where('id', $b1['batch'])->update(['status' => 'Confirmed', 'va_share_amount' => 46.00]); DB::table('t_sales')->where('order_no', 'A-1')->update(['profit' => 520]);
+        $t = SaleLines::list(['marketplace' => $this->mp, 'from' => '2026-07-01', 'to' => '2026-08-31'], $this->owner)['totals']; $this->assertSame([46.0, 'close', 1], [$t['batches'][0]['va_share'], $t['batches'][0]['source'], $t['from_close']]); $this->assertStringContainsString('1 of 2 month(s) are closed', $t['close_note']);
+        // choice "expenses before the VA share" for the shop: the open month's share is worked out after the statement's expenses and the label says so
+        \App\Services\Choices::setShop('VA_EXPENSES_BEFORE_SHARE', $this->shop, '1', 1); DB::table('va_statements')->insert($this->fill('va_statements', ['fk_id_ent' => 1, 'fk_id_branch' => $this->shop, 'fk_id_va' => $va, 'period_month' => '2026-08-01', 'fk_id_batch' => $b2['batch'], 'version_no' => 1, 'expenses' => 100, 'va_share_basis' => 'after_fee', 'status' => 'DRAFT', 'created_at' => now()]));
+        $t = SaleLines::list(['marketplace' => $this->mp, 'from' => '2026-08-01', 'to' => '2026-08-31'], $this->owner)['totals']; $this->assertSame(['VA share (15%, after expenses)', 30.0, 100.0, 'after-fee profit less expenses'], [$t['va_label'], $t['va_share'], $t['batches'][0]['expenses'], $t['basis']]);
+    }
+
+    public function test_the_va_of_a_batch_is_the_person_holding_the_shop_assignment_role_on_the_period_end(): void
+    {
+        $this->world(); $mk = fn (string $n) => DB::table('t_account')->insertGetId($this->fill('t_account', ['fk_id_ent' => 1, 'first_name' => $n, 'sur_name' => 'VA', 'f_active' => 1])); $old = $mk('Old'); $new = $mk('New'); $seed = $mk('Seed'); DB::table('t_branches')->where('id', $this->shop)->update(['fk_id_seller' => $seed]);
+        foreach ([[$old, 20], [$new, 12], [$seed, 5]] as [$acc, $pct]) DB::table('t_account_job_history')->insert($this->fill('t_account_job_history', ['fk_id_account' => $acc, 'fk_id_marketplace' => $this->mp, 'd_job_start_date' => '2026-01-01', 'share_percentage' => $pct]));
+        $as = fn (int $acc, string $role, string $from, ?string $to) => DB::table('t_account_branches')->insert($this->fill('t_account_branches', ['fk_id_branch' => $this->shop, 'fk_id_account' => $acc, 'role_code' => $role, 'd_from' => $from, 'f_active' => 1]) + ['d_to' => $to]);
+        $as($old, 'VA', '2026-01-01', '2026-07-15'); $as($new, 'SELLER', '2026-07-16', null); $as($old, 'SUPERVISOR', '2026-01-01', null);
+        $shop = DB::table('t_branches')->where('id', $this->shop)->first();
+        $this->assertSame([$new, 12.0], array_values(SalesImport::vaOf($shop, 7, 2026))); $this->assertSame([$old, 20.0], array_values(SalesImport::vaOf($shop, 6, 2026)));      // 30 June falls in the old VA's dates, 31 July in the new one's
+        DB::table('t_account_branches')->where('fk_id_branch', $this->shop)->delete(); $this->assertSame([$seed, 5.0], array_values(SalesImport::vaOf($shop, 7, 2026)));      // no assignment row: the shop's seller field is the fallback
     }
 
     public function test_filters_carrier_group_company_batch_and_the_lists_for_the_controls(): void

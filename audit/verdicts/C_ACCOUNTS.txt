@@ -37,7 +37,7 @@
 37|F|form:t_account_social_media|form only
 38|P|function options|option lists from the registry; loader rejection of placeholder lists not built
 39|F|form:t_account_job_history|form only; overlap guard / checks not built
-40|P|function vaSalary|VA salary from job history (choice VA_SALARY_SOURCE); VA % frozen on the batch not built
+40|P|function vaOf|VA = holder of the shop assignment role VA / SELLER on the batch period end, VA % from the job-history row valid on that date, frozen on the batch with basis + amount, Refresh VA % by the Owner, VA share as its own Month Close line, VA salary from job history (choice VA_SALARY_SOURCE). Missing: a job-history row for the shop winning over one without a shop, the chip "No VA share set", per-line commission as information, month-end FX for the salary, the Team engagements report
 41|F|form:t_account_branch|form only; shop assignment as the data scope not built
 42|M||linked shops by role panel not built
 43|F|form:cat_account_type|form only; role codes / flags not built
