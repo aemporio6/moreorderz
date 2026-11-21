@@ -347,11 +347,21 @@ class PrintService
 
     // ───────────────────────── PDF ─────────────────────────
 
+    /** The PDF maker class (a test can point it at a missing class). */
+    public static string $maker = Dompdf::class;
+
     public static function pdf(string $html, float $wMm, float $hMm): string
     {
+        if (! class_exists(self::$maker)) {      // R-G_CORE-72: no PDF maker → an error and a System › Health warning, never an HTML file
+            $fp = sha1('pdf_maker_missing'); $old = DB::table('sys_error_log')->where('fingerprint', $fp)->first();
+            if ($old) DB::table('sys_error_log')->where('id', $old->id)->update(['times_seen' => DB::raw('times_seen + 1'), 'last_seen' => now()]);
+            else DB::table('sys_error_log')->insert(RecordService::fillNotNull('sys_error_log', ['level' => 'ERROR', 'message' => 'PDF maker missing (' . self::$maker . ')', 'file' => 'PrintService::pdf', 'line' => 0, 'fk_id_ent' => (int) (Context::ent() ?? 0), 'fingerprint' => $fp, 'times_seen' => 1, 'created_at' => now(), 'last_seen' => now()]));
+            TaskEngine::open('SYS_ERROR', ['pdf_maker_missing'], 'PDF maker missing – PDFs cannot be made', ['ent' => (int) (Context::ent() ?? 0), 'description' => 'Install dompdf (composer) on the server.']);
+            throw new \RuntimeException('PDF maker missing');
+        }
         $dir = storage_path('app/print/fonts'); if (! is_dir($dir)) mkdir($dir, 0775, true);
         $o = new Options(); $o->setIsRemoteEnabled(false); $o->setIsPhpEnabled(false); $o->setDefaultFont('DejaVu Sans'); $o->setFontDir($dir); $o->setFontCache($dir); $o->setTempDir($dir); $o->setDpi(203);
-        $d = new Dompdf($o);
+        $d = new (self::$maker)($o);
         $d->setPaper([0, 0, $wMm * 72 / 25.4, $hMm * 72 / 25.4]);
         $d->loadHtml($html, 'UTF-8'); $d->render();
         $out = $d->output();

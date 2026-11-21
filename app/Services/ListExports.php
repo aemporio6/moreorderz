@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Storage;
 /** Export of a list in CSV / Excel / PDF (what the user sees: columns, order, filters), saved export templates, and their schedule. */
 class ListExports
 {
-    public const FORMATS = ['CSV' => ['csv', 'text/csv; charset=UTF-8'], 'XLSX' => ['xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'], 'PDF' => ['pdf', 'application/pdf']];
+    public const FORMATS = ['CSV' => ['csv', 'text/csv; charset=UTF-8'], 'XLSX' => ['xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'], 'PDF' => ['pdf', 'application/pdf'], 'DOCX' => ['docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']];
 
     /** A value that a spreadsheet could run as a formula is made safe. */
     private static function safe(mixed $v): mixed { return is_string($v) && preg_match('/^[=+\-@]/', $v) ? "'" . $v : $v; }
@@ -29,12 +29,14 @@ class ListExports
             foreach ($rows as $row) { $c = 1; foreach ($row as $v) { $cell = $sh->getCell([$c++, $n]); is_numeric($v) && ! preg_match('/^0\d|^\+/', (string) $v) && strlen((string) $v) < 15 ? $cell->setValueExplicit($v + 0, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC) : $cell->setValueExplicit((string) $v, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING); } $n++; }
             $sh->getStyle('1:1')->getFont()->setBold(true); $sh->freezePane('A2');
             $tmp = tempnam(sys_get_temp_dir(), 'moxl'); (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($book))->save($tmp); $bytes = file_get_contents($tmp); @unlink($tmp);
+        } elseif ($format === 'DOCX') {
+            $bytes = DocxWriter::table($title ?: $formKey, count($rows) . ' rows · ' . date('j M Y H:i'), [], $head, array_slice($rows, 0, 5000), [], [], 'No rows match these filters.');
         } else {
             $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
             $html = '<html><head><meta charset="utf-8"><style>body{font-family:DejaVu Sans,sans-serif;font-size:8px}h1{font-size:13px;margin:0 0 2px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #bbb;padding:2px 3px;text-align:left;vertical-align:top}th{background:#eee}</style></head><body>'
                 . '<h1>' . $e($title ?: $formKey) . '</h1><div>' . count($rows) . ' rows · ' . date('j M Y H:i') . '</div><table><thead><tr>' . implode('', array_map(fn ($h) => '<th>' . $e($h) . '</th>', $head)) . '</tr></thead><tbody>';
             foreach (array_slice($rows, 0, 5000) as $row) $html .= '<tr>' . implode('', array_map(fn ($v) => '<td>' . $e($v) . '</td>', $row)) . '</tr>';
-            $d = new \Dompdf\Dompdf(); $d->loadHtml($html . '</tbody></table></body></html>'); $d->setPaper('A4', 'landscape'); $d->render(); $bytes = $d->output();
+            $bytes = PrintService::pdf($html . '</tbody></table></body></html>', 297, 210);      // the one PDF maker (an error and a Health warning when it is missing – never HTML)
         }
         return [$bytes, $ext, $mime, count($rows)];
     }

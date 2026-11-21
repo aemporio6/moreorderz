@@ -260,11 +260,12 @@ class SaleView
             foreach ($cols as $i => $c) $sh->setCellValue([$i + 1, $rn], $c['label']); $sh->getStyle([1, $rn, count($cols), $rn])->getFont()->setBold(true);
             foreach ($grid as $g) { $rn++; foreach ($g as $i => $v) { $k = $cols[$i]['key']; $v = str_replace("\n", ' ', $v);
                 if (in_array($k, ['qty', 'sale_rate', 'total_amount', 'raw_price', 'buy_rate', 'buy_amount', 'profit'], true)) $sh->setCellValue([$i + 1, $rn], (float) $v); else $sh->setCellValueExplicit([$i + 1, $rn], $v, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING); } }
+            foreach ($rows as $ri => $r) if ($c = self::rowColour((array) $r)) $sh->getStyle([1, 5 + $ri, count($cols), 5 + $ri])->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setRGB(strtoupper(ltrim($c, '#')));      // the same row colours as the PDF
             $rn += 2; foreach ($sum as $x2) { $sh->setCellValue([1, $rn], $x2[0]); $sh->setCellValueExplicit([2, $rn], $x2[1], \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING); $rn++; }
             $tmp = tempnam(sys_get_temp_dir(), 'sx'); (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($x))->save($tmp); $body = file_get_contents($tmp); @unlink($tmp);
             return ['name' => $file, 'type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'body' => $body, 'lines' => $n];
         }
-        if ($format === 'docx') return ['name' => $file, 'type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'body' => self::docx($title, $sub, $sum, $cols, $grid), 'lines' => $n];
+        if ($format === 'docx') return ['name' => $file, 'type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'body' => self::docx($title, $sub, $sum, $cols, $grid, $rows), 'lines' => $n];
         // PDF: A4 landscape, DejaVu Sans 7 px, header repeats, no break inside a row, row colours
         $e = fn ($v) => nl2br(htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8')); $num = fn ($k) => in_array($k, self::NUMERIC, true) ? ' class="n"' : '';
         $html = '<html><head><meta charset="utf-8"><style>@page{margin:28px 22px 34px 22px}body{font-family:"DejaVu Sans";font-size:7px;color:#111}h1{font-size:13px;margin:0}.sub{margin:2px 0 6px;color:#444}table{width:100%;border-collapse:collapse}th{background:#d9e8f5;text-align:left}th,td{border:0.5px solid #b8c4cf;padding:2px 3px;vertical-align:top}tr{page-break-inside:avoid}thead{display:table-header-group}.n{text-align:right}.sum td{border:0;padding:1px 10px 1px 0}.foot{position:fixed;bottom:-24px;left:0;right:0;font-size:6px;color:#666}</style></head><body>'
@@ -276,27 +277,11 @@ class SaleView
         return ['name' => $file, 'type' => 'application/pdf', 'body' => PrintService::pdf($html, 297, 210), 'lines' => $n, 'html' => $html];
     }
 
-    /** A small Word file (title, subtitle, summary, one table) written by hand: no library needed. */
-    public static function docx(string $title, string $sub, array $sum, array $cols, array $grid): string
+    /** The Word file of the sales list (R-G_CORE-72): DocxWriter, row colours as the PDF (Refunded F5B7B1, loss FDECEA). */
+    public static function docx(string $title, string $sub, array $sum, array $cols, array $grid, array $rows = []): string
     {
-        $x = fn ($v) => htmlspecialchars((string) $v, ENT_XML1 | ENT_QUOTES, 'UTF-8');
-        $run = fn ($t, $b = false, $sz = 14) => '<w:r><w:rPr>' . ($b ? '<w:b/>' : '') . "<w:sz w:val=\"$sz\"/></w:rPr>" . implode('<w:br/>', array_map(fn ($l) => '<w:t xml:space="preserve">' . $x($l) . '</w:t>', explode("\n", (string) $t))) . '</w:r>';
-        $p = fn ($t, $b = false, $sz = 14, $right = false) => '<w:p><w:pPr>' . ($right ? '<w:jc w:val="right"/>' : '') . '<w:spacing w:after="40"/></w:pPr>' . $run($t, $b, $sz) . '</w:p>';
-        $cell = fn ($t, $b = false, $right = false, $fill = null) => '<w:tc><w:tcPr>' . ($fill ? "<w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"$fill\"/>" : '') . '</w:tcPr>' . $p($t, $b, 12, $right) . '</w:tc>';
-        $body = $p($title, true, 28) . $p($sub, false, 14) . $p(implode('   |   ', array_map(fn ($s) => $s[0] . ': ' . $s[1], $sum)), true, 14);
-        $body .= '<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblBorders>' . implode('', array_map(fn ($b) => "<w:$b w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"B8C4CF\"/>", ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'])) . '</w:tblBorders></w:tblPr>';
-        $body .= '<w:tr><w:trPr><w:tblHeader/></w:trPr>' . implode('', array_map(fn ($c) => $cell($c['label'], true, in_array($c['key'], self::NUMERIC, true), 'D9E8F5'), $cols)) . '</w:tr>';
-        foreach ($grid as $g) $body .= '<w:tr><w:trPr><w:cantSplit/></w:trPr>' . implode('', array_map(fn ($v, $c) => $cell($v, false, in_array($c['key'], self::NUMERIC, true)), $g, $cols)) . '</w:tr>';
-        if (! $grid) $body .= '<w:tr>' . $cell('No sales match these filters.') . '</w:tr>';
-        $body .= '</w:tbl>';
-        $doc = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' . $body
-            . '<w:sectPr><w:footerReference w:type="default" r:id="rId1" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/><w:pgSz w:w="16838" w:h="11906" w:orient="landscape"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="360" w:footer="360" w:gutter="0"/></w:sectPr></w:body></w:document>';
-        $footer = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' . $p("$title - $sub", false, 10) . '</w:ftr>';
-        $tmp = tempnam(sys_get_temp_dir(), 'dx'); $z = new \ZipArchive(); $z->open($tmp, \ZipArchive::OVERWRITE);
-        $z->addFromString('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>');
-        $z->addFromString('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
-        $z->addFromString('word/_rels/document.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>');
-        $z->addFromString('word/document.xml', $doc); $z->addFromString('word/footer1.xml', $footer); $z->close();
-        $out = file_get_contents($tmp); @unlink($tmp); return $out;
+        $fills = []; foreach ($rows as $i => $r) if ($c = self::rowColour((array) $r)) $fills[$i] = strtoupper(ltrim($c, '#'));
+        $num = []; foreach ($cols as $i => $c) if (in_array($c['key'], self::NUMERIC, true)) $num[] = $i;
+        return DocxWriter::table($title, $sub, $sum, array_column($cols, 'label'), $grid, $fills, $num, 'No sales match these filters.');
     }
 }
