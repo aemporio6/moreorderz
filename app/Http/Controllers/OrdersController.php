@@ -227,6 +227,19 @@ class OrdersController extends Controller
             return ['id' => $id, 'print' => $pj && $pj['status'] === 'PRINTED' ? $pj + ['url' => "/api/print-jobs/{$pj['job']}/pdf"] : null, 'parcel_code' => DB::table('wh_parcels')->where('id', $id)->value('parcel_code'), 'message' => 'Parcel packed and ready']; });
     }
 
+    /** Lost parcels and carrier claims (R-H-36). */
+    public function lostParcels(Request $r) { $this->can($r, 'orders.WAREHOUSE'); $ent = (int) Context::ent(); \App\Services\LostParcels::sweep($ent); return \App\Services\LostParcels::page($ent) + ['can_settle' => \App\Services\Perm::has($r->user(), 'money.EDIT')]; }
+    public function lostParcelAct(Request $r, int $id, string $act)
+    {
+        $this->can($r, $act === 'settle' ? 'money.EDIT' : 'orders.WAREHOUSE'); $ent = (int) Context::ent();
+        return $this->run(fn () => match ($act) {
+            'open' => \App\Services\LostParcels::open($ent, $id, (string) ($r->input('why') ?: 'Not delivered')),
+            'claim' => \App\Services\LostParcels::claim($ent, $id, (string) $r->input('ref'), (float) $r->input('amount'), $r->input('date')),
+            'settle' => \App\Services\LostParcels::settle($ent, $id, (string) $r->input('result'), $r->input('reason'), $r->input('date')),
+            'resend' => \App\Services\LostParcels::resend($ent, $id),
+        });
+    }
+
     /** What the pack screen needs: the items with their codes, the box / weight suggestion, whether scans and weight are required (R-H-29). */
     public function packCheck(Request $r)
     {

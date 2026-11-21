@@ -162,6 +162,7 @@
       if (r === '#/investor-map') return await pageInvestorMap();
       if ((mt = r.match(/^#\/product-investors\/(\d+)/))) return await pageProductInvestors(+mt[1]);
       if (r === '#/putaway') return await pagePutaway();
+      if (r === '#/lost-parcels') return await pageLostParcels();
       if (r.startsWith('#/mp-fields')) return await pageMpFields(+((r.match(/mp=(\d+)/) || [])[1] || 0));
       if ((mt = r.match(/^#\/mp-values\/(\d+)/))) return await pageMpValues(+mt[1], +((r.match(/tab=(\d+)/) || [])[1] || 0));
       if (r.startsWith('#/my-account')) return await pageMyAccount(Object.fromEntries(new URLSearchParams(r.split('?')[1] || '')));
@@ -1339,6 +1340,23 @@
   function dupLive(supEl, refEl, outEl, cycle) { let t; const run = () => { clearTimeout(t); t = setTimeout(async () => { const sup = supEl ? +supEl.value : 0, ref = refEl.value.trim(); outEl.textContent = ''; if ((supEl && !sup) || !ref) return;
       try { const r = await api('buying/duplicate-check?' + new URLSearchParams({ supplier: sup || '', ref, cycle: cycle || '' })); if (!r.ok) outEl.innerHTML = `${esc(r.message)} · <a href="#/cycle/${r.existing.id}">open</a>`; } catch (x) { } }, 400); };
     refEl.addEventListener('input', run); supEl && supEl.addEventListener('change', run); }
+  // ---------- lost parcels and carrier claims (R-H-36) ----------
+  async function pageLostParcels() {
+    busy(true); let d; try { d = await api('lost-parcels'); } finally { busy(false); }
+    const st = { LOST_INVESTIGATING: ['warn', 'Investigating'], CLAIMED: ['pend', 'Claimed'], PAID: ['done', 'Paid'], REJECTED: ['err', 'Rejected'] };
+    const act = async (id, a, body = {}) => { try { toast((await api(`lost-parcels/${id}/${a}`, { method: 'POST', body })).message); pageLostParcels(); } catch (e) { toast(e.message, 'err'); } };
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Lost parcels & claims</h1><div class="sub">A handed-over parcel with no delivery after the carrier's claim days shows here. Open a case, claim it, record the carrier's answer; a paid claim is booked as income on the shop. A lost parcel stays shipped – resend reserves and picks again.</div></div></div>
+      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>Parcel</th><th>Order</th><th>Shop</th><th>Carrier</th><th>Handed over</th><th>Case</th><th class="num">Claim</th><th></th></tr></thead><tbody>
+      ${d.rows.map(r => `<tr><td><b>${esc(r.parcel_code)}</b><div class="small muted">${esc(r.tracking_no || '')}</div></td><td>${esc(r.order_no)}</td><td>${esc(r.shop_name || '')}</td><td>${esc(r.carrier_name || '')}<div class="small muted">claim after ${r.claim_days || '—'} day(s)</div></td><td>${esc(String(r.handed_over_at || '').slice(0, 10))}</td>
+        <td>${r.claim_status ? `<span class="chip ${st[r.claim_status][0]}">${st[r.claim_status][1]}</span>` : '<span class="chip warn">Not delivered</span>'}${r.claim_ref ? `<div class="small muted">${esc(r.claim_ref)}</div>` : ''}</td><td class="num">${r.claim_amount ? (+r.claim_amount).toFixed(2) : ''}</td>
+        <td style="white-space:nowrap">${!r.claim_status ? `<button class="btn sm primary" data-lo="${r.id}">Open lost-parcel case</button>` : ''}${r.claim_status === 'LOST_INVESTIGATING' ? `<button class="btn sm" data-lc="${r.id}">Claim</button>` : ''}${r.claim_status === 'CLAIMED' && d.can_settle ? `<button class="btn sm primary" data-lp="${r.id}">Paid</button><button class="btn sm" data-lr="${r.id}">Rejected</button>` : ''}${r.claim_status ? ` <button class="btn sm ghost" data-lre="${r.id}">Resend</button>` : ''}</td></tr>`).join('')}</tbody></table>
+      ${d.rows.length ? '' : `<div class="empty">${ic('check')}<div>No lost parcels.</div></div>`}</div></div>`;
+    $$('[data-lo]').forEach(b => b.onclick = () => act(b.dataset.lo, 'open'));
+    $$('[data-lc]').forEach(b => b.onclick = () => miniForm('Claim from the carrier', '', [{ name: 'ref', label: 'Claim reference', required: true }, { name: 'amount', label: 'Amount claimed', required: true, type: 'number' }, { name: 'date', label: 'Date', type: 'date' }], async v => { const r = await api(`lost-parcels/${b.dataset.lc}/claim`, { method: 'POST', body: v }); pageLostParcels(); return r; }, 'Save claim'));
+    $$('[data-lp]').forEach(b => b.onclick = () => act(b.dataset.lp, 'settle', { result: 'PAID' }));
+    $$('[data-lr]').forEach(b => b.onclick = () => miniForm('Claim rejected', '', [{ name: 'reason', label: 'Why did the carrier reject it?', required: true }], async v => { const r = await api(`lost-parcels/${b.dataset.lr}/settle`, { method: 'POST', body: { result: 'REJECTED', reason: v.reason } }); pageLostParcels(); return r; }, 'Save'));
+    $$('[data-lre]').forEach(b => b.onclick = () => act(b.dataset.lre, 'resend'));
+  }
   // ---------- investor ids are company parties (R-D-80) ----------
   async function pageInvestorMap() {
     busy(true); let d; try { d = await api('investor-map'); } finally { busy(false); }

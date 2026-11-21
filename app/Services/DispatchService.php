@@ -141,6 +141,14 @@ class DispatchService
     // ---------------------------------------------------------------- pack
 
     /** Pack an order into one parcel: every line of the order must be fully picked. $d: order_no, branch, carrier?, box?, weight_g?. */
+    /** Is the sale line in a live parcel? A lost parcel (claim case) does not count once a replacement (RESEND) is reserved. */
+    private static function inParcel(int $saleId): bool
+    {
+        $resend = DB::table('wh_reservations')->where('fk_id_sale', $saleId)->where('reason', 'RESEND')->whereNotIn('status', ['RELEASED', 'SHIPPED'])->exists();
+        return DB::table('wh_parcel_lines as pl')->join('wh_parcels as p', 'p.id', '=', 'pl.fk_id_parcel')->where('pl.fk_id_sale', $saleId)->whereNotIn('p.status', ['VOID', 'CANCELLED'])
+            ->when($resend, fn ($q) => $q->whereNull('p.claim_status'))->exists();
+    }
+
     public static function pack(array $d): int
     {
         return DB::transaction(function () use ($d) {
@@ -150,12 +158,12 @@ class DispatchService
             if (! empty($d['sales'])) {      // Split parcel: only the chosen lines go into this parcel (R-H-29)
                 $lines = $lines->whereIn('id', array_map('intval', (array) $d['sales']))->values();
                 if ($lines->isEmpty()) throw new \InvalidArgumentException('Choose at least one line of this order for the parcel.');
-            } else $lines = $lines->filter(fn ($s) => ! DB::table('wh_parcel_lines as pl')->join('wh_parcels as p', 'p.id', '=', 'pl.fk_id_parcel')->where('pl.fk_id_sale', $s->id)->whereNotIn('p.status', ['VOID', 'CANCELLED'])->exists())->values();
+            } else $lines = $lines->filter(fn ($s) => ! self::inParcel((int) $s->id))->values();
             if ($lines->isEmpty()) throw new \RuntimeException("Order {$d['order_no']} is already packed.");
             foreach ($lines as $s) {
-                $r = DB::table('wh_reservations')->where('fk_id_sale', $s->id)->whereNotIn('status', ['RELEASED'])->first();
+                $r = DB::table('wh_reservations')->where('fk_id_sale', $s->id)->whereNotIn('status', ['RELEASED', 'SHIPPED'])->orderByDesc('id')->first();
                 if (! $r || $r->status !== 'PICKED') throw new \RuntimeException("Order {$s->order_no}: {$s->sku} is not fully picked yet.");
-                if (DB::table('wh_parcel_lines as pl')->join('wh_parcels as p', 'p.id', '=', 'pl.fk_id_parcel')->where('pl.fk_id_sale', $s->id)->whereNotIn('p.status', ['VOID', 'CANCELLED'])->exists()) throw new \RuntimeException("Order {$s->order_no} is already packed.");
+                if (self::inParcel((int) $s->id)) throw new \RuntimeException("Order {$s->order_no} is already packed.");
             }
             // pack verification, weight, box (R-H-29)
             $pl = array_values(array_filter(PackService::lines($ent, (string) $d['order_no'], (int) $d['branch']), fn ($l) => $lines->contains('id', (int) $l['sale'])));
@@ -176,7 +184,8 @@ class DispatchService
             $box = $boxId ? DB::table('wh_box_sizes')->where('id', $boxId)->whereIn('fk_id_ent', [$ent, 0])->first() : null;
             if (! empty($d['box']) && ! $box) throw new \InvalidArgumentException('Box not found.');
             $carrier = $d['carrier'] ?? DB::table('t_branches')->where('id', $d['branch'])->value('fk_id_default_carrier');
-            $pid = (int) DB::table('wh_parcels')->insertGetId(['fk_id_ent' => $ent, 'parcel_code' => Numbering::next('PRC', $ent), 'fk_id_branch' => $d['branch'], 'order_no' => $d['order_no'], 'fk_id_site' => (int) ($lines[0]->fk_id_sell_location ?: 0), 'fk_id_carrier' => $carrier,
+            $lost = DB::table('wh_parcel_lines as pl')->join('wh_parcels as p', 'p.id', '=', 'pl.fk_id_parcel')->whereIn('pl.fk_id_sale', $lines->pluck('id'))->whereNotNull('p.claim_status')->max('p.id');      // a replacement of a lost parcel (R-H-36)
+            $pid = (int) DB::table('wh_parcels')->insertGetId(['resend_of' => $lost ?: null,'fk_id_ent' => $ent, 'parcel_code' => Numbering::next('PRC', $ent), 'fk_id_branch' => $d['branch'], 'order_no' => $d['order_no'], 'fk_id_site' => (int) ($lines[0]->fk_id_sell_location ?: 0), 'fk_id_carrier' => $carrier,
                 'fk_id_box' => $box->id ?? null, 'box_suggested' => $sug['box'], 'fk_id_car_pkg_svc' => $d['service'] ?? null, 'weight_g' => $d['weight_g'] ?? $sug['weight_g'], 'length_cm' => $box ? $box->inner_l_mm / 10 : null, 'width_cm' => $box ? $box->inner_w_mm / 10 : null, 'height_cm' => $box ? $box->inner_h_mm / 10 : null,
                 'tracking_no' => $d['tracking_no'] ?? null, 'label_status' => ! empty($d['tracking_no']) ? 'READY' : 'NONE', 'status' => 'READY', 'packed_by' => Context::userId(), 'packed_at' => now(), 'created_at' => now()]);
             foreach ($lines as $s) {
@@ -304,7 +313,7 @@ class DispatchService
     /** Orders board: open order lines with their warehouse status. */
     public static function board(int $ent): array
     {
-        return \App\Services\Perm::mine(DB::table('t_sales as s'), 's.fk_id_branch')->leftJoin('wh_reservations as r', fn ($j) => $j->on('r.fk_id_sale', '=', 's.id')->whereNotIn('r.status', ['RELEASED']))->leftJoin('t_branches as b', 'b.id', '=', 's.fk_id_branch')
+        return \App\Services\Perm::mine(DB::table('t_sales as s'), 's.fk_id_branch')->leftJoin('wh_reservations as r', fn ($j) => $j->on('r.fk_id_sale', '=', 's.id')->whereNotIn('r.status', ['RELEASED'])->whereRaw('r.resend_no = (SELECT MAX(x.resend_no) FROM wh_reservations x WHERE x.fk_id_sale = r.fk_id_sale AND x.status <> "RELEASED")'))->leftJoin('t_branches as b', 'b.id', '=', 's.fk_id_branch')
             ->where('s.fk_id_ent', $ent)->where('s.status', 'Pending')->where('s.sale_source', 'active')->whereRaw("COALESCE(s.wh_status,'') NOT IN ('SHIPPED','RELEASED')")->orderByRaw('s.dispatch_by IS NULL, s.dispatch_by')->orderBy('s.id')->limit(500)
             ->get(['s.id', 's.order_no', 's.d_order', 's.sku', 's.qty', 's.wh_status', 's.fk_id_branch', 'b.shop_name as shop', 's.ship_to_name', 's.dispatch_by', 'r.status as reservation', 'r.qty as reserved', 'r.qty_short', 'r.qty_picked'])->all();
     }

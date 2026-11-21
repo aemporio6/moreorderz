@@ -569,3 +569,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-55 (21 Nov): simple → full warehouse R-H-7 BUILT (presets, putaway step and screen). +3 register lines (539). 411 tests.
 - 7e-56 (21 Nov): investor ids are company parties R-D-80 BUILT (mapping with review list, company picker). +3 register lines (542). 412 tests.
 - 7e-57 (21 Nov): carrier service selection rules R-H-30 BUILT (suggestion at pack, reason on change). +3 register lines (545). 413 tests.
+- 7e-58 (21 Nov): lost parcels and carrier claims R-H-36 BUILT (case, claim, paid on the shop, resend). +3 register lines (548). 414 tests.

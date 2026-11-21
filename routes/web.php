@@ -444,6 +444,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('pick-lists/{id}', [OrdersController::class, 'pickList'])->whereNumber('id');
         Route::post('pick-lines/{lineId}', [OrdersController::class, 'pick'])->whereNumber('lineId');
         Route::post('pack', [OrdersController::class, 'pack']);
+        Route::get('lost-parcels', [OrdersController::class, 'lostParcels']);
+        Route::post('lost-parcels/{id}/{act}', [OrdersController::class, 'lostParcelAct'])->whereNumber('id')->where('act', 'open|claim|settle|resend');
         Route::get('pack/check', [OrdersController::class, 'packCheck']);
         Route::post('pack/short', [OrdersController::class, 'packShort']);
         Route::post('handover', [OrdersController::class, 'openHandover']);
