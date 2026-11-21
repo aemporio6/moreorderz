@@ -59,7 +59,9 @@ class CycleAlerts
         if ($last < 0) $current = current(array_filter($keys, fn ($k) => ! in_array($k, $skip, true))) ?: null;
         $missing = []; foreach ($keys as $i => $k) if ($i < $last && $cnt[$k] === 0 && ! in_array($k, $skip, true)) $missing[] = $k;      // empty, not skipped, before the last step with records
         $steps = []; foreach ($keys as $k) $steps[] = ['key' => $k, 'name' => self::GROUPS[$k], 'count' => $cnt[$k], 'state' => in_array($k, $skip, true) && ! $cnt[$k] ? 'skipped' : ($cnt[$k] ? 'done' : ($k === $current ? 'current' : (in_array($k, $missing, true) ? 'missing' : 'pending')))];
-        return ['steps' => $steps, 'current' => $current, 'current_name' => $current ? self::GROUPS[$current] : 'Complete', 'last_name' => $last >= 0 ? self::GROUPS[$keys[$last]] : null, 'missing' => $missing, 'missing_text' => $missing ? 'record missing: ' . implode(', ', array_map(fn ($k) => self::GROUPS[$k], $missing)) : null];
+        $col = StepColours::forCycle((int) $id, $po, $skip);      // R-B_SOURCING-16: the colour from the data (done / bad lists in config/workflows.php)
+        foreach ($steps as &$st) { $st['colour'] = $col[$st['key']] ?? 'pend'; $st['colour_label'] = config('workflows.labels.' . $st['colour']); } unset($st);
+        return ['legend' => StepColours::legend(), 'steps' => $steps, 'current' => $current, 'current_name' => $current ? self::GROUPS[$current] : 'Complete', 'last_name' => $last >= 0 ? self::GROUPS[$keys[$last]] : null, 'missing' => $missing, 'missing_text' => $missing ? 'record missing: ' . implode(', ', array_map(fn ($k) => self::GROUPS[$k], $missing)) : null];
     }
 
     /** Quantity check per cycle product (R-39, v1.7: read from the GRN lines). */

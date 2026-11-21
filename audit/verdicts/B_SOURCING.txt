@@ -13,7 +13,7 @@
 13|M||historical CSV contract (35 columns) not built
 14|M||cycle CSV import not built
 15|P|function cycle|cycle workspace with a step bar and a section per step; 21 old tabs / sub-tabs not all present
-16|P|function cycle|step colour from the data; done / bad lists per step not complete
+16|B|class StepColours|step colour from the data: config/workflows.php done / bad lists per step, active rows only, latest QC per PO (re_inspection_of), grey / amber / green / red / hatched + legend on the cycle overview; StepColoursTest
 17|B|function pipeline|12 groups of the rule (RFQ · Samples · PO + lines + cartons · terms + payments · Production · QC · Allocation · Shipments · Freight · Customs · GRN · receipts + landed); lastDone = last group with active rows, current = first empty non-skipped group after it ("Complete" if none, first group when nothing has rows), skipped groups never current; a skipped group without rows is hatched with "Skipped for this cycle type - open and add a record to un-skip"; a record added to a skipped step un-skips it (skipped_steps updated, sys_workflow_state OPEN with STEP_UNSKIPPED, history); empty non-skipped groups before lastDone shown amber "record missing: <names>" and raise SRC_STEP_MISSING. Rule tests pass (DIRECT cycle with PO + shipment: no missing for skipped steps; FULL with PO and no RFQ → "record missing: RFQ / Quotations")
 18|M||Save & Next with carried context not built
 19|M||"already exists" guard on Next not built
