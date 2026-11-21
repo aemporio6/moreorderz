@@ -539,3 +539,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-25 (21 Nov): due engine R-C-46 BUILT (DueEngine, Due dates screen, 11 due sources on real columns). +8 register lines. 355 tests.
 - 7e-26 (21 Nov): price per marketplace R-D-22 BUILT (ProductPrices, price guard, #/prices card). +5 register lines. 357 tests.
 - 7e-27 (21 Nov): landed-cost engine R-B_SOURCING-44 BUILT (LandedEngine, per-cycle run, ABSORB / WRITE_OFF with ledger). +6 register lines. 361 tests.
+- 7e-28 (21 Nov): variations R-D-4 BUILT (Variations grid with inheritance, duplicate child). +5 register lines. 363 tests.

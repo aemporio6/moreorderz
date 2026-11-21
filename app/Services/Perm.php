@@ -115,6 +115,7 @@ class Perm
         'stock.ownership' => 'Change who owns stock',
         'stock.prices' => 'See selling prices',
         'stock.setPrice' => 'Change a selling price',
+        'stock.variations' => 'Add and change the variations (children) of a product',
         'work.CAN_EXPORT' => 'Export lists',
         'work.taskStatus_may' => 'Change the status of any task',
         'work.tasks_may' => 'See the tasks of everyone',

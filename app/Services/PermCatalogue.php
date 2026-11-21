@@ -101,6 +101,7 @@ class PermCatalogue
         'stock.ownership' => ['Ownership', 'Stock', ['OWNER', 'MANAGER']],
         'stock.prices' => ['Prices', 'Stock', ['OWNER', 'MANAGER', 'FINANCE', 'ACCOUNTANT', 'VA', 'TL']],
         'stock.setPrice' => ['Set price', 'Stock', ['OWNER', 'MANAGER', 'TL']],
+        'stock.variations' => ['Variations – add and change children', 'Stock', ['OWNER', 'MANAGER', 'TL', 'SOURCING']],
         'work.CAN_EXPORT' => ['Export lists', 'Lists, search, tasks', ['OWNER', 'MANAGER', 'FINANCE', 'ACCOUNTANT']],
         'work.taskStatus_may' => ['Task status – may', 'Lists, search, tasks', ['OWNER', 'MANAGER', 'TL']],
         'work.tasks_may' => ['Tasks – may', 'Lists, search, tasks', ['OWNER', 'MANAGER', 'TL']],

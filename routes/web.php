@@ -166,6 +166,11 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('stock/counts/{id}/{step}', [StockController::class, 'countStep'])->whereNumber('id')->whereIn('step', ['submit', 'approve', 'post', 'cancel']);
         Route::get('prices/{productId}', [StockController::class, 'prices'])->whereNumber('productId');
         Route::post('prices/{productId}', [StockController::class, 'setPrice'])->whereNumber('productId');
+        Route::get('variations/{id}', [StockController::class, 'variations'])->whereNumber('id');
+        Route::post('variations/{id}', [StockController::class, 'variationsSave'])->whereNumber('id');
+        Route::post('variations/{id}/copy-parent', [StockController::class, 'variationsCopy'])->whereNumber('id');
+        Route::post('variations/{id}/{child}/remove', [StockController::class, 'variationRemove'])->whereNumber('id')->whereNumber('child');
+        Route::get('variations/{id}/{child}/duplicate', [StockController::class, 'variationDuplicate'])->whereNumber('id')->whereNumber('child');
         Route::get('prices/{productId}/marketplaces', [StockController::class, 'mpPrices'])->whereNumber('productId');
         Route::post('prices/{productId}/marketplace/{mp}', [StockController::class, 'mpPriceSave'])->whereNumber('productId')->whereNumber('mp');
         Route::post('stock/bins', [StockController::class, 'bins']);
