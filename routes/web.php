@@ -153,6 +153,10 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('stock/on-hand', [StockController::class, 'onHand']);
         Route::get('products', [StockController::class, 'products']);
         Route::get('products/bin', [StockController::class, 'productBin']);
+        Route::get('investor-map', [StockController::class, 'investorMap']);
+        Route::post('investor-map', [StockController::class, 'investorMapRun']);
+        Route::get('products/{id}/investors', [StockController::class, 'productInvestors'])->whereNumber('id');
+        Route::post('products/{id}/investors', [StockController::class, 'productInvestorsSave'])->whereNumber('id');
         Route::get('warehouse/mode', [StockController::class, 'whMode']);
         Route::post('warehouse/mode', [StockController::class, 'whModeApply']);
         Route::get('putaway', [StockController::class, 'putaways']);

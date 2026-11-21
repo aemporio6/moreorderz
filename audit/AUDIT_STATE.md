@@ -112,4 +112,5 @@ How to work each step: build → test → change the verdict lines in `audit/ver
 | 7e-53 | Visibility per marketplace × shop R-D-20 BUILT (ProductVisibility: Pool / Private matrix, upsert, other-marketplace shop refused, lot default at receipt) | done | 533/1433 | 409 tests |
 | 7e-54 | Own-item pickers R-C-20 BUILT (OwnItems: rule labels, server refuses another person's id, + Add for the same person, draft person on first + Add) | done | 536/1433 | 410 tests |
 | 7e-55 | Simple → full warehouse by settings R-H-7 BUILT (WarehouseMode: presets, GRN to home bin or RECEIVING + putaway task, putaway screen, Simple waits for open putaways) | done | 539/1433 | 411 tests |
-| 7e-56 | NEXT → recount; 3-line R-H-49 inbound shipment, R-D-80, R-H-14, R-H-19 …; R-FIN-70 in parts; rest of Sourcing 39 / 28 | todo | | |
+| 7e-56 | Investor ids are company parties R-D-80 BUILT (InvestorParties: CH id → company party with directors, review list, idempotent run, company picker, upsert). R-H-19 (bundles) and R-H-14 (needs R-H-1 layers) checked – larger | done | 542/1433 | 412 tests |
+| 7e-57 | NEXT → recount; R-H-49 inbound shipment, R-H-19 bundles, other 3-line closers; R-FIN-70 in parts; rest of Sourcing 39 / 28 | todo | | |

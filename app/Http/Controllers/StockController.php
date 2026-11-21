@@ -52,6 +52,12 @@ class StockController extends Controller
         if (! $r->has('per')) $f += ['per' => $v['per'], 'set' => $v['set'], 'status' => $v['status'], 'mp' => $v['mp'] ?? null, 'q' => $v['q'] ?? ''];      // the person's default view
         return \App\Services\ProductsList::page((int) Context::ent(), $f, $r->user());
     }
+    /** Investor ids are company parties (R-D-80). */
+    public function investorMap(Request $r) { \App\Services\Perm::need($r->user(), 'products.investors'); return \App\Services\InvestorParties::migrate(true) + ['waiting_review' => \App\Services\InvestorParties::reviewList()]; }
+    public function investorMapRun(Request $r) { \App\Services\Perm::need($r->user(), 'products.investors'); return $this->run(fn () => \Illuminate\Support\Facades\DB::transaction(fn () => \App\Services\InvestorParties::migrate(false))); }
+    public function productInvestors(Request $r, int $id) { \App\Services\Perm::need($r->user(), 'products.investors'); return ['selected' => \App\Services\InvestorParties::ofProduct($id), 'options' => \App\Services\InvestorParties::options((int) Context::ent(), $r->query('q')), 'sku' => \Illuminate\Support\Facades\DB::table('t_product_vendors')->where('id', $id)->value('SKU_VENDOR')]; }
+    public function productInvestorsSave(Request $r, int $id) { \App\Services\Perm::need($r->user(), 'products.investors'); return $this->run(fn () => \App\Services\InvestorParties::save($id, (array) $r->input('ids', []))); }
+
     /** Simple / full warehouse by settings (R-H-7) and the putaway step. */
     public function whMode(Request $r) { \App\Services\Perm::need($r->user(), 'stock.bins'); return \App\Services\WarehouseMode::page((int) Context::ent()); }
     public function whModeApply(Request $r) { \App\Services\Perm::need($r->user(), 'stock.bins'); return $this->run(fn () => \App\Services\WarehouseMode::apply((int) Context::ent(), (string) $r->input('preset'), $r->user())); }

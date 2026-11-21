@@ -159,6 +159,8 @@
       if (r === '#/products' || r.startsWith('#/products?')) return await pageProducts();
       if ((mt = r.match(/^#\/visibility\/(\d+)/))) return await pageVisibility(+mt[1]);
       if (r === '#/warehouse-mode') return await pageWhMode();
+      if (r === '#/investor-map') return await pageInvestorMap();
+      if ((mt = r.match(/^#\/product-investors\/(\d+)/))) return await pageProductInvestors(+mt[1]);
       if (r === '#/putaway') return await pagePutaway();
       if (r.startsWith('#/mp-fields')) return await pageMpFields(+((r.match(/mp=(\d+)/) || [])[1] || 0));
       if ((mt = r.match(/^#\/mp-values\/(\d+)/))) return await pageMpValues(+mt[1], +((r.match(/tab=(\d+)/) || [])[1] || 0));
@@ -1337,6 +1339,23 @@
   function dupLive(supEl, refEl, outEl, cycle) { let t; const run = () => { clearTimeout(t); t = setTimeout(async () => { const sup = supEl ? +supEl.value : 0, ref = refEl.value.trim(); outEl.textContent = ''; if ((supEl && !sup) || !ref) return;
       try { const r = await api('buying/duplicate-check?' + new URLSearchParams({ supplier: sup || '', ref, cycle: cycle || '' })); if (!r.ok) outEl.innerHTML = `${esc(r.message)} · <a href="#/cycle/${r.existing.id}">open</a>`; } catch (x) { } }, 400); };
     refEl.addEventListener('input', run); supEl && supEl.addEventListener('change', run); }
+  // ---------- investor ids are company parties (R-D-80) ----------
+  async function pageInvestorMap() {
+    busy(true); let d; try { d = await api('investor-map'); } finally { busy(false); }
+    const tbl = (rows, cols) => rows.length ? `<div class="tbl-wrap"><table class="t"><thead><tr>${cols.map(c => `<th>${c[0]}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${cols.map(c => `<td>${esc(String(r[c[1]] ?? ''))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : `<div class="empty">${ic('check')}<div>None.</div></div>`;
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Investor ids → company parties</h1><div class="sub">Old product investor ids were Companies House ids. Each becomes the company party (with its directors and share %); anything that cannot be matched is listed for review – never guessed as a person.</div></div>
+      <div class="actions"><button class="btn primary" id="imRun" ${d.mapped.length || d.review.length ? '' : 'disabled'}>Run the mapping</button></div></div>
+      <div class="card"><div class="card-h"><h3>Dry run: ${esc(d.message)}</h3></div>${tbl(d.mapped, [['Row', 'row'], ['SKU', 'sku'], ['Old id', 'old_id'], ['Company', 'company']])}</div>
+      <div class="card" style="margin-top:12px"><div class="card-h"><h3>Unmatched investor ids · ${d.review.length + d.waiting_review.length}</h3></div>${tbl(d.review.concat(d.waiting_review), [['Row', 'row'], ['SKU', 'sku'], ['Old id', 'old_id'], ['Why', 'why']])}</div>`;
+    $('#imRun').onclick = async () => { try { toast((await api('investor-map', { method: 'POST', body: {} })).message); pageInvestorMap(); } catch (e) { toast(e.message, 'err'); } };
+  }
+  async function pageProductInvestors(id) {
+    busy(true); let d; try { d = await api(`products/${id}/investors`); } finally { busy(false); }
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Investors · ${esc(d.sku || '#' + id)}</h1><div class="sub">Investors are company parties: "Company – directors (share %)".</div></div><div class="actions"><a class="btn" href="#/stock/product/${id}">Back to product</a><a class="btn" href="#/investor-map">Old id mapping</a></div></div>
+      <div class="card">${d.options.length ? d.options.map(o => `<label class="chk" style="display:block"><input type="checkbox" data-inv="${o[0]}" ${d.selected.includes(+o[0]) ? 'checked' : ''}> ${esc(o[1])}</label>`).join('') : '<div class="small muted">No company party yet.</div>'}
+      <div style="margin-top:10px"><button class="btn primary" id="invSave">Save investors</button></div></div>`;
+    $('#invSave').onclick = async () => { try { toast((await api(`products/${id}/investors`, { method: 'POST', body: { ids: $$('[data-inv]').filter(x => x.checked).map(x => +x.dataset.inv) } })).message); } catch (e) { toast(e.message, 'err'); } };
+  }
   // ---------- simple / full warehouse by settings (R-H-7) and putaway ----------
   async function pageWhMode() {
     busy(true); let d; try { d = await api('warehouse/mode'); } finally { busy(false); }
@@ -2382,7 +2401,7 @@
     busy(true); let d, o; try { d = await api('stock/product/' + id); o = (await api('stock/on-hand')).rows.find(r => r.id === id) || {}; } finally { busy(false); }
     const cost = d.rows.length && d.rows[0].unit_cost_gbp !== undefined;
     $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/stock">Stock on hand</a> ›</div><h1>${esc(o.sku || 'Product ' + id)}</h1><div class="sub">${esc(o.name || '')}</div></div>
-      <div class="actions"><a class="btn" href="#/rec/${esc(S.boot.product_form)}/${id}">Product record</a><a class="btn" href="#/stock/ledger?product=${id}">Ledger of this product</a><a class="btn" href="#/mp-values/${id}">Marketplace fields</a><a class="btn" href="#/visibility/${id}">Visibility</a><button class="btn" data-sa="transfer">${ic('truck')} Move</button><button class="btn" data-sa="adjust">${ic('wand')} Adjust</button></div></div>
+      <div class="actions"><a class="btn" href="#/rec/${esc(S.boot.product_form)}/${id}">Product record</a><a class="btn" href="#/stock/ledger?product=${id}">Ledger of this product</a><a class="btn" href="#/mp-values/${id}">Marketplace fields</a><a class="btn" href="#/visibility/${id}">Visibility</a><a class="btn" href="#/product-investors/${id}">Investors</a><button class="btn" data-sa="transfer">${ic('truck')} Move</button><button class="btn" data-sa="adjust">${ic('wand')} Adjust</button></div></div>
       <div class="kpis"><div class="card kpi"><div class="bar"></div><div class="lbl">Units in stock</div><div class="val">${d.units}</div></div><div class="card kpi"><div class="bar"></div><div class="lbl">Can be sold</div><div class="val">${d.available}</div><div class="foot">sellable places, minus reserved</div></div></div>
       <div class="card" style="margin-top:14px"><div class="card-h"><h3>Where the units are · oldest lot first (sold first)</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Location</th><th>Lot</th><th>Received</th><th>Owner</th><th>Pool / private</th>${cost ? '<th class="num">Cost</th>' : ''}<th class="num">Units</th></tr></thead>
       <tbody>${d.rows.map(r => `<tr><td>${esc(r.location)}${r.kind ? ` <span class="small muted">${esc(r.kind.toLowerCase().replace(/_/g, ' '))}</span>` : ''}</td><td>${esc(r.lot_code)}</td><td>${esc(r.received_date)}</td><td>${esc(r.owner || 'Company')}</td><td>${esc(r.visibility || '')}</td>${cost ? `<td class="num">${(+r.unit_cost_gbp).toFixed(4)}${r.landed_status === 'PROVISIONAL' ? ' <span class="chip warn plain" title="Landed cost is not final yet">prov.</span>' : ''}</td>` : ''}<td class="num">${r.qty}</td></tr>`).join('')}</tbody></table>${d.rows.length ? '' : '<div class="empty">No units in stock.</div>'}</div></div>`;

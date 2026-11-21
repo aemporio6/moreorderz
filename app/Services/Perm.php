@@ -91,6 +91,7 @@ class Perm
         'orders.saveTrackingLayout' => 'Save a tracking file layout',
         'orders.trackingUpload' => 'Upload tracking numbers',
         'partners.EDIT' => 'Add and change partners',
+        'products.investors' => 'Set product investors (company parties) and map old investor ids',
         'products.hide' => 'Hide (archive) and restore products',
         'products.delete' => 'Delete products to the recycle bin',
         'products.marketplaceFields' => 'Build the listing fields per marketplace',
