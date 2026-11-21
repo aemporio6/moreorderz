@@ -11,7 +11,8 @@ use Illuminate\Support\Facades\DB;
  */
 class TaskActions
 {
-    public const UNDO_MIN = 10;
+    public const UNDO_MIN = 10;      // the default; the minutes come from Settings › Choices TASK_UNDO_MINUTES
+    public static function undoMin(): int { return (int) Choices::get('TASK_UNDO_MINUTES', (int) (Context::ent() ?: 0) ?: null) ?: self::UNDO_MIN; }
 
     private static function task(int $id): object { return DB::table('tasks')->where('id', $id)->first() ?? throw new \InvalidArgumentException('Task not found.'); }
     private static function boss(object $u): bool { return in_array($u->role_code, TaskScore::BOSS, true); }
@@ -232,7 +233,7 @@ class TaskActions
         $t = self::task($id);
         if ($t->status !== 'CANCELLED') throw new \InvalidArgumentException('Refused: the task is not cancelled.');
         if (! self::boss($u) && (int) $t->cancelled_by_user_id !== (int) $u->id) throw new \InvalidArgumentException('Refused: only the person who cancelled it, a Partner or a Manager can undo.');
-        if (! $t->cancelled_at || strtotime((string) $t->cancelled_at) < time() - self::UNDO_MIN * 60) throw new \InvalidArgumentException('Refused: a cancel can be undone for ' . self::UNDO_MIN . ' minutes only.');
+        if (! $t->cancelled_at || strtotime((string) $t->cancelled_at) < time() - self::undoMin() * 60) throw new \InvalidArgumentException('Refused: a cancel can be undone for ' . self::undoMin() . ' minutes only.');
         $prev = (string) DB::table('task_history')->where('task_id', $id)->where('field', 'status')->where('new_value', 'CANCELLED')->orderByDesc('id')->value('old_value') ?: 'TODO';
         DB::table('tasks')->where('id', $id)->update(['status' => $prev, 'cancelled_at' => null, 'cancelled_by_user_id' => null, 'last_update_at' => now()]);
         self::hist($id, (int) $u->id, 'status', 'CANCELLED', $prev, 'Undo cancel');
@@ -443,7 +444,7 @@ class TaskActions
             'can' => ['ack' => $open && ! $t->acknowledged_at && (int) $t->owner_user_id === (int) $u->id,
                 'move_due' => $canDue && ((int) $t->due_changes < $lim || self::partner($u)), 'request_due' => $open && (int) $t->owner_user_id === (int) $u->id && ! $req && ! $canDue,
                 'decide_due' => (bool) $req && $canDue, 'reassign' => $open && $u->role_code !== 'VA', 'cancel' => $open && self::boss($u),
-                'undo' => $t->status === 'CANCELLED' && $t->cancelled_at && strtotime((string) $t->cancelled_at) >= time() - self::UNDO_MIN * 60 && (self::boss($u) || (int) $t->cancelled_by_user_id === (int) $u->id),
+                'undo' => $t->status === 'CANCELLED' && $t->cancelled_at && strtotime((string) $t->cancelled_at) >= time() - self::undoMin() * 60 && (self::boss($u) || (int) $t->cancelled_by_user_id === (int) $u->id),
                 'subtask' => ! $t->parent_task_id && in_array($t->status, ['TODO', 'DOING', 'STUCK', 'REWORK'], true), 'waits' => $canDue,
                 'remind' => in_array($t->status, self::REMIND_OPEN, true) && (int) $t->owner_user_id !== (int) $u->id && (self::boss($u) || (int) $t->assigned_by_user_id === (int) $u->id),
                 'close_rule' => $open && $t->source === 'RULE' && self::partner($u), 'end_snooze' => self::partner($u) && self::snoozedUntil($t) !== null],

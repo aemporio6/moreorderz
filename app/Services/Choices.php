@@ -111,6 +111,12 @@ class Choices
         'CATEGORY_ROLES' => ['Tasks › Team & settings: who may change task categories (SLA, default owner, escalation)?', 'Recommended: Owner and Partner – categories decide who is chased and when.', 'OWNER,PARTNER', []],
         'DELEGATION_ALL_MONEY' => ['A delegation with rights "ALL" also lets the person decide money approvals?', 'Recommended: Yes – "ALL" means everything the absent person may do; use rights "APPROVE" for tasks only.', '1', [
             '1' => ['Yes', 'Suggested.'], '0' => ['No, money approvals stay with their own approvers', '']]],
+        'TASK_UNDO_MINUTES' => ['Tasks: a cancelled task can be brought back (Undo) for …', 'Recommended: 10 minutes – long enough to fix a wrong click, short enough that nobody builds on a cancel.', '10', [
+            '5' => ['5 minutes', ''], '10' => ['10 minutes', 'Suggested.'], '30' => ['30 minutes', ''], '60' => ['1 hour', ''], '1440' => ['1 day', '']]],
+        'TASK_COMMENT_MAX' => ['Tasks: a comment can be at most …', 'Recommended: 2,000 characters – a long text belongs in a file attached to the comment.', '2000', [
+            '1000' => ['1,000 characters', ''], '2000' => ['2,000 characters', 'Suggested.'], '5000' => ['5,000 characters', ''], '10000' => ['10,000 characters', '']]],
+        'SOURCING_DUE_DAYS' => ['Sourcing dashboard › Supplier payments: "Due soon" means due within …', 'Recommended: 7 days – one week to arrange the money.', '7', [
+            '3' => ['3 days', ''], '7' => ['7 days', 'Suggested.'], '14' => ['14 days', ''], '30' => ['30 days', '']]],
         'HIDDEN_MARGIN_ROLES' => ['Owner Home › Invoicing / Profit: who sees the row "Hidden margin"?', 'Recommended: Owner only – a partner\'s share is worked out on the net profit, so the margin kept by the company stays with the Owner.', 'OWNER', []],
     ];
 

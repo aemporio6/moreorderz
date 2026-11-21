@@ -133,7 +133,7 @@ class WaCommands
 
     private static function comment(int $task, User $u, string $text): void
     {
-        \App\Services\TaskComments::add($task, $u, mb_substr($text, 0, \App\Services\TaskComments::MAX), null, 'WHATSAPP');      // R-G_CORE-28 mentions, watcher, N9, last update
+        \App\Services\TaskComments::add($task, $u, mb_substr($text, 0, \App\Services\TaskComments::max()), null, 'WHATSAPP');      // R-G_CORE-28 mentions, watcher, N9, last update
     }
 
     /** Download and keep the media as task evidence: image → PHOTO, audio → VOICE, other → FILE. Returns [action, reply]. */

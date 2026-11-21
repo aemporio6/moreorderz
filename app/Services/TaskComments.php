@@ -12,7 +12,8 @@ use Illuminate\Support\Facades\DB;
  */
 class TaskComments
 {
-    public const MAX = 2000;
+    public const MAX = 2000;      // the default
+    public static function max(?int $ent = null): int { return (int) Choices::get('TASK_COMMENT_MAX', $ent) ?: self::MAX; }
 
     /** Active users that can be mentioned: id, name, first name (the @ picker). */
     public static function people(?int $ent = null): array
@@ -50,7 +51,8 @@ class TaskComments
         if (! $t || ! TaskFlow::canSee($t, $u)) throw new \InvalidArgumentException('Task not found.');
         $text = trim($text);
         if ($text === '' && ! $file) throw new \InvalidArgumentException('Write the comment first.');
-        if (mb_strlen($text) > self::MAX) throw new \InvalidArgumentException('Refused: a comment is at most 2,000 characters.');
+        $max = self::max((int) $t->fk_id_ent ?: null);      // Settings › Choices TASK_COMMENT_MAX
+        if (mb_strlen($text) > $max) throw new \InvalidArgumentException('Refused: a comment is at most ' . number_format($max) . ' characters.');
         $fileId = $file ? TaskEvidence::add($taskId, $u, $file, null, null, $text !== '' ? mb_substr($text, 0, 255) : null, null, $via) : null;      // one attachment, stored as evidence (voice allowed, not proof)
         [$ids, $warn] = self::parse($text, (int) $t->fk_id_ent ?: null);
         $told = [];

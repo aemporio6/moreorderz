@@ -36,7 +36,7 @@ class DashCards
     /** R-F_SETUP-21: over the open cycles, in base currency. */
     public static function payments(int $ent, ?string $today = null): array
     {
-        $today ??= date('Y-m-d'); $soon = date('Y-m-d', strtotime($today . ' +7 days')); $base = Fx::base($ent);
+        $today ??= date('Y-m-d'); $days = (int) Choices::get('SOURCING_DUE_DAYS', $ent) ?: 7; $soon = date('Y-m-d', strtotime($today . " +$days days"));      /* Settings › Choices */ $base = Fx::base($ent);
         $cy = DB::table('t_src_cycles')->where('fk_id_ent', $ent)->where('f_active', 1)->whereNotIn('status', ['CLOSED', 'Closed', 'CANCELLED', 'Cancelled', 'COMPLETED', 'Completed'])->pluck('id')->all();
         $pos = DB::table('t_src_po')->where('fk_id_ent', $ent)->where('f_active', 1)->whereIn('fk_id_cycle', $cy ?: [0])->whereNotIn('status', ['CANCELLED'])->get(['id', 'po_total', 'fk_id_currency', 'po_date', 'exchange_rate']);
         $open = 0.0; foreach ($pos as $p) { $cur = Fx::code($p->fk_id_currency, $ent); $open += $cur === $base ? (float) $p->po_total : (float) $p->po_total * ((float) $p->exchange_rate > 0 ? (float) $p->exchange_rate : Fx::rate($cur, (string) ($p->po_date ?: $today), $ent)); }
@@ -47,7 +47,7 @@ class DashCards
             $v = (float) $t->remaining_amount * Fx::rate(Fx::code($cur[$t->fk_id_po] ?? null, $ent), $today, $ent);
             $due += $v; if ($t->due_date && $t->due_date <= $soon) $week += $v;
         }
-        return ['base' => $base, 'open_po_value' => round($open, 2), 'paid' => round($paid, 2), 'terms_due' => round($due, 2), 'due_7_days' => round($week, 2), 'link' => '#/src-outstanding', 'title' => 'Supplier payments'];
+        return ['base' => $base, 'open_po_value' => round($open, 2), 'paid' => round($paid, 2), 'terms_due' => round($due, 2), 'due_7_days' => round($week, 2), 'due_days' => $days, 'link' => '#/src-outstanding', 'title' => 'Supplier payments'];
     }
 
     /** R-F_SETUP-30: Investors card – same sources as the investor report (R-F_SETUP-8). */
