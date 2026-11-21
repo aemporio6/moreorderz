@@ -481,7 +481,7 @@ class BuyingService
         $due = DB::table('t_src_payment_terms as t')->join('t_src_po as p', 'p.id', '=', 't.fk_id_po')->where('t.fk_id_ent', $ent)->where('t.f_active', 1)->where('t.status', '<>', 'PAID')->whereIn('p.status', ['CONFIRMED', 'SHIPPED', 'RECEIVED']);
         return [
             'research_open' => DB::table('src_research')->where('fk_id_ent', $ent)->whereIn('status', ['IDEA', 'RESEARCHING', 'SHORTLIST'])->count(),
-            'cycles_open' => DB::table('t_src_cycles')->where('fk_id_ent', $ent)->where('f_active', 1)->whereNotIn('status', ['CLOSED', 'CANCELLED'])->count(),
+            'cycles_open' => DB::table('t_src_cycles')->where('fk_id_ent', $ent)->where('f_active', 1)->whereNotIn('status', ['CLOSED', 'Closed', 'CANCELLED', 'Cancelled', 'COMPLETED', 'Completed'])->count(),
             'po_draft' => DB::table('t_src_po')->where('fk_id_ent', $ent)->where('f_active', 1)->where('status', 'DRAFT')->count(),
             'pay_due_count' => (clone $due)->where('t.due_date', '<=', $today)->count(),
             'pay_due_base' => round((float) (clone $due)->sum(DB::raw('t.remaining_amount * COALESCE(p.exchange_rate, 1)')), 2),

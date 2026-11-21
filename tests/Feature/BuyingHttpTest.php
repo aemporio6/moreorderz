@@ -63,6 +63,6 @@ class BuyingHttpTest extends TestCase
         $this->assertSame([250.0, $po], [(float) DB::table('t_src_po')->where('id', $rep)->value('po_total'), (int) DB::table('t_src_po')->where('id', $rep)->value('fk_id_repeat_from_po')]);
         $dash = $this->getJson('/api/buying')->assertOk()->json();
         $this->assertSame(1, $dash['kpi']['po_draft']);
-        $this->assertSame('done', $dash['cycles'][0]['steps'][5]['state']);
+        $this->assertSame('done', collect(collect($dash['cycles'])->last()['steps'])->firstWhere('key', 'landed_cost')['state']);      // R-F_SETUP-19: the 12-stage strip of the first cycle
     }
 }

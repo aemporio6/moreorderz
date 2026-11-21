@@ -44,12 +44,10 @@ class BuyingController extends Controller
     {
         $this->can($r, 'buying.SEE');
         $ent = (int) Context::ent();
-        $cycles = DB::table('t_src_cycles')->where('fk_id_ent', $ent)->where('f_active', 1)->whereNotIn('status', ['CLOSED', 'CANCELLED'])->orderByDesc('id')->limit(30)->get(['id', 'cycle_code', 'product_name', 'cycle_type', 'sourcing_date']);
-        $rows = [];
-        foreach ($cycles as $c) { $w = Buy::cycle($c->id); $rows[] = ['id' => $c->id, 'code' => $c->cycle_code, 'name' => $c->product_name, 'type' => $c->cycle_type, 'date' => $c->sourcing_date, 'steps' => $w['steps']]; }
+        $st = \App\Services\CycleAlerts::dashboard($ent, max(1, (int) $r->query('page', 1)));      // R-F_SETUP-19: one stage engine for every cycle row
         $d = Buy::dashboard($ent);
         if (! \App\Services\Perm::has($r->user(), 'buying.MONEY')) unset($d['pay_due_base'], $d['supplier_advances'], $d['supplier_payables']);
-        return ['kpi' => $d, 'cycles' => $rows, 'rights' => $this->rights($r)];
+        return ['kpi' => $d, 'cycles' => $st['rows'], 'stages' => $st, 'rights' => $this->rights($r)];
     }
 
     public function pick(Request $r)
@@ -145,6 +143,7 @@ class BuyingController extends Controller
     {
         $this->can($r, 'buying.SEE');
         $w = Buy::cycle($id);
+        $w['stages'] = \App\Services\CycleAlerts::pipeline(DB::table('t_src_cycles')->where('id', $id)->first());      // R-F_SETUP-19: the cycle header reads the same stage engine
         if (! \App\Services\Perm::has($r->user(), 'buying.MONEY')) { foreach (['rfqs' => ['price'], 'pos' => ['po_total'], 'landed' => ['freight_cost', 'customs_duty', 'other_cost', 'total_cost', 'landed_cost_per_unit']] as $k => $cols) foreach ($w[$k] as $row) foreach ($cols as $c) unset($row->$c); $w['terms'] = []; }
         return $w + ['rights' => $this->rights($r)];
     }

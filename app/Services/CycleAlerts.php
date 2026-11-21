@@ -12,9 +12,11 @@ class CycleAlerts
 {
     /** the 12 step groups of R-17 (old order), with their tables; the key is the one cycles keep in skipped_steps */
     public const GROUPS = [
-        'rfq' => 'RFQ / Quotations', 'samples' => 'Samples', 'po' => 'PO + lines + cartons', 'pay' => 'Payment terms + payments', 'production' => 'Production', 'qc' => 'QC / Inspections',
-        'allocation' => 'Destination allocation', 'shipment' => 'Shipments', 'freight' => 'Freight', 'customs' => 'Customs / Import', 'grn' => 'Landing / GRN', 'landed_cost' => 'Inventory receiving + landed cost',
+        'rfq' => 'RFQ / Quotations', 'samples' => 'Samples / Approval', 'po' => 'Purchase Orders · PO Lines · Cartons', 'pay' => 'Payment Schedule · Payments', 'production' => 'Production', 'qc' => 'QC / Inspection',
+        'allocation' => 'Destination Allocation', 'shipment' => 'Shipments', 'freight' => 'Freight Costs', 'customs' => 'Customs / Import', 'grn' => 'Landing / GRN', 'landed_cost' => 'Inventory Receiving · Landed Cost',
     ];
+    /** R-F_SETUP-19 strip colours: done teal, current black, pending grey, missing amber, skipped teal hatched */
+    public const STRIP = ['done' => '#0F5E63', 'current' => '#16181D', 'pending' => '#E1E4DE', 'missing' => '#E8A33D', 'skipped' => 'hatched'];
     public const CODES = ['SRC_PAY_DUE', 'SRC_QC_FAILED', 'SRC_SHIP_ARRIVING', 'SRC_SHIP_OVERDUE', 'SRC_GRN_SHORT', 'SRC_LOT_NO_COST', 'SRC_QTY_MISMATCH', 'SRC_OVER_ALLOC', 'SRC_STEP_MISSING', 'SRC_DOC_MISSING', 'STK_NO_LOCATION', 'STK_NO_COST', 'STK_LEDGER_MISMATCH'];
     private const HISTORICAL_ONLY = ['SRC_PAY_DUE', 'SRC_GRN_SHORT', 'SRC_SHIP_OVERDUE', 'SRC_LOT_NO_COST'];
     public const DOC_STEPS = ['po' => ['t_src_po', 'po_number', 'fk_id_po', 'PO'], 'shipment' => ['t_src_shipments', 'shipment_code', 'fk_id_shipment', 'Shipment'], 'qc' => ['t_src_qc', 'qc_code', 'fk_id_qc', 'QC'], 'customs' => ['t_src_customs', 'customs_code', 'fk_id_customs', 'Customs'], 'grn' => ['t_src_grn', 'grn_number', 'fk_id_grn', 'GRN'], 'sample' => ['t_src_samples', 'sample_code', 'fk_id_sample', 'Sample']];
@@ -60,8 +62,38 @@ class CycleAlerts
         $missing = []; foreach ($keys as $i => $k) if ($i < $last && $cnt[$k] === 0 && ! in_array($k, $skip, true)) $missing[] = $k;      // empty, not skipped, before the last step with records
         $steps = []; foreach ($keys as $k) $steps[] = ['key' => $k, 'name' => self::GROUPS[$k], 'count' => $cnt[$k], 'state' => in_array($k, $skip, true) && ! $cnt[$k] ? 'skipped' : ($cnt[$k] ? 'done' : ($k === $current ? 'current' : (in_array($k, $missing, true) ? 'missing' : 'pending')))];
         $col = StepColours::forCycle((int) $id, $po, $skip);      // R-B_SOURCING-16: the colour from the data (done / bad lists in config/workflows.php)
-        foreach ($steps as &$st) { $st['colour'] = $col[$st['key']] ?? 'pend'; $st['colour_label'] = config('workflows.labels.' . $st['colour']); } unset($st);
-        return ['legend' => StepColours::legend(), 'steps' => $steps, 'current' => $current, 'current_name' => $current ? self::GROUPS[$current] : 'Complete', 'last_name' => $last >= 0 ? self::GROUPS[$keys[$last]] : null, 'missing' => $missing, 'missing_text' => $missing ? 'record missing: ' . implode(', ', array_map(fn ($k) => self::GROUPS[$k], $missing)) : null];
+        foreach ($steps as &$st) { $st['colour'] = $col[$st['key']] ?? 'pend'; $st['colour_label'] = config('workflows.labels.' . $st['colour']); $st['done'] = $st['count'] > 0 || in_array($st['key'], $skip, true); $st['strip'] = self::STRIP[$st['state']]; } unset($st);
+        // R-F_SETUP-19: progress = stages with records ÷ (12 − skipped); skip counts as done (hatched), never as progress
+        $withRec = count(array_filter($cnt)); $den = count($keys) - count(array_filter($skip, fn ($k) => isset(self::GROUPS[$k]) && ! $cnt[$k]));
+        return ['legend' => StepColours::legend(), 'strip_legend' => self::STRIP, 'progress_pct' => $den > 0 ? (int) round($withRec / $den * 100) : 100, 'last_done' => $last >= 0 ? $keys[$last] : null, 'steps' => $steps, 'current' => $current, 'current_name' => $current ? self::GROUPS[$current] : 'Complete', 'last_name' => $last >= 0 ? self::GROUPS[$keys[$last]] : null, 'missing' => $missing, 'missing_text' => $missing ? 'record missing: ' . implode(', ', array_map(fn ($k) => self::GROUPS[$k], $missing)) : null];
+    }
+
+    /**
+     * Sourcing dashboard (R-F_SETUP-19): one row per open cycle from the stage engine – strip, current stage, missing text, progress %,
+     * suppliers (distinct, active cycle products only), products with target qty, PO numbers, Next action (first Needs-action item, R-F_SETUP-20, else "—"),
+     * Days open (floor of days since the sourcing date, never below 0; 0 without a date), cycle cell "code + entered dd Mon · status".
+     * Tiles: open cycles per current stage (a "Complete" cycle is not counted). Paged.
+     */
+    public static function dashboard(int $ent, int $page = 1, int $per = 30): array
+    {
+        $all = DB::table('t_src_cycles')->where('fk_id_ent', $ent)->where('f_active', 1)->whereNotIn('status', ['CLOSED', 'Closed', 'CANCELLED', 'Cancelled', 'COMPLETED', 'Completed'])->orderByDesc('id')
+            ->get(['id', 'cycle_code', 'cycle_type', 'skipped_steps', 'created_by', 'status', 'sourcing_date', 'created_at', 'product_name']);
+        $tiles = array_fill_keys(array_keys(self::GROUPS), 0); $rows = [];
+        $page = max(1, $page); $from = ($page - 1) * $per; $today = new \DateTimeImmutable('today');
+        foreach ($all as $i => $c) {
+            $pl = self::pipeline($c); if ($pl['current']) $tiles[$pl['current']]++;
+            if ($i < $from || $i >= $from + $per) continue;
+            $po = DB::table('t_src_po')->where('fk_id_cycle', $c->id)->where('f_active', 1)->orderBy('id')->get(['po_number', 'po_code']);
+            $prods = DB::table('t_src_cycle_products as cp')->leftJoin('t_src_suppliers as s', 's.id', '=', 'cp.fk_id_supplier')->where('cp.fk_id_cycle', $c->id)->where('cp.f_active', 1)->orderBy('cp.id')->get(['cp.product_name', 'cp.target_qty', 's.supplier_name']);
+            $needs = self::detect($ent, (int) $c->id); usort($needs, fn ($a, $b) => [$a['p'], $a['due'] ?? '9999'] <=> [$b['p'], $b['due'] ?? '9999']);
+            $days = $c->sourcing_date ? max(0, (int) floor(($today->getTimestamp() - strtotime((string) $c->sourcing_date)) / 86400)) : 0;
+            $rows[] = ['id' => (int) $c->id, 'code' => $c->cycle_code, 'cell' => $c->cycle_code . ' · entered ' . ($c->created_at ? date('d M', strtotime((string) $c->created_at)) : '—') . ' · ' . ($c->status ?: '—'),
+                'steps' => array_map(fn ($st) => array_intersect_key($st, array_flip(['key', 'name', 'state', 'strip', 'count', 'done'])), $pl['steps']), 'current' => $pl['current'], 'current_name' => $pl['current_name'], 'missing_text' => $pl['missing_text'], 'progress_pct' => $pl['progress_pct'],
+                'suppliers' => $prods->pluck('supplier_name')->filter()->unique()->values()->all(), 'products' => $prods->map(fn ($p) => trim($p->product_name . ' ' . number_format((float) $p->target_qty, 0, '.', '')))->all(),
+                'pos' => $po->map(fn ($p) => $p->po_number ?: $p->po_code)->filter()->values()->all(), 'next_action' => $needs[0]['title'] ?? '—', 'days_open' => $days];
+        }
+        return ['tiles' => array_map(fn ($k) => ['key' => $k, 'name' => self::GROUPS[$k], 'open' => $tiles[$k]], array_keys(self::GROUPS)), 'rows' => $rows, 'total' => $all->count(), 'page' => $page, 'per_page' => $per,
+            'legend' => [['Done', self::STRIP['done']], ['Current', self::STRIP['current']], ['Pending', self::STRIP['pending']], ['Record missing', self::STRIP['missing']], ['Skipped', 'hatched']]];
     }
 
     /** Quantity check per cycle product (R-39, v1.7: read from the GRN lines). */

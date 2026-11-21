@@ -16,7 +16,7 @@
 16|P|class Rights|money hidden from Warehouse; one see_money permission for every role / card not built
 17|B|class Context|every query scoped to the signed-in company
 18|P|function dashboard|open cycles on the buying dashboard; supplier / search / stage-tile filters not built
-19|P|function cycle|step bar from the data; 12-stage engine with missing / skipped / progress % not built
+19|B|function dashboard|stage engine: CycleAlerts::pipeline with the 12 stages of the rule (names as the rule), done = records or skipped (hatched), lastDone, current (first not-done after lastDone; none with records → first not skipped; none left → Complete), missing (amber "record missing: …") with SRC_STEP_MISSING, strip colours #0F5E63 / #16181D / #E1E4DE / #E8A33D / hatched, progress % = stages with records ÷ (12 − skipped); CycleAlerts::dashboard: tiles of open cycles per current stage (Complete not counted), rows with cycle cell "code · entered dd Mon · status", products with target qty, suppliers of active cycle products, PO numbers, strip + %, current, missing, Next action (first Needs-action item), Days open (floor, ≥ 0, 0 without date), paged; the cycle header reads the same engine; Journey / Summary PDF are R-F_SETUP-2 / -12; StageEngineTest (rule example: 38 %, Freight Costs current, Destination Allocation missing); clicked in a browser
 20|P|SRC_PAY_DUE|needs-action as rule tasks (6 codes); the dashboard list with texts / chips partly
 21|P|function dashboard|supplier payments to make on the Money dashboard; base-currency box partly
 22|M||"Contact today" with WhatsApp messages not built
