@@ -108,12 +108,59 @@ class DashCards
         return ['title' => 'Team activity', 'rows' => array_slice($rows, 0, 6), 'empty' => 'No activity in period'];
     }
 
+    /** R-F_SETUP-25: cost source of one lot – its own value, never a global flag. */
+    public const COST_SOURCES = ['FINAL' => ['Calculated', 'teal'], 'PROVISIONAL' => ['Provisional', 'amber'], 'MANUAL' => ['Entered by hand', 'amber'], 'MISSING' => ['Empty', 'red']];
+    public static function costSource(object $lot): string
+    {
+        if ((float) $lot->unit_cost_gbp <= 0) return 'MISSING';
+        $c = strtoupper((string) ($lot->cost_source ?? ''));
+        return isset(self::COST_SOURCES[$c]) ? $c : (strtoupper((string) ($lot->landed_status ?? '')) === 'FINAL' ? 'FINAL' : 'PROVISIONAL');
+    }
+
+    /** R-F_SETUP-25: last 10 lots (company scope) with owner and the cost-source chip; the landed unit cost only with see money. */
+    public static function lots(int $ent, bool $money): array
+    {
+        $rows = DB::table('fin_lots as l')->leftJoin('t_account as a', 'a.id', '=', 'l.fk_id_owner')->leftJoin('t_src_cycles as c', 'c.id', '=', 'l.fk_id_cycle')->leftJoin('t_src_inventory_receipts as r', 'r.id', '=', 'l.fk_id_receipt')
+            ->where('l.company_id', $ent)->orderByDesc('l.id')->limit(10)
+            ->get(['l.id', 'l.lot_code', 'l.sku', 'l.qty', 'l.unit_cost_gbp', 'l.cost_source', 'l.landed_status', 'c.id as cycle_id', 'c.cycle_code', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as owner"), 'r.receipt_code'])
+            ->map(function ($l) use ($money) { $cs = self::costSource($l);
+                return ['id' => (int) $l->id, 'batch' => $l->receipt_code ?: $l->lot_code, 'sku' => $l->sku, 'lot' => $l->lot_code, 'cycle' => $l->cycle_code, 'cycle_id' => $l->cycle_id ? (int) $l->cycle_id : null, 'qty' => (float) $l->qty,
+                    'owner' => $l->owner ?: '—', 'cost' => $money ? round((float) $l->unit_cost_gbp, 4) : null, 'cost_source' => $cs, 'chip' => self::COST_SOURCES[$cs][0], 'tone' => self::COST_SOURCES[$cs][1]]; })->all();
+        return ['title' => 'Inventory receiving', 'header' => $money ? 'Landed Unit Cost' : 'Cost source', 'rows' => $rows, 'empty' => 'No inventory lots yet.'];
+    }
+
+    /** R-F_SETUP-31: Buying Management card – one purchase source: Quick buys and Direct POs (local buys). */
+    public static function buying(int $ent, string $from, string $to, bool $money): array
+    {
+        $q = fn () => DB::table('t_src_po as p')->join('t_src_cycles as c', 'c.id', '=', 'p.fk_id_cycle')->where('p.fk_id_ent', $ent)->where('p.f_active', 1)->whereIn('c.cycle_type', ['QUICK', 'DIRECT'])->whereNotIn('p.status', ['CANCELLED']);
+        $per = $q()->whereBetween('p.po_date', [$from, $to])->get(['p.id', 'p.po_total', 'p.exchange_rate']);
+        $items = (float) DB::table('t_src_po_lines')->whereIn('fk_id_po', $per->pluck('id')->all() ?: [0])->where('f_active', 1)->sum('qty_ordered');
+        $last = $q()->max('p.po_date');
+        return ['title' => 'Buying Management', 'purchases' => $per->count() . ' · ' . rtrim(rtrim(number_format($items, 3, '.', ''), '0'), '.') . ' items', 'last' => $last ? date('d M Y', strtotime($last)) : '-',
+            'value' => $money ? round($per->sum(fn ($p) => (float) $p->po_total * ((float) $p->exchange_rate ?: 1)), 2) : null, 'link' => '#/list/t_src_po'];
+    }
+
+    /** R-F_SETUP-32: Sourcing Management glance – every count is the full count; PO outstanding = max(0, open PO value − paid) with see money. */
+    public static function glance(int $ent, bool $money): array
+    {
+        $open = (int) DB::table('t_src_cycles')->where('fk_id_ent', $ent)->where('f_active', 1)->where(fn ($w) => $w->whereNull('status')->orWhereRaw("UPPER(status) NOT IN ('CLOSED','CANCELLED','COMPLETED')"))->count();
+        $n = self::needs($ent, true)['rows']; $c = fn ($code) => count(array_filter($n, fn ($r) => $r['code'] === $code));
+        $lotsNoCost = (int) DB::table('fin_lots')->where('company_id', $ent)->where('qty_left', '>', 0)->where(fn ($w) => $w->whereNull('unit_cost_gbp')->orWhere('unit_cost_gbp', '<=', 0))->count();
+        $rows = [['Open cycles', $open, '#/buying'], ['Needs action', count($n) . ' items', '#/buying'], ['Shipments overdue', $c('SRC_SHIP_OVERDUE'), '#/src-transit'], ['Lots missing landed cost', max($lotsNoCost, $c('SRC_LOT_NO_COST')), '#/stock']];
+        if ($money) { $p = self::payments($ent); $rows[] = ['PO outstanding', number_format(max(0, $p['open_po_value'] - $p['paid']), 2) . ' ' . $p['base'], '#/src-outstanding']; }
+        return ['title' => 'Sourcing Management', 'rows' => array_map(fn ($r) => ['label' => $r[0], 'value' => $r[1], 'link' => $r[2]], $rows), 'link' => '#/buying'];
+    }
+
     /** R-F_SETUP-20: Needs action over the open cycles – P1 then P2, then due date; top 20 with "show all"; the header counts every item. */
     public static function needs(int $ent, bool $all = false): array
     {
         $cy = DB::table('t_src_cycles')->where('fk_id_ent', $ent)->where('f_active', 1)->whereNotIn('status', ['CLOSED', 'Closed', 'CANCELLED', 'Cancelled', 'COMPLETED', 'Completed'])->pluck('cycle_code', 'id');
         $rows = [];
-        foreach ($cy as $id => $code) foreach (CycleAlerts::detect($ent, (int) $id) as $r) $rows[] = ['code' => $r['code'], 'p' => $r['p'], 'title' => $r['title'], 'detail' => $r['detail'], 'chip' => $r['chip'], 'due' => $r['due'], 'cycle' => $code, 'cycle_id' => (int) $id, 'link' => $r['opt']['fix_url'] ?? "#/cycle/$id"];
+        $tab = ['SRC_PAY_DUE' => 'payment_terms', 'SRC_QC_FAILED' => 'qc', 'SRC_SHIP_ARRIVING' => 'shipments', 'SRC_SHIP_OVERDUE' => 'shipments', 'SRC_GRN_SHORT' => 'grn', 'SRC_LOT_NO_COST' => 'inventory', 'SRC_QTY_MISMATCH' => 'allocation', 'SRC_OVER_ALLOC' => 'allocation', 'SRC_DOC_MISSING' => 'documents'];
+        foreach ($cy as $id => $code) foreach (CycleAlerts::detect($ent, (int) $id) as $r) {
+            $t = $tab[$r['code']] ?? ($r['code'] === 'SRC_STEP_MISSING' ? (string) ($r['key'][1] ?? 'overview') : 'overview');      // R-F_SETUP-34: the cycle opens on the exact tab with the row highlighted
+            $rows[] = ['code' => $r['code'], 'p' => $r['p'], 'title' => $r['title'], 'detail' => $r['detail'], 'chip' => $r['chip'], 'due' => $r['due'], 'cycle' => $code, 'cycle_id' => (int) $id, 'link' => "#/cycle/$id?tab=$t&hl=" . rawurlencode((string) ($r['key'][0] ?? ''))];
+        }
         usort($rows, fn ($a, $b) => [$a['p'], $a['due'] ?? '9999-12-31', $a['cycle']] <=> [$b['p'], $b['due'] ?? '9999-12-31', $b['cycle']]);
         return ['count' => count($rows), 'rows' => $all ? $rows : array_slice($rows, 0, 20), 'more' => ! $all && count($rows) > 20, 'empty' => 'Nothing pending — all clear.'];
     }

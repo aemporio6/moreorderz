@@ -357,7 +357,7 @@ class StockService
             if ($vSold != 0.0) $lines[] = ['account' => '5000', $side($vSold, true) => abs($vSold), 'memo' => "$sold unit(s) already sold"];
             $tot = round($vStock + $vSold, 2);
             if ($tot != 0.0) $lines[] = ['account' => '3000', $side($tot, false) => abs($tot)];
-            DB::table('fin_lots')->where('id', $lotId)->update(['unit_cost_gbp' => $cost, 'landed_status' => 'FINAL']);
+            DB::table('fin_lots')->where('id', $lotId)->update(['unit_cost_gbp' => $cost, 'landed_status' => 'FINAL', 'cost_source' => 'MANUAL']);      // R-F_SETUP-25: typed by hand, reason logged
             DB::table('fin_lot_consumption')->where('lot_id', $lotId)->update(['unit_cost_gbp' => $cost]);
             if (count($lines) >= 2) Ledger::post($ent, date('Y-m-d'), 'LOT_COST', $lotId, $lines, ['memo' => "Cost of lot {$lot->lot_code} set to " . rtrim(rtrim(number_format($cost, 4, '.', ''), '0'), '.') . ' · ' . mb_substr($reason, 0, 80)]);
             Audit::log('fin_lots', $lotId, 'UPDATE', ['unit_cost' => [(float) $lot->unit_cost_gbp, $cost]], $reason, $ent);

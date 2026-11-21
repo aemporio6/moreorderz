@@ -185,6 +185,7 @@
       if (r === '#/stock/counts') return await pageCounts();
       if ((mt = r.match(/^#\/prices\/(\d+)/))) return await pagePrices(+mt[1]);
       if (r.startsWith('#/stock')) return await pageStock({ low: r.includes('low=1') });
+      if (r.startsWith('#/buying/overview')) return await pageBuyingOverview(r.split('?')[1] || '');
       if (r === '#/buying' || r.startsWith('#/buying?')) { const u = new URLSearchParams(r.split('?')[1] || ''); return await pageBuying(+(u.get('page') || 1), Object.fromEntries(['supplier', 'q', 'stage', 'reset'].filter(k => u.has(k)).map(k => [k, u.get(k)]))); }
       if ((mt = r.match(/^#\/research\/(\d+)/))) return await pageResearch(+mt[1]);
       if ((mt = r.match(/^#\/cycle-extras\/(\d+)/))) return await pageCycleExtras(+mt[1]);
@@ -197,7 +198,10 @@
       if (r.startsWith('#/src-suppliers')) return await pageSrcSuppliers({ from: (r.match(/from=([\d-]+)/) || [])[1], to: (r.match(/to=([\d-]+)/) || [])[1] });
       if (r.startsWith('#/sourcing-reports')) return await pageSrcReports(+((r.match(/cycle=(\d+)/) || [])[1] || 0), +((r.match(/po=(\d+)/) || [])[1] || 0));
       if (r.startsWith('#/direct-po')) return await pageDirectPo(null, null);
-      if ((mt = r.match(/^#\/cycle\/(\d+)/))) { await pageCycle(+mt[1]); if (r.includes('tab=payments')) { const h = $$('#main h3').find(x => x.textContent.startsWith('3. Payments')); if (h) h.scrollIntoView({ block: 'start' }); } if (r.includes('tab=landed')) { const h = $$('#main h3').find(x => x.textContent.startsWith('6. Landed')); if (h) h.scrollIntoView({ block: 'start' }); } return; }
+      if ((mt = r.match(/^#\/cycle\/(\d+)/))) { const ctab = (r.match(/tab=(\w+)/) || [])[1], hl = decodeURIComponent((r.match(/hl=([^&]+)/) || [])[1] || '');
+        if (['qc', 'allocation', 'samples', 'customs', 'production', 'freight', 'documents'].includes(ctab)) { await pageCycleExtras(+mt[1]); hilite(hl); return; }
+        await pageCycle(+mt[1]); const head = { payment_terms: '3. Payments', shipments: '4. Shipments', grn: '5. Receiving', inventory: '6. Landed' }[ctab];
+        if (head) { const h = $$('#main h3').find(x => x.textContent.startsWith(head)); if (h) h.scrollIntoView({ block: 'start' }); } hilite(hl); if (r.includes('tab=payments')) { const h = $$('#main h3').find(x => x.textContent.startsWith('3. Payments')); if (h) h.scrollIntoView({ block: 'start' }); } if (r.includes('tab=landed')) { const h = $$('#main h3').find(x => x.textContent.startsWith('6. Landed')); if (h) h.scrollIntoView({ block: 'start' }); } return; }
       if (r.startsWith('#/quick-buy')) return await pageQuickBuy(+(new URLSearchParams(r.split('?')[1] || '').get('product')) || null);
       if (r === '#/forecast') return await pageForecast();
       if (r === '#/labels') return await pageLabels();
@@ -2792,6 +2796,8 @@
 
   // R-F_SETUP-19: the 12-stage strip of the stage engine (done teal, current black, pending grey, record missing amber, skipped hatched)
   const stageStrip = (steps, pct) => `<div style="display:flex;gap:2px;align-items:center" data-strip>${steps.map(s => `<span data-st="${s.key}" data-state="${s.state}" title="${esc(s.name)}: ${s.state === 'missing' ? 'record missing' : s.state}${s.count ? ' (' + s.count + ')' : ''}" style="flex:1;min-width:10px;height:10px;border-radius:2px;background:${s.strip === 'hatched' ? 'repeating-linear-gradient(45deg,#0F5E63,#0F5E63 2px,#fff 2px,#fff 5px)' : s.strip}"></span>`).join('')}${pct !== undefined ? `<b class="small" style="margin-left:6px;white-space:nowrap">${pct}%</b>` : ''}</div>`;
+  // highlight the row of a deep link (R-F_SETUP-34)
+  function hilite(text) { if (!text) return; setTimeout(() => { const all = $$('#main tr').filter(t => t.textContent.includes(text)), tr = all.find(t => !t.closest('#cyOver')) || all[0]; if (tr) { tr.style.background = '#fff4c2'; tr.dataset.hl = '1'; tr.scrollIntoView({ block: 'center' }); } }, 400); }
   // R-F_SETUP-27: the one period component – a choice is resolved (and remembered per user per card) by the server; Custom applies only when both dates are filled
   function periodSelect(card, p, onApply) {
     const id = 'pd' + Math.random().toString(36).slice(2, 7), opts = p.options || {};
@@ -2822,6 +2828,10 @@
     if (money) perCard('invoicing', '#bInv', (box, d) => { box.innerHTML = d.show ? `<div class="card"><div class="card-h"><h3>${esc(d.title)}</h3><span data-pslot style="margin-left:auto"></span></div>${kv(d.rows)}</div>` : ''; });
     if (money) perCard('investors', '#bInvest', (box, d) => { const m2 = v => money2(v);
       box.innerHTML = `<div class="card"><div class="card-h"><h3>${esc(d.title)}</h3><span data-pslot style="margin-left:auto"></span></div>${d.empty ? `<div class="empty">${esc(d.empty)}</div>` : kv([...d.invested.map(x => ['Invested (period) · ' + x.name + ' (' + x.cycles + ' cycles)', m2(x.amount)]), ...d.goods.map(x => ['Goods in hand (now) · ' + x.name, m2(x.amount)]), ['Returns (confirmed, period)', m2(d.returns)], ['Withdrawals (period)', m2(d.withdrawals)]])}</div>`; });
+    load('lots', '#bLots', (box, d) => { const tone = { teal: '#d9f0ee', amber: '#fff1d6', red: '#fde2e0' };
+      box.innerHTML = `<div class="card"><div class="card-h"><h3>${esc(d.title)}</h3></div>${d.rows.length ? `<div class="tbl-wrap"><table class="t" id="lotT"><thead><tr><th>Batch / Lot</th><th class="num">Qty accepted</th><th>Owner / Investor</th><th class="num">${esc(d.header)}</th></tr></thead><tbody>${d.rows.map(r => `<tr><td>${esc(r.batch)}<div class="small muted">${esc(r.sku || '')} · ${esc(r.lot)}${r.cycle_id ? ` · <a href="#/cycle/${r.cycle_id}">${esc(r.cycle)}</a>` : ''}</div></td><td class="num">${(+r.qty).toLocaleString()}</td><td>${esc(r.owner)}</td><td class="num">${r.cost !== null ? (+r.cost).toFixed(4) + ' ' : ''}<span class="chip" style="background:${tone[r.tone]}">${esc(r.chip)}</span></td></tr>`).join('')}</tbody></table></div>` : `<div class="empty">${esc(d.empty)}</div>`}</div>`; });
+    perCard('buyingcard', '#oBuy', (box, d) => { box.innerHTML = `<div class="card"><div class="card-h"><h3>${esc(d.title)}</h3><span data-pslot style="margin-left:auto"></span></div>${kv([['Purchases (period)', d.purchases], ['Last purchase', d.last], ...(d.value !== null ? [['Buy value (period)', money2(d.value)]] : [])])}<div class="card-b"><a href="${d.link}" class="small">Open module</a></div></div>`; });
+    load('glance', '#oGlance', (box, d) => { box.innerHTML = `<div class="card"><div class="card-h"><h3>${esc(d.title)}</h3></div><table class="t"><tbody>${d.rows.map(r => `<tr><td><a href="${r.link}">${esc(r.label)}</a></td><td class="num">${esc(String(r.value))}</td></tr>`).join('')}</tbody></table><div class="card-b"><a href="${d.link}" class="small">Open module</a></div></div>`; });
     perCard('team', '#bTeam', (box, d) => { box.innerHTML = `<div class="card"><div class="card-h"><h3>${esc(d.title)}</h3><span data-pslot style="margin-left:auto"></span></div>${d.rows.length ? `<div class="card-b" id="tmList">${d.rows.map(r => `<div style="padding:4px 0"><a href="${esc(r.drill)}">${esc(r.line)}</a></div>`).join('')}</div>` : `<div class="empty">${esc(d.empty)}</div>`}</div>`; });
     const drawNeeds = (box, d) => { const P = { P1: '#c0392b', P2: '#e67e22' };
       box.innerHTML = `<div class="card"><div class="card-h"><h3>Needs action</h3><span class="small muted">${d.count}</span>${d.more ? '<a href="#" class="small" id="ndAll" style="margin-left:auto">show all</a>' : ''}</div>${d.rows.length ? `<div class="tbl-wrap"><table class="t" id="ndT"><tbody>${d.rows.map(r => `<tr class="click" data-link="${esc(r.link)}"><td style="width:40px"><span class="chip" style="background:${P[r.p] || '#888'};color:#fff">${esc(r.p)}</span></td><td><b>${esc(r.title)}</b><div class="small muted">${esc(r.detail)}</div></td><td><span class="chip plain">${esc(r.chip)}</span></td><td class="small">${esc(r.cycle)}</td><td class="small">${esc(r.due || '')}</td></tr>`).join('')}</tbody></table></div>` : `<div class="empty">${esc(d.empty)}</div>`}</div>`;
@@ -2840,11 +2850,21 @@
           <td title="${esc(r.eta_history || '')}">${esc(r.eta)}${r.eta_changes ? ` <span class="small muted">(${r.eta_changes}×)</span>` : ''}</td><td>${chip(r.customs, r.customs_tone)}</td><td>${chip(r.grn, r.grn_tone)}</td><td>${r.tracking_url ? `<a href="${esc(r.tracking_url)}" target="_blank" rel="noopener" class="small">tracking</a>` : ''}</td></tr>`).join('')}</tbody></table></div>` : `<div class="empty">${esc(d.empty)}</div>`}</div>`; });
   }
   const money2 = v => (+v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // R-F_SETUP-34: two tabs with deep links; filters are kept when switching
+  const buyTabs = (on, qs) => `<div class="seg" style="margin-bottom:8px" id="buyTabs"><a href="#/buying${qs ? '?' + qs : ''}" class="${on === 'sourcing' ? 'on' : ''}" style="padding:6px 12px;display:inline-block">Sourcing, in full</a><a href="#/buying/overview${qs ? '?' + qs : ''}" class="${on === 'overview' ? 'on' : ''}" style="padding:6px 12px;display:inline-block">Business overview</a></div>
+    <div class="small muted" style="margin-bottom:8px">This page only reads data – nothing here changes a record. Click any cycle, tile or row to open the real screen.</div>`;
+  async function pageBuyingOverview(qs) {
+    $('#main').innerHTML = `${buyTabs('overview', qs)}<div class="page-head"><div><h1>Business overview</h1></div></div><div id="bFailed"></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:12px;align-items:start"><div id="oBuy"></div><div id="oGlance"></div><div id="bInv"></div><div id="bInvest"></div><div id="bTeam"></div></div>`;
+    S.failedCards = []; const r = await api('buying?' + qs).catch(() => ({ rights: {} })); buyingCards(null, !!(r.rights || {}).money);
+    $('#main').addEventListener('click', e => { const a = e.target.closest('[data-retry]'); if (!a) return; e.preventDefault(); buyingCards(a.dataset.retry, !!(r.rights || {}).money); });
+  }
   async function pageBuying(page = 1, flt = {}) {
     busy(true); let d; try { d = await api('buying?' + new URLSearchParams({ page, ...flt })); } finally { busy(false); }
     const F = (d.stages && d.stages.filters) || {}, fgo = x => { const n = { supplier: F.supplier || '', q: F.q || '', stage: F.stage || '', ...x }; go('#/buying?' + new URLSearchParams(Object.fromEntries(Object.entries(n).filter(([, v]) => v !== '' && v !== null)))); };
     const k = d.kpi || {}, fail = (lbl, key) => `<div class="card" data-failed="${esc(lbl)}"><div class="card-b muted">${esc(lbl)}: This section could not load – the admin has been told. <a href="#" data-retry="${key}">Retry</a></div></div>`, card = (lbl, val, foot, tone, goto) => `<div class="card kpi ${tone || ''}" ${goto ? `data-go="${goto}" style="cursor:pointer"` : ''}><div class="bar"></div><div class="lbl">${lbl}</div><div class="val">${val}</div><div class="foot">${foot || ''}</div></div>`;
-    $('#main').innerHTML = `<div class="page-head"><div><h1>Buying</h1><div class="sub">From an idea to stock on the shelf. Each open cycle shows where it stands.</div></div>
+    const qs = new URLSearchParams(Object.fromEntries(Object.entries({ supplier: F.supplier || '', q: F.q || '', stage: F.stage || '' }).filter(([, v]) => v))).toString();
+    $('#main').innerHTML = `${buyTabs('sourcing', qs)}<div class="page-head"><div><h1>Buying</h1><div class="sub">From an idea to stock on the shelf. Each open cycle shows where it stands.</div></div>
       <div class="actions">${d.rights.buy ? `<a class="btn" href="#/quick-buy">${ic('plus')} Quick buy</a><button class="btn" id="bRes">${ic('plus')} New research</button><button class="btn" id="bPo">${ic('plus')} Direct PO</button>` : ''}</div></div>
       <div id="bFailed"></div>
       ${d.kpi ? `<div class="kpis">${card('Research open', k.research_open, 'ideas not decided yet', '', '#/list/src_research')}${card('Cycles open', k.cycles_open, '', '', '#/list/t_src_cycles')}${card('POs to confirm', k.po_draft, 'drafts', k.po_draft ? 'warn' : 'done', '#/list/t_src_po')}
@@ -2862,7 +2882,7 @@
     S.failedCards = [...(d.failed || [])]; failBox();
     $$('#main [data-go]').forEach(x => x.onclick = () => go(x.dataset.go));
     $$('#main tr[data-id]').forEach(tr => tr.onclick = () => go('#/cycle/' + tr.dataset.id));
-    $('#main').insertAdjacentHTML('beforeend', `<div style="display:grid;grid-template-columns:minmax(260px,1fr) 2.4fr;gap:12px;margin-top:12px;align-items:start"><div><div id="bPay"></div><div id="bInv" style="margin-top:12px"></div><div id="bInvest" style="margin-top:12px"></div><div id="bContacts" style="margin-top:12px"></div><div id="bTeam" style="margin-top:12px"></div></div><div><div id="bNeeds"></div><div id="bShips" style="margin-top:12px"></div></div></div>`);
+    $('#main').insertAdjacentHTML('beforeend', `<div style="display:grid;grid-template-columns:minmax(260px,1fr) 2.4fr;gap:12px;margin-top:12px;align-items:start"><div><div id="bPay"></div><div id="bContacts" style="margin-top:12px"></div><div id="bLots" style="margin-top:12px"></div></div><div><div id="bNeeds"></div><div id="bShips" style="margin-top:12px"></div></div></div>`);
     $('#main').addEventListener('click', e => { const a = e.target.closest('[data-retry]'); if (!a) return; e.preventDefault(); if (a.dataset.retry === 'page') pageBuying(page); else buyingCards(a.dataset.retry); });
     buyingCards(null, d.rights.money);
     if ($('#bPrev')) $('#bPrev').onclick = () => pageBuying(page - 1, flt); if ($('#bNext')) $('#bNext').onclick = () => pageBuying(page + 1, flt);

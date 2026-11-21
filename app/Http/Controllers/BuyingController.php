@@ -132,11 +132,14 @@ class BuyingController extends Controller
     {
         $this->can($r, 'buying.SEE'); $ent = (int) Context::ent();
         if (in_array($card, ['payments', 'investors', 'invoicing'], true) && ! \App\Services\Perm::has($r->user(), 'buying.MONEY')) abort(403, 'This card needs the right to see money.');
-        $per = in_array($card, ['investors', 'invoicing', 'team'], true) ? \App\Services\Period::forCard((int) $r->user()->id, $card, $r->query('period'), $r->query('from'), $r->query('to')) : null;      // R-F_SETUP-27
+        $money = \App\Services\Perm::has($r->user(), 'buying.MONEY');
+        $per = in_array($card, ['investors', 'invoicing', 'team', 'buyingcard'], true) ? \App\Services\Period::forCard((int) $r->user()->id, $card, $r->query('period'), $r->query('from'), $r->query('to')) : null;      // R-F_SETUP-27
         $fn = match ($card) {
             'contacts' => ['Contact today', fn () => \App\Services\SourcingBoard::contactToday($ent)], 'shipments' => ['Shipments on the way', fn () => \App\Services\SourcingBoard::shipments($ent, $r->boolean('all') ? 500 : 15)],
             'payments' => ['Supplier payments', fn () => \App\Services\DashCards::payments($ent)], 'needs' => ['Needs action', fn () => \App\Services\DashCards::needs($ent, $r->boolean('all'))],
             'investors' => ['Investors', fn () => \App\Services\DashCards::investors($ent, $per['from'], $per['to']) + ['period' => $per]],
+            'lots' => ['Inventory receiving', fn () => \App\Services\DashCards::lots($ent, $money)], 'glance' => ['Sourcing Management', fn () => \App\Services\DashCards::glance($ent, $money)],
+            'buyingcard' => ['Buying Management', fn () => \App\Services\DashCards::buying($ent, $per['from'], $per['to'], $money) + ['period' => $per]],
             'team' => ['Team activity', fn () => \App\Services\DashCards::team($ent, $per['from'], $per['to']) + ['period' => $per]],
             'invoicing' => ['Invoicing / Profit', fn () => \App\Services\DashCards::invoicing($ent, $per['from'], $per['to'], (string) Context::role()) + ['period' => $per]],
             default => abort(404) };
