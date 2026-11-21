@@ -191,6 +191,8 @@
       if ((mt = r.match(/^#\/cycle-journey\/(\d+)/))) return await pageCycleJourney(+mt[1]);
       if ((mt = r.match(/^#\/src-landed\/(\d+)/))) return await pageSrcLanded(+mt[1]);
       if (r.startsWith('#/src-outstanding')) return await pageSrcOutstanding();
+      if (r.startsWith('#/src-transit')) return await pageSrcTransit();
+      if (r.startsWith('#/src-suppliers')) return await pageSrcSuppliers({ from: (r.match(/from=([\d-]+)/) || [])[1], to: (r.match(/to=([\d-]+)/) || [])[1] });
       if (r.startsWith('#/sourcing-reports')) return await pageSrcReports(+((r.match(/cycle=(\d+)/) || [])[1] || 0), +((r.match(/po=(\d+)/) || [])[1] || 0));
       if (r.startsWith('#/direct-po')) return await pageDirectPo(null, null);
       if ((mt = r.match(/^#\/cycle\/(\d+)/))) { await pageCycle(+mt[1]); if (r.includes('tab=payments')) { const h = $$('#main h3').find(x => x.textContent.startsWith('3. Payments')); if (h) h.scrollIntoView({ block: 'start' }); } if (r.includes('tab=landed')) { const h = $$('#main h3').find(x => x.textContent.startsWith('6. Landed')); if (h) h.scrollIntoView({ block: 'start' }); } return; }
@@ -3189,7 +3191,7 @@
       <div class="card"><div class="card-h"><h3>Per cycle</h3></div><div class="card-b"><div class="fld" style="max-width:420px;position:relative"><label><span>Sourcing cycle</span></label><input id="srCyc" placeholder="Type a cycle code, product or SKU" autocomplete="off"><div id="srCycL" class="mo-dd-list"></div></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn" data-rc="journey">Cycle Journey</button><button class="btn" data-rc="landed">Landed Cost</button><button class="btn" data-rc="summary">Cycle Summary PDF</button></div><div class="errtext" id="srCycMsg"></div></div></div>
       <div class="card" style="margin-top:12px"><div class="card-h"><h3>Global</h3></div><div class="card-b" style="display:flex;gap:8px;flex-wrap:wrap">
-        <a class="btn" href="#/src-outstanding">Outstanding Supplier Payments</a><a class="btn" href="#/reports/stock_location">Inventory by Country / Warehouse / Platform</a><a class="btn" href="#/reports/in_transit">In-Transit</a><a class="btn" href="#/reports/supplier_perf">Supplier Performance</a><a class="btn" href="#/reports/partners">Investor Report</a></div></div>
+        <a class="btn" href="#/src-outstanding">Outstanding Supplier Payments</a><a class="btn" href="#/reports/stock_location">Inventory by Country / Warehouse / Platform</a><a class="btn" href="#/src-transit">In-Transit</a><a class="btn" href="#/src-suppliers">Supplier Performance</a><a class="btn" href="#/reports/partners">Investor Report</a></div></div>
       <div class="card" style="margin-top:12px"><div class="card-h"><h3>Per PO</h3></div><div class="card-b"><div class="fld" style="max-width:420px;position:relative"><label><span>Purchase order</span></label><input id="srPo" placeholder="Type a PO number or code" autocomplete="off"><div id="srPoL" class="mo-dd-list"></div></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn" data-rp="pay">PO Payment Position</button><button class="btn" data-rp="docs">PO Documents</button><button class="btn" data-rp="pdf">PO PDF</button></div><div class="errtext" id="srPoMsg"></div></div></div>`;
     const picker = (inp, list, url, pick) => { let tm; const load = async () => { const r = await api(url() + encodeURIComponent(inp.value.trim()));
@@ -3374,6 +3376,29 @@
         <td class="num" style="${r.over_target ? 'color:#c0392b;font-weight:600' : ''}">${r.variance !== null ? (r.variance > 0 ? '+' : '') + f4(r.variance) : '—'}</td><td class="num" style="${r.over_target ? 'color:#c0392b' : ''}">${r.variance_pct !== null ? r.variance_pct.toFixed(1) + ' %' : '—'}</td></tr>`).join('')}
       <tr><td><b>Total</b></td>${B.map(([k]) => `<td class="num"><b>${money(d.totals[k])}</b></td>`).join('')}<td class="num"><b>${money(d.totals.total)}</b></td><td class="num"><b>${+d.totals.accepted}</b></td><td class="num"><b>${f4(d.totals.per_unit)}</b></td><td colspan="5"></td></tr></tbody></table>
       ${d.rows.length ? '' : '<div class="empty">No landed-cost run for this cycle yet.</div>'}</div></div>`;
+  }
+  // R-F_SETUP-6: in transit – shipments (red when late) and transfers, with the ledger TRANSIT check
+  async function pageSrcTransit() {
+    busy(true); let d; try { d = await api('src-report/in-transit'); } catch (e) { busy(false); return toast(e.message, 'err'); } busy(false);
+    const n = v => (+v).toLocaleString(), red = r => r.late ? ' style="color:#c0392b"' : '';
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/sourcing-reports">Sourcing reports</a> ›</div><h1>In transit</h1><div class="sub">Shipments not arrived and transfers on the way. The stock ledger's TRANSIT location must hold the same units.</div></div></div>
+      ${d.warning ? `<div class="card" style="border-left:4px solid #e8a33d"><div class="card-b" id="trWarn">⚠ ${esc(d.warning)} <span class="small muted">(ledger ${n(d.ledger_transit)}, report ${n(d.units_shipments + d.units_transfers)})</span></div></div>` : ''}
+      <div class="card" style="margin-top:12px"><div class="card-h"><h3>Shipments in transit</h3><span class="small muted">${n(d.units_shipments)} units</span></div><div class="tbl-wrap"><table class="t" id="trS"><thead><tr><th>Shipment</th><th>PO</th><th>Cycle</th><th>Mode</th><th>Forwarder</th><th>Destination</th><th class="num">Units</th><th>ETD</th><th>ETA</th><th class="num">Days late</th><th>Status</th></tr></thead><tbody>
+      ${d.shipments.map(r => `<tr${red(r)}><td>${esc(r.shipment)}</td><td>${r.po_id ? `<a href="#/po/${r.po_id}">${esc(r.po || '')}</a>` : ''}</td><td>${r.cycle_id ? `<a href="#/cycle/${r.cycle_id}">${esc(r.cycle)}</a>` : ''}</td><td>${esc(r.mode || '')}</td><td>${esc(r.forwarder || '')}</td><td>${esc(r.destination || '')}</td><td class="num">${n(r.units)}</td><td>${esc(r.etd || '')}</td><td>${esc(r.eta || '—')}</td><td class="num">${r.days_late || ''}</td><td>${esc(r.status || '')}</td></tr>`).join('')}</tbody></table>${d.shipments.length ? '' : '<div class="empty">Nothing on the way.</div>'}</div></div>
+      <div class="card" style="margin-top:12px"><div class="card-h"><h3>Transfers in transit</h3><span class="small muted">${n(d.units_transfers)} units</span></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Transfer</th><th>Cycle</th><th class="num">Qty in transit</th><th>Transfer date</th><th>Expected arrival</th><th class="num">Days late</th><th>Status</th></tr></thead><tbody>
+      ${d.transfers.map(r => `<tr${red(r)}><td>${esc(r.transfer)}</td><td>${esc(r.cycle || '')}</td><td class="num">${n(r.qty)}</td><td>${esc(r.transfer_date || '')}</td><td>${esc(r.expected || '—')}</td><td class="num">${r.days_late || ''}</td><td>${esc(r.status || '')}</td></tr>`).join('')}</tbody></table>${d.transfers.length ? '' : '<div class="empty">No transfer on the way.</div>'}</div></div>`;
+  }
+  // R-F_SETUP-7: supplier scorecard
+  async function pageSrcSuppliers(f = {}) {
+    const q = { from: f.from || new Date().getFullYear() + '-01-01', to: f.to || new Date().toISOString().slice(0, 10) };
+    busy(true); let d; try { d = await api('src-report/suppliers?' + new URLSearchParams(q)); } catch (e) { busy(false); return toast(e.message, 'err'); } busy(false);
+    const v = x => x === null || x === undefined ? '—' : x;
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/sourcing-reports">Sourcing reports</a> ›</div><h1>Supplier performance</h1><div class="sub">Suppliers with a PO dated in the period. Each figure is counted on its own, so nothing is counted twice.</div></div></div>
+      <div class="card"><div class="card-b" style="display:flex;gap:8px;align-items:end"><div class="fld"><label><span>From</span></label><input type="date" id="spF" value="${q.from}"></div><div class="fld"><label><span>To</span></label><input type="date" id="spT" value="${q.to}"></div><button class="btn sm" id="spGo">Show</button></div>
+      <div class="tbl-wrap"><table class="t" id="spT2"><thead><tr><th>Supplier</th><th class="num">POs</th><th class="num">Value (${esc(d.base)})</th><th class="num">Defect %</th><th class="num">Missing units</th><th class="num">Damaged units</th><th class="num">On-time %</th><th class="num">Lead time actual (d)</th><th class="num">Lead time promised (d)</th><th class="num">Claims</th></tr></thead><tbody>
+      ${d.rows.map(r => `<tr><td>${esc(r.supplier)}</td><td class="num">${r.pos}</td><td class="num">${r.value === null ? '•••' : money(r.value)}</td><td class="num">${r.defect_pct.toFixed(2)}</td><td class="num">${r.missing}</td><td class="num">${r.damaged}</td><td class="num">${v(r.on_time_pct)}</td><td class="num">${v(r.lead_actual)}</td><td class="num">${v(r.lead_promised)}</td><td class="num">${r.claims}</td></tr>`).join('')}</tbody></table>${d.rows.length ? '' : '<div class="empty">No PO in this period.</div>'}</div>
+      ${d.unassigned_grn.length ? `<div class="card-b small">Unassigned GRN (no shipment, cycle with several suppliers): ${d.unassigned_grn.map(g => esc(g.grn) + ' (missing ' + g.missing + ', damaged ' + g.damaged + ')').join(', ')}</div>` : ''}</div>`;
+    $('#spGo').onclick = () => go(`#/src-suppliers?from=${$('#spF').value}&to=${$('#spT').value}`);
   }
   // R-F_SETUP-4: outstanding supplier payments – FX-correct, ageing chip, grouped by supplier, Pay
   async function pageSrcOutstanding(f = {}) {

@@ -83,4 +83,39 @@ class SourcingReportsTest extends TestCase
         $this->assertEquals(400, $x['cards'][1]['remaining']);
         $this->postJson("/api/src-payments/$loose/link-term", ['term' => 999999])->assertStatus(422);
     }
+
+    public function test_in_transit_rule_example_and_ledger_check(): void
+    {
+        $this->actingAs($this->owner);
+        DB::table('t_src_shipments')->update(['f_active' => 0]); DB::table('t_src_transfers')->update(['f_active' => 0]);
+        $cy = $this->cycle(); $po = $this->f('t_src_po', ['fk_id_cycle' => $cy, 'po_number' => 'PO-TR-1', 'status' => 'CONFIRMED']);
+        $fw = $this->f('t_src_forwarders', ['forwarder_code' => 'FW-' . uniqid(), 'forwarder_name' => 'Fast Freight']);
+        $this->f('t_src_shipments', ['fk_id_cycle' => $cy, 'fk_id_po' => $po, 'shipment_code' => 'SHP-NOETA', 'planned_qty' => 5]);
+        $this->f('t_src_shipments', ['fk_id_cycle' => $cy, 'fk_id_po' => $po, 'shipment_code' => 'SHP-LATE', 'eta' => '2026-11-01', 'planned_qty' => 100, 'confirmed_qty' => 120, 'actual_shipped_qty' => 110, 'fk_id_forwarder' => $fw, 'shipping_mode' => 'SEA']);
+        $this->f('t_src_shipments', ['fk_id_cycle' => $cy, 'fk_id_po' => $po, 'shipment_code' => 'SHP-IN', 'eta' => '2026-10-01', 'actual_arrival' => '2026-10-02', 'planned_qty' => 50]);
+        $this->f('t_src_transfers', ['fk_id_cycle' => $cy, 'transfer_code' => 'TR-1', 'qty_in_transit' => 30, 'expected_arrival' => '2026-11-10', 'transfer_date' => '2026-11-02']);
+        $x = SourcingReports::inTransit(1, '2026-11-06');
+        $this->assertSame(['SHP-LATE', 'SHP-NOETA'], array_column($x['shipments'], 'shipment'), 'ETA ascending, no ETA last, arrived left out');
+        $r = $x['shipments'][0];
+        $this->assertEquals([5, true, 120, 'Fast Freight', 'PO-TR-1'], [$r['days_late'], $r['late'], $r['units'], $r['forwarder'], $r['po']], 'units = max of shipped / confirmed / planned');
+        $this->assertSame(['TR-1'], array_column($x['transfers'], 'transfer'));
+        $this->assertEquals([125, 30], [$x['units_shipments'], $x['units_transfers']]);
+        $this->assertSame('Ledger TRANSIT differs by -155 units', $x['warning']);
+        $this->getJson('/api/src-report/in-transit')->assertOk();
+    }
+
+    public function test_supplier_scorecard_rule_example_counts_once(): void
+    {
+        $this->actingAs($this->owner);
+        $cy = $this->cycle(); $s = $this->f('t_src_suppliers', ['supplier_code' => 'SC-' . uniqid(), 'supplier_name' => 'Score Co']);
+        $po = $this->f('t_src_po', ['fk_id_cycle' => $cy, 'fk_id_supplier' => $s, 'po_number' => 'PO-SC-1', 'status' => 'CONFIRMED', 'po_date' => '2026-06-01', 'required_ship_date' => '2026-07-01', 'exchange_rate' => 1]);
+        foreach ([2000, 3000, 4000] as $t) $this->f('t_src_po_lines', ['fk_id_cycle' => $cy, 'fk_id_po' => $po, 'qty_ordered' => 10, 'line_total' => $t]);
+        $this->f('t_src_qc', ['fk_id_cycle' => $cy, 'fk_id_po' => $po, 'qc_code' => 'QC-SC-1', 'qty_inspected' => 100, 'qty_failed' => 5, 'corrective_action' => 'x']);
+        $this->f('t_src_qc', ['fk_id_cycle' => $cy, 'fk_id_po' => $po, 'qc_code' => 'QC-SC-2', 'qty_inspected' => 300, 'qty_failed' => 3, 'corrective_action' => 'x']);
+        $sh = $this->f('t_src_shipments', ['fk_id_cycle' => $cy, 'fk_id_po' => $po, 'shipment_code' => 'SHP-SC', 'actual_departure' => '2026-06-25']);
+        $this->f('t_src_grn', ['fk_id_cycle' => $cy, 'fk_id_shipment' => $sh, 'grn_number' => 'GRN-SC-1', 'missing_units' => 10, 'damaged_units' => 2, 'claim_status' => 'OPEN']);
+        $x = $this->getJson('/api/src-report/suppliers?from=2026-01-01&to=2026-12-31')->assertOk()->json();
+        $r = collect($x['rows'])->firstWhere('supplier', 'Score Co');
+        $this->assertEquals([1, 9000, 10, 2, 2.0, 100, 24, 30, 1], [$r['pos'], $r['value'], $r['missing'], $r['damaged'], $r['defect_pct'], $r['on_time_pct'], $r['lead_actual'], $r['lead_promised'], $r['claims']], 'not 18,000 / 60 as the old join; defect % weighted 8 / 400');
+    }
 }

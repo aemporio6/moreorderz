@@ -121,6 +121,9 @@ class BuyingController extends Controller
     public function cycleOverview(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\CycleAlerts::overview((int) Context::ent(), $id, $r->user())); }
     /** R-F_SETUP-3 / 4 / 9: landed cost per cycle, outstanding supplier payments, PO payment position (money: buying.MONEY). */
     public function repLanded(Request $r, int $id) { $this->can($r, 'buying.MONEY'); return $this->run(fn () => \App\Services\SourcingReports::landed((int) Context::ent(), $id)); }
+    public function repTransit(Request $r) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\SourcingReports::inTransit((int) Context::ent())); }
+    public function repSuppliers(Request $r) { $this->can($r, 'buying.SEE'); return $this->run(function () use ($r) { $x = \App\Services\SourcingReports::supplierPerf((int) Context::ent(), (string) ($r->query('from') ?: date('Y-01-01')), (string) ($r->query('to') ?: date('Y-m-d')));
+        if (! \App\Services\Perm::has($r->user(), 'buying.MONEY')) foreach ($x['rows'] as &$row) $row['value'] = null; return $x; }); }
     public function repOutstanding(Request $r) { $this->can($r, 'buying.MONEY'); return $this->run(fn () => \App\Services\SourcingReports::outstanding((int) Context::ent(), $r->only(['supplier', 'cycle', 'ageing', 'currency']))); }
     public function poPosition(Request $r, int $id) { $this->can($r, 'buying.MONEY'); return $this->run(fn () => \App\Services\SourcingReports::poPosition((int) Context::ent(), $id)); }
     public function linkTerm(Request $r, int $id) { $this->can($r, 'buying.PAY'); return $this->run(fn () => \App\Services\SourcingReports::linkPayment((int) Context::ent(), $id, (int) $r->input('term'))); }

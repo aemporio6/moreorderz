@@ -94,6 +94,55 @@ class SourcingReports
         return ['base' => $base, 'groups' => $groups, 'total_label' => 'TOTAL OUTSTANDING', 'total_base' => round($grand, 2), 'chips' => ['Not due', 'Due ≤ 7 days', 'Overdue', 'No due date']];
     }
 
+    /** R-F_SETUP-6: shipments in transit (no arrival, ETA ascending, no-ETA last, red when late) + transfers in transit, and the ledger TRANSIT check. */
+    public static function inTransit(int $ent, ?string $today = null): array
+    {
+        $today ??= date('Y-m-d'); $late = fn ($d) => $d && $d < $today ? (int) ((strtotime($today) - strtotime($d)) / 86400) : 0;
+        $ships = DB::table('t_src_shipments as s')->leftJoin('t_src_po as p', 'p.id', '=', 's.fk_id_po')->leftJoin('t_src_cycles as c', 'c.id', '=', DB::raw('COALESCE(s.fk_id_cycle, p.fk_id_cycle)'))->leftJoin('t_src_forwarders as f', 'f.id', '=', 's.fk_id_forwarder')
+            ->where('s.fk_id_ent', $ent)->where('s.f_active', 1)->where(fn ($q) => $q->whereNull('s.actual_arrival')->orWhere('s.actual_arrival', '0000-00-00'))->orderByRaw('s.eta IS NULL, s.eta')->orderBy('s.id')
+            ->get(['s.id', 's.shipment_code', 'p.id as po_id', 'p.po_number', 'c.id as cycle_id', 'c.cycle_code', 's.shipping_mode', 'f.forwarder_name', 's.fk_id_warehouse', 's.actual_shipped_qty', 's.confirmed_qty', 's.planned_qty', 's.etd', 's.eta', 's.status'])
+            ->map(fn ($r) => ['id' => (int) $r->id, 'shipment' => $r->shipment_code, 'po' => $r->po_number, 'po_id' => $r->po_id ? (int) $r->po_id : null, 'cycle' => $r->cycle_code, 'cycle_id' => $r->cycle_id ? (int) $r->cycle_id : null, 'mode' => $r->shipping_mode, 'forwarder' => $r->forwarder_name,
+                'destination' => GrnPrint::locName((int) $r->fk_id_warehouse), 'units' => (float) max((float) $r->actual_shipped_qty, (float) $r->confirmed_qty, (float) $r->planned_qty), 'etd' => $r->etd, 'eta' => $r->eta, 'days_late' => $late($r->eta), 'late' => $late($r->eta) > 0, 'status' => $r->status])->all();
+        $trans = DB::table('t_src_transfers as t')->leftJoin('t_src_cycles as c', 'c.id', '=', 't.fk_id_cycle')->where('t.fk_id_ent', $ent)->where('t.f_active', 1)->where('t.qty_in_transit', '>', 0)->orderByRaw('t.expected_arrival IS NULL, t.expected_arrival')->orderBy('t.id')
+            ->get(['t.id', 't.transfer_code', 'c.cycle_code', 't.qty_in_transit', 't.transfer_date', 't.expected_arrival', 't.status'])
+            ->map(fn ($r) => ['id' => (int) $r->id, 'transfer' => $r->transfer_code, 'cycle' => $r->cycle_code, 'qty' => (float) $r->qty_in_transit, 'transfer_date' => $r->transfer_date, 'expected' => $r->expected_arrival, 'days_late' => $late($r->expected_arrival), 'late' => $late($r->expected_arrival) > 0, 'status' => $r->status])->all();
+        $u1 = array_sum(array_column($ships, 'units')); $u2 = array_sum(array_column($trans, 'qty'));
+        $ledger = (float) DB::table('fin_lot_balances as b')->join('cat_inventory_locations as l', 'l.id', '=', 'b.fk_id_location')->where('l.fk_id_ent', $ent)->where('l.kind', 'TRANSIT')->sum('b.qty');
+        $diff = round($ledger - ($u1 + $u2), 3);
+        return ['shipments' => $ships, 'transfers' => $trans, 'units_shipments' => $u1, 'units_transfers' => $u2, 'ledger_transit' => $ledger, 'ledger_diff' => $diff,
+            'warning' => abs($diff) > 0.0005 ? 'Ledger TRANSIT differs by ' . rtrim(rtrim(number_format($diff, 3, '.', ''), '0'), '.') . ' units' : null];
+    }
+
+    /** R-F_SETUP-7: supplier scorecard – every measure in its own aggregate (no multiplied rows). */
+    public static function supplierPerf(int $ent, string $from, string $to): array
+    {
+        $pos = DB::table('t_src_po')->where('fk_id_ent', $ent)->where('f_active', 1)->whereNotNull('fk_id_supplier')->whereBetween('po_date', [$from, $to])->whereNotIn('status', ['CANCELLED'])->get(['id', 'fk_id_supplier', 'fk_id_cycle', 'po_date', 'required_ship_date', 'exchange_rate']);
+        $rows = []; $unassigned = [];
+        $supOfCycle = fn ($cy) => DB::table('t_src_po')->where('fk_id_cycle', $cy)->where('f_active', 1)->whereNotNull('fk_id_supplier')->distinct()->pluck('fk_id_supplier');
+        foreach ($pos->groupBy('fk_id_supplier') as $sid => $list) {
+            $ids = $list->pluck('id')->all();
+            $value = round((float) DB::table('t_src_po_lines as l')->join('t_src_po as p', 'p.id', '=', 'l.fk_id_po')->whereIn('l.fk_id_po', $ids)->where('l.f_active', 1)->sum(DB::raw('l.line_total * COALESCE(NULLIF(p.exchange_rate, 0), 1)')), 2);
+            $qc = DB::table('t_src_qc')->whereIn('fk_id_po', $ids)->where('f_active', 1)->selectRaw('COALESCE(SUM(qty_failed),0) f, COALESCE(SUM(qty_inspected),0) i')->first();
+            $ships = DB::table('t_src_shipments')->whereIn('fk_id_po', $ids)->where('f_active', 1)->get(['id', 'fk_id_po', 'actual_departure']);
+            $grn = DB::table('t_src_grn')->whereIn('fk_id_shipment', $ships->pluck('id')->all() ?: [0])->where('f_active', 1)->get(['id', 'grn_number', 'missing_units', 'damaged_units', 'claim_status']);
+            // a GRN without shipment counts for the supplier only when its cycle has exactly one supplier
+            foreach (DB::table('t_src_grn')->whereIn('fk_id_cycle', $list->pluck('fk_id_cycle')->filter()->unique()->all() ?: [0])->where('f_active', 1)->where(fn ($q) => $q->whereNull('fk_id_shipment')->orWhere('fk_id_shipment', 0))->get(['id', 'grn_number', 'fk_id_cycle', 'missing_units', 'damaged_units', 'claim_status']) as $g) {
+                $s = $supOfCycle($g->fk_id_cycle); if ($s->count() === 1) $grn->push($g); else $unassigned[$g->id] = ['grn' => $g->grn_number, 'missing' => (float) $g->missing_units, 'damaged' => (float) $g->damaged_units];
+            }
+            $grn = $grn->unique('id');
+            $byPo = $list->keyBy('id'); $dep = $ships->filter(fn ($x) => $x->actual_departure);
+            $onTime = $dep->filter(fn ($x) => ($r = $byPo[$x->fk_id_po]->required_ship_date ?? null) && $x->actual_departure <= $r)->count();
+            $actual = $dep->map(fn ($x) => ($d = $byPo[$x->fk_id_po]->po_date ?? null) ? (strtotime($x->actual_departure) - strtotime($d)) / 86400 : null)->filter(fn ($x) => $x !== null);
+            $promised = $list->filter(fn ($p) => $p->po_date && $p->required_ship_date)->map(fn ($p) => (strtotime($p->required_ship_date) - strtotime($p->po_date)) / 86400);
+            $claims = $grn->filter(fn ($g) => ($g->claim_status ?? '') !== '' || DB::table('tasks')->where('dedupe_key', 'SRC_GRN_SHORT:' . $g->grn_number)->exists())->count();
+            $rows[] = ['supplier_id' => (int) $sid, 'supplier' => DB::table('t_src_suppliers')->where('id', $sid)->value('supplier_name') ?? ('#' . $sid), 'pos' => count($ids), 'value' => $value,
+                'defect_pct' => (float) $qc->i > 0 ? round((float) $qc->f / (float) $qc->i * 100, 2) : 0.0, 'missing' => (float) $grn->sum('missing_units'), 'damaged' => (float) $grn->sum('damaged_units'),
+                'on_time_pct' => $dep->count() ? round($onTime / $dep->count() * 100, 1) : null, 'lead_actual' => $actual->count() ? round($actual->avg(), 1) : null, 'lead_promised' => $promised->count() ? round($promised->avg(), 1) : null, 'claims' => $claims];
+        }
+        usort($rows, fn ($a, $b) => $b['value'] <=> $a['value']);
+        return ['from' => $from, 'to' => $to, 'base' => Fx::base($ent), 'rows' => $rows, 'unassigned_grn' => array_values($unassigned)];
+    }
+
     /** R-F_SETUP-9 */
     public static function poPosition(int $ent, int $poId): array
     {
