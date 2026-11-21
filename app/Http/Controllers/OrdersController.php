@@ -41,7 +41,7 @@ class OrdersController extends Controller
     {
         $this->can($r, 'orders.SEE');
         $ent = (int) Context::ent(); $rows = Dispatch::board($ent);
-        $count = fn (array $st) => count(array_filter($rows, fn ($x) => in_array($x->wh_status, $st, true)));
+        $count = fn (array $st) => count(array_filter($rows, fn ($x) => in_array($x['wh_status'], $st, true)));
         return ['rows' => $rows, 'counts' => ['to_pick' => $count(['RESERVED']), 'short' => $count(['SHORT']), 'picking' => $count(['PICKING']), 'picked' => $count(['PICKED']), 'packed' => $count(['PACKED'])],
             'shops' => \App\Services\Perm::mine(DB::table('t_branches'), 'id')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name as name']),
             'carriers' => DB::table('t_carriers')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('carrier_name')->get(['id', 'carrier_name as name']),

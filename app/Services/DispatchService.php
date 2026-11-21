@@ -315,7 +315,8 @@ class DispatchService
     {
         return \App\Services\Perm::mine(DB::table('t_sales as s'), 's.fk_id_branch')->leftJoin('wh_reservations as r', fn ($j) => $j->on('r.fk_id_sale', '=', 's.id')->whereNotIn('r.status', ['RELEASED'])->whereRaw('r.resend_no = (SELECT MAX(x.resend_no) FROM wh_reservations x WHERE x.fk_id_sale = r.fk_id_sale AND x.status <> "RELEASED")'))->leftJoin('t_branches as b', 'b.id', '=', 's.fk_id_branch')
             ->where('s.fk_id_ent', $ent)->where('s.status', 'Pending')->where('s.sale_source', 'active')->whereRaw("COALESCE(s.wh_status,'') NOT IN ('SHIPPED','RELEASED')")->orderByRaw('s.dispatch_by IS NULL, s.dispatch_by')->orderBy('s.id')->limit(500)
-            ->get(['s.id', 's.order_no', 's.d_order', 's.sku', 's.qty', 's.wh_status', 's.fk_id_branch', 'b.shop_name as shop', 's.ship_to_name', 's.dispatch_by', 'r.status as reservation', 'r.qty as reserved', 'r.qty_short', 'r.qty_picked'])->all();
+            ->get(['s.id', 's.order_no', 's.d_order', 's.sku', 's.qty', 's.wh_status', 's.fk_id_branch', 'b.shop_name as shop', 's.ship_to_name', 's.dispatch_by', 's.carrier_service_text', 'r.status as reservation', 'r.qty as reserved', 'r.qty_short', 'r.qty_picked'])
+            ->pipe(fn ($c) => DispatchDeadline::sort($c->all()));      // overdue → due before collection → due today → later; express first; order time (R-H-24)
     }
 
     /** Sellable bins of a product in walking order with the units a rule may take (oldest lot first inside the stock service). */

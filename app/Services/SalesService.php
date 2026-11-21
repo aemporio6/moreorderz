@@ -40,7 +40,9 @@ class SalesService
                     'status' => 'Pending', 'sale_source' => $product ? 'active' : 'unmatched', 'fk_id_listing' => $listing->id ?? null, 'fk_id_currency' => BuyingService::currencyId($cur), 'total_amount_gbp' => Fx::toBase($total, $cur, $l['d_order'], $ent),
                     'fk_id_batch' => $batch, 'line_status' => 'OPEN', 'fulfilment_channel' => $l['fulfilment_channel'] ?? ($shop->fulfilment_channel ?: 'SELF'), 'fk_id_sell_location' => $shop->fk_id_main_location,
                     'tracking_no' => $l['tracking_no'] ?? null, 'ship_to_name' => $l['ship_to_name'] ?? ($l['cust_name'] ?? null), 'ship_to_phone' => $l['ship_to_phone'] ?? null, 'ship_to_address' => $l['ship_to_address'] ?? null,
-                    'ship_to_city' => $l['ship_to_city'] ?? null, 'ship_to_postcode' => $l['ship_to_postcode'] ?? null, 'ship_to_country_code' => isset($l['ship_to_country_code']) ? strtoupper(substr($l['ship_to_country_code'], 0, 2)) : null, 'dispatch_by' => $l['dispatch_by'] ?? null];
+                    'ship_to_city' => $l['ship_to_city'] ?? null, 'ship_to_postcode' => $l['ship_to_postcode'] ?? null, 'ship_to_country_code' => isset($l['ship_to_country_code']) ? strtoupper(substr($l['ship_to_country_code'], 0, 2)) : null,
+                    'dispatch_by' => $l['dispatch_by'] ?? DispatchDeadline::compute($ent, (int) $shop->id, (string) ($l['order_time'] ?? ($l['d_order'] === date('Y-m-d') ? date('Y-m-d H:i:s') : $l['d_order'] . ' 00:00:00'))),      // R-H-24: from the file, else handling days in working days
+                    'carrier_service_text' => $l['carrier_service_text'] ?? null];
                 // expected cost of an own-stock line on its order date: raw, carrier, packing, where it came from; one formula for buy amount and profit (R-A_SALES-27 / 28)
                 if ($product) $row = array_merge($row, SaleLines::intakeCost($product, $shop, (string) $l['d_order'], $row['qty'], (float) $row['sale_rate'], $total, $ent));
                 $old = DB::table('t_sales')->where('fk_id_ent', $ent)->where('fk_id_branch', $shop->id)->where('order_no', $row['order_no'])->where('sku', $sku)->lockForUpdate()->first();

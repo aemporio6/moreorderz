@@ -21,7 +21,7 @@
 21|P|function createGrn|receive with a place per line; phone receiving flow partly
 22|P|function quickBuy|receiving without a PO = quick buy / opening stock
 23|B|function suggest|putaway suggestion with reason
-24|M||dispatch deadline and priority not built
+24|B|class DispatchDeadline|dispatch_by from the file / API, else order time + profile handling_days in working days of the site's country (WH_WEEKEND_DAYS + cal_non_working_days, menu Non-working days), dispatch_cutoff_time moves late orders to the next working day, end of the last day; Orders board sorted overdue → due today before the carrier collection time → due today → later, express first, order time; column + chips (DispatchDeadlineTest)
 25|B|function buildPickList|pick list in walking order
 26|B|function pick|picking on the phone (Work screen)
 27|B|function pick|short pick -> back in queue + count task

@@ -115,4 +115,5 @@ How to work each step: build → test → change the verdict lines in `audit/ver
 | 7e-56 | Investor ids are company parties R-D-80 BUILT (InvestorParties: CH id → company party with directors, review list, idempotent run, company picker, upsert). R-H-19 (bundles) and R-H-14 (needs R-H-1 layers) checked – larger | done | 542/1433 | 412 tests |
 | 7e-57 | Carrier service selection rules R-H-30 BUILT (CarrierRules: priority match, country groups, buyer's chosen service, default + hint, reason when the packer changes it) | done | 545/1433 | 413 tests |
 | 7e-58 | Lost parcels and carrier claims R-H-36 BUILT (LostParcels: sweep after claim_days, case → claim → paid/rejected, paid booked on the shop, resend with a new reservation) | done | 548/1433 | 414 tests |
-| 7e-59 | NEXT → recount; 3-line R-H-24 dispatch deadline, R-H-47 automatic counts, R-H-49, R-H-19, R-B_SOURCING-2, R-A_SALES-87, R-FIN-22 …; rest of Sourcing 39 / 28 | todo | | |
+| 7e-59 | Dispatch deadline and priority R-H-24 BUILT (DispatchDeadline: handling days in working days with bank holidays and cut-off, board priority buckets, express first) | done | 551/1433 | 415 tests |
+| 7e-60 | NEXT → recount; 3-line R-H-47 automatic counts, R-H-49, R-H-19, R-B_SOURCING-2, R-A_SALES-87, R-FIN-22 …; rest of Sourcing 39 / 28 | todo | | |
