@@ -140,7 +140,7 @@ MR-0124|F|form:t_account|person master and sub-lists as forms; vault built
 MR-0125|P|class MoneyService|bank, expenses, approvals, money files, close, partners built; alerts, old invoicing not built
 MR-0126|P|class TaskEngine|tasks list + rule tasks; most task features not built
 MR-0127|F|form:acc_obligation|forms only
-MR-0128|P|class DsMatch|drop-shipping match, explanation, link / unlink, masking of address and phone on list / record / export built; DS upload with preview + save, platforms per shop, imports + errors not built (forms only)
+MR-0128|P|class DsUpload|drop-shipping match, explanation, link / unlink, masking; upload with check (preview) + save, platforms with + New, uploads history + error rows, undo built. Missing: inventory-sharing screen, DS list page with totals bar and item page (R-D-85), platforms per shop
 MR-0129|F|form:cat_country|all catalogue lists as registry forms
 MR-0130|P|function attempt|login, hashed passwords, 2-step, lock-out, sessions; forgot password not built
 MR-0131|P|class ReportService|one report engine with 25 reports + CSV; charts, annual / detailed sale reports not built

@@ -406,6 +406,19 @@ class OrdersController extends Controller
 
     public function saleImportFee(Request $r) { $this->can($r, 'orders.saleImport'); $mp = (int) DB::table('t_branches')->where('id', (int) $r->query('shop'))->value('fk_id_marketplace'); return ['report' => \App\Services\SalesImport::feeFromReport((int) $r->query('shop'), (int) $r->query('month'), (int) $r->query('year')), 'typical_pct' => $mp ? \App\Services\Marketplaces::feeHint($mp) : null]; }
 
+    // ---------- drop shipping supplier-orders upload (R-D-73 … 78, 86) ----------
+    public function dsUploadHome(Request $r) { return $this->run(fn () => \App\Services\DsUpload::home($r->user())); }
+    public function dsUploadStage(Request $r)
+    {
+        return $this->run(function () use ($r) { $d = $r->only(['marketplace', 'shop', 'month', 'year', 'platform', 'mode']); $f = $r->file('file');
+            if (! $f || ! $f->isValid()) { \App\Services\DsUpload::shopOf($d, $r->user()); throw new \InvalidArgumentException($f && in_array($f->getError(), [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true) ? 'The file is larger than the server accepts (' . ini_get('upload_max_filesize') . '). Split it and upload the parts.' : 'Choose a .csv or .txt file to upload.'); }
+            return \App\Services\DsUpload::stage($f->getRealPath(), $f->getClientOriginalName(), (int) $f->getSize(), $d, $r->user()); });
+    }
+    public function dsUploadRun(Request $r) { return $this->run(fn () => \App\Services\DsUpload::run((string) $r->input('token'), ['mapping' => (array) $r->input('mapping', []), 'default_currency' => $r->input('default_currency', 'GBP'), 'date_order' => $r->input('date_order'), 'mode' => $r->input('mode'), 'confirm_replace' => $r->boolean('confirm_replace')], $r->user(), $r->boolean('apply'))); }
+    public function dsUploadErrors(Request $r, int $id) { $this->can($r, 'orders.dsUpload'); return \App\Services\DsUpload::errors($id, $r->user()); }
+    public function dsUploadUndo(Request $r, int $id) { return $this->run(fn () => \App\Services\DsUpload::undo($id, $r->user())); }
+    public function dsPlatformAdd(Request $r) { return $this->run(fn () => \App\Services\DsUpload::addPlatform((string) $r->input('name'), $r->user())); }
+
     // ---------- marketplace master, its questions, the checklist per shop (R-A_SALES-68) ----------
     public function marketplaces(Request $r) { $this->can($r, 'orders.SEE'); return \App\Services\Marketplaces::list($r->user()); }
     public function marketplaceSave(Request $r) { return $this->run(fn () => \App\Services\Marketplaces::save($r->except(['id']), (int) $r->input('id') ?: null, $r->user())); }

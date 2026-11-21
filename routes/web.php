@@ -299,6 +299,12 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('sales/export', [OrdersController::class, 'saleExport']);
         Route::get('sales/unlock', [OrdersController::class, 'saleUnlockInfo']);
         Route::post('sales/unlock', [OrdersController::class, 'saleUnlock']);
+        Route::get('ds-upload', [OrdersController::class, 'dsUploadHome']);
+        Route::post('ds-upload', [OrdersController::class, 'dsUploadStage']);
+        Route::post('ds-upload/run', [OrdersController::class, 'dsUploadRun']);
+        Route::get('ds-upload/{id}/errors', [OrdersController::class, 'dsUploadErrors'])->whereNumber('id');
+        Route::post('ds-upload/{id}/undo', [OrdersController::class, 'dsUploadUndo'])->whereNumber('id');
+        Route::post('ds-upload/platform', [OrdersController::class, 'dsPlatformAdd']);
         Route::get('sales/import', [OrdersController::class, 'saleImportHome']);
         Route::get('sales/import/fee', [OrdersController::class, 'saleImportFee']);
         Route::get('sales/import/name', [OrdersController::class, 'saleImportName']);

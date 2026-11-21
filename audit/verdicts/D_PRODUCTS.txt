@@ -57,12 +57,12 @@
 69|F|form:cat_brands|forms only
 70|F|form:cat_product_type|forms only
 71|F|form:cat_vendors|form only
-73|M||dropship upload step 1 not built
-74|P|function rows|forgiving CSV reader (BOM, separator, header row) in the money / order readers; UK / US date question not built
-75|M||DS column catalogue / guess not built
-76|M||DS row checks not built
-77|M||DS duplicates / joined lines not built
-78|P|import-history|import history; upload undo with restore not built
+73|B|function stage|marketplace → shop (active, the person's shops, auto-selected when one), month + year (next year … −3), platform, Ignore / Replace, .csv / .txt, > 0 bytes, 10 MB + 10,000 rows as settings, server size message, 32-hex token bound to the person with JSON meta outside the web folder, removed after 24 h; answer = headers, samples (60), saved or guessed mapping, missing saved columns, warnings. Rule tests pass (11 MB refused before upload, a seller sees only his shops); clicked in a browser
+74|P|function detectDateOrder|reader (BOM, Windows-1252, separator, header row ≥ 3 cells, Column n, (2)), money / currencyOf / date order with the UK-or-US question and the order saved with the mapping – rule tests pass. Missing: one shared library for every import type (the sales import keeps its own reader), Excel serial / weekday / ordinal date forms not proven for this reader
+75|P|function guess|22 fields in 5 groups, guess score as written, money never from address-type headers, buyer name never from store / seller / product columns, each column once, saved mapping per company + platform, re-guess with the missing-columns message, the 4 problems + 2 warnings, default currency, step-3 summary. Rule tests pass. Missing: the alias lists were written by hand and are not yet compared with the Field Registry alias column
+76|B|rounded by Excel|every row check with the rule's messages (value quoted, 40 chars), total / unit computed, currency column → detected → default, address, postcode upper case, cut to lengths never refused, problem rows listed + stored, task IMP_PROBLEM per upload. Rule tests pass
+77|B|_merged_lines|dup_key as written, repeated line ignored, same key joined (qty, shipping, total added, unit recomputed, tracking joined, raw keeps _merged_lines), Ignore / Replace with the OVERWRITTEN question (moves to this shop + month), outside-month rows saved under the month with a warning, 5 chips, the rule's message. Rule tests pass
+78|P|function undo|one transaction: upload row with all counts, link per row (added / skipped / replaced), error rows; 100 errors returned, 1,000 shown; history of 50 with every column, errors popup; undo deletes rows only in this upload, moves first / last pointers, restores replaced rows from imp_batch_effects (rule test passes), refuses while a row is linked to a sale. Missing: "Show rows" filter of the list to one upload (list page R-D-85)
 79|P|function maskRow|masking of personal data in test copies and secrets; PII_BUYER class per role not built
 80|P|form:product_investor|lot owner is a party; old investor id mapping not built
 81|M||investor settlement line amounts not built (waterfall works on lots instead)
@@ -70,7 +70,7 @@
 83|M||investor documents (invoices, numbering) not built
 84|M||reopen / cancel / credit note / payments on invoices not built
 85|F|form:drp_inventory|form only
-86|F|form:drp_platform|form only
+86|B|function addPlatform|+ New platform in the upload screen: name to single spaces, 1–100, existing name re-activated with "already in the list", managers add directly, others propose (approval DS_PLATFORM_ADD). Rule test passes
 87|P|sellable|location kinds with sellable flag; fulfilment-centre children, STK_FC_DIFF, channel default location partly
 88|P|function returnIn|return back into the same lot with cost reversed, damaged / missing to their place; condition -> location table, locked-month correction partly
 89|F|form:product_packaging|form only

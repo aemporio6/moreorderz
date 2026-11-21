@@ -370,3 +370,17 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - How the next work is chosen: by the number of register lines a still-open rule covers (script in the scheduled prompt).
 - Tests: 294 pass; new `SalesWatchTest` (3), one more in `SaleViewTest`.
 - Register after this batch: BUILT 325 of 1,433 (23 %); Sales 60 of 155 (39 %).
+
+### Batch 7e-8 (21 Nov 2026)
+- **Bulk delete of Pending sales** (R-A_SALES-53): shop + date range, preview with counts, Owner-only right `orders.saleBulkDelete`, above 500 lines a second person must approve; lines go to the recycle bin.
+- **Drop-shipping supplier-orders upload** (R-D-73 … 78, 86): service `DsUpload`, screen `#/ds-upload` (choose → check columns → result), endpoints `api/ds-upload*`.
+  - The file is held outside the web folder under a 32-hex token bound to the person; removed after 24 hours. Limits are settings `DS_UPLOAD_MAX_MB` (10) and `DS_UPLOAD_MAX_ROWS` (10,000).
+  - Mapping: saved per company + platform; else the marketplace's DS Columns / 5 Matching Rule Columns; else a guess from the header names.
+  - Unclear dates (UK or US) stop the upload and ask; the answer is saved with the mapping.
+  - Same line twice = ignored; lines of one item = joined; a row already saved = ignored or replaced (question first). Replaced rows keep their earlier values in `imp_batch_effects`, so Undo puts them back.
+  - Undo is refused while a row of the upload is linked to a sale line (unlink first).
+  - After an upload the event `DS_BATCH_APPLIED` (shop, month, year) runs Re-match by itself.
+  - Rights: `orders.dsUpload`, `orders.dsUndo` (Owner by default), `orders.dsPlatformAdd` (others propose; approval `DS_PLATFORM_ADD`).
+- Not built yet (honest): the drop-shipping list page with totals bar and item page (R-D-85), the "Show rows" filter per upload, masking per role on every DS screen (R-D-79), one shared reader for every import type (R-D-74), alias lists compared with the Field Registry (R-D-75).
+- Tests: 304 pass; new `DsUploadTest` (9).
+- Register after this batch: BUILT 333 of 1,433 (23 %); Sales 68 of 155 (44 %); Products 16 of 101.

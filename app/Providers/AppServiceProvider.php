@@ -28,6 +28,9 @@ class AppServiceProvider extends ServiceProvider
         \App\Services\Approvals::handler('SALE_BULK_DELETE', function (object $a, bool $ok) {      // more than 500 sale lines: carried out only after a second person said yes
             if ($ok) { $d = json_decode($a->change_json, true); \App\Services\SaleLines::bulkApply((int) $d['shop'], (string) $d['from'], (string) $d['to'], (string) $d['reason']); }
         });
+        \App\Services\Approvals::handler('DS_PLATFORM_ADD', function (object $a, bool $ok) {      // a proposed supplier platform is added only after a manager said yes
+            if ($ok) { $d = json_decode($a->change_json, true); if (! \Illuminate\Support\Facades\DB::table('drp_platforms')->whereRaw('LOWER(platform_name) = ?', [mb_strtolower($d['name'])])->exists()) \Illuminate\Support\Facades\DB::table('drp_platforms')->insert(['platform_name' => $d['name'], 'f_active' => 1, 'created_by' => $d['by'] ?? null, 'created_at' => now()]); }
+        });
         \App\Services\Approvals::handler('EXPENSE', function (object $a, bool $ok) {
             if ($ok) { \Illuminate\Support\Facades\DB::table('fin_expenses')->where('id', $a->entity_id)->update(['f_active' => 1]); \App\Services\MoneyService::postExpense((int) $a->entity_id); }
         });

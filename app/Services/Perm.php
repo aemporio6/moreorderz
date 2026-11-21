@@ -160,6 +160,9 @@ class Perm
         $c['orders.dsRematch'] = ['Run Re-match of not matched lines against drop shipping orders', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
         $c['orders.dsLink'] = ['Link or unlink a drop shipping item by hand (with a reason)', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL']];
         $c['orders.dsSeeContact'] = ['See the address and phone of a drop shipping order unmasked', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL']];
+        $c['orders.dsUpload'] = ['Upload a drop shipping supplier-orders file for a shop and month', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
+        $c['orders.dsUndo'] = ['Undo (delete) a drop shipping upload', 'Orders and dispatch', ['OWNER']];
+        $c['orders.dsPlatformAdd'] = ['Add a supplier platform directly (others propose it)', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL']];
         $c['orders.shopReminders'] = ['Add, resolve and remove shop monthly reminders', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
         $c['orders.shopReminderTemplates'] = ['Set the monthly reminder templates of the shops', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL']];
         $c['setup.marketplaces'] = ['Set marketplaces and their questions', 'Setup', ['OWNER', 'MANAGER']];
