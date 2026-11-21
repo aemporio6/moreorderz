@@ -116,6 +116,9 @@ class BuyingController extends Controller
     }
 
     // ---- cycle, RFQ, PO ----
+    public function shipmentPos(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\ShipmentLinks::page((int) Context::ent(), $id)); }
+    public function shipmentPoSave(Request $r, int $id) { $this->can($r, 'buying.BUY'); return $this->run(fn () => \App\Services\ShipmentLinks::save((int) Context::ent(), $id, $r->only(['po', 'planned', 'actual', 'reason']))); }
+    public function shipmentPoRemove(Request $r, int $id, int $po) { $this->can($r, 'buying.BUY'); return $this->run(fn () => \App\Services\ShipmentLinks::remove((int) Context::ent(), $id, $po)); }
     public function cycleOverview(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\CycleAlerts::overview((int) Context::ent(), $id, $r->user())); }
     public function cycleWhatsapp(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\CycleAlerts::whatsapp((int) Context::ent(), $id, (string) $r->input('key'), trim((string) $r->input('text')))); }
     public function grnClaim(Request $r, int $id) { $this->can($r, 'buying.BUY'); return $this->run(fn () => \App\Services\CycleAlerts::claim((int) Context::ent(), $id, strtoupper((string) $r->input('status')), (string) $r->input('reason'))); }
