@@ -354,3 +354,11 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - The 7e-4 screen parts were clicked through in a browser (Health, date format, Equal matches pick, Daily totals chip, Annual report): no script errors.
 - Tests: 287 pass; `SalesGapsTest` now has 10 tests.
 - Register after this batch: BUILT 309 of 1,433 (22 %); Sales 49 of 155.
+
+## Sales batch 5, part 6 – import fee from the money report, fix links, marketplace master (21 Nov 2026)
+- **Fee of a sales import** (R-A_SALES-2): when the money report of the shop + month is loaded, the fee field is pre-filled from it (`SalesImport::feeFromReport`, Σ fees of the statements dated in the month). Without a report the fee is typed, stored as `fee_source = typed` with the warning "replaced when the money report arrives" – and it is replaced by itself once the report is loaded (`applyReportFees`, run before reports and statements read a batch). The typical fee % of the marketplace is shown as a hint only.
+- **Fix link on every refusal** (2): inactive shop → open the shop; other marketplace → one click sets the shop's marketplace; Sale Columns missing → opens them; no rights → Roles and rights; database not up to date → System health.
+- **Marketplaces** (68) – `app/Services/Marketplaces.php`, screen `#/marketplaces`: short name, full name, country ("+ New" adds a country), ISO code (typed, upper-case, 2–10 letters / digits, must be new – checked while typing), payout, contact, typical fee %; **Questions** per marketplace (A–Z); **Checklist of a shop** – the questions of its marketplace with a tick, a note, who and when. New right `setup.marketplaces` (Owner, Manager). Migration `000030`.
+- Month Close cards of part 5 were clicked through in a browser (question answered with and without a reason): fine.
+- Tests: 290 pass; new `MarketplacesTest` (2), `SalesGapsTest` now 11.
+- Register after this batch: BUILT 315 of 1,433 (22 %); Sales 50 of 155.

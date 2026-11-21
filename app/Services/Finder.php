@@ -21,6 +21,7 @@ class Finder
         ['VA statements', 'va statement payslip seller share month approve', '#/va-statements', 'orders.SEE'],
         ['Shop reminders', 'shop monthly reminders pending resolved template invoice', '#/shop-reminders', 'orders.SEE'],
         ['Carriers and postage rates', 'carrier preset matrix package service packing rate postage royal mail cheapest', '#/carriers', 'orders.SEE'],
+        ['Marketplaces and their questions', 'marketplace master iso code country questions checklist shop sale columns', '#/marketplaces', 'orders.SEE'],
         ['New order', 'enter order add sale', '#/orders?do=new', 'orders.ENTER'],
         ['Load order file', 'import orders upload ebay temu amazon csv', '#/orders?do=file', 'orders.ENTER'],
         ['Make pick list', 'picking pick sheet warehouse', '#/orders?do=pick', 'orders.WAREHOUSE'],

@@ -251,6 +251,14 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('print-routes', [PrintController::class, 'route']);
         Route::get('orders', [OrdersController::class, 'board']);
         Route::get('sales', [OrdersController::class, 'saleLines']);
+        Route::get('marketplaces', [OrdersController::class, 'marketplaces']);
+        Route::post('marketplaces', [OrdersController::class, 'marketplaceSave']);
+        Route::post('marketplaces/country', [OrdersController::class, 'marketplaceCountry']);
+        Route::get('marketplaces/iso', [OrdersController::class, 'marketplaceIso']);
+        Route::get('marketplaces/{mp}/questions', [OrdersController::class, 'marketplaceQuestions'])->whereNumber('mp');
+        Route::post('marketplaces/{mp}/questions', [OrdersController::class, 'marketplaceQuestionSave'])->whereNumber('mp');
+        Route::get('shops/{shop}/checklist', [OrdersController::class, 'shopChecklist'])->whereNumber('shop');
+        Route::post('shops/{shop}/checklist', [OrdersController::class, 'shopChecklistTick'])->whereNumber('shop');
         Route::get('carriers/matrix', [OrdersController::class, 'carrierMatrix']);
         Route::get('carriers/cheapest', [OrdersController::class, 'carrierCheapest']);
         Route::get('carriers/rates/{kind}/{id}', [OrdersController::class, 'carrierRateHistory'])->where('kind', 'carrier|packing')->whereNumber('id');

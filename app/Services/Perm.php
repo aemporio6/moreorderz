@@ -162,6 +162,7 @@ class Perm
         $c['orders.dsSeeContact'] = ['See the address and phone of a drop shipping order unmasked', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL']];
         $c['orders.shopReminders'] = ['Add, resolve and remove shop monthly reminders', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
         $c['orders.shopReminderTemplates'] = ['Set the monthly reminder templates of the shops', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL']];
+        $c['setup.marketplaces'] = ['Set marketplaces and their questions', 'Setup', ['OWNER', 'MANAGER']];
         $c['setup.carriers'] = ['Set carriers, packages, services, presets, packings and their rates', 'Setup', ['OWNER', 'MANAGER']];
         $c['orders.vaStatement'] = ['Make the VA statement of a shop and month', 'Orders and dispatch', ['OWNER', 'MANAGER', 'FINANCE', 'TL']];
         $c['orders.vaStatementApprove'] = ['Approve or send back a VA statement', 'Orders and dispatch', ['OWNER']];

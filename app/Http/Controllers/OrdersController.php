@@ -404,5 +404,15 @@ class OrdersController extends Controller
 
     public function saleOutOfPeriod(Request $r) { return $this->run(fn () => \App\Services\SalesImport::answerOutOfPeriod((int) $r->input('shop'), (string) $r->input('month'), (string) $r->input('mode'), (string) $r->input('reason'), $r->user())); }
 
-    public function saleImportFee(Request $r) { $this->can($r, 'orders.saleImport'); return ['report' => \App\Services\SalesImport::feeFromReport((int) $r->query('shop'), (int) $r->query('month'), (int) $r->query('year'))]; }
+    public function saleImportFee(Request $r) { $this->can($r, 'orders.saleImport'); $mp = (int) DB::table('t_branches')->where('id', (int) $r->query('shop'))->value('fk_id_marketplace'); return ['report' => \App\Services\SalesImport::feeFromReport((int) $r->query('shop'), (int) $r->query('month'), (int) $r->query('year')), 'typical_pct' => $mp ? \App\Services\Marketplaces::feeHint($mp) : null]; }
+
+    // ---------- marketplace master, its questions, the checklist per shop (R-A_SALES-68) ----------
+    public function marketplaces(Request $r) { $this->can($r, 'orders.SEE'); return \App\Services\Marketplaces::list($r->user()); }
+    public function marketplaceSave(Request $r) { return $this->run(fn () => \App\Services\Marketplaces::save($r->except(['id']), (int) $r->input('id') ?: null, $r->user())); }
+    public function marketplaceCountry(Request $r) { return $this->run(fn () => \App\Services\Marketplaces::addCountry((string) $r->input('name'), $r->user())); }
+    public function marketplaceIso(Request $r) { $this->can($r, 'orders.SEE'); $free = \App\Services\Marketplaces::isoFree((string) $r->query('iso'), (int) $r->query('id') ?: null); return ['free' => $free, 'message' => $free ? null : 'This ISO code already exists. Please add another']; }
+    public function marketplaceQuestions(Request $r, int $mp) { return $this->run(function () use ($r, $mp) { $this->can($r, 'orders.SEE'); return \App\Services\Marketplaces::questions($mp); }); }
+    public function marketplaceQuestionSave(Request $r, int $mp) { return $this->run(fn () => $r->boolean('remove') ? \App\Services\Marketplaces::deleteQuestion($mp, (int) $r->input('id'), $r->user()) : \App\Services\Marketplaces::saveQuestion($mp, (string) $r->input('question'), (int) $r->input('id') ?: null, $r->user())); }
+    public function shopChecklist(Request $r, int $shop) { return $this->run(function () use ($r, $shop) { $this->can($r, 'orders.SEE'); return \App\Services\Marketplaces::checklist($shop, $r->user()); }); }
+    public function shopChecklistTick(Request $r, int $shop) { return $this->run(function () use ($r, $shop) { $this->can($r, 'orders.SEE'); return \App\Services\Marketplaces::tick($shop, (int) $r->input('question'), $r->boolean('done'), $r->input('note'), $r->user()); }); }
 }
