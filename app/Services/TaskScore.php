@@ -76,8 +76,7 @@ class TaskScore
             Audit::log('tasks', $taskId, 'APPROVE', ['quality' => $quality, 'score' => $p['score']]);
             $ref = 'T-' . str_pad((string) $taskId, 4, '0', STR_PAD_LEFT);
             if ($t->owner_user_id) AlertRules::send('APPROVED', (int) $t->owner_user_id, ['first_name' => self::first((int) $t->owner_user_id), 'task_ref' => $ref, 'title' => $t->title, 'quality' => $quality, 'score' => $p['score'], 'link' => self::link()], $taskId, "AP:$taskId");
-            foreach (DB::table('tasks')->where('depends_on_task_id', $taskId)->whereNotIn('status', ['APPROVED', 'CANCELLED'])->get() as $w)      // waiting tasks can start (N10)
-                if ($w->owner_user_id) AlertRules::send('N10', (int) $w->owner_user_id, ['first_name' => self::first((int) $w->owner_user_id), 'task_ref' => 'T-' . str_pad((string) $w->id, 4, '0', STR_PAD_LEFT), 'title' => $w->title, 'cleared_ref' => $ref, 'link' => self::link()], (int) $w->id, "N10:$w->id:$taskId");
+            TaskActions::unblock($taskId, 'approved'); TaskActions::rollUp($taskId);      // R-G_CORE-11 waiting TODO tasks get N10, R-G_CORE-12 parent roll-up
             return $p + ['message' => "$ref approved – score {$p['score']} ({$p['text']})."];
         });
     }

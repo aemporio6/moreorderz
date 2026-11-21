@@ -99,11 +99,9 @@ class WaCommands
         try {
             switch (true) {
                 case in_array($first, self::ACK, true):
-                    if ((int) $t->owner_user_id !== (int) $u->id) return ['REFUSED', 'RECEIVED', "Refused: only the owner of $ref can acknowledge it."];
-                    DB::table('tasks')->where('id', $t->id)->whereNull('acknowledged_at')->update(['acknowledged_at' => now(), 'last_update_at' => now()]);
-                    DB::table('task_history')->insert(['task_id' => $t->id, 'at' => now(), 'user_id' => $u->id, 'field' => 'acknowledged_at', 'old_value' => null, 'new_value' => 'ACK', 'reason' => 'By WhatsApp']);
-                    \App\Services\EventBus::fire('TASK_ACK', 'tasks', $t->id, ['via' => 'WHATSAPP'], (int) $t->fk_id_ent);
-                    return ['ACK', 'ACTED', "$ref acknowledged."];
+                    if ((int) $t->owner_user_id !== (int) $u->id) return ['REFUSED', 'RECEIVED', "Only the owner acknowledges $ref."];
+                    try { return ['ACK', 'ACTED', \App\Services\TaskActions::acknowledge((int) $t->id, $u, 'WHATSAPP')]; }      // R-G_CORE-10: one path for web, phone and WhatsApp
+                    catch (\InvalidArgumentException $e) { return ['REFUSED', 'RECEIVED', $e->getMessage()]; }
                 case $first === 'START':
                     TaskFlow::move($t->id, $u, 'DOING', null, 'WHATSAPP'); return ['START', 'ACTED', "$ref is now In progress."];
                 case $first === 'DONE':

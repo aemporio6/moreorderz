@@ -107,6 +107,8 @@ class TaskCreate
         } else throw new \InvalidArgumentException('Refused: choose what the task is about from the list.');
         $dep = ! empty($d['depends_on']) ? (int) $d['depends_on'] : null;
         if ($dep && ! DB::table('tasks')->where('id', $dep)->exists()) throw new \InvalidArgumentException('Refused: the task it depends on does not exist.');
+        $parent = ! empty($d['parent']) ? TaskActions::parentFor((int) $d['parent'], $ent) : null;      // R-G_CORE-12: one level, under an open parent, its link copied
+        if ($parent && ! $mod && $parent->linked_module) { $mod = $parent->linked_module; $rec = $parent->linked_record_id ? (int) $parent->linked_record_id : null; }
 
         $warn = []; $hist = null; $realOwner = $owner;
         if ($a = TaskOwner::absent($owner)) {
@@ -116,10 +118,10 @@ class TaskCreate
                 $warn[] = "Owner is absent - task given to $cn."; $hist = "created during absence of $on ({$a->from_date} to " . ($a->to_date ?: 'open') . ')';
             } else $warn[] = 'Owner is absent and has no cover.';
         }
-        return DB::transaction(function () use ($ent, $d, $u, $title, $pr, $cat, $realOwner, $due, $mod, $rec, $dep, $warn, $hist) {
+        return DB::transaction(function () use ($ent, $d, $u, $title, $pr, $cat, $realOwner, $due, $mod, $rec, $dep, $warn, $hist, $parent) {
             $id = (int) DB::table('tasks')->insertGetId(RecordService::fillNotNull('tasks', ['fk_id_ent' => $ent, 'title' => $title, 'description' => trim((string) ($d['detail'] ?? '')) ?: null, 'category_id' => $cat,
                 'owner_user_id' => $realOwner, 'assigned_by_user_id' => (int) $u->id, 'priority' => $pr, 'status' => 'TODO',      // a task that waits for another stays TODO; N10 tells the owner when it is approved
-                'created_at' => now(), 'due_at' => $due . ' 23:59:59', 'source' => 'MANUAL', 'linked_module' => $mod, 'linked_record_id' => $rec, 'depends_on_task_id' => $dep,
+                'created_at' => now(), 'due_at' => $due . ' 23:59:59', 'source' => 'MANUAL', 'linked_module' => $mod, 'linked_record_id' => $rec, 'depends_on_task_id' => $dep, 'parent_task_id' => $parent ? (int) $parent->id : null, 'reference_id' => $parent->reference_id ?? null,
                 'evidence_required' => ! empty($d['evidence']) ? 1 : 0, 'last_update_at' => now()]));
             foreach (array_values(array_filter(array_map('trim', preg_split('/\R/', (string) ($d['checklist'] ?? ''))))) as $n => $line)
                 DB::table('task_checklist')->insert(['task_id' => $id, 'text' => mb_substr($line, 0, 255), 'sort' => $n + 1, 'is_done' => 0]);

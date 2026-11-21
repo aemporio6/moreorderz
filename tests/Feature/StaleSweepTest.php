@@ -24,7 +24,7 @@ class StaleSweepTest extends TestCase
         $mgr = $this->makeUser('MANAGER'); $va = $this->makeUser('VA');
         $t = $this->task(['owner_user_id' => $va->id, 'assigned_by_user_id' => $mgr->id]);
         try { TaskFlow::cancel($t, $va, 'not needed'); $this->fail('VA cancel must be refused'); } catch (\InvalidArgumentException $e) { $this->assertStringStartsWith('Refused: only', $e->getMessage()); }
-        try { TaskFlow::cancel($t, $mgr, ' '); $this->fail('reason required'); } catch (\InvalidArgumentException $e) { $this->assertSame('Give the reason for cancelling.', $e->getMessage()); }
+        try { TaskFlow::cancel($t, $mgr, ' '); $this->fail('reason required'); } catch (\InvalidArgumentException $e) { $this->assertSame('Refused: a reason is required to cancel.', $e->getMessage()); }
         $row = TaskFlow::cancel($t, $mgr, 'Order was cancelled');
         $this->assertSame(['CANCELLED', $mgr->id], [$row->status, (int) $row->cancelled_by_user_id]);
         $this->assertSame('Order was cancelled', DB::table('task_history')->where('task_id', $t)->where('new_value', 'CANCELLED')->value('reason'));

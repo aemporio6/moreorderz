@@ -37,7 +37,7 @@ class TaskFlow
         if ($open) $out[] = ['code' => 'CHECKLIST', 'text' => "Refused: $open checklist item" . ($open === 1 ? ' is' : 's are') . ' not ticked yet.'];
         $sub = DB::table('tasks')->where('parent_task_id', $t->id)->whereNotIn('status', ['APPROVED', 'CANCELLED'])->count();
         if ($sub) $out[] = ['code' => 'SUBTASKS', 'text' => "Refused: $sub subtask" . ($sub === 1 ? ' is' : 's are') . ' not approved yet. The parent becomes Done by itself when the last subtask is approved (R5).'];
-        if ((int) $t->evidence_required === 1 && ! DB::table('task_evidence')->where('task_id', $t->id)->whereIn('type', self::COUNTING)->exists())
+        if ((int) $t->evidence_required === 1 && ! DB::table('task_evidence')->where('task_id', $t->id)->whereNull('hidden_at')->whereIn('type', self::COUNTING)->exists())
             $out[] = ['code' => 'EVIDENCE', 'text' => DB::table('task_evidence')->where('task_id', $t->id)->where('type', 'VOICE')->exists()
                 ? 'Refused: a voice note is not evidence. Attach a screenshot, photo, file, link or reference first.' : 'Refused: attach evidence first (screenshot, photo, file, link or reference).'];
         return $out;
@@ -88,6 +88,7 @@ class TaskFlow
                 self::history($id, (int) $u->id, $t->status, 'DOING', "Started by $via before done"); $t->status = 'DOING';
             }
             if ($why = self::moveRefusal($t, $to)) throw new \InvalidArgumentException($why);
+            if ($to === 'DOING' && $t->status === 'TODO' && ($why = TaskActions::blockedBy($t))) throw new \InvalidArgumentException($why);      // R-G_CORE-11
             if ($to === 'DONE' && ($m = self::missing($t))) throw new \InvalidArgumentException($m[0]['text']);
             if ($t->status === 'STUCK') Guide::unstuck($id);
             DB::table('tasks')->where('id', $id)->update(['status' => $to, 'last_update_at' => now(), 'done_at' => $to === 'DONE' ? now() : null,
@@ -103,12 +104,13 @@ class TaskFlow
     public static function cancel(int $id, object $u, string $reason): object
     {
         $t = DB::table('tasks')->where('id', $id)->first() ?? throw new \InvalidArgumentException('Task not found.');
-        if (! in_array($u->role_code, TaskScore::BOSS, true)) throw new \InvalidArgumentException('Refused: only the Owner, a Partner or a Manager can cancel a task.');
+        if (! in_array($u->role_code, TaskScore::BOSS, true)) throw new \InvalidArgumentException('Refused: only a Partner or Manager can cancel a task.');
         if (! in_array($t->status, self::OPEN, true)) throw new \InvalidArgumentException("Refused: a task in " . self::LABELS[$t->status] . ' cannot go to Cancelled.');
-        if (mb_strlen(trim($reason)) < 3) throw new \InvalidArgumentException('Give the reason for cancelling.');
+        if (trim($reason) === '') throw new \InvalidArgumentException('Refused: a reason is required to cancel.');
         DB::table('tasks')->where('id', $id)->update(['status' => 'CANCELLED', 'cancelled_at' => now(), 'cancelled_by_user_id' => $u->id, 'last_update_at' => now()]);
         self::history($id, (int) $u->id, $t->status, 'CANCELLED', trim($reason)); Audit::log('tasks', $id, 'UPDATE', ['status' => [$t->status, 'CANCELLED']], trim($reason));
         EventBus::fire('TASK_CANCELLED', 'tasks', $id, ['from' => $t->status, 'reason' => trim($reason)], (int) $t->fk_id_ent);
+        TaskActions::unblock($id, 'cancelled'); TaskActions::rollUp($id);      // R-G_CORE-11 waiting tasks may start, R-G_CORE-12 the parent may be done now
         return DB::table('tasks')->where('id', $id)->first();
     }
 }

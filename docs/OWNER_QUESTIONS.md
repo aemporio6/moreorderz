@@ -46,6 +46,7 @@ Updated 21 Nov 2026 (batch 7e-101). How to answer: write **OK** next to a line t
 | B17 | R-FIN-6 | Payouts are now matched to the bank within ± 3 days (the spec default; the old code used 5 when the setting was empty). Change "Match payouts within" if your marketplaces pay later | — |
 | B18 | R-B_SOURCING-46 / 55 | "Make FINAL" for landed cost and approving a landed-cost override are for Owner, Manager and Partner (new right buying.LANDED_FINAL – change it in Rights) | — |
 | B19 | R-B_SOURCING-46 | After new freight, customs or GRN rows the landed cost is worked out again as PROVISIONAL by itself, 5 minutes after the last change (never once it is FINAL) | — |
+| B20 | R-G_CORE-15 / 13 | A cancelled task can be undone for 10 minutes (back to its last status). A new due date may not be in the past. The owner (VA) can ask for a new date; the person who assigned it approves (counts as a move) or rejects with a reason | — |
 
 ## C. Suggested defaults written in the specification (220 lines)
 

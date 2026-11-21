@@ -545,5 +545,14 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('tasks/{id}/approve', [WorkController::class, 'taskApprove'])->whereNumber('id');
         Route::post('tasks/{id}/rework', [WorkController::class, 'taskRework'])->whereNumber('id');
         Route::get('tasks/{id}/score', [WorkController::class, 'taskScore'])->whereNumber('id');
+        Route::get('tasks/{id}/panel', [WorkController::class, 'taskPanel'])->whereNumber('id');
+        Route::post('tasks/{id}/ack', [WorkController::class, 'taskAck'])->whereNumber('id');
+        Route::post('tasks/{id}/waits', [WorkController::class, 'taskWaits'])->whereNumber('id');
+        Route::post('tasks/{id}/due', [WorkController::class, 'taskDue'])->whereNumber('id');
+        Route::post('tasks/{id}/due-request', [WorkController::class, 'taskDueRequest'])->whereNumber('id');
+        Route::post('tasks/{id}/due-decide', [WorkController::class, 'taskDueDecide'])->whereNumber('id');
+        Route::post('tasks/{id}/reassign', [WorkController::class, 'taskReassign'])->whereNumber('id');
+        Route::post('tasks/{id}/undo-cancel', [WorkController::class, 'taskUndo'])->whereNumber('id');
+        Route::post('task-evidence/{id}/hide', [WorkController::class, 'taskHideEvidence'])->whereNumber('id');
     });
 });
