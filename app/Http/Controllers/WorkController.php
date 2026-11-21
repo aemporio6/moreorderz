@@ -173,8 +173,9 @@ class WorkController extends Controller
     public function taskPage(Request $r, int $id) { return \App\Services\TaskActions::page($id, $r->user()); }
     public function taskProofOff(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskActions::proofOff($id, $r->user(), (string) $r->input('reason'))); }
     public function taskProofOn(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskActions::proofOn($id, $r->user())); }
-    public function taskComment(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskActions::comment($id, $r->user(), (string) $r->input('text'))); }
-    public function taskProof(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskActions::addProof($id, $r->user(), $r->file('file'), $r->input('link'), $r->input('reference'), $r->input('note'))); }
+    public function taskComment(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskComments::add($id, $r->user(), (string) $r->input('text'), $r->file('file'))); }
+    public function taskEvidenceFile(Request $r, int $id) { return \App\Services\TaskEvidence::stream($id, $r->user()); }
+    public function taskProof(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskActions::addProof($id, $r->user(), $r->file('file'), $r->input('link'), $r->input('reference'), $r->input('note'), $r->input('kind'))); }
     public function taskItem(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskActions::addItem($id, $r->user(), (string) $r->input('text'))); }
     public function taskTick(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskActions::tick($id, $r->user(), $r->boolean('done'))); }
     public function taskImportTemplate() { return response(\App\Services\TaskImport::template(), 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => 'attachment; filename="tasks_import_template.csv"']); }

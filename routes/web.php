@@ -571,6 +571,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('tasks/{id}/due-decide', [WorkController::class, 'taskDueDecide'])->whereNumber('id');
         Route::post('tasks/{id}/reassign', [WorkController::class, 'taskReassign'])->whereNumber('id');
         Route::post('tasks/{id}/undo-cancel', [WorkController::class, 'taskUndo'])->whereNumber('id');
+        Route::get('task-evidence/{id}/file', [WorkController::class, 'taskEvidenceFile'])->whereNumber('id');
         Route::post('task-evidence/{id}/hide', [WorkController::class, 'taskHideEvidence'])->whereNumber('id');
         Route::post('tasks/{id}/remind', [WorkController::class, 'taskRemind'])->whereNumber('id');
         Route::post('tasks/{id}/close-rule', [WorkController::class, 'taskCloseRule'])->whereNumber('id');

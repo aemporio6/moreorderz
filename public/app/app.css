@@ -19,10 +19,19 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
   .phone-only{display:block}
   table.task-cards thead{display:none}
   table.task-cards, table.task-cards tbody{display:block;width:100%}
-  table.task-cards tr{display:block;border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:8px 0;background:var(--card,#fff)}
+  table.task-cards tr{display:block;border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:8px 0;background:var(--surface)}
   table.task-cards td{display:block;border:0;padding:2px 0}
   table.task-cards td:empty{display:none}
-  .task-sticky{display:flex;gap:6px;position:fixed;left:0;right:0;bottom:0;padding:8px 12px;background:var(--card,#fff);border-top:1px solid var(--line);z-index:30;flex-wrap:wrap}
+  .task-sticky{display:flex;gap:6px;position:fixed;left:0;right:0;bottom:0;padding:8px 12px;background:var(--surface);border-top:1px solid var(--line);z-index:30;flex-wrap:wrap}
   .task-sticky .btn{flex:1}
   .task-page{padding-bottom:70px}
 }
+
+/* R-G_CORE-29 proof gallery, R-G_CORE-28 @ picker */
+.ev-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+.ev{border:1px solid var(--line);border-radius:8px;padding:8px;min-width:0;overflow-wrap:anywhere}
+.ev img{width:100%;height:120px;object-fit:cover;border-radius:6px;display:block;margin-bottom:6px}
+.ev audio,.ev video{width:100%;margin-bottom:6px}
+.at-pick{position:absolute;z-index:20;background:var(--surface);border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.12);max-width:280px;width:100%}
+.at-pick button{display:block;width:100%;text-align:left;padding:7px 10px;border:0;background:none;cursor:pointer;color:inherit}
+.at-pick button:hover{background:rgba(0,0,0,.05)}

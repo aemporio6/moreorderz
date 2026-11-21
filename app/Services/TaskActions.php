@@ -377,38 +377,12 @@ class TaskActions
         return 'Item added.';
     }
 
-    public static function comment(int $id, object $u, string $text): string
-    {
-        $t = self::task($id);
-        if (! TaskFlow::canSee($t, $u)) throw new \InvalidArgumentException('Task not found.');
-        if (trim($text) === '') throw new \InvalidArgumentException('Write the comment first.');
-        DB::table('task_comments')->insert(['task_id' => $id, 'at' => now(), 'user_id' => $u->id, 'text' => mb_substr(trim($text), 0, 2000), 'via' => 'APP']);
-        if ((int) $t->owner_user_id === (int) $u->id || DB::table('task_helpers')->where('task_id', $id)->where('user_id', $u->id)->exists()) {      // R-G_CORE-27: a comment by the owner or a helper is an update
-            DB::table('tasks')->where('id', $id)->update(['last_update_at' => now()]); TaskAlerts::fresh($id);
-        }
-        return 'Comment added.';
-    }
+    public static function comment(int $id, object $u, string $text): string { return TaskComments::add($id, $u, $text)['message']; }      // R-G_CORE-28
 
     /** Proof by the web / phone camera: a file (photo, PDF, office), a link or a reference. */
-    public static function addProof(int $id, object $u, ?\Illuminate\Http\UploadedFile $file, ?string $link, ?string $ref, ?string $note = null): string
+    public static function addProof(int $id, object $u, ?\Illuminate\Http\UploadedFile $file, ?string $link, ?string $ref, ?string $note = null, ?string $kind = null): string
     {
-        $t = self::task($id); self::open($t);
-        if (! self::contributor($t, $u)) throw new \InvalidArgumentException('Refused: only the people working on the task can add proof.');
-        $row = ['task_id' => $id, 'uploaded_by' => $u->id, 'via' => 'APP', 'note' => $note ? mb_substr($note, 0, 255) : null, 'created_at' => now()];
-        if ($file) {
-            $ext = strtolower($file->getClientOriginalExtension());
-            if (! in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'heic', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt'], true)) throw new \InvalidArgumentException('Proof must be a photo, PDF or office file.');
-            if ($file->getSize() > 10 * 1024 * 1024) throw new \InvalidArgumentException('The file is larger than 10 MB.');
-            $path = $file->storeAs('task_evidence/' . $id, date('Ymd_His') . '_' . preg_replace('/[^\w.\-]+/', '_', $file->getClientOriginalName()), 'local');
-            $row += ['type' => in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'heic'], true) ? 'PHOTO' : 'FILE', 'file_path' => $path, 'file_name' => mb_substr($file->getClientOriginalName(), 0, 190), 'mime' => $file->getClientMimeType()];
-        } elseif ($link && trim($link) !== '') {
-            if (! filter_var(trim($link), FILTER_VALIDATE_URL)) throw new \InvalidArgumentException('The link must start with https://');
-            $row += ['type' => 'LINK', 'url' => mb_substr(trim($link), 0, 500)];
-        } elseif ($ref && trim($ref) !== '') $row += ['type' => 'REFERENCE', 'reference_id' => mb_substr(trim($ref), 0, 120)];
-        else throw new \InvalidArgumentException('Add a file, a link or a reference.');
-        DB::table('task_evidence')->insert(RecordService::fillNotNull('task_evidence', $row));
-        DB::table('tasks')->where('id', $id)->update(['last_update_at' => now()]); TaskAlerts::fresh($id);
-        self::hist($id, (int) $u->id, 'evidence', null, $row['type'], $row['file_name'] ?? $row['url'] ?? $row['reference_id'] ?? null);
+        TaskEvidence::add($id, $u, $file, $link, $ref, $note, $kind);      // R-G_CORE-29
         return 'Proof added.';
     }
 
@@ -431,7 +405,7 @@ class TaskActions
         if ($t->parent_task_id) $banners[] = ['SUBTASK', 'This is a subtask of ' . TaskFlow::ref((int) $t->parent_task_id) . ' – the parent is done when all its subtasks are approved.'];
         if ($t->owner_user_id && ($a = TaskOwner::absent((int) $t->owner_user_id))) { $c = TaskOwner::usable((int) $t->owner_user_id); $banners[] = ['ABSENT', self::name((int) $t->owner_user_id) . ' is away until ' . ($a->to_date ?: 'further notice') . ($c && $c !== (int) $t->owner_user_id ? ' – ' . self::name($c) . ' covers.' : ' and has no cover.')]; }
         $repeat = TaskRepeat::line($t);      // R-G_CORE-26 "weekly · Mon · next 2026-11-16" / "last one"
-        $ev = DB::table('task_evidence')->where('task_id', $id)->orderBy('id')->get()->map(fn ($e) => ['id' => (int) $e->id, 'type' => $e->type, 'name' => $e->file_name ?: $e->url ?: $e->reference_id ?: $e->note, 'url' => $e->url, 'at' => (string) $e->created_at, 'by' => $name($e->uploaded_by), 'hidden' => $e->hidden_at ? 'hidden: ' . $e->hidden_reason : null]);
+        $ev = TaskEvidence::gallery($id);      // R-G_CORE-29 gallery
         $hist = DB::table('task_history as h')->leftJoin('t_users as x', 'x.id', '=', 'h.user_id')->where('h.task_id', $id)->orderByDesc('h.id')->limit(200)->get(['h.at', 'h.field', 'h.old_value', 'h.new_value', 'h.reason', 'x.display_name as by']);
         $can = $p['can'] + ['proof_off' => self::boss($u) && in_array($t->status, TaskFlow::OPEN, true) && (int) $t->evidence_required, 'proof_on' => self::boss($u) && in_array($t->status, TaskFlow::OPEN, true) && ! (int) $t->evidence_required,
             'work' => in_array($t->status, TaskFlow::OPEN, true) && self::contributor($t, $u)];
@@ -443,7 +417,7 @@ class TaskActions
                 'Blocked by' => $p['waits_for'] && $p['waits_for']['blocked'] ? $p['waits_for']['ref'] : null], fn ($v) => $v !== null && $v !== ''),
             'score' => $t->status === 'APPROVED' && $t->score !== null ? ['final' => (float) $t->score, 'band' => TaskScore::band((float) $t->score)] : ($t->status === 'DONE' ? ['preview' => TaskScore::parts($t, 'GOOD')] : null),
             'checklist' => DB::table('task_checklist')->where('task_id', $id)->orderBy('sort')->get(['id', 'text', 'is_done', 'done_at']),
-            'proof' => $ev, 'comments' => DB::table('task_comments as c')->leftJoin('t_users as x', 'x.id', '=', 'c.user_id')->where('c.task_id', $id)->orderBy('c.id')->get(['c.id', 'c.at', 'c.text', 'c.via', 'x.display_name as by']),
+            'proof' => $ev, 'comments' => TaskComments::rows($id), 'people' => TaskComments::people((int) $t->fk_id_ent ?: null),
             'history' => $hist, 'stuck_on' => Guide::STUCK_ON, 'qualities' => array_keys(TaskScore::QUALITY)];
     }
 

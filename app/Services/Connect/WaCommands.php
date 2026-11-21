@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\Storage;
 class WaCommands
 {
     public const ACK = ['OK', 'ACK', 'OKAY', 'SEEN', 'ACKNOWLEDGED', '👍'];
-    public const MEDIA_TYPES = ['jpg', 'jpeg', 'png', 'webp', 'pdf', 'ogg', 'mp3', 'aac', 'm4a', 'mp4', 'txt', 'xlsx', 'docx', 'xls', 'doc', 'csv'];
+    public const MEDIA_TYPES = [...\App\Services\TaskEvidence::IMAGE, ...\App\Services\TaskEvidence::AUDIO, ...\App\Services\TaskEvidence::FILE];      // R-G_CORE-29 the same kinds as the web
     public const MIME_EXT = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'application/pdf' => 'pdf', 'audio/ogg' => 'ogg', 'audio/mpeg' => 'mp3', 'audio/aac' => 'aac', 'audio/mp4' => 'm4a', 'video/mp4' => 'mp4', 'text/plain' => 'txt', 'text/csv' => 'csv',
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' => 'xlsx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => 'docx', 'application/vnd.ms-excel' => 'xls', 'application/msword' => 'doc'];
     public const MAX_BYTES = 15 * 1024 * 1024;
@@ -133,8 +133,7 @@ class WaCommands
 
     private static function comment(int $task, User $u, string $text): void
     {
-        DB::table('task_comments')->insert(['task_id' => $task, 'at' => now(), 'user_id' => $u->id, 'text' => mb_substr($text, 0, 2000), 'via' => 'WHATSAPP']);
-        DB::table('tasks')->where('id', $task)->update(['last_update_at' => now()]);
+        \App\Services\TaskComments::add($task, $u, mb_substr($text, 0, \App\Services\TaskComments::MAX), null, 'WHATSAPP');      // R-G_CORE-28 mentions, watcher, N9, last update
     }
 
     /** Download and keep the media as task evidence: image → PHOTO, audio → VOICE, other → FILE. Returns [action, reply]. */
@@ -148,7 +147,7 @@ class WaCommands
             if ($size > self::MAX_BYTES || strlen($bytes) > self::MAX_BYTES) throw new \InvalidArgumentException('the file is larger than 15 MB');
             $kind = str_starts_with($mime, 'image/') ? 'PHOTO' : (str_starts_with($mime, 'audio/') || $type === 'voice' ? 'VOICE' : 'FILE');
             $path = 'uploads/task_evidence/' . $t->id . '/' . bin2hex(random_bytes(8)) . '.' . $ext; Storage::disk('local')->put($path, $bytes);
-            DB::table('task_evidence')->insert(['task_id' => $t->id, 'type' => $kind, 'file_path' => $path, 'file_name' => mb_substr((string) ($media['filename'] ?? basename($path)), 0, 255), 'mime' => mb_substr($mime, 0, 100), 'taken_at' => now(), 'uploaded_by' => $u->id, 'via' => 'WHATSAPP', 'created_at' => now()]);
+            DB::table('task_evidence')->insert(\App\Services\TaskEvidence::exif(Storage::disk('local')->path($path), $ext) + ['task_id' => $t->id, 'type' => $kind, 'file_path' => $path, 'file_name' => mb_substr((string) ($media['filename'] ?? basename($path)), 0, 255), 'mime' => mb_substr($mime, 0, 100), 'uploaded_by' => $u->id, 'via' => 'WHATSAPP', 'created_at' => now()]);
             return $kind === 'VOICE' ? ['EVIDENCE_VOICE', "Voice note saved on $ref. It does not count as proof - send a photo or file too."]
                 : ['EVIDENCE_' . $kind, ($kind === 'PHOTO' ? 'Photo' : 'File') . " saved as proof on $ref. Reply DONE when the task is finished."];
         } catch (\Throwable $e) { return ['MEDIA_FAILED', "The file could not be saved on $ref: " . mb_substr($e->getMessage(), 0, 120) . '. Please send it again.']; }
