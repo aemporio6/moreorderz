@@ -78,6 +78,7 @@ class GuideTest extends TestCase
         $row = DB::table('tasks')->where('id', $t)->first();
         $this->assertNull($row->stuck_on_type); $this->assertNull($row->stuck_on_id); $this->assertNull($row->stuck_on_text); $this->assertNull($row->stuck_since);
         $this->postJson("/api/tasks/$t/stuck", ['type' => 'OTHER', 'text' => 'Waiting for the courier'])->assertOk();
+        DB::table('task_evidence')->insert(['task_id' => $t, 'type' => 'PHOTO', 'uploaded_by' => $va->id, 'via' => 'APP', 'created_at' => now()]);      // the Done gate needs proof (R-G_CORE-5)
         $this->postJson("/api/tasks/$t/status", ['status' => 'DONE'])->assertOk();
         $this->assertNull(DB::table('tasks')->where('id', $t)->value('stuck_on_type'));                                                      // cleared on Done too
         $this->postJson("/api/tasks/$t/stuck", ['type' => 'OTHER', 'text' => 'x'])->assertStatus(422);                                      // a closed task

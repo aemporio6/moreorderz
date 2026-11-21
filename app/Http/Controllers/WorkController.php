@@ -109,10 +109,10 @@ class WorkController extends Controller
         if ($r->query('status', 'open') === 'open' && $scope !== 'to_approve') $q->whereNotIn('t.status', ['DONE', 'APPROVED', 'CANCELLED']);
         if ($s = $r->query('q')) $q->where('t.title', 'like', "%$s%");
         $rows = $q->orderByRaw("FIELD(t.priority,'URGENT','HIGH','NORMAL','LOW')")->orderBy('t.due_at')->limit(300)
-            ->get(['t.id', 't.title', 't.status', 't.priority', 't.due_at', 't.rule_code', 't.source', 't.fix_url', 't.linked_module', 't.linked_record_id', 't.amount_gbp', 't.stuck_on_type', 't.stuck_on_text', 't.stuck_since', 'u.display_name as owner', 'c.name as category', 't.owner_user_id', 't.assigned_by_user_id', 't.rework_count', 't.score']);
+            ->get(['t.id', 't.title', 't.status', 't.priority', 't.due_at', 't.rule_code', 't.source', 't.fix_url', 't.linked_module', 't.linked_record_id', 't.amount_gbp', 't.stuck_on_type', 't.stuck_on_text', 't.stuck_since', 'u.display_name as owner', 'c.name as category', 't.owner_user_id', 't.assigned_by_user_id', 't.rework_count', 't.score', 't.evidence_required']);
         if ($scope === 'to_approve') $rows = $rows->filter(fn ($t) => $t->source !== 'RULE' && \App\Services\TaskScore::refusal($t, $u) === null)->values();
         $why = DB::table('task_history')->whereIn('task_id', $rows->pluck('id')->all() ?: [0])->where('new_value', 'CREATED')->where('reason', 'like', '%owner by%')->pluck('reason', 'task_id');      // why this owner (R-G_CORE-94)
-        $rows = $rows->map(fn ($t) => (array) $t + ['owner_why' => isset($why[$t->id]) ? ucfirst(trim(substr($why[$t->id], strpos($why[$t->id], 'owner by') + 9))) : null, 'may_approve' => $t->status === 'DONE' && $t->source !== 'RULE' && \App\Services\TaskScore::refusal($t, $u) === null, 'preview' => $t->status === 'DONE' ? \App\Services\TaskScore::parts($t, 'GOOD') : null, 'band' => $t->score !== null ? \App\Services\TaskScore::band((float) $t->score) : null]);
+        $rows = $rows->map(fn ($t) => (array) $t + ['actions' => \App\Services\TaskFlow::actionsFor($t, $u), 'missing' => in_array($t->status, ['DOING', 'STUCK'], true) ? array_column(\App\Services\TaskFlow::missing($t), 'text') : [], 'label' => \App\Services\TaskFlow::LABELS[$t->status] ?? $t->status, 'ref' => \App\Services\TaskFlow::ref((int) $t->id), 'owner_why' => isset($why[$t->id]) ? ucfirst(trim(substr($why[$t->id], strpos($why[$t->id], 'owner by') + 9))) : null, 'may_approve' => $t->status === 'DONE' && $t->source !== 'RULE' && \App\Services\TaskScore::refusal($t, $u) === null, 'preview' => $t->status === 'DONE' ? \App\Services\TaskScore::parts($t, 'GOOD') : null, 'band' => $t->score !== null ? \App\Services\TaskScore::band((float) $t->score) : null]);
         $today = date('Y-m-d');
         $toApprove = DB::table('tasks as t')->where('t.status', 'DONE')->where('t.source', '<>', 'RULE')->where(fn ($w) => $w->where('t.fk_id_ent', Context::ent())->orWhereNull('t.fk_id_ent'))->get(['t.id', 't.status', 't.owner_user_id', 't.assigned_by_user_id'])->filter(fn ($t) => \App\Services\TaskScore::refusal($t, $u) === null)->count();
         return ['tasks' => $rows, 'to_approve' => $toApprove, 'my_score' => \App\Services\TaskScore::person((int) $u->id), 'qualities' => array_keys(\App\Services\TaskScore::QUALITY), 'stuck_on_me' => DB::table('tasks')->where('status', 'STUCK')->where('stuck_on_type', 'USER')->where('stuck_on_id', $u->id)->count(),
@@ -122,20 +122,11 @@ class WorkController extends Controller
 
     public function taskStatus(Request $r, int $id)
     {
-        $data = $r->validate(['status' => 'required|in:TODO,DOING,STUCK,DONE', 'note' => 'nullable|string|max:500']);
-        $t = DB::table('tasks')->where('id', $id)->first() ?? abort(404);
-        $u = $r->user();
-        abort_unless((int) $t->owner_user_id === $u->id || \App\Services\Perm::has($u, 'work.taskStatus_may'), 403, 'This task belongs to someone else.');
-        if ($data['status'] === 'DONE' && $t->source === 'RULE') {
-            return response()->json(['message' => 'This task was opened by a rule. It closes by itself when the problem is fixed' . ($t->fix_url ? ' – use the Fix link.' : '.')], 422);
-        }
-        if ($data['status'] === 'STUCK' && empty($data['note'])) return response()->json(['message' => 'Say what you are stuck on.', 'errors' => ['note' => ['Say what you are stuck on.']]], 422);
-        if ($t->status === 'STUCK' && $data['status'] !== 'STUCK') \App\Services\Guide::unstuck($id);   // start again or done: the stuck fields are cleared
-        DB::table('tasks')->where('id', $id)->update(['status' => $data['status'], 'last_update_at' => now(), 'done_at' => $data['status'] === 'DONE' ? now() : null,
-            'stuck_since' => $data['status'] === 'STUCK' ? now() : null, 'stuck_on_text' => $data['status'] === 'STUCK' ? $data['note'] : null]);
-        DB::table('task_history')->insert(['task_id' => $id, 'at' => now(), 'user_id' => $u->id, 'field' => 'status', 'old_value' => $t->status, 'new_value' => $data['status'], 'reason' => $data['note'] ?? null]);
-        Audit::log('tasks', $id, 'UPDATE', ['status' => [$t->status, $data['status']]]);
-        return ['ok' => true];
+        $data = $r->validate(['status' => 'required|in:TODO,DOING,STUCK,DONE,CANCELLED', 'note' => 'nullable|string|max:500']);
+        try {
+            $t = $data['status'] === 'CANCELLED' ? \App\Services\TaskFlow::cancel($id, $r->user(), (string) ($data['note'] ?? '')) : \App\Services\TaskFlow::move($id, $r->user(), $data['status'], $data['note'] ?? null);      // one state table (R-G_CORE-1, done gate R-G_CORE-5)
+            return ['ok' => true, 'status' => $t->status, 'label' => \App\Services\TaskFlow::LABELS[$t->status]];
+        } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage(), 'errors' => ['status' => [$e->getMessage()]]], 422); }
     }
 
     /** Approve / send back (R-G_CORE-7) and the score preview (R-G_CORE-8). */

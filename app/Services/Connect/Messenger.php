@@ -47,6 +47,12 @@ class Messenger
         return DB::table('wa_outbound')->insertGetId(['fk_id_ent' => $ent, 'fk_id_account' => $accountId, 'phone' => mb_substr($phone, 0, 30), 'template_code' => $code, 'body' => $body . "\n\x1e" . json_encode($vars), 'link_table' => $linkTable, 'link_id' => $linkId, 'status' => 'QUEUED', 'queued_at' => now()]);
     }
 
+    /** A free-text reply inside the 24-hour window (WhatsApp commands, R-G_CORE-52). */
+    public static function queueText(int $ent, ?int $accountId, string $phone, string $text, ?string $linkTable = null, ?int $linkId = null): int
+    {
+        return DB::table('wa_outbound')->insertGetId(['fk_id_ent' => $ent, 'fk_id_account' => $accountId, 'phone' => mb_substr($phone, 0, 30), 'template_code' => 'FREE_TEXT', 'body' => mb_substr($text, 0, 4000), 'link_table' => $linkTable, 'link_id' => $linkId, 'status' => 'QUEUED', 'queued_at' => now()]);
+    }
+
     public static function queueEmail(int $ent, ?int $accountId, string $to, string $subject, string $body, ?string $file = null, ?string $code = null, ?string $linkTable = null, ?int $linkId = null): int
     {
         return DB::table('email_outbound')->insertGetId(['fk_id_ent' => $ent, 'fk_id_account' => $accountId, 'to_address' => mb_substr($to, 0, 190), 'subject' => mb_substr($subject, 0, 200), 'body' => $body . ($file ? "\n\x1e" . $file : ''),
@@ -113,8 +119,9 @@ class Messenger
             if (! $c) { if ($m->status !== 'HELD') DB::table('wa_outbound')->where('id', $m->id)->update(['status' => 'HELD', 'error' => 'No WhatsApp connection is set up (System › API connections). It goes out as soon as one is.']); $done['wa_held']++; continue; }
             $vars = json_decode((string) (explode("\n\x1e", $m->body, 2)[1] ?? '[]'), true) ?: [];
             try {
-                [, $params] = self::render((string) $m->template_code, $vars);
-                $ad = Connections::adapter($c); $id = $ad->send($m->phone, (string) $m->template_code, $params);
+                $ad = Connections::adapter($c);
+                if ($m->template_code === 'FREE_TEXT') $id = $ad->sendText($m->phone, (string) $m->body);      // a reply inside the 24-hour window
+                else { [, $params] = self::render((string) $m->template_code, $vars); $id = $ad->send($m->phone, (string) $m->template_code, $params); }
                 DB::table('wa_outbound')->where('id', $m->id)->update(['status' => 'SENT', 'provider_msg_id' => $id, 'sent_at' => now(), 'error' => null, 'attempts' => $m->attempts + 1]); $done['wa_sent']++;
                 TaskEngine::close('SYS_WA_FAILING', [(int) $m->fk_id_ent], 'WhatsApp sends again');
             } catch (\Throwable $e) {
@@ -143,8 +150,8 @@ class Messenger
 
     /**
      * WhatsApp webhook (POST). Only a body signed with the app secret of one of the WhatsApp connections is read.
-     * A reply is kept in the inbox; "DONE" answering a task message from the task owner's number closes a hand-made task.
-     * "OK" / "NO" to an approval is NOT acted on (an approval needs the person signed in) – it is kept and the person is sent the link.
+     * Every message is kept in the inbox and read as a command (WaCommands, R-G_CORE-52): task ACK / START / DONE / STUCK / APPROVE / REWORK, media as proof,
+     * OK / NO to an approval or a capital call; a free-text reply goes back inside the 24-hour window. "tasks_closed" counts tasks moved to Waiting approval.
      */
     public static function inbound(string $raw, ?string $signature): array
     {
@@ -158,21 +165,17 @@ class Messenger
                 if (isset($map[$st['status'] ?? ''])) DB::table('wa_outbound')->where('provider_msg_id', $st['id'] ?? '')->update(['status' => $map[$st['status']]] + ($st['status'] === 'failed' ? ['error' => mb_substr((string) ($st['errors'][0]['title'] ?? 'failed'), 0, 255)] : []));
             }
             foreach ($ch['value']['messages'] ?? [] as $msg) {
-                $id = (string) ($msg['id'] ?? ''); if ($id === '' || DB::table('wa_inbound')->where('provider_msg_id', $id)->exists()) continue;
-                $phone = preg_replace('/\D/', '', (string) ($msg['from'] ?? '')); $text = trim((string) ($msg['text']['body'] ?? $msg['button']['text'] ?? $msg['image']['caption'] ?? ''));
-                $acc = DB::table('t_account')->whereRaw("REGEXP_REPLACE(whatsapp_number, '[^0-9]', '') = ?", [$phone])->value('id');
-                $ctx = (string) ($msg['context']['id'] ?? ''); $out = $ctx !== '' ? DB::table('wa_outbound')->where('provider_msg_id', $ctx)->first() : null;
-                $status = 'NEW'; $note = null;
-                if ($out && $out->link_table === 'tasks' && preg_match('/^(done|ok done|completed)\b/i', $text) && $acc) {
-                    $t = DB::table('tasks as t')->join('t_users as u', 'u.id', '=', 't.owner_user_id')->where('t.id', $out->link_id)->first(['t.*', 'u.fk_id_account']);
-                    if ($t && (int) $t->fk_id_account === (int) $acc && $t->source !== 'RULE' && ! in_array($t->status, ['DONE', 'CANCELLED'], true)) {
-                        DB::table('tasks')->where('id', $t->id)->update(['status' => 'DONE', 'done_at' => now(), 'last_update_at' => now()]);
-                        DB::table('task_history')->insert(['task_id' => $t->id, 'at' => now(), 'user_id' => 0, 'field' => 'status', 'old_value' => $t->status, 'new_value' => 'DONE', 'reason' => mb_substr('Closed by a WhatsApp reply from the owner\'s number' . (isset($msg['image']['id']) ? ' with a photo (media ' . $msg['image']['id'] . ')' : ''), 0, 255)]);
-                        $status = 'HANDLED'; $note = 'Task #' . $t->id . ' closed'; $closed++;
-                    } else $note = $t && $t->source === 'RULE' ? 'Rule task: it closes by itself when the problem is gone' : 'Not the task owner, or the task is already closed';
-                } elseif ($out && $out->link_table === 'sys_approvals' && preg_match('/^(ok|no|yes)\b/i', $text)) $note = 'Approvals are decided in the tool, signed in – not by a WhatsApp reply';
-                DB::table('wa_inbound')->insert(['fk_id_ent' => (int) $conn->fk_id_ent, 'provider_msg_id' => mb_substr($id, 0, 120), 'phone' => mb_substr($phone, 0, 30), 'fk_id_account' => $acc, 'body' => $text, 'media_id' => $msg['image']['id'] ?? $msg['document']['id'] ?? null,
-                    'reply_to' => $ctx ?: null, 'status' => $status, 'note' => $note, 'received_at' => now()]);
+                $id = (string) ($msg['id'] ?? ''); if ($id === '' || DB::table('wa_inbound')->where('provider_msg_id', $id)->exists()) continue;      // a webhook sent twice is read once
+                $phone = preg_replace('/\D/', '', (string) ($msg['from'] ?? ''));
+                $acc = $phone !== '' ? DB::table('t_account')->whereRaw("REGEXP_REPLACE(whatsapp_number, '[^0-9]', '') = ?", [$phone])->value('id') : null;      // "+", spaces and dashes ignored
+                $type = (string) ($msg['type'] ?? 'text'); $media = $msg[$type] ?? [];
+                $text = trim((string) ($msg['text']['body'] ?? $msg['button']['text'] ?? ($media['caption'] ?? '')));
+                $rowId = DB::table('wa_inbound')->insertGetId(['fk_id_ent' => (int) $conn->fk_id_ent, 'provider_msg_id' => mb_substr($id, 0, 120), 'phone' => mb_substr($phone, 0, 30), 'fk_id_account' => $acc, 'body' => $text,
+                    'media_id' => is_array($media) ? ($media['id'] ?? null) : null, 'reply_to' => ($msg['context']['id'] ?? null) ?: null, 'status' => 'NEW', 'received_at' => now()]);
+                [$action, $status, $note, $reply, $task, $pending] = WaCommands::handle($conn, $msg, $phone, $acc ? (int) $acc : null);      // R-G_CORE-52
+                DB::table('wa_inbound')->where('id', $rowId)->update(['action' => $action, 'status' => $status, 'note' => $note ? mb_substr($note, 0, 255) : null, 'fk_id_task' => $task, 'pending_json' => $pending]);
+                if ($reply && $acc) self::queueText((int) $conn->fk_id_ent, (int) $acc, $phone, $reply, $task ? 'tasks' : 'wa_inbound', $task ?: $rowId);
+                if ($action === 'DONE') $closed++;
                 $n++;
             }
         }

@@ -84,11 +84,13 @@ class TaskScore
 
     public static function rework(int $taskId, object $u, string $reason): array
     {
-        if (mb_strlen(trim($reason)) < 3) throw new \InvalidArgumentException('Say what needs to be redone.');
         $t = DB::table('tasks')->where('id', $taskId)->first() ?? throw new \InvalidArgumentException('Task not found.');
+        if ($t->status !== 'DONE') throw new \InvalidArgumentException('Refused: only a DONE task can be sent back.');
         if ($why = self::refusal($t, $u)) throw new \InvalidArgumentException(str_replace('approve', 'send back', $why));
+        if (mb_strlen(trim($reason)) < 3) throw new \InvalidArgumentException('Refused: say what needs to be redone.');
         DB::table('tasks')->where('id', $taskId)->update(['status' => 'REWORK', 'rework_count' => (int) $t->rework_count + 1, 'done_at' => null, 'last_update_at' => now()]);
         DB::table('task_history')->insert(['task_id' => $taskId, 'at' => now(), 'user_id' => $u->id, 'field' => 'status', 'old_value' => 'DONE', 'new_value' => 'REWORK', 'reason' => trim($reason)]);
+        DB::table('task_comments')->insert(['task_id' => $taskId, 'at' => now(), 'user_id' => $u->id, 'text' => 'REWORK: ' . trim($reason), 'via' => 'APP']);      // R-G_CORE-9
         $ref = 'T-' . str_pad((string) $taskId, 4, '0', STR_PAD_LEFT);
         if ($t->owner_user_id) AlertRules::send('N8', (int) $t->owner_user_id, ['first_name' => self::first((int) $t->owner_user_id), 'task_ref' => $ref, 'title' => $t->title, 'reason' => trim($reason), 'link' => self::link()], $taskId, "N8:$taskId:" . ((int) $t->rework_count + 1));
         return ['message' => "$ref sent back for rework."];

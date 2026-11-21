@@ -34,6 +34,25 @@ class WhatsAppCloud extends Adapter
         return (string) ($j['messages'][0]['id'] ?? throw new ApiError('WhatsApp took the message but gave no id.'));
     }
 
+    /** A free-text reply (only inside the 24-hour window after the person wrote to us). */
+    public function sendText(string $phone, string $text): string
+    {
+        $body = ['messaging_product' => 'whatsapp', 'to' => preg_replace('/\D/', '', $phone), 'type' => 'text', 'text' => ['body' => mb_substr($text, 0, 4000)]];
+        $j = Api::ok($this->call('POST', $this->url('/messages'), ['headers' => ['Authorization' => 'Bearer ' . $this->s['access_token']], 'json' => $body]), 'WhatsApp reply');
+        return (string) ($j['messages'][0]['id'] ?? throw new ApiError('WhatsApp took the message but gave no id.'));
+    }
+
+    /** Download a media file the person sent: [bytes, mime, size]. GET /{media id} → url, then GET url with the token. */
+    public function media(string $mediaId): array
+    {
+        $this->need('access_token');
+        $meta = Api::ok($this->call('GET', 'https://graph.facebook.com/' . ($this->cfg['version'] ?? 'v21.0') . '/' . rawurlencode($mediaId), ['headers' => ['Authorization' => 'Bearer ' . $this->s['access_token']]]), 'WhatsApp media');
+        $url = (string) ($meta['url'] ?? throw new ApiError('WhatsApp gave no link for the media.'));
+        $res = $this->call('GET', $url, ['headers' => ['Authorization' => 'Bearer ' . $this->s['access_token']]]);
+        if (! $res->successful()) throw new ApiError('The media could not be downloaded (' . $res->status() . ').');
+        return [$res->body(), (string) ($meta['mime_type'] ?? $res->header('Content-Type')), (int) ($meta['file_size'] ?? strlen($res->body()))];
+    }
+
     public static function signatureOk(string $raw, ?string $header, string $appSecret): bool
     {
         return $header !== null && $appSecret !== '' && hash_equals('sha256=' . hash_hmac('sha256', $raw, $appSecret), $header);

@@ -106,4 +106,5 @@ How to work each step: build → test → change the verdict lines in `audit/ver
 | 7e-47 | My Partner Account R-FIN-19 BUILT (PartnerAccount: as-of vs compare, return %, stock share, profit by product, never-shows strip, Owner view-as audited, Reinvest, notify switches) | done | 510/1433 | 401 tests |
 | 7e-48 | Task owner order + priority R-G_CORE-94 BUILT (TaskOwner: record user → cycle → shop → category default → role fewest open, absence cover, "no ROLE set"; ICC_RED/money URGENT; old roles mapped; why-owner on Tasks) | done | 513/1433 | 402 tests |
 | 7e-49 | Marketplace field builder R-A_SALES-67 BUILT (MarketplaceFields: slug name fixed on edit, 9 types, options → JSON, soft delete keeps values, product values per tab, export columns) | done | 516/1433 | 403 tests |
-| 7e-50 | NEXT → recount; 3-line closers (R-H-49 inbound shipment …); rest of Sourcing 39 / 28 | todo | | |
+| 7e-50 | WhatsApp inbound commands R-G_CORE-52 BUILT, with the task state table R-G_CORE-1, Done gate R-G_CORE-5 and rework texts R-G_CORE-9 (TaskFlow, WaCommands: ACK/START/DONE/STUCK/APPROVE/REWORK, media proof, OK/NO approvals + capital calls, numbered question, free-text replies) | done | 523/1433 | 406 tests |
+| 7e-51 | NEXT → recount; 4-line closers R-FIN-74 (profit views) / R-FIN-70 if honest; 3-line R-H-49 inbound shipment …; rest of Sourcing 39 / 28 | todo | | |

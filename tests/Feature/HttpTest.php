@@ -147,6 +147,9 @@ class HttpTest extends TestCase
         $this->assertSame(1, $d['counts']['late']);
         $this->postJson("/api/tasks/$rule/status", ['status' => 'DONE'])->assertStatus(422);
         $this->postJson("/api/tasks/$manual/status", ['status' => 'STUCK'])->assertStatus(422);
+        $this->postJson("/api/tasks/$manual/status", ['status' => 'DONE'])->assertStatus(422)->assertJsonPath('message', 'Refused: a TODO task cannot be marked done - start it first.');      // R-G_CORE-1
+        $this->postJson("/api/tasks/$manual/status", ['status' => 'DOING'])->assertOk();
+        DB::table('task_evidence')->insert(['task_id' => $manual, 'type' => 'PHOTO', 'uploaded_by' => $va->id, 'via' => 'APP', 'created_at' => now()]);
         $this->postJson("/api/tasks/$manual/status", ['status' => 'DONE'])->assertOk();
         $this->assertSame('DONE', DB::table('tasks')->where('id', $manual)->value('status'));
         $other = $this->makeUser('VA');

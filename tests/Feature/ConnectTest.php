@@ -203,7 +203,7 @@ class ConnectTest extends TestCase
         $this->get('/wa/inbound?hub_mode=subscribe&hub_verify_token=wrong&hub_challenge=42')->assertStatus(403);
         $acc = DB::table('t_account')->insertGetId(RecordService::fillNotNull('t_account', ['fk_id_ent' => 1, 'account_code' => 'V' . random_int(100, 999), 'first_name' => 'Vee', 'sur_name' => 'A', 'f_active' => 1, 'whatsapp_number' => '+92 300 1234567']));
         $va = $this->makeUser('VA'); DB::table('t_users')->where('id', $va->id)->update(['fk_id_account' => $acc]);
-        $task = DB::table('tasks')->insertGetId(RecordService::fillNotNull('tasks', ['fk_id_ent' => 1, 'title' => 'Photograph the shelf', 'owner_user_id' => $va->id, 'status' => 'TODO', 'source' => 'MANUAL', 'priority' => 'NORMAL', 'created_at' => now()]));
+        $task = DB::table('tasks')->insertGetId(RecordService::fillNotNull('tasks', ['fk_id_ent' => 1, 'title' => 'Photograph the shelf', 'owner_user_id' => $va->id, 'status' => 'TODO', 'source' => 'MANUAL', 'priority' => 'NORMAL', 'evidence_required' => 0, 'created_at' => now()]));
         DB::table('wa_outbound')->insert(['fk_id_ent' => 1, 'fk_id_account' => $acc, 'phone' => '923001234567', 'template_code' => 'TASK_NEW', 'body' => 'x', 'link_table' => 'tasks', 'link_id' => $task, 'status' => 'SENT', 'provider_msg_id' => 'wamid.OUT1']);
         $body = json_encode(['entry' => [['changes' => [['value' => ['messages' => [['from' => '923001234567', 'id' => 'wamid.IN1', 'type' => 'text', 'text' => ['body' => 'DONE'], 'context' => ['id' => 'wamid.OUT1']]],
             'statuses' => [['id' => 'wamid.OUT1', 'status' => 'read']]]]]]]]);
@@ -212,7 +212,7 @@ class ConnectTest extends TestCase
         $this->call('POST', '/wa/inbound', [], [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_X_HUB_SIGNATURE_256' => 'sha256=' . hash_hmac('sha256', $body, 'appsec')], $body)->assertOk()->assertJsonPath('tasks_closed', 1);
         $this->assertSame('DONE', DB::table('tasks')->where('id', $task)->value('status'));
         $this->assertSame('READ', DB::table('wa_outbound')->where('provider_msg_id', 'wamid.OUT1')->value('status'));
-        $this->assertSame(['HANDLED', $acc], [DB::table('wa_inbound')->value('status'), (int) DB::table('wa_inbound')->value('fk_id_account')]);
+        $this->assertSame(['ACTED', $acc], [DB::table('wa_inbound')->value('status'), (int) DB::table('wa_inbound')->value('fk_id_account')]);
         // the same message again is stored once
         $this->call('POST', '/wa/inbound', [], [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_X_HUB_SIGNATURE_256' => 'sha256=' . hash_hmac('sha256', $body, 'appsec')], $body)->assertOk()->assertJsonPath('messages', 0);
     }
