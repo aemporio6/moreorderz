@@ -42,12 +42,13 @@ class TaskCreate
     }
 
     /** What the form needs: categories (SLA), owners with their load (least loaded first), modules, priorities. */
-    public static function form(int $ent): array
+    public static function form(int $ent, ?object $u = null): array
     {
         $owners = DB::table('t_users')->where('f_active', 1)->where(fn ($w) => $w->whereNull('fk_id_ent')->orWhere('fk_id_ent', 0)->orWhere('fk_id_ent', $ent))->orderBy('display_name')->get(['id', 'display_name'])
             ->map(fn ($u) => ['id' => (int) $u->id, 'name' => $u->display_name, 'absent' => (bool) TaskOwner::absent((int) $u->id)] + self::load((int) $u->id))->sortBy([['open', 'asc'], ['name', 'asc']])->values()->all();
         return ['categories' => DB::table('task_categories')->where('is_active', 1)->orderBy('sort')->orderBy('name')->get(['id', 'name', 'default_due_days', 'default_owner_user_id']),
             'owners' => $owners, 'priorities' => self::PRIORITIES, 'today' => date('Y-m-d'),
+            'proof_default' => Choices::get('TASK_PROOF_DEFAULT', $ent) === '1', 'proof_off' => $u ? Choices::has('TASK_PROOF_OFF_ROLES', $ent, $u->role_code ?? null) : false,
             'modules' => DB::table('sys_field_options')->where('list_code', 'LINK_MODULE')->where('f_active', 1)->orderBy('sort')->get(['value', 'label'])];
     }
 
@@ -111,10 +112,11 @@ class TaskCreate
         if ($parent && ! $mod && $parent->linked_module) { $mod = $parent->linked_module; $rec = $parent->linked_record_id ? (int) $parent->linked_record_id : null; }
 
         // R-G_CORE-6: proof is ON by default; only a boss switches it off (with a reason); amount and "confidential" are a Partner's – a value from anyone else refuses the whole save
-        $boss = in_array($u->role_code ?? '', TaskScore::BOSS, true); $system = ! empty($d['system']);
-        $evidence = array_key_exists('evidence', $d) && $d['evidence'] !== null && $d['evidence'] !== '' ? (bool) $d['evidence'] : true;
-        if (! $evidence && ! $system && ! $boss) throw new \InvalidArgumentException('Refused: only a Partner or Manager may switch "evidence required" off.');
-        if (! $evidence && ! $system && trim((string) ($d['evidence_reason'] ?? '')) === '') throw new \InvalidArgumentException('Refused: give a reason for switching evidence off.');
+        $boss = Choices::has('TASK_PROOF_OFF_ROLES', $ent, $u->role_code ?? null); $system = ! empty($d['system']);      /* Settings › Choices: who may switch proof off, proof by default */
+        $evidence = array_key_exists('evidence', $d) && $d['evidence'] !== null && $d['evidence'] !== '' ? (bool) $d['evidence'] : Choices::get('TASK_PROOF_DEFAULT', $ent) === '1';
+        $defOn = Choices::get('TASK_PROOF_DEFAULT', $ent) === '1';      // switching proof OFF against the company default needs the right and a reason
+        if (! $evidence && ! $system && $defOn && ! $boss) throw new \InvalidArgumentException('Refused: only a Partner or Manager may switch "evidence required" off.');
+        if (! $evidence && ! $system && $defOn && trim((string) ($d['evidence_reason'] ?? '')) === '') throw new \InvalidArgumentException('Refused: give a reason for switching evidence off.');
         $partner = in_array($u->role_code ?? '', ['OWNER', 'PARTNER'], true);
         if (isset($d['amount']) && $d['amount'] !== '' && $d['amount'] !== null && ! $partner && ! $system) throw new \InvalidArgumentException('Refused: only a Partner may enter an amount.');
         if (! empty($d['confidential']) && ! $partner && ! $system) throw new \InvalidArgumentException('Refused: only a Partner may mark a task confidential.');
@@ -136,7 +138,7 @@ class TaskCreate
                 'repeat_day_of_month' => (int) ($d['repeat_day_of_month'] ?? 0) ?: null, 'repeat_until' => ! empty($d['repeat_until']) ? $d['repeat_until'] : null,
                 'amount_gbp' => isset($d['amount']) && $d['amount'] !== '' && $d['amount'] !== null ? round((float) $d['amount'], 2) : null, 'is_confidential' => ! empty($d['confidential']) ? 1 : 0, 'last_update_at' => now()]));
             if (! $evidence) DB::table('task_history')->insert(['task_id' => $id, 'at' => now(), 'user_id' => (int) $u->id, 'field' => 'evidence_required', 'old_value' => '1', 'new_value' => '0',
-                'reason' => $system ? 'set by System' : 'switched off at create by ' . ($u->role_code ?? '') . ': ' . mb_substr(trim((string) $d['evidence_reason']), 0, 200)]);
+                'reason' => $system ? 'set by System' : (trim((string) ($d['evidence_reason'] ?? '')) === '' ? 'proof off by default (Settings › Choices)' : 'switched off at create by ' . ($u->role_code ?? '') . ': ' . mb_substr(trim((string) $d['evidence_reason']), 0, 200))]);
             foreach (array_values(array_filter(array_map('trim', preg_split('/\R/', (string) ($d['checklist'] ?? ''))))) as $n => $line)
                 DB::table('task_checklist')->insert(['task_id' => $id, 'text' => mb_substr($line, 0, 255), 'sort' => $n + 1, 'is_done' => 0]);
             DB::table('task_history')->insert(['task_id' => $id, 'at' => now(), 'user_id' => (int) $u->id, 'field' => 'status', 'old_value' => null, 'new_value' => 'TODO', 'reason' => 'Created by hand']);

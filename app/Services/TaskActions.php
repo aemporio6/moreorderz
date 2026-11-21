@@ -15,6 +15,7 @@ class TaskActions
 
     private static function task(int $id): object { return DB::table('tasks')->where('id', $id)->first() ?? throw new \InvalidArgumentException('Task not found.'); }
     private static function boss(object $u): bool { return in_array($u->role_code, TaskScore::BOSS, true); }
+    private static function proofOffRight(object $u): bool { return Choices::has('TASK_PROOF_OFF_ROLES', (int) (Context::ent() ?: ($u->fk_id_ent ?? 0)) ?: null, $u->role_code ?? null); }      // Settings › Choices
     private static function partner(object $u): bool { return in_array($u->role_code, ['OWNER', 'PARTNER'], true); }
     private static function name(int $id): string { return (string) (DB::table('t_users')->where('id', $id)->value('display_name') ?: '#' . $id); }
     private static function first(int $id): string { $n = self::name($id); return strtok($n, ' ') ?: $n; }
@@ -326,7 +327,7 @@ class TaskActions
     public static function proofOff(int $id, object $u, string $reason): string
     {
         $t = self::task($id); self::open($t);
-        if (! self::boss($u)) throw new \InvalidArgumentException('Refused: only a Partner or Manager may switch "evidence required" off.');
+        if (! self::proofOffRight($u)) throw new \InvalidArgumentException('Refused: only a Partner or Manager may switch "evidence required" off.');
         if (trim($reason) === '') throw new \InvalidArgumentException('Refused: give a reason for switching evidence off.');
         if (! (int) $t->evidence_required) throw new \InvalidArgumentException('Refused: proof is already off.');
         DB::table('tasks')->where('id', $id)->update(['evidence_required' => 0, 'evidence_waived_by' => $u->id, 'evidence_waived_at' => now(), 'last_update_at' => now()]);
@@ -407,7 +408,7 @@ class TaskActions
         $repeat = TaskRepeat::line($t);      // R-G_CORE-26 "weekly · Mon · next 2026-11-16" / "last one"
         $ev = TaskEvidence::gallery($id);      // R-G_CORE-29 gallery
         $hist = DB::table('task_history as h')->leftJoin('t_users as x', 'x.id', '=', 'h.user_id')->where('h.task_id', $id)->orderByDesc('h.id')->limit(200)->get(['h.at', 'h.field', 'h.old_value', 'h.new_value', 'h.reason', 'x.display_name as by']);
-        $can = $p['can'] + ['proof_off' => self::boss($u) && in_array($t->status, TaskFlow::OPEN, true) && (int) $t->evidence_required, 'proof_on' => self::boss($u) && in_array($t->status, TaskFlow::OPEN, true) && ! (int) $t->evidence_required,
+        $can = $p['can'] + ['proof_off' => self::proofOffRight($u) && in_array($t->status, TaskFlow::OPEN, true) && (int) $t->evidence_required, 'proof_on' => self::boss($u) && in_array($t->status, TaskFlow::OPEN, true) && ! (int) $t->evidence_required,
             'work' => in_array($t->status, TaskFlow::OPEN, true) && self::contributor($t, $u)];
         return ['task' => $row, 'panel' => $p, 'can' => $can, 'banners' => array_map(fn ($b) => ['code' => $b[0], 'text' => $b[1]], $banners),
             'facts' => array_filter(['Reference' => $t->reference_id, 'Assigned by (approver)' => $name($t->assigned_by_user_id) ?: 'System', 'Helpers' => implode(', ', $row['helpers']) ?: null, 'Link' => $row['linked'],

@@ -1892,7 +1892,7 @@
     // R-G_CORE-34 task CSV import: check (changes nothing) → import only when every row is OK → undo by batch
     if ($('#tkImport')) $('#tkImport').onclick = () => {
       const m = modal('Import tasks from CSV', 'Columns of the template; finished work is not imported; at most 1,000 rows.', `<div class="form"><a class="btn sm" href="/api/task-import/template">Download the template</a>
-        <label style="margin-top:10px">CSV file<input type="file" id="tiF" accept=".csv"></label><label class="chk" style="margin-top:6px"><input type="checkbox" id="tiN"> Tell each owner on WhatsApp now</label><div id="tiR" class="small" style="margin-top:10px"></div></div>`,
+        <label style="margin-top:10px">CSV file<input type="file" id="tiF" accept=".csv"></label><label class="chk" style="margin-top:6px"><input type="checkbox" id="tiN" ${d.import_tell ? 'checked' : ''}> Tell each owner on WhatsApp now</label><div id="tiR" class="small" style="margin-top:10px"></div></div>`,
         '<button class="btn" id="tiC">Check file (changes nothing)</button><button class="btn primary" id="tiI" disabled>Import</button>', false);
       const send = async apply => { const f = $('#tiF', m.ov).files[0]; if (!f) return toast('Choose the CSV file first.', 'err'); const fd = new FormData(); fd.append('file', f); fd.append('apply', apply ? 1 : 0); fd.append('notify', $('#tiN', m.ov).checked ? 1 : 0);
         try { const r = await apiForm('task-import', fd);
@@ -4297,7 +4297,7 @@
       <label>Repeats<select id="tnRep"><option value="NONE">Does not repeat</option><option value="DAILY">Every day</option><option value="WEEKLY">Every week</option><option value="MONTHLY">Every month</option><option value="EVERY_N_DAYS">Every N days</option></select></label>
       <label id="tnRepX" style="display:none"><span id="tnRepL">N</span><input id="tnRepV" type="number" min="1"></label>
       <label id="tnRepU" style="display:none">Repeat until (optional)<input id="tnRepTo" type="date"></label>
-      <label><input type="checkbox" id="tnEv" checked ${['OWNER', 'PARTNER', 'MANAGER'].includes(S.boot.user.role) ? '' : 'disabled title="Only a Partner or Manager may switch proof off"'}> Proof required</label>
+      <label><input type="checkbox" id="tnEv" ${f.proof_default !== false ? 'checked' : ''} ${f.proof_off || f.proof_default === false ? '' : 'disabled title="Your role may not switch proof off (Settings › Choices)"'}> Proof required</label>
       <label id="tnEvRw" style="display:none">Why no proof? *<input id="tnEvR" placeholder="Reason (kept in the history)"></label>
       ${['OWNER', 'PARTNER'].includes(S.boot.user.role) ? `<label>Amount £ (Partner only)<input id="tnAmt" type="number" step="0.01"></label><label><input type="checkbox" id="tnConf"> Confidential (owner + Partners only)</label>` : ''}
       <div class="small" id="tnErr" style="grid-column:1/-1;color:var(--err)"></div></div>`, '<button class="btn" id="tnNo">Cancel</button><button class="btn primary" id="tnOk">Create task</button>', false);
@@ -4306,7 +4306,7 @@
     $m('#tnNo').onclick = m.close;
     $m('#tnRep').onchange = () => { const v = $m('#tnRep').value; $m('#tnRepX').style.display = ['WEEKLY', 'MONTHLY', 'EVERY_N_DAYS'].includes(v) ? '' : 'none'; $m('#tnRepU').style.display = v === 'NONE' ? 'none' : '';
       $m('#tnRepL').textContent = v === 'WEEKLY' ? 'Weekday 1 = Mon … 7 = Sun (empty = the due date\'s day)' : v === 'MONTHLY' ? 'Day of the month 1–31 (31 = last day)' : 'Every how many days (1–365)'; };      // R-G_CORE-26
-    $m('#tnEv').onchange = () => { $m('#tnEvRw').style.display = $m('#tnEv').checked ? 'none' : ''; };      // R-G_CORE-6 reason to switch proof off
+    $m('#tnEv').onchange = () => { $m('#tnEvRw').style.display = $m('#tnEv').checked || f.proof_default === false ? 'none' : ''; };      // R-G_CORE-6 reason to switch proof off
     $m('#tnCat').onchange = async () => { const c = $m('#tnCat').value; if (!c) return; try { const p = await api('tasks/new/prefill?category=' + c); if (p.due) $m('#tnDue').value = p.due; if (p.owner && !$m('#tnOwner').value) $m('#tnOwner').value = String(p.owner); } catch (e) { $m('#tnErr').textContent = e.message; } };
     const picker = (inp, list, url, onPick) => { let t; inp.oninput = () => { onPick(null); clearTimeout(t); t = setTimeout(async () => { const q = inp.value.trim(); if (q.length < 2 && !/^\d+$/.test(q)) { list.innerHTML = ''; return; }
       try { const r = await api(url() + encodeURIComponent(q)); list.innerHTML = r.rows.length ? r.rows.map(x => `<a href="#" data-pk="${x.id}" style="display:block">${esc(x.label)}</a>`).join('') : '<span class="muted">Nothing found</span>';

@@ -35,3 +35,6 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .at-pick{position:absolute;z-index:20;background:var(--surface);border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.12);max-width:280px;width:100%}
 .at-pick button{display:block;width:100%;text-align:left;padding:7px 10px;border:0;background:none;cursor:pointer;color:inherit}
 .at-pick button:hover{background:rgba(0,0,0,.05)}
+
+/* a long segment row (Tasks: Mine · All · Dashboard · Team · Weekly report) wraps on a phone instead of widening the page */
+@media (max-width: 640px) { .seg { display:flex; flex-wrap:wrap; max-width:100%; } .seg button { flex:1 1 auto; border-bottom:1px solid var(--line); } }

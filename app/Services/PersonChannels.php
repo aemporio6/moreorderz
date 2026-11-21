@@ -64,8 +64,9 @@ class PersonChannels
         $e = []; $chg = fn (string $f) => array_key_exists($f, $data) && (string) ($data[$f] ?? '') !== (string) ($old[$f] ?? '');
         $changed = array_values(array_filter(self::FIELDS, $chg)); if (! $changed) return [];
         $u = Auth::user(); $role = $u->role_code ?? Context::role(); $self = $u && $id && (int) ($u->fk_id_account ?? 0) === $id;
-        $boss = in_array($role, ['OWNER', 'PARTNER', 'MANAGER'], true); $partner = in_array($role, ['OWNER', 'PARTNER'], true);
-        if ($u && ! $boss && ! ($self && ! in_array('weekly_task_limit', $changed, true))) return ['_form' => 'Refused: only a Partner or Manager can edit channels.'];
+        $boss = in_array($role, ['OWNER', 'PARTNER', 'MANAGER'], true); $ent = Context::ent() ?: ($u->fk_id_ent ?? null);
+        $partner = Choices::has('CHANNEL_SWITCH_ROLES', $ent ? (int) $ent : null, $role); $selfOk = Choices::get('CHANNELS_SELF_EDIT', $ent ? (int) $ent : null) === '1';      /* Settings › Choices */
+        if ($u && ! $boss && ! ($self && $selfOk && ! in_array('weekly_task_limit', $changed, true))) return ['_form' => 'Refused: only a Partner or Manager can edit channels.'];
         if ($u && ! $self && ! $partner && (in_array('wa_enabled', $changed, true) || in_array('email_enabled', $changed, true))) return ['wa_enabled' => 'Refused: only a Partner can switch a channel on or off for someone.'];
         if ($chg('whatsapp_number') && trim((string) $data['whatsapp_number']) !== '') {
             $raw = trim((string) $data['whatsapp_number']); $n = preg_replace('/[^\d+]/', '', $raw);

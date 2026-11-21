@@ -117,7 +117,7 @@ class WorkController extends Controller
             'stuck_on' => \App\Services\Guide::STUCK_ON, 'people' => DB::table('t_users')->where('f_active', 1)->where('id', '<>', $u->id)->orderBy('display_name')->get(['id', DB::raw('COALESCE(display_name, login_id) as name')]),
             'snoozes' => in_array($u->role_code, ['OWNER', 'PARTNER', 'MANAGER'], true) ? \App\Services\TaskActions::snoozes((int) Context::ent()) : [], 'bulk' => in_array($u->role_code, \App\Services\TaskScore::BOSS, true) ? \App\Services\TaskBulk::ACTIONS : null, 'can_end_snooze' => in_array($u->role_code, ['OWNER', 'PARTNER'], true),
             'shops' => DB::table('t_branches')->where('fk_id_ent', Context::ent())->where('f_active', 1)->orderBy('shop_name')->get(['id', DB::raw("TRIM(CONCAT_WS(' ', shop_no, shop_name)) as name")]),
-            'boss' => $L::boss($u), 'all_people' => DB::table('t_users')->where('f_active', 1)->orderBy('display_name')->get(['id', DB::raw('COALESCE(display_name, login_id) as name')])];
+            'boss' => $L::boss($u), 'import_tell' => \App\Services\Choices::get('TASK_IMPORT_TELL', (int) Context::ent()) === '1', 'all_people' => DB::table('t_users')->where('f_active', 1)->orderBy('display_name')->get(['id', DB::raw('COALESCE(display_name, login_id) as name')])];
     }
 
     /** R-G_CORE-38 dashboard, R-G_CORE-39 needs attention, R-G_CORE-37 export. */
@@ -139,7 +139,7 @@ class WorkController extends Controller
     }
 
     /** New task form (R-G_CORE-2): SLA prefill, pick-only record link, dependency by name, absence cover, weekly-limit warning. */
-    public function taskForm(Request $r) { Rights::check('ADD', 'task'); return \App\Services\TaskCreate::form((int) Context::ent()); }
+    public function taskForm(Request $r) { Rights::check('ADD', 'task'); return \App\Services\TaskCreate::form((int) Context::ent(), $r->user()); }
     public function taskPrefill(Request $r) { Rights::check('ADD', 'task'); try { return \App\Services\TaskCreate::prefill($r->integer('category')); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
     public function taskRecords(Request $r) { Rights::check('ADD', 'task'); try { return ['rows' => \App\Services\TaskCreate::records((int) Context::ent(), (string) $r->query('module', ''), (string) $r->query('q', ''))]; } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
     public function taskFind(Request $r) { Rights::check('ADD', 'task'); return ['rows' => \App\Services\TaskCreate::tasks((int) Context::ent(), (string) $r->query('q', ''))]; }

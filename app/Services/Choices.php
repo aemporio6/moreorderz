@@ -90,11 +90,19 @@ class Choices
         'LC_AUTO_RERUN_MINUTES' => ['Landed cost: after new freight, customs or GRN rows the PROVISIONAL landed cost is worked out again …', 'Recommended: 5 minutes after the last change – several rows typed one after another give one new version. A FINAL landed cost never changes by itself.', '5', [
             '0' => ['at the next worker run', 'As soon as the worker sees the change.'], '5' => ['5 minutes after the last change', 'Suggested.'], '15' => ['15 minutes after the last change', ''],
             '60' => ['1 hour after the last change', ''], 'OFF' => ['never by itself', 'Only when someone presses Calculate.']]],
+        'TASK_PROOF_DEFAULT' => ['New task: is proof (a screenshot, photo, file, link or reference) needed before Done?', 'Recommended: Yes – the specification\'s rule; work without proof cannot be checked. The person creating the task can still switch it off (with a reason) when his role may.', '1', [
+            '1' => ['Yes, proof is needed by default', 'Suggested.'], '0' => ['No, proof is off by default', 'Proof is asked only when the person ticks it.']]],
+        'TASK_PROOF_OFF_ROLES' => ['Tasks: who may switch "proof required" off (with a reason)?', 'Recommended: Owner, Partner and Manager – the people who approve the work.', 'OWNER,PARTNER,MANAGER', []],
+        'TASK_IMPORT_TELL' => ['Task CSV import: "Tell each owner on WhatsApp now" is …', 'Recommended: not ticked – a big import should not send many messages at once; the tasks still show in each person\'s morning digest.', '0', [
+            '0' => ['not ticked', 'Suggested.'], '1' => ['ticked', 'Every imported task sends its "new task" message.']]],
+        'CHANNELS_SELF_EDIT' => ['My alerts: may a person change his own quiet hours, time zone, digest time and WhatsApp / e-mail switches?', 'Recommended: Yes – each person knows when he sleeps and where he is; the weekly task limit stays with Partners and Managers.', '1', [
+            '1' => ['Yes', 'Suggested.'], '0' => ['No, only Partners and Managers', 'A person sees his own settings but cannot change them.']]],
+        'CHANNEL_SWITCH_ROLES' => ['Who may switch WhatsApp or e-mail alerts off for somebody else?', 'Recommended: Owner and Partner – a switched-off person misses task alerts, so it is a Partner\'s decision.', 'OWNER,PARTNER', []],
         'HIDDEN_MARGIN_ROLES' => ['Owner Home › Invoicing / Profit: who sees the row "Hidden margin"?', 'Recommended: Owner only – a partner\'s share is worked out on the net profit, so the margin kept by the company stays with the Owner.', 'OWNER', []],
     ];
 
     /** Multiple choices: key → where the options come from (party roles = roles of people, login roles = roles of logins). Value = comma list or ALL. */
-    public const MULTI = ['DIRECTOR_ROLES' => 'party_roles', 'HIDDEN_MARGIN_ROLES' => 'login_roles', 'FBA_LOCATION_KINDS' => 'list:LOCATION_KIND'];
+    public const MULTI = ['DIRECTOR_ROLES' => 'party_roles', 'HIDDEN_MARGIN_ROLES' => 'login_roles', 'FBA_LOCATION_KINDS' => 'list:LOCATION_KIND', 'TASK_PROOF_OFF_ROLES' => 'login_roles', 'CHANNEL_SWITCH_ROLES' => 'login_roles'];
 
     /** [code => [label, effect]] of a multiple choice (All first). */
     public static function options(string $key): array
