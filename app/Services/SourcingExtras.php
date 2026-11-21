@@ -115,6 +115,7 @@ class SourcingExtras
      */
     public static function saveQc(int $ent, array $d): array
     {
+        CycleAlerts::touched();      // sourcing alerts run again after this save (R-B_SOURCING-26)
         self::can(['OWNER', 'MANAGER', 'SOURCING', 'WAREHOUSE']);
         return DB::transaction(function () use ($ent, $d) {
             $po = DB::table('t_src_po')->where('id', $d['po'] ?? 0)->where('fk_id_ent', $ent)->first() ?? throw new \InvalidArgumentException('Choose the purchase order that is checked.');
@@ -143,6 +144,7 @@ class SourcingExtras
 
     public static function qcAction(int $ent, int $id, string $action): void
     {
+        CycleAlerts::touched();      // sourcing alerts run again after this save (R-B_SOURCING-26)
         self::can(['OWNER', 'MANAGER', 'SOURCING']);
         $q = DB::table('t_src_qc')->where('id', $id)->where('fk_id_ent', $ent)->first() ?? throw new \InvalidArgumentException('QC not found.');
         if (trim($action) === '') throw new \InvalidArgumentException('Write what is done about the failed check.');
@@ -163,6 +165,7 @@ class SourcingExtras
 
     public static function saveCustoms(int $ent, array $d): int
     {
+        CycleAlerts::touched();      // sourcing alerts run again after this save (R-B_SOURCING-26)
         self::can(['OWNER', 'MANAGER', 'SOURCING', 'FINANCE']);
         $s = DB::table('t_src_shipments')->where('id', $d['shipment'] ?? 0)->where('fk_id_ent', $ent)->first() ?? throw new \InvalidArgumentException('Choose the shipment that is cleared.');
         $val = round((float) ($d['customs_value'] ?? 0), 4); $ratePct = (float) ($d['duty_rate'] ?? 0); if ($val < 0 || $ratePct < 0 || $ratePct > 100) throw new \InvalidArgumentException('The customs value cannot be negative and the duty rate is between 0 and 100 %.');

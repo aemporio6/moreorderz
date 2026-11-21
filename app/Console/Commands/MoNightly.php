@@ -20,8 +20,7 @@ class MoNightly extends Command
             $r = StockService::selfCheck((int) $ent);
             $low = StockService::lowStockTasks((int) $ent);
             \App\Services\BuyingService::staleResearch((int) $ent);
-            \App\Services\BuyingService::payDueTasks((int) $ent);
-            \App\Services\BuyingService::shipmentTasks((int) $ent);
+            \App\Services\CycleAlerts::sweep((int) $ent);      // the sourcing alert registry (R-B_SOURCING-26), also every 15 minutes
             \App\Services\MoneyService::unmatchedTasks((int) $ent);
             \App\Services\MoneyService::staleTasks((int) $ent);
             \App\Services\CloseService::openTasks((int) $ent);

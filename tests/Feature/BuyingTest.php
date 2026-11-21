@@ -94,7 +94,7 @@ class BuyingTest extends TestCase
         $this->assertSame(0.80, $c['fx_rate']);
         $terms = DB::table('t_src_payment_terms')->where('fk_id_po', $po)->orderBy('term_no')->get();
         $this->assertSame([1500.0, 3500.0], [(float) $terms[0]->planned_amount, (float) $terms[1]->planned_amount]);    // 30 / 70
-        $this->assertTrue(TaskEngine::isOpen('SRC_PAY_DUE', [$terms[0]->id]), 'deposit is due at once');
+        $this->assertTrue(TaskEngine::isOpen('SRC_PAY_DUE', \App\Services\CycleAlerts::key('SRC_PAY_DUE', (int) $terms[0]->id)), 'deposit is due at once');
         try { Buy::confirmPo($po); $this->fail('confirmed twice'); } catch (\RuntimeException $e) { $this->assertStringContainsString('only a draft', $e->getMessage()); }
 
         // deposit 1,500 USD on 1 Aug at 0.80 = 1,200.00 GBP
@@ -103,7 +103,7 @@ class BuyingTest extends TestCase
         $sup = (int) DB::table('t_src_po')->where('id', $po)->value('fk_id_supplier');
         $this->assertSame(1200.00, Ledger::balance(1, '1300', 'PARTY', $sup));
         $this->assertSame(-1200.00, Ledger::balance(1, '1000', 'BANK', $this->bank));
-        $this->assertFalse(TaskEngine::isOpen('SRC_PAY_DUE', [$terms[0]->id]), 'paid term closes its task');
+        $this->assertFalse(TaskEngine::isOpen('SRC_PAY_DUE', \App\Services\CycleAlerts::key('SRC_PAY_DUE', (int) $terms[0]->id)), 'paid term closes its task');
 
         $ship = Buy::createShipment(['po' => $po, 'eta' => '2026-08-18']);
         try { Buy::createShipment(['po' => $po, 'eta' => '2026-08-19']); $this->fail('shipped twice'); } catch (\RuntimeException $e) { $this->assertStringContainsString('already on a shipment', $e->getMessage()); }
@@ -123,7 +123,7 @@ class BuyingTest extends TestCase
         $this->assertSame(1200.00, $res['advance_used']);
         $this->assertSame(0.00, Ledger::balance(1, '1300', 'PARTY', $sup), 'the deposit is used against the goods');
         $this->assertSame(-2760.00, Ledger::balance(1, '2000', 'PARTY', $sup), 'still owed for the goods: 3,960 − 1,200');
-        $this->assertTrue(TaskEngine::isOpen('SRC_GRN_SHORT', [$grn]));
+        $this->assertTrue(TaskEngine::isOpen('SRC_GRN_SHORT', \App\Services\CycleAlerts::key('SRC_GRN_SHORT', (int) $grn)));
         $this->assertSame(1, (int) DB::table('t_product_vendors')->where('id', $go['product'])->value('f_active'), 'the draft product is live once it has stock');
         $this->assertSame('RECEIVED', DB::table('t_src_po')->where('id', $po)->value('status'), '990 received + 10 missing = 1,000 ordered: every unit is accounted for; the 10 missing live on in the claim task');
         try { Buy::postGrn($grn); $this->fail('posted twice'); } catch (\RuntimeException $e) { $this->assertStringContainsString('already posted', $e->getMessage()); }
@@ -140,7 +140,7 @@ class BuyingTest extends TestCase
         $this->assertSame(693.00, $lc['to_stock']);
         $lot = DB::table('fin_lots')->where('po_id', $po)->first();
         $this->assertSame(['FINAL', 4.7], [$lot->landed_status, (float) $lot->unit_cost_gbp]);
-        $this->assertFalse(TaskEngine::isOpen('SRC_LOT_NO_COST', [$lot->id]));
+        $this->assertFalse(TaskEngine::isOpen('SRC_LOT_NO_COST', \App\Services\CycleAlerts::key('SRC_LOT_NO_COST', (int) $lot->id)));
         $this->assertSame(4653.00, Stock::value(1));                    // 990 × 4.70
         $this->assertSame(Stock::value(1), Ledger::balance(1, '1200'), 'stock value = stock account, to the penny');
         $this->assertTrue(Ledger::trialBalance(1)['balanced']);
@@ -148,7 +148,7 @@ class BuyingTest extends TestCase
 
         $w = Buy::cycle($go['cycle']);
         $this->assertSame(['done', 'done', 'done', 'done', 'done', 'done'], array_column($w['steps'], 'state'));
-        $this->assertTrue(TaskEngine::isOpen('SRC_GRN_SHORT', [$grn]), 'the claim for the 10 missing and 10 damaged units is still open');
+        $this->assertTrue(TaskEngine::isOpen('SRC_GRN_SHORT', \App\Services\CycleAlerts::key('SRC_GRN_SHORT', (int) $grn)), 'the claim for the 10 missing and 10 damaged units is still open');
         $this->assertSame('Silicone dog bowl', $w['research']->title);
         $d = Buy::dashboard(1);
         $this->assertSame([0, 0, 0], [$d['po_draft'], $d['in_transit'], $d['grn_to_post']]);

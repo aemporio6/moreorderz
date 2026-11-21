@@ -116,6 +116,22 @@ class BuyingController extends Controller
     }
 
     // ---- cycle, RFQ, PO ----
+    public function cycleOverview(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\CycleAlerts::overview((int) Context::ent(), $id, $r->user())); }
+    public function cycleWhatsapp(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\CycleAlerts::whatsapp((int) Context::ent(), $id, (string) $r->input('key'), trim((string) $r->input('text')))); }
+    public function grnClaim(Request $r, int $id) { $this->can($r, 'buying.BUY'); return $this->run(fn () => \App\Services\CycleAlerts::claim((int) Context::ent(), $id, strtoupper((string) $r->input('status')), (string) $r->input('reason'))); }
+    public function docRequirements(Request $r) { $this->can($r, 'buying.SEE'); return ['rows' => DB::table('src_doc_requirements')->where('fk_id_ent', Context::ent())->orderBy('step_key')->orderBy('doc_type')->get(), 'steps' => array_map(fn ($x) => $x[3], \App\Services\CycleAlerts::DOC_STEPS),
+        'types' => DB::table('cat_doc_types')->where('f_active', 1)->orderBy('doc_type_name')->pluck('doc_type_name'), 'can_edit' => in_array(Context::role(), ['OWNER', 'MANAGER'], true)]; }
+    public function docRequirementSave(Request $r)
+    {
+        if (! in_array(Context::role(), ['OWNER', 'MANAGER'], true)) abort(403, 'Only the Owner or a Manager sets the required documents.');
+        return $this->run(function () use ($r) {
+            $k = (string) $r->input('step_key'); $t = trim((string) $r->input('doc_type')); if (! isset(\App\Services\CycleAlerts::DOC_STEPS[$k])) throw new \InvalidArgumentException('Choose the step.'); if ($t === '') throw new \InvalidArgumentException('Write the document type.');
+            DB::table('src_doc_requirements')->updateOrInsert(['fk_id_ent' => Context::ent(), 'step_key' => $k, 'doc_type' => mb_substr($t, 0, 100)], ['f_active' => $r->boolean('active', true) ? 1 : 0, 'created_at' => now()]);
+            \App\Services\Audit::log('src_doc_requirements', 0, 'UPDATE', ['step' => $k, 'document' => $t, 'active' => $r->boolean('active', true)]); \App\Services\CycleAlerts::touched();
+            return ['message' => "Required document saved: $t on " . \App\Services\CycleAlerts::DOC_STEPS[$k][3] . '.'];
+        });
+    }
+
     public function cycle(Request $r, int $id)
     {
         $this->can($r, 'buying.SEE');

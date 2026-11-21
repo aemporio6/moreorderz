@@ -168,23 +168,9 @@ class BuyingService
         });
     }
 
-    /** SRC_PAY_DUE: a task per payment term that is due within SRC_PAY_REMIND_DAYS and not fully paid; closes when the term is Paid. */
-    public static function payDueTasks(int $ent): array
-    {
-        $days = (int) Settings::get('SRC_PAY_REMIND_DAYS', $ent, 3);
-        $rows = DB::table('t_src_payment_terms as t')->join('t_src_po as p', 'p.id', '=', 't.fk_id_po')->where('t.fk_id_ent', $ent)->where('t.f_active', 1)->where('t.status', '<>', 'PAID')->where('p.status', '<>', 'CANCELLED')
-            ->where('t.due_date', '<=', now()->addDays($days)->toDateString())->get(['t.id', 't.milestone', 't.remaining_amount', 't.due_date', 'p.po_number', 'p.id as po_id', 'p.exchange_rate']);
-        return TaskEngine::sync('SRC_PAY_DUE', $rows->map(fn ($t) => ['key' => [$t->id], 'title' => "Supplier payment due {$t->due_date}: {$t->milestone} of {$t->po_number}", 'opt' => ['module' => 't_src_po', 'record_id' => $t->po_id,
-            'amount' => round($t->remaining_amount * (float) ($t->exchange_rate ?: 1), 2), 'fix_url' => "#/po/{$t->po_id}"]])->all(), null, $ent);
-    }
+    /** SRC_PAY_DUE: a term not Paid with a planned amount; with a due date the task waits until SRC_PAY_REMIND_DAYS before it (R-B_SOURCING-26 – one detector, CycleAlerts). */
+    public static function payDueTasks(int $ent): array { return CycleAlerts::sweep($ent, ['SRC_PAY_DUE'])['SRC_PAY_DUE']; }
 
-    // ---------------------------------------------------------------- payments
-
-    /**
-     * Pay a supplier against a PO term. $d: term, amount (PO currency), date, bank (fin_bank_accounts id), method?, txn_ref?.
-     * Ledger: supplier advance (1300) up, bank (1000) down, in base currency at the rate of the payment date.
-     */
-    /** Pay now, or – over the limit (setting APPROVAL_LIMIT_PAYMENT, base currency) and not entered by the Owner – ask a second person first. Nothing is booked while it waits. */
     public static function payOrAsk(array $d): array
     {
         $ent = (int) Context::ent();
@@ -200,6 +186,7 @@ class BuyingService
 
     public static function pay(array $d): int
     {
+        CycleAlerts::touched();      // sourcing alerts run again after this save (R-B_SOURCING-26)
         return DB::transaction(function () use ($d) {
             $ent = (int) Context::ent();
             $t = DB::table('t_src_payment_terms')->where('id', $d['term'])->where('fk_id_ent', $ent)->lockForUpdate()->first() ?? throw new \RuntimeException('Payment term not found.');
@@ -221,7 +208,7 @@ class BuyingService
                 ['account' => '1000', 'credit' => $base, 'ref_id' => $bank->id, 'amount_cur' => -$amt],
             ], ['memo' => "Supplier payment {$po->po_number} · {$t->milestone}", 'currency' => $cur, 'fx_rate' => $rate]);
             if (! DB::table('t_src_payment_terms')->where('fk_id_po', $po->id)->where('f_active', 1)->where('status', '<>', 'PAID')->exists()) DB::table('t_src_po')->where('id', $po->id)->update(['f_paid_in_full' => 1]);
-            if ($rem <= $tol) TaskEngine::close('SRC_PAY_DUE', [$t->id], 'Term paid');
+            if ($rem <= $tol) TaskEngine::close('SRC_PAY_DUE', CycleAlerts::key('SRC_PAY_DUE', (int) $t->id), 'Term paid');
             self::applyAdvances($ent, (int) $po->fk_id_supplier, $date);
             Audit::log('t_src_payments', $pid, 'INSERT', ['amount' => $amt, 'currency' => $cur, 'base' => $base], null, $ent);
             EventBus::fire('PAYMENT_POSTED', 't_src_payments', $pid, ['po' => $po->id, 'term' => $t->id, 'base' => $base], $ent);
@@ -245,6 +232,7 @@ class BuyingService
     /** $d: po, eta, etd?, mode?, lines? [{po_line, qty}] (default: everything still to ship). */
     public static function createShipment(array $d): int
     {
+        CycleAlerts::touched();      // sourcing alerts run again after this save (R-B_SOURCING-26)
         return DB::transaction(function () use ($d) {
             $po = self::po((int) $d['po']); $ent = (int) $po->fk_id_ent;
             if (! in_array($po->status, ['CONFIRMED', 'SHIPPED'], true)) throw new \RuntimeException('Confirm the PO before shipping.');
@@ -263,17 +251,9 @@ class BuyingService
         });
     }
 
-    /** SRC_SHIP_ARRIVING / SRC_SHIP_OVERDUE from ETA and arrival. */
-    public static function shipmentTasks(int $ent): array
-    {
-        $soon = now()->addDays((int) Settings::get('SRC_SHIP_ARRIVING_DAYS', $ent, 3))->toDateString(); $today = date('Y-m-d');
-        $open = DB::table('t_src_shipments')->where('fk_id_ent', $ent)->where('f_active', 1)->whereNull('actual_arrival')->whereNotNull('eta')->get(['id', 'shipment_code', 'eta']);
-        $a = TaskEngine::sync('SRC_SHIP_ARRIVING', $open->filter(fn ($s) => $s->eta >= $today && $s->eta <= $soon)->map(fn ($s) => ['key' => [$s->id], 'title' => "Shipment {$s->shipment_code} arrives {$s->eta} – get the warehouse ready", 'opt' => ['module' => 't_src_shipments', 'record_id' => $s->id]])->values()->all(), null, $ent);
-        $o = TaskEngine::sync('SRC_SHIP_OVERDUE', $open->filter(fn ($s) => $s->eta < $today)->map(fn ($s) => ['key' => [$s->id], 'title' => "Shipment {$s->shipment_code} is overdue (ETA {$s->eta}) – chase the forwarder", 'opt' => ['module' => 't_src_shipments', 'record_id' => $s->id]])->values()->all(), null, $ent);
-        return ['arriving' => $a, 'overdue' => $o];
-    }
+    /** SRC_SHIP_ARRIVING / SRC_SHIP_OVERDUE from ETA and arrival (one detector, CycleAlerts). */
+    public static function shipmentTasks(int $ent): array { $r = CycleAlerts::sweep($ent, ['SRC_SHIP_ARRIVING', 'SRC_SHIP_OVERDUE']); return ['arriving' => $r['SRC_SHIP_ARRIVING'], 'overdue' => $r['SRC_SHIP_OVERDUE']]; }
 
-    /** Draft GRN for a shipment. $d: shipment, location, date?, lines [{po_line, received, damaged?, missing?}] (default: everything planned, nothing damaged). */
     private static function grnLoc(int $ent, mixed $id): ?int
     {
         if (! $id) return null;
@@ -283,6 +263,7 @@ class BuyingService
 
     public static function createGrn(array $d): int
     {
+        CycleAlerts::touched();      // sourcing alerts run again after this save (R-B_SOURCING-26)
         return DB::transaction(function () use ($d) {
             $s = DB::table('t_src_shipments')->where('id', $d['shipment'])->where('fk_id_ent', Context::ent())->first() ?? throw new \RuntimeException('Shipment not found.');
             $ent = (int) $s->fk_id_ent; $date = $d['date'] ?? date('Y-m-d');
@@ -310,6 +291,7 @@ class BuyingService
      */
     public static function postGrn(int $grnId): array
     {
+        CycleAlerts::touched();      // sourcing alerts run again after this save (R-B_SOURCING-26)
         return DB::transaction(function () use ($grnId) {
             $g = DB::table('t_src_grn')->where('id', $grnId)->where('fk_id_ent', Context::ent())->lockForUpdate()->first() ?? throw new \RuntimeException('GRN not found.');
             if ($g->posting_status === 'POSTED') throw new \RuntimeException("GRN {$g->grn_number} is already posted. Stock is never received twice.");
@@ -328,14 +310,14 @@ class BuyingService
             $res = StockService::receive($ent, $lines, 'GRN', $grnId, ['lot_source' => 'GRN', 'contra' => '2000', 'contra_ref' => $po->fk_id_supplier]);
             DB::table('t_src_grn')->where('id', $grnId)->update(['posting_status' => 'POSTED', 'status' => 'POSTED', 'approved_by' => (string) Context::userId(), 'approved_at' => date('Y-m-d')]);
             DB::table('t_src_shipments')->where('id', $ship->id)->update(['actual_arrival' => $g->arrival_date ?: $g->grn_date, 'status' => 'ARRIVED']);
-            TaskEngine::close('SRC_SHIP_ARRIVING', [$ship->id], 'Arrived'); TaskEngine::close('SRC_SHIP_OVERDUE', [$ship->id], 'Arrived');
+            TaskEngine::close('SRC_SHIP_ARRIVING', CycleAlerts::key('SRC_SHIP_ARRIVING', (int) $ship->id), 'Arrived'); TaskEngine::close('SRC_SHIP_OVERDUE', CycleAlerts::key('SRC_SHIP_OVERDUE', (int) $ship->id), 'Arrived');
             $allIn = ! DB::table('t_src_po_lines as p')->where('p.fk_id_po', $po->id)->where('p.f_active', 1)
                 ->whereRaw('p.qty_confirmed > (SELECT COALESCE(SUM(l.received_qty + l.missing_qty),0) FROM t_src_grn_lines l JOIN t_src_grn g ON g.id=l.fk_id_grn WHERE l.fk_id_po_line=p.id AND g.posting_status="POSTED")')->exists();
             if ($allIn) DB::table('t_src_po')->where('id', $po->id)->update(['status' => 'RECEIVED']);
             if ($g->missing_units > 0 || $g->damaged_units > 0) {
-                TaskEngine::open('SRC_GRN_SHORT', [$grnId], "GRN {$g->grn_number}: " . (int) $g->missing_units . ' short, ' . (int) $g->damaged_units . ' damaged – claim from the supplier', ['ent' => $ent, 'module' => 't_src_grn', 'record_id' => $grnId]);
+                TaskEngine::open('SRC_GRN_SHORT', CycleAlerts::key('SRC_GRN_SHORT', (int) $grnId), "GRN {$g->grn_number}: " . (int) $g->missing_units . ' short, ' . (int) $g->damaged_units . ' damaged – claim from the supplier', ['ent' => $ent, 'module' => 't_src_grn', 'record_id' => $grnId]);
             }
-            foreach ($res['lots'] as $lot) TaskEngine::open('SRC_LOT_NO_COST', [$lot], 'Lot has only a provisional cost – run the landed cost for ' . $po->po_number, ['ent' => $ent, 'module' => 't_src_po', 'record_id' => $po->id, 'fix_url' => "#/po/{$po->id}"]);
+            foreach (DB::table('fin_lots')->whereIn('id', $res['lots'] ?: [0])->where(fn ($q) => $q->whereNull('unit_cost_gbp')->orWhere('unit_cost_gbp', '<=', 0))->pluck('id') as $lot) TaskEngine::open('SRC_LOT_NO_COST', CycleAlerts::key('SRC_LOT_NO_COST', (int) $lot), 'Enter Landed Unit Cost – the lot has no cost (' . $po->po_number . ')', ['ent' => $ent, 'module' => 'fin_lots', 'record_id' => $lot, 'fix_url' => "#/po/{$po->id}"]);      // R-40: only a lot without cost; a provisional cost is no alert
             $used = self::applyAdvances($ent, (int) $po->fk_id_supplier, $g->grn_date);
             Audit::log('t_src_grn', $grnId, 'APPROVE', ['posted' => true, 'value' => $res['value']], null, $ent);
             return $res + ['advance_used' => $used, 'po_status' => $allIn ? 'RECEIVED' : $po->status];
@@ -381,7 +363,7 @@ class BuyingService
                     DB::table('fin_lots')->where('id', $f->id)->update(['unit_cost_gbp' => $new, 'landed_status' => ! empty($d['final']) ? 'FINAL' : 'PROVISIONAL']);
                     DB::table('fin_lot_consumption')->where('lot_id', $f->id)->update(['unit_cost_gbp' => $new]);
                     DB::table('t_stock_movements')->where('fk_id_lot', $f->id)->update(['unit_cost_gbp' => $new]);
-                    if (! empty($d['final'])) TaskEngine::close('SRC_LOT_NO_COST', [$f->id], 'Landed cost is final');
+                    if (! empty($d['final'])) TaskEngine::close('SRC_LOT_NO_COST', CycleAlerts::key('SRC_LOT_NO_COST', (int) $f->id), 'Landed cost is final');
                 }
                 $weighted += $new * $b['qty']; $n++;
             }
@@ -416,7 +398,7 @@ class BuyingService
         $poIds = array_column($pos, 'id');
         $terms = DB::table('t_src_payment_terms')->whereIn('fk_id_po', $poIds ?: [0])->where('f_active', 1)->orderBy('fk_id_po')->orderBy('term_no')->get(['id', 'fk_id_po', 'milestone', 'planned_amount', 'paid_amount', 'remaining_amount', 'due_date', 'status'])->all();
         $ships = DB::table('t_src_shipments')->whereIn('fk_id_po', $poIds ?: [0])->where('f_active', 1)->orderBy('id')->get(['id', 'shipment_code', 'fk_id_po', 'planned_qty', 'etd', 'eta', 'actual_arrival', 'status'])->all();
-        $grns = DB::table('t_src_grn')->where('fk_id_cycle', $cycleId)->where('f_active', 1)->orderBy('id')->get(['id', 'grn_number', 'fk_id_shipment', 'grn_date', 'units_received', 'damaged_units', 'missing_units', 'posting_status'])->all();
+        $grns = DB::table('t_src_grn')->where('fk_id_cycle', $cycleId)->where('f_active', 1)->orderBy('id')->get(['id', 'grn_number', 'fk_id_shipment', 'grn_date', 'units_received', 'damaged_units', 'missing_units', 'posting_status', 'claim_status'])->all();
         $lcs = DB::table('t_src_landed_cost')->whereIn('fk_id_po', $poIds ?: [0])->where('f_active', 1)->orderBy('id')->get(['id', 'lc_code', 'fk_id_po', 'freight_cost', 'customs_duty', 'other_cost', 'total_cost', 'landed_cost_per_unit', 'landed_status', 'run_version', 'superseded_by'])->all();
         $done = fn ($ok, $started) => $ok ? 'done' : ($started ? 'prog' : 'pend');
         $steps = [

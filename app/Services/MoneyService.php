@@ -254,7 +254,7 @@ class MoneyService
             $jid = Ledger::post($ent, $l->txn_date, 'BANK_SPLIT', (int) $l->id, $lines, ['memo' => 'Split bank line · ' . mb_substr((string) $l->description, 0, 80), 'currency' => $l->currency, 'allow_no_ref' => true]);
             foreach ($rows as $row) DB::table('fin_bank_line_splits')->insert(RecordService::fillNotNull('fin_bank_line_splits', $row));
             foreach (DB::table('t_src_payment_terms')->whereIn('id', array_filter(array_map(fn ($p) => $p['term'] ?? null, $parts)))->get() as $t) {
-                if ($t->status === 'PAID') TaskEngine::close('SRC_PAY_DUE', [$t->id], 'Term paid');
+                if ($t->status === 'PAID') TaskEngine::close('SRC_PAY_DUE', CycleAlerts::key('SRC_PAY_DUE', (int) $t->id), 'Term paid');
                 BuyingService::applyAdvances($ent, (int) DB::table('t_src_po')->where('id', $t->fk_id_po)->value('fk_id_supplier'), $l->txn_date);
             }
             self::link($l, 'SPLIT', (int) $l->id, 'BY_HAND', 'MANUAL');
