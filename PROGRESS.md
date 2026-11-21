@@ -608,3 +608,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-94 (21 Nov): last lots with per-lot cost source R-F_SETUP-25, Buying Management card R-F_SETUP-31, Sourcing Management glance R-F_SETUP-32 and the two-tab layout with deep links R-F_SETUP-34 BUILT. +5 register lines (654). 478 tests.
 - 7e-95 (21 Nov): one see_money permission R-F_SETUP-16 BUILT – the server drops money keys from the buying dashboard, cards, reports and PO page without it; money cards / PDFs give 403. SOURCING off by default. 656 register lines. 479 tests.
 - 7e-96 (21 Nov): company form Director 1 contact pickers cascade R-F_SETUP-36 and director picker = Owner / Director / Partner R-F_SETUP-38 BUILT. +3 register lines (659). 481 tests.
+- 7e-97 (21 Nov): "already exists" guard on Next R-B_SOURCING-19 (rule example test) and the floating step pager R-B_SOURCING-20 BUILT. +3 register lines (662). 483 tests.

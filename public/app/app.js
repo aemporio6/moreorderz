@@ -68,8 +68,23 @@
     bar.innerHTML = `<span class="small muted">How to do this:</span>` + list.map((p, i) => `<button class="btn sm" data-pb="${i}">${ic('play')} ${esc(p.title)}</button>`).join('') + (d.can_edit ? ` <a class="small" href="#/playbooks">${list.length ? 'edit' : 'No playbook written for these steps yet – add one'}</a>` : '');
     head.insertAdjacentElement('afterend', bar); $$('[data-pb]', bar).forEach(b => b.onclick = () => openPlaybook(list[+b.dataset.pb])); }
   // after every page: remember it (recent pages), paint the star, show the playbooks
-  let navTimer; function afterRender(route) { paintFav(); playbookBar(route); clearTimeout(navTimer);
+  let navTimer; function afterRender(route) { paintFav(); playbookBar(route); stepPager(route); clearTimeout(navTimer);
     navTimer = setTimeout(async () => { if (S.route !== route || route === '#/home') return; const h = $('#main h1'); if (!h) return; try { NAV = await api('nav', { method: 'POST', body: { title: h.textContent.trim().slice(0, 150), url: route } }); paintFav(); } catch (e) {} }, 1500); }
+  // R-B_SOURCING-20: floating Previous / Next on every step place of a cycle record (cycle page sections, Samples · QC · Customs, the step lists of the cycle); skipped steps are jumped
+  async function stepPager(route) {
+    const old = document.getElementById('stepPager'); if (old) old.remove();
+    let cy = null, key = (route.match(/[?&]step=(\w+)/) || [])[1] || null, mt;
+    if ((mt = route.match(/^#\/cycle\/(\d+)/))) { cy = +mt[1]; key = key || 'details'; }
+    else if ((mt = route.match(/^#\/cycle-extras\/(\d+)/))) { cy = +mt[1]; key = key || 'samples'; }
+    else if (key && (mt = route.match(/^#\/list\/[\w-]+\?.*f%5Bfk_id_cycle%5D=(\d+)|^#\/list\/[\w-]+\?.*f\[fk_id_cycle\]=(\d+)/))) cy = +(mt[1] || mt[2]);
+    if (!cy) return; let p; try { p = await api(`cycle/${cy}/pager?step=${key}`); } catch (e) { return; } if (S.route !== route) return;
+    const btn = (x, dir) => x ? `<a class="btn sm ${dir === 'next' ? 'primary' : ''}" href="${esc(x.href)}" data-pg="${dir}" title="${dir === 'next' ? 'Next' : 'Previous'} step: ${esc(x.label)}">${dir === 'next' ? '' : '← '}${dir === 'next' ? 'Next' : 'Previous'}: ${esc(x.label)}${dir === 'next' ? ' →' : ''}</a>` : '';
+    const el = document.createElement('div'); el.id = 'stepPager';
+    el.style.cssText = 'position:fixed;right:18px;bottom:18px;z-index:60;display:flex;gap:6px;align-items:center;background:var(--surface,#fff);border:1px solid var(--line);border-radius:10px;padding:6px 8px;box-shadow:0 4px 14px rgba(0,0,0,.12);max-width:calc(100vw - 36px);flex-wrap:wrap';
+    el.innerHTML = `${btn(p.prev, 'prev')}<span class="small muted" style="padding:0 4px">${esc(p.current.label)}${p.current.no ? ` · step ${p.current.no} of ${p.current.of}` : ''}</span>${btn(p.next, 'next')}`;
+    document.body.appendChild(el);
+    const sec = p.current.section; if (sec && /[?&]step=/.test(route)) setTimeout(() => { const h = $$('#main h3').find(x => x.textContent.trim().startsWith(sec)); if (h) h.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, 300);
+  }
   // the strip above a list: what this screen is, how to add, where else it is created
   async function guideStrip(key) { const host = $('#lGuide'); if (!host) return; let g; try { g = await api('guide/list/' + key); } catch (e) { return; } if (!$('#lGuide')) return;
     let open = HELP; try { open = HELP || localStorage.getItem('mo_strip_' + key) === '1' || (localStorage.getItem('mo_strip_' + key) === null && !localStorage.getItem('mo_strip_seen')); localStorage.setItem('mo_strip_seen', '1'); } catch (e) {}

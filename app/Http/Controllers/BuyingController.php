@@ -203,6 +203,9 @@ class BuyingController extends Controller
     /** The carried context of a cycle for the user, and the preset of a step form opened inside it. */
     public function cycleContext(Request $r, int $id) { $this->can($r, 'buying.SEE'); $ctx = \App\Services\WorkflowContext::get($id, (int) \Illuminate\Support\Facades\Auth::id());
         $f = (string) $r->query('form'); return ['context' => $ctx, 'preset' => $f !== '' ? \App\Services\WorkflowContext::prefill($f, $id, $ctx) : null, 'step' => $f !== '' ? \App\Services\WorkflowContext::stepOf($f) : null, 'next' => $f !== '' ? \App\Services\WorkflowContext::next($f, $id) : null]; }
+    /** R-B_SOURCING-20: Previous / Next step of the cycle record (skipped steps jumped). */
+    public function cyclePager(Request $r, int $id) { $this->can($r, 'buying.SEE'); if (! DB::table('t_src_cycles')->where('id', $id)->where('fk_id_ent', Context::ent())->exists()) abort(404);
+        return \App\Services\WorkflowContext::pager($id, (string) $r->query('step', 'details'), \App\Services\Perm::has($r->user(), 'see_money')); }
     public function cycleWhatsapp(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\CycleAlerts::whatsapp((int) Context::ent(), $id, (string) $r->input('key'), trim((string) $r->input('text')))); }
     public function grnClaim(Request $r, int $id) { $this->can($r, 'buying.BUY'); return $this->run(fn () => \App\Services\CycleAlerts::claim((int) Context::ent(), $id, strtoupper((string) $r->input('status')), (string) $r->input('reason'))); }
     public function docRequirements(Request $r) { $this->can($r, 'buying.SEE'); return ['rows' => DB::table('src_doc_requirements')->where('fk_id_ent', Context::ent())->orderBy('step_key')->orderBy('doc_type')->get(), 'steps' => array_map(fn ($x) => $x[3], \App\Services\CycleAlerts::DOC_STEPS),

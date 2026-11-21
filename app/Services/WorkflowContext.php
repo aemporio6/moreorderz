@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Schema;
  * The context is kept server-side per cycle and user (sys_workflow_context), so it survives reloads, devices and new sessions; any step form
  * opened inside the cycle takes its parents from it when empty (linked:workflow.<x>). Steps run in the workspace order; SKIPPED steps are jumped.
  * Before the next form opens, records that already exist for the same context are named ("This PO already has 1 shipment (SHP-…)", R-B_SOURCING-19).
+ * Floating Previous / Next on every step place of the cycle record in the same order, skipped steps jumped (R-B_SOURCING-20, pager()).
  */
 class WorkflowContext
 {
@@ -51,6 +52,44 @@ class WorkflowContext
         $skip = array_filter(array_map('trim', explode(',', (string) DB::table('t_src_cycles')->where('id', $cycleId)->value('skipped_steps'))));
         foreach (array_slice(self::STEPS, $at['index'] + 1) as $s) if (! $s[3] || ! in_array($s[3], $skip, true)) return ['key' => $s[0], 'form' => $s[1], 'label' => $s[2]];
         return null;
+    }
+
+    /**
+     * R-B_SOURCING-20 step pager: where each step lives inside the cycle record – [page, section heading]. page 'cycle' = #/cycle/<id>,
+     * 'extras' = #/cycle-extras/<id>, 'list' = the step's own list filtered to the cycle. Money sections fall back to the list without see money.
+     */
+    public const PLACE = [
+        'details' => ['cycle', null], 'rfq' => ['cycle', '1. Quotes'], 'po' => ['cycle', '2. Purchase orders'], 'terms' => ['cycle', '3. Payments', true], 'payments' => ['cycle', '3. Payments', true],
+        'shipment' => ['cycle', '4. Shipments'], 'grn' => ['cycle', '5. Receiving'], 'landed' => ['cycle', '6. Landed cost', true],
+        'samples' => ['extras', 'Samples'], 'qc' => ['extras', 'Quality checks'], 'customs' => ['extras', 'Customs'],
+    ];
+
+    /** The steps of the cycle in the workspace order, SKIPPED ones left out. */
+    public static function steps(int $cycleId): array
+    {
+        $skip = array_filter(array_map('trim', explode(',', (string) DB::table('t_src_cycles')->where('id', $cycleId)->value('skipped_steps'))));
+        return array_values(array_filter(self::STEPS, fn ($s) => ! $s[3] || ! in_array($s[3], $skip, true)));
+    }
+
+    /** Link and section of one step inside the cycle record. */
+    public static function place(string $key, int $cycleId, bool $money = true): array
+    {
+        $s = collect(self::STEPS)->firstWhere(0, $key) ?? throw new \InvalidArgumentException('Unknown step.');
+        [$page, $section, $isMoney] = (self::PLACE[$key] ?? ['list', null]) + [2 => false];
+        if ($isMoney && ! $money) [$page, $section] = ['list', null];
+        $href = match ($page) { 'cycle' => "#/cycle/$cycleId", 'extras' => "#/cycle-extras/$cycleId", default => "#/list/{$s[1]}?f[fk_id_cycle]=$cycleId" };
+        return ['key' => $key, 'label' => $s[2], 'href' => $href . (str_contains($href, '?') ? '&' : '?') . 'step=' . $key, 'section' => $section];
+    }
+
+    /** Previous / Next of a step (skipped steps jumped); a skipped or unknown current step starts from its place in the full order. */
+    public static function pager(int $cycleId, string $key, bool $money = true): array
+    {
+        $all = array_column(self::STEPS, 0); if (! in_array($key, $all, true)) $key = 'details';
+        $on = array_column(self::steps($cycleId), 0); $at = array_search($key, $all, true);
+        $prev = null; for ($i = $at - 1; $i >= 0; $i--) if (in_array($all[$i], $on, true)) { $prev = $all[$i]; break; }
+        $next = null; for ($i = $at + 1; $i < count($all); $i++) if (in_array($all[$i], $on, true)) { $next = $all[$i]; break; }
+        return ['current' => self::place($key, $cycleId, $money) + ['skipped' => ! in_array($key, $on, true), 'no' => array_search($key, $on, true) === false ? null : array_search($key, $on, true) + 1, 'of' => count($on)],
+            'prev' => $prev ? self::place($prev, $cycleId, $money) : null, 'next' => $next ? self::place($next, $cycleId, $money) : null];
     }
 
     public static function get(int $cycleId, int $userId): array
