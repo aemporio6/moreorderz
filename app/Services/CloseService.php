@@ -267,7 +267,7 @@ class CloseService
     /** Nightly: a shop × month that ended more than period_open_days ago and is not LOCKED. */
     public static function openTasks(int $ent): int
     {
-        $days = (int) (Settings::get('period_open_days', $ent, 15) ?: 15); $n = 0; $ov = self::overview($ent, 12); $names = collect($ov['shops'])->pluck('name', 'id');
+        $days = FinanceSettings::int($ent, 'period_open_days') ?: 10; $n = 0; $ov = self::overview($ent, 12); $names = collect($ov['shops'])->pluck('name', 'id');
         foreach ($ov['months'] as $m) {
             if (date('Y-m-t', strtotime($m['month'] . '-01')) >= date('Y-m-d', strtotime("-$days day"))) continue;
             foreach ($m['cells'] as $c) if (in_array($c['status'], ['OPEN', 'CHECKED'], true)) { TaskEngine::open('FIN_PERIOD_OPEN', [$c['shop'] . '-' . $m['month']], "{$names[$c['shop']]} {$m['name']} is not locked yet", ['ent' => $ent, 'module' => 't_branches', 'record_id' => $c['shop'], 'fix_url' => "#/close?shop={$c['shop']}&month={$m['month']}"]); $n++; }

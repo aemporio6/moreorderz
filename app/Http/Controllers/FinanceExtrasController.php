@@ -27,7 +27,7 @@ class FinanceExtrasController extends Controller
         return $this->run(function () use ($r, $ent) {
             $periods = F::vatPeriods($ent); $from = (string) ($r->query('from') ?: $periods[1]['from']); $to = (string) ($r->query('to') ?: $periods[1]['to']);
             $saved = DB::table('mo_vat_returns')->where(['fk_id_ent' => $ent, 'period_from' => $from, 'period_to' => $to])->first();
-            return ['periods' => $periods, 'from' => $from, 'to' => $to, 'calc' => F::vatCalc($ent, $from, $to), 'saved' => $saved,
+            return ['periods' => $periods, 'from' => $from, 'to' => $to, 'calc' => F::vatCalc($ent, $from, $to), 'saved' => $saved, 'card' => \App\Services\VatCard::card($ent, $from, $to),
                 'banks' => DB::table('fin_bank_accounts')->where('company_id', $ent)->where('is_active', 1)->get(['id', DB::raw("CONCAT(bank_name, ' · ', COALESCE(account_label,'')) name"), 'currency'])];
         });
     }

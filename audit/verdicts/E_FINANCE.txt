@@ -1,9 +1,9 @@
 FIN-1|P|class PermCatalogue|finance rights are data now (matrix per role, switchable); open: the spec's fin.* action names and the PARTNER_ACCOUNT own-partner right are not mapped one to one
 FIN-2|P|function partnerOfUser|a PARTNER login sees only his own account and asks only his own withdrawal; route-level whitelist of 12 actions not built
 FIN-3|B|class PartnerOnboarding|six items in fin_onboarding, old denial text with missing labels at login, ticks by events (agreement, capital, login link) + records (party, signed doc, ID doc), Owner ticks audited, staff login refused as Partner Account; existing partner logins grandfathered; FinanceAlertsTest r3
-FIN-4|P|vat_rate|VAT rate + corporation tax rate per company used for the reserve; the full settings form with checks not built
+FIN-4|B|function saveCompany|fin_company_settings form on #/settings/finance (display name, VAT / corp tax %, free cash limit, payout tolerance, schedule, slow / dead days, FX source, active), Owner only, old check texts, audited old->new; missing row -> system defaults; every finance reader goes through FinanceSettings::value; FinanceSettingsTest r4 (corp 120 refused, tolerance 1.00)
 FIN-5|F|form:fin_marketplace_setting|form only
-FIN-6|P|class Settings|some finance settings (overdue days, limits); the full key list with help / min / max not built
+FIN-6|B|function saveSystem|18 finance system keys with label, help, default, min / max, Owner only (old refusal), 'Unknown setting <key>', history old->new, alert_repeat_days >= 1, statement_folder in the private store (no .., not public) used for statement PDFs, app_url for links; matching / alerts / snapshot / close read them; FinanceSettingsTest r6 (match_payout_days 3->4 history + next match uses 4)
 FIN-7|B|function createBank|bank accounts with opening balance booked, balance per account
 FIN-9|P|class Audit|every write audited; proof link per bank line not built
 FIN-10|P|class Messenger|one outbox per channel, never twice, statements sent; partner opt-out per kind not built
@@ -21,7 +21,7 @@ FIN-20|P|opening_balance|opening balance of bank accounts and opening lots; the 
 FIN-21|N||legacy investor migration – old-tool cut-over step, not run (old investments copied as documents only)
 FIN-22|P|class MarketplaceFiles|money files of TikTok, Amazon (2 formats), eBay, any table + bank CSV / Excel with dedupe; ADS / FBA_STOCK / RETURNS / REIMB / STORAGE types not built
 FIN-23|B|function amazonCode|settlement line -> bucket rules (in code, not as data)
-FIN-24|P|function importStatement|upload -> check -> apply with dedupe; saved layouts per shop, dry-run screen, temp token not built
+FIN-24|B|class BankImportCheck|bank file check -> apply: CSV/TXT/TSV (Excel converted), 25 MB, delimiter from header, BOM, blank lines, number rules incl. (x), 10 date formats + UTC + Excel day, dry run new/dup/error (first 50) + 8 sample rows + same-file note (SHA of rows), token for the uploader only, deleted after load and after 24 h, same file only by the Owner on purpose; layout misfit text; load reads with the same code; saved layouts per shop stay bank layouts (marketplace files use MarketplaceFiles); FinanceSettingsTest r24
 FIN-25|B|function board|FinanceExports::board per shop x SETTLEMENT/ORDERS + BANK per account, overdue 17/8 days, page #/report-board; ORDERS limit owner to confirm; FinanceExportsTest
 FIN-26|B|class FxMissing|Manual rates (one per date + currency, replaced when saved again, > 0); lookup = latest rate on or before the date, base currency = 1; no rate is never 1.0: the amount is refused and a task "Add rate <CCY> <date>" (FIN_FX_MISSING) opens outside the failed transaction; adding a rate on or before that date closes it (also the hourly sweep); month close keeps its FX_PRESENT check. FinanceBatchTest has the rule example (EUR 0.86 used for 10 Mar; USD → task, not 1.0).
 FIN-27|P|function autoMatch|auto-match only when exactly one thing fits (supplier payment, expense, payout); rule codes M1-M5 / MC partly
@@ -49,7 +49,7 @@ FIN-54|B|class ProductProfitList|per SKU units, sales, fees+PPC, COGS, profit, m
 FIN-60|B|class CashForecast|cash forecast by week with committed items – different formula from the spec's 30 / 60 / 90
 FIN-61|P|function payDueTasks|supplier terms + SRC_PAY_DUE task; schedule view in Finance partly (dashboard list)
 FIN-62|B|function loanNew|loans given / taken, payments, balance, due task
-FIN-63|P|function vatCalc|VAT return 9 boxes; quarters from the Accountancy Hub stagger not built
+FIN-63|B|class VatCard|VAT card per period: output VAT from settlement TAX lines converted to base, input VAT from OUT bank lines DUTY_VAT / VAT flag with Ignored left out, periods from the Accountancy Hub stagger / frequency (calendar quarters without it), locked shop-months, VAT_RETURN obligation of the period; VAT return page periods follow it; FinanceSettingsTest r63 (stagger 2 -> Feb-Apr, May-Jul)
 FIN-64|P|function budgets|budgets per month and category; Bank & cash page parts partly
 FIN-65|P|money|Money dashboard tiles + to-do list; forecast tiles, partners table partly
 FIN-66|B|class FinanceAlerts|FA1-FA10 in fin_alert_rules (on/off, roles, channels), hourly run, OPEN/RESOLVED with dedupe code+subject, repeat every alert_repeat_days, TASK FIN_<code>:<alert id>, WhatsApp FIN_ALERT / e-mail, settings thresholds; FA3/FA4/FA9 messages-only by default (their tasks come from existing rules); FA7 reads live lots (no snapshot table yet, FIN-51); free cash leaves out the unpaid tax reserve (not tracked); FinanceAlertsTest

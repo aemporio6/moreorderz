@@ -44,7 +44,7 @@ class MoneyTest extends TestCase
         $b = $this->bankRow();
         $this->assertSame([951.26, 1000.0, -48.74, 2, true], [$b['statement_balance'], $b['books_base'], $b['difference'], $b['unmatched'], $b['explained']], 'the whole difference is the two unmatched lines');
         try { Money::importStatement(1, $this->bank, DB::table('bank_statement_profiles')->where('code', 'EX_BANK_DEBIT_CREDIT')->value('id'), $csv); $this->fail('wrong layout'); }
-        catch (\InvalidArgumentException $e) { $this->assertStringContainsString('is not in this file', $e->getMessage()); }
+        catch (\InvalidArgumentException $e) { $this->assertStringContainsString('The saved layout does not fit this file. Missing:', $e->getMessage()); }      // R-FIN-24 text
     }
 
     public function test_lines_without_a_bank_id_are_told_apart_by_their_position(): void

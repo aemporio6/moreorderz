@@ -217,6 +217,46 @@ class MoneyController extends Controller
         });
     }
 
+    /** R-FIN-24 step "check": the dry run (nothing written), the file waits under a token for this login. */
+    public function bankImportCheck(Request $r, int $id)
+    {
+        $this->can($r, 'money.EDIT');
+        $d = $r->validate(['profile' => 'required|integer', 'csv' => 'required_without:file|nullable|string|max:26214400', 'file' => 'nullable|file|max:25600', 'file_name' => 'nullable|string|max:200']);
+        return $this->run(function () use ($r, $id, $d) {
+            if ($r->hasFile('file')) { $f = $r->file('file'); \App\Services\BankImportCheck::checkFile($f->getClientOriginalName(), (int) $f->getSize());
+                $d['csv'] = in_array(strtolower($f->getClientOriginalExtension()), ['xlsx', 'xls'], true) ? Money::excelToCsv($f->getRealPath()) : (string) file_get_contents($f->getRealPath()); $d['file_name'] = $f->getClientOriginalName(); }
+            return \App\Services\BankImportCheck::dryRun((int) Context::ent(), $id, (int) $d['profile'], $d['csv'], $d['file_name'] ?? 'statement.csv', (int) $r->user()->id);
+        });
+    }
+
+    /** R-FIN-24 step "apply": load the checked file by its token. */
+    public function bankImportApply(Request $r)
+    {
+        $this->can($r, 'money.EDIT');
+        $d = $r->validate(['token' => 'required|string|max:64', 'again' => 'nullable|boolean']);
+        return $this->run(function () use ($r, $d) {
+            $x = \App\Services\BankImportCheck::apply((int) Context::ent(), $d['token'], (int) $r->user()->id, (bool) ($d['again'] ?? false));
+            return $x + ['message' => "{$x['new']} new line(s), {$x['matched']} matched by the tool" . ($x['duplicates'] ? ", {$x['duplicates']} were already loaded" : '') . ($x['errors'] ? ', ' . count($x['errors']) . ' row(s) could not be read' : '')];
+        });
+    }
+
+    /** R-FIN-4 / 6 finance settings page and saves (Owner only for saves). */
+    public function financeSettings(Request $r) { $this->can($r, 'money.SEE'); return \App\Services\FinanceSettings::page((int) Context::ent()) + ['may_edit' => $r->user()->role_code === 'OWNER']; }
+    public function financeSettingSave(Request $r)
+    {
+        $this->can($r, 'money.SEE');
+        try { return \App\Services\FinanceSettings::saveSystem((string) $r->input('key', ''), $r->input('value')); }
+        catch (\App\Services\ValidationErrors $e) { return response()->json(['message' => $e->getMessage(), 'errors' => array_map(fn ($m) => [$m], $e->errors)], 422); }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], str_starts_with($e->getMessage(), 'Refused') ? 403 : 422); }
+    }
+    public function financeCompanySave(Request $r)
+    {
+        $this->can($r, 'money.SEE');
+        try { return \App\Services\FinanceSettings::saveCompany((int) Context::ent(), (array) $r->input('values', [])); }
+        catch (\App\Services\ValidationErrors $e) { return response()->json(['message' => implode(' ', $e->errors), 'errors' => array_map(fn ($m) => [$m], $e->errors)], 422); }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 403); }
+    }
+
     public function lineAction(Request $r, int $id, string $what)
     {
         $this->can($r, 'money.EDIT');

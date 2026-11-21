@@ -35,7 +35,7 @@ class CashForecast
             $run = round($run + $b['in'][$i] - $b['out'][$i], 2);
             $rows[] = ['week' => $i, 'label' => $i === 0 ? 'Now and late' : ($i === $weeks ? 'Later' : 'Week of ' . date('j M', strtotime("$mon +$i week"))), 'in' => $b['in'][$i], 'out' => $b['out'][$i], 'balance' => $run];
         }
-        $low = (float) Settings::get('free_cash_alert_limit', $ent, 0);
+        $low = FinanceSettings::num($ent, 'free_cash_alert_limit');
         usort($items, fn ($x, $y) => [$x['week'], $x['date']] <=> [$y['week'], $y['date']]);
         return ['bank_now' => $bank, 'rows' => $rows, 'items' => $items, 'base' => Fx::base($ent), 'alert_limit' => $low, 'first_low' => collect($rows)->first(fn ($r) => $low > 0 && $r['balance'] < $low)['label'] ?? null,
             'not_dated' => ['unsettled_sales' => round(Ledger::balance($ent, '1100'), 2), 'held_back' => round(Ledger::balance($ent, '1120'), 2)]];

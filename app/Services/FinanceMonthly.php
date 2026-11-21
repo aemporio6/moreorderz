@@ -35,7 +35,7 @@ class FinanceMonthly
             $text = 'Monthly summary: balance ' . self::money($bal, $cur) . ', profit to date ' . self::money($profit, $cur) . '. Open your Partner Account for details.';
             $ent = (int) (DB::table('fin_investor_agreements')->where('investor_id', $p)->where('status', 'ACTIVE')->value('company_id') ?? 0);
             $ph = Messenger::whatsappOf($p, true);
-            if ($ph) Messenger::queueWa($ent, $p, $ph, 'MONTHLY_SUMMARY', ['balance' => self::money($bal, $cur), 'profit' => self::money($profit, $cur), 'link' => rtrim((string) config('app.url'), '/') . '/#/my-account'], 't_account', $p);
+            if ($ph) Messenger::queueWa($ent, $p, $ph, 'MONTHLY_SUMMARY', ['balance' => self::money($bal, $cur), 'profit' => self::money($profit, $cur), 'link' => FinanceSettings::appUrl() . '/#/my-account'], 't_account', $p);
             DB::table('fin_messages')->insertOrIgnore(['investor_id' => $p, 'user_id' => null, 'kind' => 'MONTHLY', 'channel' => 'WHATSAPP', 'text' => $ph ? $text : 'Not sent: no WhatsApp number (or switched off) – ' . $text,
                 'event_key' => $key, 'status' => $ph ? 'QUEUED' : 'FAILED', 'created_at' => now()]);
             $n[$ph ? 'sent' : 'not_sent']++;
@@ -46,7 +46,7 @@ class FinanceMonthly
     /** Shops whose report is missing: [shop id => [shop name, last period end]]. */
     public static function missing(int $ent, ?string $today = null): array
     {
-        $today ??= date('Y-m-d'); $lim = (int) (Settings::get('settlement_overdue_days', $ent, 17) ?: 17); $out = [];
+        $today ??= date('Y-m-d'); $lim = FinanceSettings::int($ent, 'settlement_overdue_days') ?: 17; $out = [];
         foreach (DB::table('aud_runs as r')->join('t_branches as br', 'br.id', '=', 'r.fk_id_branch')->where('r.fk_id_ent', $ent)->where('br.f_active', 1)->whereIn('r.status', ['OPEN', 'CHECKED'])
             ->orderBy('r.period_month')->get(['r.fk_id_branch', 'r.period_month', 'br.shop_name']) as $r) {
             $end = date('Y-m-t', strtotime($r->period_month . '-01'));

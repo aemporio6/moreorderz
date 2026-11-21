@@ -37,8 +37,8 @@ class FinanceAlerts
 
     private static function set(int $ent, string $key, float $default): float
     {
-        $v = Settings::get($key, $ent, null);
-        return $v === null || $v === '' ? $default : (float) $v;
+        $v = FinanceSettings::value($ent, $key);      // R-FIN-4 / 6: company row, then system setting, then default
+        return $v === '' ? $default : (float) $v;
     }
 
     public static function rules(): array
@@ -195,7 +195,7 @@ class FinanceAlerts
             $t = TaskEngine::open('FIN_' . $rule->code, [$alertId], $rule->code . ' · ' . $msg, ['ent' => $ent, 'module' => 'fin_alerts', 'record_id' => $alertId, 'fix_url' => '#/fin-alerts'] + ($owner ? ['owner_user_id' => (int) $owner] : []));
             if ($t && ! $was) { DB::table('fin_alerts')->where('id', $alertId)->update(['task_id' => $t]); $n += self::log(null, $owner ? (int) $owner : null, $rule->code, 'TASK', $msg, $ev, 'SENT'); }
         }
-        $link = rtrim((string) config('app.url'), '/') . '/#/fin-alerts';
+        $link = FinanceSettings::appUrl() . '/#/fin-alerts';
         foreach (DB::table('t_users')->whereIn('role_code', $roles)->where('f_active', 1)->where(fn ($w) => $w->where('fk_id_ent', $ent)->orWhereNull('fk_id_ent')->orWhere('fk_id_ent', 0))->get(['id', 'fk_id_account', 'display_name']) as $u) {
             $acc = (int) $u->fk_id_account;
             if (in_array('WHATSAPP', $ch, true)) {

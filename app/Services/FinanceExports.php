@@ -45,7 +45,7 @@ class FinanceExports
     {
         if (! self::mayExport($u)) throw new \InvalidArgumentException('Refused: Owner or Accountant only.');
         $format = $format === 'xlsx' ? 'xlsx' : 'csv'; $cos = self::companies($company, $u);
-        $base = rtrim((string) (Settings::get('APP_URL', null, '') ?: config('app.url') ?: url('/')), '/');
+        $base = FinanceSettings::appUrl();
         $form = RecordService::formOfTable('fin_bank_transactions') ?: 'fin_bank_line';
         $cats = DB::table('fin_categories')->pluck('name', 'code'); $users = DB::table('t_users')->pluck('display_name', 'id');
         $rows = DB::table('fin_bank_transactions as t')->leftJoin('fin_bank_accounts as b', 'b.id', '=', 't.bank_account_id')->whereIn('t.company_id', $cos ?: [0])->whereBetween('t.txn_date', [$from, $to])

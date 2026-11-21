@@ -42,6 +42,8 @@ Updated 21 Nov 2026 (batch 7e-101). How to answer: write **OK** next to a line t
 | B13 | R-FIN-3 | Partners who already had a login keep working: the system ticked all six onboarding items for them once (new partners must complete all six) | — |
 | B14 | R-FIN-54 | "Stock days" = stock on hand ÷ units sold per day in the chosen dates. The list uses order dates (the same figures as Profit by SKU), not settlement end dates | — |
 | B15 | R-FIN-51 | A location counts as "at FBA" when its kind is FBA / FC / AMAZON / MARKETPLACE / 3PL, or when an inbound shipment was sent to it. Give your fulfilment-centre locations one of these kinds | — |
+| B16 | R-FIN-4 | Your company has no finance settings row yet, so the tax reserve before partner shares is 0 % VAT + 0 % corporation tax. The form shows the spec defaults (0 % and 19 %); saving it once starts the reserve at what you enter. Please open Setup › Company & finance settings and save the rates you want | — |
+| B17 | R-FIN-6 | Payouts are now matched to the bank within ± 3 days (the spec default; the old code used 5 when the setting was empty). Change "Match payouts within" if your marketplaces pay later | — |
 
 ## C. Suggested defaults written in the specification (220 lines)
 

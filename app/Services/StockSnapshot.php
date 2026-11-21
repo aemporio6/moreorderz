@@ -114,7 +114,7 @@ class StockSnapshot
     /** R-FIN-51 cards + rows for a date. */
     public static function view(int $ent, string $date): array
     {
-        $slow = (int) (Settings::get('slow_days', $ent, 90) ?: 90); $dead = (int) (Settings::get('dead_days', $ent, 180) ?: 180);
+        $slow = FinanceSettings::int($ent, 'slow_days') ?: 90; $dead = FinanceSettings::int($ent, 'dead_days') ?: 180;
         $rows = array_map(fn ($r) => $r + ['flag' => self::flag($r, $slow, $dead)], self::rows($ent, $date));
         $sum = fn ($k) => array_sum(array_column($rows, $k)); $cost = fn ($r, $k) => $r[$k] * (float) $r['landed_cost_per_unit'];
         $flagged = fn ($f) => array_values(array_filter($rows, fn ($r) => $r['flag'] === $f));

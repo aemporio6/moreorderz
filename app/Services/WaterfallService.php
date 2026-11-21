@@ -161,7 +161,8 @@ class WaterfallService
             . '<h2>Owner note</h2><div>' . $e($run->owner_note) . '</div>'
             . (! empty($snap['checks']) && array_filter($snap['checks'], fn ($c) => $c['status'] === 'WAIVED') ? '<h2>Checks waived by the Owner</h2><table>' . implode('', array_map(fn ($c) => '<tr><td>' . $e($c['code']) . '</td><td>' . $e($c['waive_reason'] ?? '') . '</td></tr>', array_filter($snap['checks'], fn ($c) => $c['status'] === 'WAIVED'))) . '</table>' : '')
             . '<div class="mut" style="margin-top:14px">Locked ' . $e($run->locked_at) . '. A locked month is never edited; a correction is booked in the next open month and shown on a new version of this statement.</div></body></html>';
-        $path = 'statements/' . $ent . '/' . substr($run->period_month, 0, 4) . '/' . $run->period_month . '_' . preg_replace('/[^A-Za-z0-9_-]/', '', str_replace(' ', '_', $shop)) . '_' . $run->run_code . '/' . ($partner ? "partner_{$partner}_v$v.pdf" : "company_v$v.pdf");
+        $path = trim(FinanceSettings::value($ent, 'statement_folder') ?: 'statements', '/') . '/' . $ent . '/'      // R-FIN-6 statement_folder (private file store)
+            . substr($run->period_month, 0, 4) . '/' . $run->period_month . '_' . preg_replace('/[^A-Za-z0-9_-]/', '', str_replace(' ', '_', $shop)) . '_' . $run->run_code . '/' . ($partner ? "partner_{$partner}_v$v.pdf" : "company_v$v.pdf");
         try { Storage::disk('local')->put($path, self::pdf($html)); $type = 'PDF'; }
         catch (\Throwable $ex) { report($ex); Storage::disk('local')->put($path = preg_replace('/\.pdf$/', '.pending.html', $path), $html); $type = 'HTML'; }   // saved as data; the screen shows "PDF pending"
         DB::table('fin_statements')->where('period_id', $run->id)->when($partner, fn ($q) => $q->where('investor_id', $partner), fn ($q) => $q->whereNull('investor_id'))->update(['superseded' => 1]);

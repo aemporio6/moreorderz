@@ -29,7 +29,7 @@ class ProductProfitList
             ->groupBy('fk_product_id')->selectRaw("fk_product_id p, SUM(qty) u, SUM(CASE WHEN status = 'Refunded' THEN qty ELSE 0 END) r")->get()->keyBy('p');
         $noCost = DB::table('t_sales as s')->where('s.fk_id_ent', $ent)->where('s.status', 'Confirmed')->where('s.sale_source', 'active')->whereBetween(DB::raw('DATE(s.d_order)'), [$from, $to])
             ->whereNotExists(fn ($x) => $x->from('fin_lot_consumption as c')->whereColumn('c.fk_id_sale', 's.id'))->groupBy('s.fk_product_id')->selectRaw('s.fk_product_id p, SUM(s.qty) u')->pluck('u', 'p');
-        $slow = (int) (Settings::get('slow_days', $ent, 90) ?: 90); $dead = (int) (Settings::get('dead_days', $ent, 180) ?: 180);
+        $slow = FinanceSettings::int($ent, 'slow_days') ?: 90; $dead = FinanceSettings::int($ent, 'dead_days') ?: 180;
         $snap = collect(StockSnapshot::rows($ent, $to))->keyBy('sku');
         $days = max(1, (int) round((strtotime($to) - strtotime($from)) / 86400) + 1);
         $rows = [];

@@ -64,13 +64,8 @@ class FinanceExtras
 
     public static function vatPeriods(int $ent): array
     {
-        $start = max(1, min(12, (int) Settings::get('VAT_QUARTER_START_MONTH', $ent, 1))); $out = [];
-        for ($i = 0; $i < 8; $i++) {
-            $m = (int) date('n') - (((int) date('n') - $start + 12) % 3) - 3 * $i; $y = (int) date('Y'); while ($m < 1) { $m += 12; $y--; }
-            $from = sprintf('%04d-%02d-01', $y, $m); $to = date('Y-m-t', strtotime("$from +2 months"));
-            $out[] = ['from' => $from, 'to' => $to, 'saved' => DB::table('mo_vat_returns')->where(['fk_id_ent' => $ent, 'period_from' => $from, 'period_to' => $to])->first()];
-        }
-        return $out;
+        // R-FIN-63: the periods follow the company's VAT stagger / frequency in the Accountancy Hub (calendar quarters when it has none)
+        return array_map(fn ($p) => $p + ['saved' => DB::table('mo_vat_returns')->where(['fk_id_ent' => $ent, 'period_from' => $p['from'], 'period_to' => $p['to']])->first()], VatCard::periods($ent));
     }
 
     /** Book the return: Dr Sales (output VAT, per shop) / Cr VAT payable; Dr VAT payable / Cr VAT to claim back (input VAT). Once per period. */

@@ -257,7 +257,7 @@ class ReportService
         $stock = DB::table('fin_lots')->where('company_id', $ent)->where('qty_left', '>', 0)->groupBy('fk_id_product')->selectRaw('fk_id_product p, SUM(qty_left) q, SUM(qty_left * unit_cost_gbp) v')->get()->keyBy('p');
         $last = \App\Services\Perm::mine(DB::table('t_sales'), 'fk_id_branch')->where('fk_id_ent', $ent)->where('sale_source', 'active')->whereIn('status', ['Pending', 'Confirmed'])->whereIn('fk_product_id', $stock->keys())->groupBy('fk_product_id')->selectRaw('fk_product_id p, MAX(d_order) d')->pluck('d', 'p');
         $names = DB::table('t_product_vendors')->whereIn('id', $stock->keys())->get(['id', 'SKU_VENDOR', 'product_name_vendor'])->keyBy('id');
-        $slow = (int) Settings::get('slow_days', $ent, 90); $dead = (int) Settings::get('dead_days', $ent, 180); $rows = [];
+        $slow = FinanceSettings::int($ent, 'slow_days'); $dead = FinanceSettings::int($ent, 'dead_days'); $rows = [];
         foreach ($stock as $p => $x) { $d = $last[$p] ?? null; $days = $d ? (int) ((time() - strtotime($d)) / 86400) : null; if ($days !== null && $days < $slow) continue;
             $rows[] = ['sku' => $names[$p]->SKU_VENDOR ?? '', 'name' => $names[$p]->product_name_vendor ?? '', 'units' => (int) $x->q, 'value' => round((float) $x->v, 2), 'last' => $d, 'days' => $days, 'kind' => $days === null || $days >= $dead ? 'Dead' : 'Slow']; }
         usort($rows, fn ($a, $b) => $b['value'] <=> $a['value']);

@@ -82,47 +82,20 @@ class MoneyService
         return $out;
     }
 
+    /** Load a bank file with a layout. The rows are read by BankImportCheck (R-FIN-24), the same reading the dry run shows. */
     public static function importStatement(int $ent, int $bankId, int $profileId, string $csv, string $fileName = 'statement.csv'): array
     {
         $bank = self::bank($ent, $bankId);
         $p = DB::table('bank_statement_profiles')->where('id', $profileId)->whereIn('fk_id_ent', [0, $ent])->first() ?? throw new \InvalidArgumentException('Choose the layout of this bank file.');
-        $csv = preg_replace('/^\xEF\xBB\xBF/', '', $csv);
-        $rows = array_values(array_filter(array_map('str_getcsv', preg_split('/\r\n|\n|\r/', trim($csv))), fn ($r) => $r && implode('', $r) !== ''));
-        $hi = max(1, (int) $p->header_row) - 1;
-        if (! isset($rows[$hi])) throw new \InvalidArgumentException('The file is empty.');
-        $head = array_map(fn ($h) => strtolower(trim((string) $h)), $rows[$hi]);
-        $col = function (?string $name, bool $must = false) use ($head) {
-            if ($name === null || $name === '') return null;
-            $i = array_search(strtolower(trim($name)), $head, true);
-            if ($i === false && $must) throw new \InvalidArgumentException("Column \"$name\" is not in this file. Columns found: " . implode(', ', $head) . '. Choose the right layout for this bank.');
-            return $i === false ? null : $i;
-        };
-        $two = $p->amount_rule !== 'ONE_SIGNED';
-        $cDate = $col($p->date_column, true); $cDesc = $col($p->description_column, true); $cAmt = $two ? null : $col($p->amount_column, true);
-        $cOut = $two ? $col($p->debit_column, true) : null; $cIn = $two ? $col($p->credit_column, true) : null;
-        $cRef = $col($p->reference_column); $cParty = $col($p->counterparty_column); $cId = $col($p->txn_id_column); $cCur = $col($p->currency_column);
-        $num = fn ($v) => (float) str_replace([',', '£', '$', '€', ' '], '', (string) $v);
-        $cur = $bank->currency ?: Fx::base($ent); $errors = []; $new = 0; $dup = 0; $seen = []; $from = null; $to = null;
-
-        return DB::transaction(function () use ($ent, $bank, $rows, $hi, $p, $two, $cDate, $cDesc, $cAmt, $cOut, $cIn, $cRef, $cParty, $cId, $cCur, $num, $cur, $fileName, $csv, &$errors, &$new, &$dup, &$seen, &$from, &$to) {
-            $batch = DB::table('fin_import_batches')->insertGetId(['report_type' => 'BANK_STATEMENT', 'company_id' => $ent, 'bank_account_id' => $bank->id, 'file_name' => mb_substr($fileName, 0, 200), 'file_hash' => sha1($csv), 'imported_by' => Context::userId(), 'imported_at' => now()]);
-            foreach (array_slice($rows, $hi + 1) as $n => $r) {
-                $line = $hi + 2 + $n;
-                $raw = trim((string) ($r[$cDate] ?? ''));
-                $d = \DateTime::createFromFormat('!' . $p->date_format, $raw);
-                if (! $d && is_numeric($raw) && (float) $raw > 30000 && (float) $raw < 80000) $d = new \DateTime(date('Y-m-d', (int) round(((float) $raw - 25569) * 86400)));   // an Excel day number
-                if (! $d) { $errors[] = "Row $line: date \"" . ($r[$cDate] ?? '') . "\" is not in the form {$p->date_format}"; continue; }
-                $amt = round($two ? $num($r[$cIn] ?? 0) - abs($num($r[$cOut] ?? 0)) : $num($r[$cAmt] ?? 0), 2);
-                if ($amt == 0.0) { $errors[] = "Row $line: no amount"; continue; }
-                if ($cCur !== null && ($rc = strtoupper(trim((string) ($r[$cCur] ?? '')))) && $rc !== strtoupper($cur)) { $errors[] = "Row $line: currency $rc but the account is $cur"; continue; }
-                $date = $d->format('Y-m-d'); $desc = trim((string) ($r[$cDesc] ?? ''));
-                $key = $cId !== null && trim((string) ($r[$cId] ?? '')) !== '' ? trim((string) $r[$cId]) : null;
-                if ($key === null) { $k = "$date|$amt|$desc"; $seen[$k] = ($seen[$k] ?? 0) + 1; $key = 'H' . substr(sha1($k . '|' . $seen[$k]), 0, 30); }
-                if (DB::table('fin_bank_transactions')->where('bank_account_id', $bank->id)->where('bank_txn_id', $key)->exists()) { $dup++; continue; }
-                DB::table('fin_bank_transactions')->insert(['batch_id' => $batch, 'bank_account_id' => $bank->id, 'company_id' => $ent, 'txn_date' => $date, 'amount' => $amt, 'currency' => $cur, 'amount_gbp' => Fx::toBase($amt, $cur, $date, $ent),
-                    'description' => mb_substr($desc, 0, 250), 'counterparty' => $cParty !== null ? mb_substr(trim((string) ($r[$cParty] ?? '')), 0, 120) : null, 'bank_txn_id' => mb_substr($key, 0, 80),
-                    'reference_no' => $cRef !== null ? mb_substr(trim((string) ($r[$cRef] ?? '')), 0, 60) : null, 'match_status' => 'UNMATCHED']);
-                $new++; $from = $from === null || $date < $from ? $date : $from; $to = $to === null || $date > $to ? $date : $to;
+        [$items, , $hash] = BankImportCheck::classify($ent, $bank, $p, $csv);
+        return DB::transaction(function () use ($ent, $bank, $items, $hash, $fileName) {
+            $new = 0; $dup = 0; $errors = []; $from = null; $to = null;
+            $batch = DB::table('fin_import_batches')->insertGetId(['report_type' => 'BANK_STATEMENT', 'company_id' => $ent, 'bank_account_id' => $bank->id, 'file_name' => mb_substr($fileName, 0, 200), 'file_hash' => $hash, 'imported_by' => Context::userId(), 'imported_at' => now()]);
+            foreach ($items as [$line, $status, $msg, $row]) {
+                if ($status === 'ERROR') { $errors[] = $msg; continue; }
+                if ($status === 'DUPLICATE' || DB::table('fin_bank_transactions')->where('bank_account_id', $bank->id)->where('bank_txn_id', $row['bank_txn_id'])->exists()) { $dup++; continue; }
+                DB::table('fin_bank_transactions')->insert($row + ['batch_id' => $batch, 'bank_account_id' => $bank->id, 'company_id' => $ent, 'amount_gbp' => Fx::toBase($row['amount'], $row['currency'], $row['txn_date'], $ent), 'match_status' => 'UNMATCHED']);
+                $new++; $from = $from === null || $row['txn_date'] < $from ? $row['txn_date'] : $from; $to = $to === null || $row['txn_date'] > $to ? $row['txn_date'] : $to;
             }
             DB::table('fin_import_batches')->where('id', $batch)->update(['rows_total' => $new + $dup + count($errors), 'rows_new' => $new, 'rows_duplicate' => $dup, 'rows_error' => count($errors), 'period_from' => $from, 'period_to' => $to]);
             $matched = self::autoMatch($ent, (int) $bank->id);
@@ -143,7 +116,7 @@ class MoneyService
     /** Match what can only mean one thing: same amount, close date, same account, exactly one candidate. Two candidates → left for a person. */
     public static function autoMatch(int $ent, int $bankId): int
     {
-        $n = 0; $dSup = (int) (Settings::get('match_supplier_days', $ent, 5) ?: 5); $dPay = (int) (Settings::get('MATCH_PAYOUT_DAYS', $ent, 5) ?: 5);
+        $n = 0; $dSup = FinanceSettings::int($ent, 'match_supplier_days'); $dPay = FinanceSettings::int($ent, 'match_payout_days');      // R-FIN-6 one place for the finance settings
         $near = fn ($q, string $col, string $date, int $days) => $q->whereBetween($col, [date('Y-m-d', strtotime("$date -$days day")), date('Y-m-d', strtotime("$date +$days day"))]);
         foreach (DB::table('fin_bank_transactions')->where('bank_account_id', $bankId)->where('company_id', $ent)->where('match_status', 'UNMATCHED')->orderBy('txn_date')->orderBy('id')->get() as $l) {
             $amt = round((float) $l->amount, 2);
@@ -284,7 +257,7 @@ class MoneyService
             if ($l->match_status !== 'UNMATCHED') throw new \InvalidArgumentException('This line is already matched.');
             $other = self::bank($ent, $otherBankId);
             if ($other->id == $l->bank_account_id) throw new \InvalidArgumentException('Choose the other account, not the same one.');
-            $base = abs((float) $l->amount_gbp); $in = (float) $l->amount > 0; $days = (int) (Settings::get('match_intercompany_days', $ent, 2) ?: 2);
+            $base = abs((float) $l->amount_gbp); $in = (float) $l->amount > 0; $days = FinanceSettings::int($ent, 'match_intercompany_days');
             $jid = Ledger::post($ent, $l->txn_date, 'TRANSFER', (int) $l->id, [
                 ['account' => '1000', $in ? 'debit' : 'credit' => $base, 'ref_id' => (int) $l->bank_account_id, 'amount_cur' => (float) $l->amount],
                 ['account' => '1000', $in ? 'credit' : 'debit' => $base, 'ref_id' => (int) $other->id]], ['memo' => 'Transfer between own accounts', 'currency' => $l->currency]);
@@ -410,7 +383,7 @@ class MoneyService
     /** Nightly: a bank account with no new line, or a shop with no new money file, for longer than the settings allow. Only accounts / shops that were loaded at least once. */
     public static function staleTasks(int $ent): array
     {
-        $bd = (int) (Settings::get('bank_overdue_days', $ent, 8) ?: 8); $sd = (int) (Settings::get('settlement_overdue_days', $ent, 17) ?: 17); $n = ['bank' => 0, 'shop' => 0];
+        $bd = FinanceSettings::int($ent, 'bank_overdue_days') ?: 8; $sd = FinanceSettings::int($ent, 'settlement_overdue_days') ?: 17; $n = ['bank' => 0, 'shop' => 0];
         foreach (DB::table('fin_bank_accounts as b')->join('fin_bank_transactions as t', 't.bank_account_id', '=', 'b.id')->where('b.company_id', $ent)->where('b.is_active', 1)->groupBy('b.id', 'b.account_label')->selectRaw('b.id, b.account_label, MAX(t.txn_date) last')->get() as $b) {
             if ($b->last < date('Y-m-d', strtotime("-$bd day"))) { TaskEngine::open('FIN_BANK_STALE', [$b->id], "No new bank lines for {$b->account_label} since {$b->last} – load the bank file", ['ent' => $ent, 'module' => 'fin_bank_accounts', 'record_id' => $b->id, 'fix_url' => '#/bank']); $n['bank']++; }
             else TaskEngine::close('FIN_BANK_STALE', [$b->id], 'Bank lines are up to date');
