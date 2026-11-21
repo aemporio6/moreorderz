@@ -122,4 +122,5 @@ How to work each step: build → test → change the verdict lines in `audit/ver
 | 7e-63 | Shop assignment = shop scope R-C-41 BUILT (ShopAssignments: unique person+shop+role, VA overlap refused, events, VA cache, scope from assignments + own/seller shops, Shops card) | done | 563/1433 | 419 tests |
 | 7e-64 | R-B_SOURCING-16 step colours from the data (config/workflows.php, StepColours, legend) → MR-0369, MR-0570, MR-0748 BUILT | done | 566 / 1,433 (39%) | 422 tests |
 | 7e-65 | R-H-49 inbound shipment prep (InboundShipments: reserve, pick into cartons, FBA item / carton labels + packing list, two-step transfer, STK_FC_DIFF) → MR-0138, MR-0194, MR-1368 BUILT | done | 569 / 1,433 (40%) | 425 tests |
-| 7e-66 | NEXT → recount; 3-line R-H-19, R-A_SALES-87, R-FIN-22, R-FIN-47, R-G_CORE-96 …; rest of Sourcing 39 / 28 | todo | | |
+| 7e-66 | R-D-46 Stock alerts page (StockAlerts: rows, counted-qty update with reason, approval, STK_LOW, Buy more / Create PO) → MR-0464, MR-0888, MR-0977 BUILT | done | 572 / 1,433 (40%) | 427 tests |
+| 7e-67 | NEXT → recount; 3-line R-H-19, R-A_SALES-87, R-FIN-22, R-FIN-47, R-G_CORE-96, R-B_SOURCING-51 …; rest of Sourcing 39 / 28 | todo | | |

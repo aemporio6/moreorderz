@@ -163,6 +163,7 @@
       if ((mt = r.match(/^#\/product-investors\/(\d+)/))) return await pageProductInvestors(+mt[1]);
       if (r === '#/putaway') return await pagePutaway();
       if (r === '#/inbound') return await pageInbound();
+      if (r === '#/stock-alerts') return await pageStockAlerts();
       if (/^#\/inbound\/\d+$/.test(r)) return await pageInboundOne(+r.split('/')[2]);
       if (r === '#/lost-parcels') return await pageLostParcels();
       if (r.startsWith('#/mp-fields')) return await pageMpFields(+((r.match(/mp=(\d+)/) || [])[1] || 0));
@@ -185,7 +186,7 @@
       if ((mt = r.match(/^#\/cycle-extras\/(\d+)/))) return await pageCycleExtras(+mt[1]);
       if (r.startsWith('#/direct-po')) return await pageDirectPo(null, null);
       if ((mt = r.match(/^#\/cycle\/(\d+)/))) { await pageCycle(+mt[1]); if (r.includes('tab=payments')) { const h = $$('#main h3').find(x => x.textContent.startsWith('3. Payments')); if (h) h.scrollIntoView({ block: 'start' }); } return; }
-      if (r === '#/quick-buy') return await pageQuickBuy();
+      if (r.startsWith('#/quick-buy')) return await pageQuickBuy(+(new URLSearchParams(r.split('?')[1] || '').get('product')) || null);
       if (r === '#/forecast') return await pageForecast();
       if (r === '#/labels') return await pageLabels();
       if (r === '#/import') return pageImportHub();
@@ -1394,6 +1395,21 @@
         <td class="num"><input type="number" min="1" max="${r.qty}" value="${r.qty}" data-paq="${r.task}" style="width:80px"></td><td><button class="btn sm primary" data-pa="${r.task}">Put away</button></td></tr>`).join('')}</tbody></table>
       ${d.rows.length ? '' : `<div class="empty">${ic('check')}<div>Nothing waits in RECEIVING.</div></div>`}</div></div>`;
     $$('[data-pa]').forEach(b => b.onclick = async () => { const t = b.dataset.pa; try { toast((await api(`putaway/${t}`, { method: 'POST', body: { bin: +$(`[data-pab="${t}"]`).value, qty: +$(`[data-paq="${t}"]`).value } })).message); pagePutaway(); } catch (e) { toast(e.message, 'err'); } });
+  }
+  // ---------- stock alerts (R-D-46): out of stock / near min level, counted qty update, buy buttons ----------
+  async function pageStockAlerts() {
+    busy(true); let d; try { d = await api('stock-alerts'); } finally { busy(false); }
+    const locs = sel => d.locations.map(l => `<option value="${l.id}" ${+sel === +l.id ? 'selected' : ''}>${esc(l.name)}</option>`).join('');
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Stock alerts</h1><div class="sub">Products out of stock or at / below their minimum level (available stock). Enter the counted quantity at a location – the difference is posted as an adjustment with its reason. More than ${d.approval_qty} units waits for approval.</div></div>${d.icc ? `<a class="btn ghost" href="#/icc">${d.icc} ICC reorder alert(s)</a>` : ''}</div>
+      <div class="card"><div class="tbl-wrap"><table class="t" id="saList"><thead><tr><th>SKU</th><th>Product</th><th>Vendor</th><th class="num">Stock</th><th class="num">Min</th><th>Status</th>${d.can_change ? '<th>Location</th><th class="num">New qty</th><th>Reason</th><th>Notes</th><th></th>' : ''}${d.can_buy ? '<th></th>' : ''}</tr></thead><tbody>${d.rows.map(r => `<tr data-sa="${r.id}"><td><b>${esc(r.sku)}</b></td><td><a href="#/rec/t_product_vendor/${r.id}" target="_blank" rel="noopener">${esc(r.name || '')}</a></td><td>${esc(r.vendor || '')}</td><td class="num">${r.stock}</td><td class="num">${r.min || ''}</td>
+        <td><span class="chip ${r.status === 'Out of stock' ? 'err' : 'warn'}">${esc(r.status)}</span></td>
+        ${d.can_change ? `<td><select data-sl>${locs(r.location)}</select></td><td class="num"><input type="number" min="0" step="1" data-sq style="width:80px"></td><td><select data-sr><option value="">Choose…</option>${d.reasons.map(x => `<option>${esc(x)}</option>`).join('')}</select></td><td><input data-sn value="${esc(d.note)}" style="min-width:160px"></td><td><button class="btn sm primary" data-su>Update</button></td>` : ''}
+        ${d.can_buy ? `<td style="white-space:nowrap"><a class="btn sm ghost" href="#/quick-buy?product=${r.id}">Buy more</a> <a class="btn sm ghost" href="#/direct-po">Create PO</a></td>` : ''}</tr>`).join('')}</tbody></table>
+      ${d.rows.length ? '' : `<div class="empty">${ic('check')}<div>No stock alerts – everything is above minimum level</div></div>`}</div></div>`;
+    $$('[data-su]').forEach(b => b.onclick = async () => { const tr = b.closest('tr');
+      try { const r = await api('stock-alerts/' + tr.dataset.sa, { method: 'POST', body: { location: +$('[data-sl]', tr).value, new_qty: $('[data-sq]', tr).value, reason: $('[data-sr]', tr).value, notes: $('[data-sn]', tr).value } });
+        toast(r.message, r.waiting ? 'warn' : undefined); if (r.changed) pageStockAlerts(); }
+      catch (e) { toast(e.errors ? Object.values(e.errors).flat().join(' · ') : e.message, 'err'); } });
   }
   // ---------- inbound shipment prep, FBA / 3PL (R-H-49) ----------
   async function pageInbound() {
@@ -3041,7 +3057,7 @@
     $$('#main [data-tk]').forEach(b => b.onclick = () => miniForm('Mark this step done', 'For example: we use no carrier account yet, or the old data comes later.', [{ name: 'note', label: 'Note' }], async v => { const r = await api('setup/tick', { method: 'POST', body: { step: b.dataset.tk, on: true, note: v.note || null } }); again(); return r; }, 'Mark done'));
     $$('#main [data-un]').forEach(b => b.onclick = () => act('setup/tick', { step: b.dataset.un, on: false }, again));
   }
-  async function pageQuickBuy() {
+  async function pageQuickBuy(pre) {
     busy(true); let p; try { p = await bpick(); } finally { busy(false); }
     const lineRow = () => `<tr data-ql><td><select class="q" data-qp style="min-width:180px"><option value="">Choose…</option>${p.products.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('')}</select></td><td class="num"><input class="q" data-qq type="number" min="1" step="1" value="1" style="width:90px;text-align:right"></td><td class="num"><input class="q" data-qu type="number" min="0" step="0.01" style="width:110px;text-align:right"></td><td class="num" data-qt>0.00</td><td><button class="btn sm" data-qx>✕</button></td></tr>`;
     $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/buying">Buying</a> ›</div><h1>Quick buy</h1><div class="sub">A local purchase that has already happened: ordered, received and – if you choose a bank – paid in one save. The stock is booked at the price paid.</div></div></div>
@@ -3056,7 +3072,7 @@
         <div class="card-b" style="display:flex;justify-content:flex-end;gap:8px;align-items:center"><span class="small muted" id="qbMsg"></span><button class="btn primary" id="qbSave">Save quick buy</button></div></div>`;
     const sum = () => { let t = 0; $$('#qbLines tr').forEach(tr => { const v = (+$('[data-qq]', tr).value || 0) * (+$('[data-qu]', tr).value || 0); $('[data-qt]', tr).textContent = v.toFixed(2); t += v; }); $('#qbTot').textContent = t.toFixed(2); };
     const wire = () => { $$('#qbLines input').forEach(i => i.oninput = sum); $$('#qbLines [data-qx]').forEach(b => b.onclick = () => { if ($$('#qbLines tr').length > 1) { b.closest('tr').remove(); sum(); } }); };
-    $('#qbAdd').onclick = () => { $('#qbLines').insertAdjacentHTML('beforeend', lineRow()); wire(); }; wire(); dupLive($('#qbS'), $('#qbR'), $('#qbDup'));
+    $('#qbAdd').onclick = () => { $('#qbLines').insertAdjacentHTML('beforeend', lineRow()); wire(); }; wire(); if (pre) { const q = $('#qbLines [data-qp]'); if (q && [...q.options].some(o => +o.value === pre)) { q.value = String(pre); q.dispatchEvent(new Event('change')); } }      // Buy more from Stock alerts (R-D-46) dupLive($('#qbS'), $('#qbR'), $('#qbDup'));
     $('#qbSave').onclick = async () => { const lines = $$('#qbLines tr').map(tr => ({ product: +$('[data-qp]', tr).value || null, qty: +$('[data-qq]', tr).value || 0, unit_price: $('[data-qu]', tr).value === '' ? null : +$('[data-qu]', tr).value })).filter(l => l.product);
       if (!lines.length) return ($('#qbMsg').textContent = 'Add at least one product line.'); if (lines.some(l => l.unit_price === null || l.qty < 1)) return ($('#qbMsg').textContent = 'Each line needs units and a price.');
       busy(true); try { const r = await withDup(x => api('quick-buy', { method: 'POST', body: { supplier: +$('#qbS').value || null, date: $('#qbD').value, location: +$('#qbL').value || null, bank: +$('#qbB').value || null, reference: $('#qbR').value || null, note: $('#qbN').value || null, lines, ...x } })); toast(r.message); go('#/cycle/' + r.cycle); }

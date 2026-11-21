@@ -577,3 +577,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-63 (21 Nov): shop assignment = shop scope R-C-41 BUILT (VA one source, scope, Shops card). +3 register lines (563). 419 tests.
 - 7e-64 (21 Nov): step colours from the data R-B_SOURCING-16 BUILT (done / bad lists in config/workflows.php, latest QC per PO, hatched skipped, legend). +3 register lines (566). 422 tests.
 - 7e-65 (21 Nov): inbound shipment prep R-H-49 BUILT (reserve, pick into cartons by scan, item / carton labels + packing list, shipped → TRANSIT with the same lots, centre receipt + STK_FC_DIFF; page #/inbound). +3 register lines (569). 425 tests.
+- 7e-66 (21 Nov): Stock alerts page R-D-46 BUILT (out of stock / near min by available stock, counted-qty update as an adjustment with a required reason, approval above the limit, STK_LOW, Buy more / Create PO). +3 register lines (572). 427 tests.

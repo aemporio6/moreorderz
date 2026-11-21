@@ -36,7 +36,7 @@
 43|M||void a purchase not built
 44|P|function productStock|units per location and lot from the ledger; bin notes / inactive-location warning not built
 45|F|form:inventory_setup|setup lists as forms; own-descendant parent check not built
-46|P|STK_LOW|low stock tasks nightly + low filter; the Stock alerts page with update / buy buttons not built
+46|B|class StockAlerts|Stock alerts page #/stock-alerts: non-child products with available ≤ 0, manual OOS or ≤ min (alert on), sorted by stock, badges; counted qty at a location → adjustment of R-D-47 with a required reason from Adjustment reasons (No change. when equal), approval above ADJUST_APPROVAL_QTY, STK_LOW opens / closes per product, Buy more (Quick buy prefilled) and Create PO, ICC link; StockAlertsTest
 47|B|function adjust|adjust with reason, location, never below 0, approval above ADJUST_APPROVAL_QTY
 48|P|function transfer|transfer between locations, lot and cost travel; two-step via TRANSIT with damaged / missing not built
 50|B|class CountService|stock count: blind count, second person approves, only differences posted; CSV count upload not built

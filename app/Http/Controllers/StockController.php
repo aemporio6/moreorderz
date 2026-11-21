@@ -64,6 +64,16 @@ class StockController extends Controller
     public function putaways(Request $r) { \App\Services\Perm::need($r->user(), 'stock.CHANGE'); return ['rows' => \App\Services\WarehouseMode::putaways((int) Context::ent()), 'bins' => \Illuminate\Support\Facades\DB::table('cat_inventory_locations')->where('fk_id_ent', Context::ent())->where('kind', 'BIN')->where('f_active', 1)->orderBy('pick_seq')->limit(500)->get(['id', 'location_name as name'])]; }
     public function putaway(Request $r, int $id) { \App\Services\Perm::need($r->user(), 'stock.CHANGE'); return $this->run(fn () => \App\Services\WarehouseMode::putaway((int) Context::ent(), $id, (int) $r->input('bin'), $r->filled('qty') ? (int) $r->input('qty') : null)); }
 
+    /** Stock alerts page (R-D-46). */
+    public function stockAlerts(Request $r) { $this->can($r, 'stock.SEE'); return \App\Services\StockAlerts::page((int) Context::ent()) + ['can_change' => \App\Services\Perm::has($r->user(), 'stock.CHANGE'), 'can_buy' => \App\Services\Perm::has($r->user(), 'buying.BUY')]; }
+    public function stockAlertUpdate(Request $r, int $id)
+    {
+        $this->can($r, 'stock.CHANGE');
+        try { return \App\Services\StockAlerts::update((int) Context::ent(), $id, $r->input('location') ? (int) $r->input('location') : null, $r->input('new_qty'), (string) $r->input('reason', ''), $r->input('notes'), \App\Services\Perm::has($r->user(), 'stock.adjust_owner')); }
+        catch (\App\Services\ValidationErrors $e) { return response()->json(['message' => $e->getMessage(), 'errors' => array_map(fn ($m) => [$m], $e->errors)], 422); }
+        catch (\InvalidArgumentException|\RuntimeException $e) { return response()->json(['message' => $e->getMessage(), 'errors' => ['_form' => [$e->getMessage()]]], 422); }
+    }
+
     /** Inbound shipment prep (R-H-49). */
     public function inboundList(Request $r)
     {
