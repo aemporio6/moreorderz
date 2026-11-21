@@ -174,6 +174,14 @@ class PartnerController extends Controller
         return \App\Services\PartnerAccount::setNotify($id, $d);
     }
 
+    /** R-FIN-18: the Owner reinvests for any partner. */
+    public function reinvest(Request $r, int $id)
+    {
+        abort_unless($r->user()->role_code === 'OWNER', 403, 'Refused: a partner (or the Owner) reinvests.');
+        $d = $r->validate(['amount' => 'required|numeric|gt:0', 'note' => 'nullable|string|max:200']);
+        return $this->run(fn () => \App\Services\PartnerAccount::reinvest((int) Context::ent(), $id, (float) $d['amount'], $d['note'] ?? null));
+    }
+
     public function myReinvest(Request $r)
     {
         [$id] = $this->accountOf($r, true); abort_unless($id, 403, 'Only a partner login can reinvest.');

@@ -117,6 +117,23 @@ class MoneyController extends Controller
             'profiles' => DB::table('bank_statement_profiles')->whereIn('fk_id_ent', [0, $ent])->where('f_active', 1)->orderBy('id')->get(['id', 'name', 'date_format'])] + $this->lists($ent);
     }
 
+    /** R-FIN-33 accountant export and R-FIN-36 stock valuation at a date (CSV / XLSX). */
+    public function exportLedger(Request $r)
+    {
+        $this->can($r, 'money.SEE'); $y = (int) ($r->query('year') ?: date('Y'));
+        $d = fn ($v, $def) => is_string($v) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $v) ? $v : $def;
+        return $this->run(function () use ($r, $y, $d) { $x = \App\Services\FinanceExports::ledger((int) ($r->query('company') === 'all' ? 0 : ($r->query('company') ?? Context::ent())), $d($r->query('from'), "$y-01-01"), $d($r->query('to'), "$y-12-31"), (string) $r->query('format', 'csv'), $r->user());
+            return response($x['body'], 200, ['Content-Type' => $x['type'], 'Content-Disposition' => 'attachment; filename="' . $x['name'] . '"']); });
+    }
+    public function exportValuation(Request $r)
+    {
+        $this->can($r, 'money.SEE'); $date = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $r->query('date')) ? (string) $r->query('date') : date('Y-m-d');
+        return $this->run(function () use ($r, $date) { $x = \App\Services\FinanceExports::valuation((int) ($r->query('company') === 'all' ? 0 : ($r->query('company') ?? Context::ent())), $date, (string) $r->query('format', 'csv'), $r->user());
+            return response($x['body'], 200, ['Content-Type' => $x['type'], 'Content-Disposition' => 'attachment; filename="' . $x['name'] . '"']); });
+    }
+    /** R-FIN-25 report status board per shop × report type. */
+    public function reportBoard(Request $r) { $this->can($r, 'money.SEE'); return \App\Services\FinanceExports::board((int) Context::ent()); }
+
     public function bankCreate(Request $r)
     {
         $this->can($r, 'money.EDIT');

@@ -14,7 +14,7 @@ FIN-13|B|function scopeTotals|share total per scope, over 100 % warning + close 
 FIN-15|P|ended_reason|agreement end with reason; automatic end when the PO is sold out not verified
 FIN-16|P|function account|partner balance (capital, profit, withdrawn); annualised return not built
 FIN-17|B|function requestWithdrawal|withdrawal request -> approval -> paid, never above balance
-FIN-18|M||reinvest action not built (the ledger type exists only)
+FIN-18|B|function reinvestable|PartnerAccount::reinvest: refusal text as spec, PROFIT -x + CAPITAL_IN +x ref REINVEST, POOL agreement ended+copied (in place when it starts today), Owners told, GL 2100->2150; My Account confirm with new capital + Owner action; PartnerReinvestTest (3000/1000/2500 refused, allowed 2000)
 FIN-14|B|function callNew|capital calls: ask partners, answer, money received = capital; WhatsApp OK / NO answer and auto-match MC not built
 FIN-19|B|function myAccount|My Partner Account #/my-account: as-of vs compare cards, return % after reserve, stock share (damaged/returned/written off apart), profit by product top 50, statements, capital calls, agreements, Withdraw/Reinvest, notify switches; never-shows strip; Owner view-as read-only + REVEAL audit; staff explanation (MyPartnerAccountTest)
 FIN-20|P|opening_balance|opening balance of bank accounts and opening lots; the wizard with types + lock not built
@@ -22,7 +22,7 @@ FIN-21|N||legacy investor migration – old-tool cut-over step, not run (old inv
 FIN-22|P|class MarketplaceFiles|money files of TikTok, Amazon (2 formats), eBay, any table + bank CSV / Excel with dedupe; ADS / FBA_STOCK / RETURNS / REIMB / STORAGE types not built
 FIN-23|B|function amazonCode|settlement line -> bucket rules (in code, not as data)
 FIN-24|P|function importStatement|upload -> check -> apply with dedupe; saved layouts per shop, dry-run screen, temp token not built
-FIN-25|P|hubs|Marketplace hubs card per shop; report status board per shop x type not built
+FIN-25|B|function board|FinanceExports::board per shop x SETTLEMENT/ORDERS + BANK per account, overdue 17/8 days, page #/report-board; ORDERS limit owner to confirm; FinanceExportsTest
 FIN-26|B|class FxMissing|Manual rates (one per date + currency, replaced when saved again, > 0); lookup = latest rate on or before the date, base currency = 1; no rate is never 1.0: the amount is refused and a task "Add rate <CCY> <date>" (FIN_FX_MISSING) opens outside the failed transaction; adding a rate on or before that date closes it (also the hourly sweep); month close keeps its FX_PRESENT check. FinanceBatchTest has the rule example (EUR 0.86 used for 10 Mar; USD → task, not 1.0).
 FIN-27|P|function autoMatch|auto-match only when exactly one thing fits (supplier payment, expense, payout); rule codes M1-M5 / MC partly
 FIN-28|P|function unmatch|manual match with direction guard, undo; all targets (INVOICE, CLAIM, LOAN) not built
@@ -44,7 +44,7 @@ FIN-50|P|FIN_SETTLEMENT_OVERDUE|overdue money-file task (auto-close); monthly pa
 FIN-51|M||nightly stock snapshot not built (stock read live from the ledger)
 FIN-52|N||pipeline rows replaced by sourcing records (v1.7 says no pipeline ledger)
 FIN-53|B|function postGrn|GRN post is the only lot creator
-FIN-36|P|valuation|stock valuation report (today); valuation at a past date not built
+FIN-36|B|function valuationRows|FinanceExports::valuation at any date (later lot movements reversed, zero lots left out), CSV/XLSX, needs see_money; FinanceExportsTest
 FIN-54|P|class ProfitService|profit by product view; stock days / slow-dead flags in the same list not built
 FIN-60|B|class CashForecast|cash forecast by week with committed items – different formula from the spec's 30 / 60 / 90
 FIN-61|P|function payDueTasks|supplier terms + SRC_PAY_DUE task; schedule view in Finance partly (dashboard list)
@@ -54,7 +54,7 @@ FIN-64|P|function budgets|budgets per month and category; Bank & cash page parts
 FIN-65|P|money|Money dashboard tiles + to-do list; forecast tiles, partners table partly
 FIN-66|P|FIN_BANK_STALE|3 of the 10 finance alerts as rule tasks (bank stale, settlement overdue, loan due); FA1, FA2, FA5-FA8, FA10 not built
 FIN-67|M||alerts screen with on / off not built
-FIN-33|P|export/\{key\}|CSV export of lists; the accountant year export with proof links not built
+FIN-33|B|LEDGER_COLS|FinanceExports::ledger year export, spec column order, proof_link per line, Owner/Accountant only, audited, CSV BOM + XLSX logo; FinanceExportsTest
 FIN-69|P|class MarketplaceFiles|money reports per marketplace placed in shop x month; mappings are code, not profile data
 FIN-70|P|function split|bank layouts, auto-match, split lines; M6 invoice match, sum matching, provider profiles not built
 FIN-71|P|class OldImport|opening lots + history import; cut-over date rules / go-live gate not built

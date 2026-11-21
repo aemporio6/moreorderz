@@ -96,16 +96,54 @@ class PartnerAccount
         return ['message' => 'Saved. Statements are always sent.'];
     }
 
-    /** Reinvest: move part of the balance into capital (REINVEST row; the balance goes down, the capital goes up). */
+    /**
+     * R-FIN-18 how much may be reinvested: profit + adjustments − withdrawn (= the balance; old REINVEST rows already taken off),
+     * less withdrawals still waiting (improved: money asked for cannot be reinvested too).
+     */
+    public static function reinvestable(int $ent, int $partner): float
+    {
+        $waiting = (float) DB::table('fin_withdrawals')->where('company_id', $ent)->where('investor_id', $partner)->whereIn('status', ['REQUESTED', 'APPROVED'])->sum('amount');
+        return round(PartnerService::account($ent, $partner)['balance'] - $waiting, 2);
+    }
+
+    /**
+     * R-FIN-18 Reinvest profit as capital. Partner (own) or Owner (the controllers check who). Amount > allowed + 0.001 → refused
+     * "Refused: only <x> of accumulated profit is available to reinvest." Writes PROFIT −x and CAPITAL_IN +x (reference REINVEST) dated
+     * today, posts payable 2100 → capital 2150. Current POOL agreement: started before today → ended yesterday and copied from today
+     * with capital_amount + x; started today → capital updated in place. The Owners are told (bell, type FINANCE).
+     */
     public static function reinvest(int $ent, int $partner, float $amount, ?string $note = null): array
     {
-        if ($amount <= 0) throw new \InvalidArgumentException('The amount must be more than zero.');
-        $waiting = (float) DB::table('fin_withdrawals')->where('company_id', $ent)->where('investor_id', $partner)->where('status', 'REQUESTED')->sum('amount');
-        $free = PartnerService::account($ent, $partner)['balance'] - $waiting;
-        if ($amount > $free + 0.005) throw new \InvalidArgumentException('This is more than the ' . number_format(max(0, $free), 2) . ' you can reinvest now.');
-        $id = (int) DB::table('fin_investor_ledger')->insertGetId(['investor_id' => $partner, 'company_id' => $ent, 'entry_date' => date('Y-m-d'), 'type' => 'REINVEST', 'amount' => -round($amount, 2), 'note' => mb_substr('Reinvested by the partner' . ($note ? ': ' . $note : ''), 0, 255), 'created_by' => (int) Context::userId(), 'created_at' => now()]);
-        Audit::log('fin_investor_ledger', $id, 'INSERT', ['type' => 'REINVEST', 'amount' => round($amount, 2)], 'Partner reinvest', $ent);
-        return ['id' => $id, 'message' => 'Reinvested ' . number_format($amount, 2) . ' – your capital went up by the same amount.'];
+        if ($amount <= 0) throw new \InvalidArgumentException('Amount must be more than 0.');
+        return DB::transaction(function () use ($ent, $partner, $amount, $note) {
+            DB::table('t_account')->where('id', $partner)->lockForUpdate()->first() ?? throw new \InvalidArgumentException('Choose the partner.');
+            $x = round($amount, 2); $allowed = self::reinvestable($ent, $partner);
+            if ($x > $allowed + 0.001) throw new \InvalidArgumentException('Refused: only ' . number_format(max(0, $allowed), 2) . ' of accumulated profit is available to reinvest.');
+            $today = date('Y-m-d'); $uid = (int) Context::userId(); $who = Context::role() === 'OWNER' ? 'by the Owner' : 'by the partner';
+            $row = ['investor_id' => $partner, 'company_id' => $ent, 'entry_date' => $today, 'reference_no' => 'REINVEST', 'note' => mb_substr("Reinvested $who" . ($note ? ': ' . $note : ''), 0, 255), 'created_by' => $uid, 'created_at' => now()];
+            $p = (int) DB::table('fin_investor_ledger')->insertGetId($row + ['type' => 'PROFIT', 'amount' => -$x]);
+            $c = (int) DB::table('fin_investor_ledger')->insertGetId($row + ['type' => 'CAPITAL_IN', 'amount' => $x]);
+            Ledger::post($ent, $today, 'PARTNER_REINVEST', $c, [['account' => '2100', 'debit' => $x, 'ref_id' => $partner], ['account' => '2150', 'credit' => $x, 'ref_id' => $partner]], ['memo' => 'Reinvest · ' . PartnerService::name($partner)]);
+            $agr = null;
+            $a = DB::table('fin_investor_agreements')->where('company_id', $ent)->where('investor_id', $partner)->where('scope', 'POOL')->where('status', 'ACTIVE')
+                ->where('effective_from', '<=', $today)->where(fn ($w) => $w->whereNull('effective_to')->orWhere('effective_to', '>=', $today))->orderByDesc('effective_from')->orderByDesc('id')->lockForUpdate()->first();
+            if ($a) {
+                $cap = round((float) $a->capital_amount + $x, 2);
+                if ($a->effective_from >= $today) { DB::table('fin_investor_agreements')->where('id', $a->id)->update(['capital_amount' => $cap]); $agr = (int) $a->id; }
+                else {
+                    DB::table('fin_investor_agreements')->where('id', $a->id)->update(['effective_to' => date('Y-m-d', strtotime("$today -1 day")), 'status' => 'ENDED', 'ended_reason' => 'Reinvest: new capital ' . number_format($cap, 2)]);
+                    $copy = (array) $a; unset($copy['id']);
+                    $agr = (int) DB::table('fin_investor_agreements')->insertGetId(array_merge($copy, ['effective_from' => $today, 'capital_amount' => $cap, 'status' => 'ACTIVE', 'ended_reason' => null, 'created_by' => $uid, 'created_at' => now()]));
+                }
+                Audit::log('fin_investor_agreements', $agr, $agr === (int) $a->id ? 'UPDATE' : 'INSERT', ['capital_amount' => $cap, 'from' => $a->id], 'Reinvest', $ent);
+            }
+            Audit::log('fin_investor_ledger', $c, 'INSERT', ['type' => 'REINVEST', 'amount' => $x, 'profit_row' => $p, 'agreement' => $agr], 'Partner reinvest', $ent);
+            $name = PartnerService::name($partner);
+            foreach (DB::table('t_users')->where('role_code', 'OWNER')->where('f_active', 1)->pluck('id') as $o)
+                if ((int) $o !== $uid) Notify::push((int) $o, 'FINANCE', "REINVEST: $name reinvested " . number_format($x, 2) . ' of profit as capital.', "#/partners/$partner");
+            $capital = PartnerService::account($ent, $partner)['capital'];
+            return ['id' => $c, 'agreement' => $agr, 'capital' => $capital, 'message' => 'Reinvested ' . number_format($x, 2) . ' – capital is now ' . number_format($capital, 2) . '.'];
+        });
     }
 
     /** May this partner get a non-mandatory message on this channel? */
