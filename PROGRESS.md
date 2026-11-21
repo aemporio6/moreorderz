@@ -633,3 +633,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-119 (22 Nov): Task screens – R-G_CORE-6 / 37 / 38 / 41 BUILT, R-G_CORE-34 and 36 PARTIAL. 743 → 749 register lines BUILT (52 %). 568 tests. Browser desktop + phone, no writes (checksums same).
 - 7e-120 (22 Nov): R-G_CORE-19 / 62 / 36 / 34 BUILT (task visibility incl. confidential + cover, one Mask service, Home needs action, Import Center TASKS). 749 → 755 register lines BUILT (53 %). 571 tests. Browser desktop + phone, no writes (checksums same).
 - 7e-121 (22 Nov): R-G_CORE-26 repeating tasks BUILT; Team page + leaderboard (G-40) and weekly report (G-44) PARTIAL. 755 → 756 BUILT, MISSING 166 → 163 (53 %). 574 tests. Browser desktop + phone, no writes (checksums same).
+- 7e-122 (22 Nov): Task settings – R-G_CORE-17 / 22 / 23 BUILT, R-G_CORE-16 PARTIAL (HR calendar open). 756 → 760 register lines BUILT (53 %). 578 tests. Browser desktop + phone, no writes (checksums same).

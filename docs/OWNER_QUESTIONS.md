@@ -51,6 +51,7 @@ Updated 21 Nov 2026 (batch 7e-101). How to answer: write **OK** next to a line t
 | B22 | R-G_CORE-48 / 45 | A person may change his own quiet hours, time zone, digest time and WhatsApp / e-mail switches (Tasks › My alerts); a Partner or Manager changes anyone's; only a Partner switches a channel off for someone else; the weekly task limit only a Partner or Manager. An empty digest ("Nothing due. Well done.") is sent because digest_send_empty is 1 today – set it to 0 in Alerts › Thresholds to stop it | — |
 | B23 | R-G_CORE-53 / 46 | Outside the 24-hour WhatsApp window only an APPROVED template is sent. All templates (statements, capital calls, task alerts …) start as PENDING: when Meta / 360dialog approves one, open Settings › WhatsApp templates and set it to Approved – until then those WhatsApp messages show FAILED "template needed" (e-mail and in-app still go) | ✔ Owner confirmed 22 Nov 02:18 ("ok") |
 | B24 | R-G_CORE-6 / 34 | A new task now needs proof by default (the spec's rule); only a Partner or Manager can switch proof off, with a reason. A task CSV import tells nobody unless "Tell each owner on WhatsApp now" is ticked (the tasks still show in the digest) | — |
+| B25 | R-G_CORE-16 / 17 / 23 | Partners now see Team & settings (absence, delegation, SLA categories). Only a Partner sets delegations and changes categories; a Manager sets absences. A delegation with "ALL" also lets the person decide money approvals | — |
 
 ## C. Suggested defaults written in the specification (220 lines)
 

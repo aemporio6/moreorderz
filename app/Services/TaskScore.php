@@ -52,9 +52,7 @@ class TaskScore
         $boss = in_array($u->role_code, self::BOSS, true);
         if ((int) $t->assigned_by_user_id === 0) return $boss ? null : 'Refused: only the person who assigned it, a Partner or a Manager can approve.';
         if ((int) $t->assigned_by_user_id === (int) $u->id || $boss) return null;
-        $today = date('Y-m-d');
-        $del = DB::table('tm_delegations')->where('from_user_id', $t->assigned_by_user_id)->where('to_user_id', $u->id)->whereIn('rights', ['APPROVE', 'ALL'])
-            ->where(fn ($w) => $w->whereNull('from_date')->orWhere('from_date', '<=', $today))->where(fn ($w) => $w->whereNull('to_date')->orWhere('to_date', '>=', $today))->exists();
+        $del = TaskSettings::delegationFor((int) $t->assigned_by_user_id, $u);      // R-G_CORE-17
         return $del ? null : 'Refused: only the person who assigned it, a Partner or a Manager can approve.';
     }
 
@@ -76,6 +74,8 @@ class TaskScore
             Audit::log('tasks', $taskId, 'APPROVE', ['quality' => $quality, 'score' => $p['score']]);
             $ref = 'T-' . str_pad((string) $taskId, 4, '0', STR_PAD_LEFT);
             if ($t->owner_user_id) AlertRules::send('APPROVED', (int) $t->owner_user_id, ['first_name' => self::first((int) $t->owner_user_id), 'task_ref' => $ref, 'title' => $t->title, 'quality' => $quality, 'score' => $p['score'], 'link' => self::link()], $taskId, "AP:$taskId");
+            if (! $system && (int) $t->assigned_by_user_id && (int) $t->assigned_by_user_id !== (int) $u->id && TaskSettings::delegationFor((int) $t->assigned_by_user_id, $u))
+                DB::table('task_history')->insert(['task_id' => $taskId, 'at' => now(), 'user_id' => $u->id, 'field' => 'approved_by', 'old_value' => null, 'new_value' => (string) $u->id, 'reason' => 'approved on behalf of ' . DB::table('t_users')->where('id', $t->assigned_by_user_id)->value('display_name')]);      // R-G_CORE-17 note
             TaskActions::unblock($taskId, 'approved'); TaskActions::rollUp($taskId); TaskRepeat::onClosed($taskId);      // R-G_CORE-26 the next repeat      // R-G_CORE-11 waiting TODO tasks get N10, R-G_CORE-12 parent roll-up
             return $p + ['message' => "$ref approved – score {$p['score']} ({$p['text']})."];
         });

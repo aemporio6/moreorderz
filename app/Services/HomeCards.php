@@ -41,6 +41,12 @@ class HomeCards
             return ['label' => 'My tasks', 'value' => $d['open'], 'foot' => $need ? "needs action: {$d['late']} late · {$d['due_today']} due today · {$d['waiting_on_me']} waiting on me" : 'nothing needs action',
                 'tone' => $d['late'] ? 'err' : ($need ? 'warn' : 'done'), 'go' => '#/tasks'];
         });
+        self::register(['OWNER', 'PARTNER', 'MANAGER', 'TL'], function ($ent) {      // R-G_CORE-16: who is away today
+            $today = date('Y-m-d');
+            $who = DB::table('user_absence as a')->leftJoin('t_account as p', 'p.id', '=', 'a.user_id')->leftJoin('t_account as c', 'c.id', '=', 'a.cover_user_id')->where('a.from_date', '<=', $today)
+                ->where(fn ($w) => $w->whereNull('a.to_date')->orWhere('a.to_date', '>=', $today))->get([DB::raw("TRIM(CONCAT_WS(' ', p.first_name, p.sur_name)) as who"), DB::raw("TRIM(CONCAT_WS(' ', c.first_name, c.sur_name)) as cover")]);
+            return ['label' => 'Who is away today', 'value' => $who->count(), 'foot' => $who->count() ? $who->map(fn ($x) => $x->who . ($x->cover ? ' (cover ' . $x->cover . ')' : ''))->implode(', ') : 'everyone is in', 'tone' => $who->count() ? 'warn' : 'done', 'go' => '#/tasks?scope=team'];
+        });
         self::register(['OWNER', 'MANAGER', 'TL'], function ($ent) use ($open) {
             $q = fn () => $open()->where(fn ($w) => $w->where('fk_id_ent', $ent)->orWhere('fk_id_ent', 0));
             $n = $q()->count(); $urgent = $q()->where('priority', 'URGENT')->count();

@@ -122,7 +122,7 @@ section_no,section,item_no,screen,route,roles,forms,rules,new_or_in_design
 13,Work,13.2,Needs action (all tasks),#/list/tasks,all (rights decide which),task(Q) task_edit(C) task_checklist_item(K) task_watcher(K) task_comment(X) task_evidence(X) task_bulk_action(T) task_import(T),"R-G_CORE-1…37, 41, 97, IC-9, 06C",IN DESIGN
 13,Work,13.3,My tasks,#/list/tasks?mine=1,all,,"R-G_CORE-10, 36",IN DESIGN
 13,Work,13.4,Approvals queue,#/approvals,approvers by sys_approval_limits (never the maker),,"E8, R-FIN-17, R-G_CORE-7, R-G_CORE-17",IN DESIGN
-13,Work,13.5,Team & settings (task rules),#/tasks/team,"OWNER, MANAGER",task_category(C) task_template(C) task_template_item(X) task_absence(C) task_delegation(C) sys_rule(M),"R-G_CORE-16, 17, 18, 23, 24, 40, R-G_CORE-94",NEW
+13,Work,13.5,Team & settings (task rules),#/tasks?scope=team,"OWNER, PARTNER, MANAGER",task_category(C) task_template(C) task_template_item(X) task_absence(C) task_delegation(C) sys_rule(M),"R-G_CORE-16, 17, 18, 23, 24, 40, R-G_CORE-94",NEW
 13,Work,13.6,Messages & WhatsApp,#/part/4/messages,"OWNER (rules), all (own)",wa_template(C) task_alerts(Q),R-G_CORE-46…54,IN DESIGN
 13,Work,13.7,Playbooks,#/list/playbooks,"OWNER, MANAGER",playbook_step(C),R-G_CORE-107,NEW
 14,Documents,14.1,Documents,#/list/documents,all (by rights),document(C) document_link(K),"R-B_SOURCING-47…49, E18, PHASE_08 §8.6",IN DESIGN

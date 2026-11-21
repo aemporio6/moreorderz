@@ -192,6 +192,18 @@ class WorkController extends Controller
         $mon = date('Y-m-d', strtotime('monday this week', strtotime($mon)));
         $d = \App\Services\TaskWeekly::data($mon); return $d + ['html' => \App\Services\TaskWeekly::html($d)];
     }
+    /** R-G_CORE-16 / 17 "End now", the proposed delegation for an absent Partner. */
+    public function absenceEnd(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskSettings::endAbsence($id, $r->user())); }
+    public function delegationEnd(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskSettings::endDelegation($id, $r->user())); }
+    public function delegationPropose(Request $r)
+    {
+        return $this->act(function () use ($r) {
+            $d = ['from_user_id' => $r->integer('from_user_id'), 'to_user_id' => $r->integer('to_user_id'), 'from_date' => (string) $r->input('from_date'), 'to_date' => (string) $r->input('to_date'), 'rights' => 'APPROVE'];
+            if ($e = \App\Services\TaskSettings::delegation($d, [], null)) throw new \InvalidArgumentException(reset($e));
+            $id = DB::table('tm_delegations')->insertGetId($d + ['created_by' => $r->user()->id, 'created_at' => now()]); \App\Services\Audit::log('tm_delegations', $id, 'INSERT', $d);
+            return 'Delegation added.';
+        });
+    }
     public function taskBulkUndo(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskBulk::undo($id, $r->user())); }
 
     /** Approve / send back (R-G_CORE-7) and the score preview (R-G_CORE-8). */

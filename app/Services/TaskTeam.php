@@ -53,12 +53,12 @@ class TaskTeam
             ->orderByDesc('t.due_changes')->get(['t.id', 't.title', 't.due_changes', 'x.display_name'])->map(fn ($t) => ['id' => (int) $t->id, 'text' => TaskFlow::ref((int) $t->id) . ' ' . $t->title . ' – ' . (int) $t->due_changes . '× (' . ($t->display_name ?: '—') . ')'])->all();
         $today = date('Y-m-d'); $until = date('Y-m-d', strtotime('+14 days'));
         $absence = DB::table('user_absence as a')->leftJoin('t_account as p', 'p.id', '=', 'a.user_id')->leftJoin('t_account as c', 'c.id', '=', 'a.cover_user_id')
-            ->where('a.from_date', '<=', $until)->where(fn ($w) => $w->whereNull('a.to_date')->orWhere('a.to_date', '>=', $today))->orderBy('a.from_date')
+            ->where('a.from_date', '<=', $until)->where(fn ($w) => $w->whereNull('a.to_date')->orWhere('a.to_date', '>=', $today))->whereRaw('(a.to_date IS NULL OR a.to_date >= a.from_date)')->orderBy('a.from_date')
             ->get(['a.id', 'a.from_date', 'a.to_date', DB::raw("TRIM(CONCAT_WS(' ', p.first_name, p.sur_name)) as who"), DB::raw("TRIM(CONCAT_WS(' ', c.first_name, c.sur_name)) as cover")]);
-        $deleg = DB::table('tm_delegations as d')->leftJoin('t_users as f', 'f.id', '=', 'd.from_user_id')->leftJoin('t_users as t', 't.id', '=', 'd.to_user_id')->where(fn ($w) => $w->whereNull('d.to_date')->orWhere('d.to_date', '>=', $today))
+        $deleg = DB::table('tm_delegations as d')->whereRaw('(d.to_date IS NULL OR d.to_date >= d.from_date)')->leftJoin('t_users as f', 'f.id', '=', 'd.from_user_id')->leftJoin('t_users as t', 't.id', '=', 'd.to_user_id')->where(fn ($w) => $w->whereNull('d.to_date')->orWhere('d.to_date', '>=', $today))
             ->get(['d.id', 'f.display_name as from_name', 't.display_name as to_name', 'd.from_date', 'd.to_date', 'd.rights']);
         return ['workload' => $load, 'moved' => $moved, 'categories' => DB::table('task_categories')->orderBy('sort')->get(['id', 'name', 'default_due_days', 'ack_hours', 'escalate_to_role', 'evidence_type_default', 'is_active']),
             'absence' => $absence, 'delegations' => $deleg, 'recurring' => TaskRepeat::chains($ent), 'suggested' => self::SUGGESTED,
-            'leaderboard' => self::leaderboard($month ?: date('Y-m')), 'forms' => ['category' => 'task_category', 'absence' => 'task_absence', 'delegation' => 'task_delegation'], 'can_delegate' => TaskVisibility::partner($u)];
+            'leaderboard' => self::leaderboard($month ?: date('Y-m')), 'hard_limits' => TaskSettings::hardLimits(), 'partner_gaps' => TaskSettings::partnerGaps(), /* R-G_CORE-22 / 16 */ 'forms' => ['category' => 'task_category', 'absence' => 'task_absence', 'delegation' => 'task_delegation'], 'can_delegate' => TaskVisibility::partner($u)];
     }
 }

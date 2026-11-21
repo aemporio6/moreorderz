@@ -62,6 +62,9 @@ class FormRules
             if (! is_array($p) || array_values($p) !== $p || array_filter($p, fn ($x) => ! is_string($x) || ! preg_match('/^\w+$/', $x))) return ['params_json' => 'Parameters must be a list of names, e.g. ["first_name","task_ref"].'];
             $data['params_json'] = json_encode(array_values($p));
         }
+        if ($table === 'user_absence') return TaskSettings::absence($data, $old, $id);      // R-G_CORE-16
+        if ($table === 'tm_delegations') return TaskSettings::delegation($data, $old, $id);      // R-G_CORE-17
+        if ($table === 'task_categories') return TaskSettings::category($data, $old, $id);      // R-G_CORE-23
         if ($table === 't_src_cartons') return self::cartons($data, $old);
         if ($table === 't_src_documents') return self::document($data, $old, $already);      // R-B_SOURCING-47 / 49
         if ($table === 'fin_categories') return self::finCategory($data, $old, $id);

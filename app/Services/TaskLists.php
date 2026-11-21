@@ -45,7 +45,8 @@ class TaskLists
                 'may_approve' => $t->status === 'DONE' && $t->source !== 'RULE' && TaskScore::refusal($t, $u) === null, 'preview' => $t->status === 'DONE' ? TaskScore::parts($t, 'GOOD') : null,
                 'band' => $t->score !== null ? TaskScore::band((float) $t->score) : null, 'proof' => $n ? "✓ $n file" . ($n === 1 ? '' : 's') : ((int) $t->evidence_required ? 'required' : 'not needed'), 'evidence_count' => $n,
                 'helpers' => collect($help[$t->id] ?? [])->map(fn ($h) => strtok((string) $h->display_name, ' '))->values()->all(), 'source_label' => self::SOURCES[$t->source] ?? $t->source,
-                'linked' => $t->linked_module ? $t->linked_module . ($t->linked_record_id ? ' #' . $t->linked_record_id : '') : null];
+                'linked' => $t->linked_module ? $t->linked_module . ($t->linked_record_id ? ' #' . $t->linked_record_id : '') : null,
+                'absent' => $t->owner_user_id && in_array($t->status, self::OPEN, true) && (bool) TaskOwner::absent((int) $t->owner_user_id)];      // R-G_CORE-16 "Absent" chip
             if (! $partner) unset($a['amount_gbp']);      // the amount column is for Partners only
             return $a;
         })->all();
@@ -196,7 +197,7 @@ class TaskLists
     public static function dataQuality(int $ent): array
     {
         $q = fn () => DB::table('tasks')->where(fn ($w) => $w->where('fk_id_ent', $ent)->orWhere('fk_id_ent', 0)->orWhereNull('fk_id_ent'))->whereIn('status', self::OPEN)->where(fn ($w) => $w->whereNull('rule_code')->orWhereNotIn('rule_code', ['TASK_NO_DUE', 'TASK_NOT_LINKED']));
-        $noDue = $q()->whereNull('due_at')->count(); $notLinked = $q()->whereNull('linked_module')->count();
+        $noDue = $q()->whereNull('due_at')->count(); $notLinked = $q()->whereNull('linked_module')->where(fn ($w) => $w->whereNull('category_id')->orWhere('category_id', '<>', 1))->count();      // R-G_CORE-23: every task is linked except category General
         $d = date('Y-m-d'); $out = [];
         foreach (['TASK_NO_DUE' => [$noDue, "$noDue open task(s) have no due date"], 'TASK_NOT_LINKED' => [$notLinked, "$notLinked open task(s) are not linked to a record"]] as $code => [$n, $title]) {
             if ($n > 0) { if (! TaskEngine::isOpen($code, [$ent, $d]) && TaskEngine::open($code, [$ent, $d], $title, ['ent' => $ent, 'module' => 'tasks', 'fix_url' => '#/tasks?scope=all&chip=' . ($code === 'TASK_NO_DUE' ? 'nodue' : 'open')])) $out[] = $code; }
