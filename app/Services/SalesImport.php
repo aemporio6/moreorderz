@@ -291,7 +291,7 @@ class SalesImport
             $deducted = DB::table('t_sales')->where('fk_id_import', $old->id)->where('f_stock_deducted', 1)->count(); $by = DB::table('t_users')->where('id', $old->imported_by)->value('display_name');
             return ['confirm_overwrite' => ['batch' => $old->id, 'lines' => (int) $old->saved_rows, 'file' => $old->file_name, 'imported_at' => $old->imported_at ? date('d-m-Y H:i', strtotime((string) $old->imported_at)) : '', 'imported_by' => $by, 'deducted' => $deducted,
                 'title' => 'Replace existing sales?', 'text' => "{$old->saved_rows} sale line(s) from {$old->file_name}, imported " . ($old->imported_at ? date('d-m-Y H:i', strtotime((string) $old->imported_at)) : '') . ($by ? " by $by" : ''),
-                'warn' => "If you continue, all $mn sales for shop $label are deleted and replaced with this file. The old lines stay in the recycle bin for 30 days.", 'buttons' => ['Keep existing sales', 'Yes, replace them']],
+                'warn' => "If you continue, all $mn sales for shop $label are deleted and replaced with this file. The old lines stay in the recycle bin for " . SaleLines::binDays() . " days.", 'buttons' => ['Keep existing sales', 'Yes, replace them']],
                 'message' => "Shop $label already has sales imported for $mn."];
         }
 

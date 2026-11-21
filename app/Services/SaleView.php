@@ -15,6 +15,8 @@ class SaleView
     public const MONEY = ['raw_price', 'carrier', 'packing', 'buy_rate', 'buy_amount', 'profit', 'va_commission', 'd_buy', 'url'];      // only for people who may see cost
     public const NUMERIC = ['qty', 'sale_rate', 'total_amount', 'raw_price', 'carrier', 'packing', 'buy_rate', 'buy_amount', 'profit'];
     public const LIMITS = ['pdf' => 1500, 'docx' => 5000, 'xlsx' => 20000, 'csv' => 20000];
+    /** Excel / CSV follow Settings › Choices SALE_EXPORT_MAX_ROWS (default 20,000); PDF and Word keep theirs. */
+    public static function limit(string $format): int { return in_array($format, ['xlsx', 'csv'], true) ? ((int) Choices::get('SALE_EXPORT_MAX_ROWS', (int) (Context::ent() ?: 0) ?: null) ?: self::LIMITS[$format]) : self::LIMITS[$format]; }
     public const NAMES = ['pdf' => 'PDF', 'docx' => 'Word', 'xlsx' => 'Excel', 'csv' => 'CSV'];
     public const PAGE = 'sales_listing';
 
@@ -166,7 +168,7 @@ class SaleView
     {
         if (! isset(self::LIMITS[$format])) throw new \InvalidArgumentException('Unknown export format.');
         if (empty($f['marketplace']) && empty($f['batch'])) throw new \InvalidArgumentException('Choose a marketplace first.');
-        $n = (int) SaleLines::list($f + ['per_page' => 20, 'page' => 1], $u)['total']; $name = self::NAMES[$format]; $max = self::LIMITS[$format];
+        $n = (int) SaleLines::list($f + ['per_page' => 20, 'page' => 1], $u)['total']; $name = self::NAMES[$format]; $max = self::limit($format);
         if ($n === 0) throw new \InvalidArgumentException('There are no sales to export with these filters.');
         if ($n > $max) throw new \InvalidArgumentException("The $name export takes up to $max lines; these filters match $n. Narrow the filters (e.g. dates or shop) and try again.");
         if ($n > self::backgroundFrom()) return ['lines' => $n, 'background' => true, 'message' => "This $name has $n lines: it is prepared in the background. You get a bell message and an e-mail with the file when it is ready."];
@@ -240,7 +242,7 @@ class SaleView
     {
         if (! isset(self::LIMITS[$format])) throw new \InvalidArgumentException('Unknown export format.');
         if (empty($f['marketplace']) && empty($f['batch'])) throw new \InvalidArgumentException('Choose a marketplace first.');
-        $max = self::LIMITS[$format]; $name = self::NAMES[$format];
+        $max = self::limit($format); $name = self::NAMES[$format];
         $d = SaleLines::list(array_diff_key($f, ['page' => 1, 'per_page' => 1]) + ['_limit' => $max + 1], $u); $n = (int) $d['total'];
         if ($n > $max) throw new \InvalidArgumentException("Too many lines to export ($n). The $name export takes up to $max lines: narrow the filters and try again.");
         $cols = self::visible($u); $rows = $d['rows']; $title = 'Sales'; $sub = self::subtitle($d['filter'] ?? $f, $n, $now); $s = $d['totals']; $m = fn ($v) => number_format((float) $v, 2);

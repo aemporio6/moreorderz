@@ -60,7 +60,7 @@ Updated 21 Nov 2026 (batch 7e-101). How to answer: write **OK** next to a line t
 
 ## C. Suggested defaults written in the specification (220 lines)
 
-Each line already works with the default shown. **Classified 22 Nov (7e-132):** [S] already a setting 106 · [B] made a setting in 7e-127…133 11 · [D] design rule with no real alternative 79 · [C] real choice still fixed – being made settings in the next batches 24.
+Each line already works with the default shown. **Classified 22 Nov (7e-132):** [S] already a setting 106 · [B] made a setting in 7e-127…134 15 · [D] design rule with no real alternative 79 · [C] real choice still fixed – being made settings in the next batches 20 (of them 8 wait for a feature that is not built yet).
 
 
 ### Stock/Warehouse (33)
@@ -138,10 +138,10 @@ Each line already works with the default shown. **Classified 22 Nov (7e-132):** 
 
 | Line | Rule | Default (question) |
 |---|---|---|
-| MR-0062 | R-B_SOURCING-64 | Supplier share link expiry 14 days — **[C] real choice – to become a setting**: supplier share link expiry days – next batch |
+| MR-0062 | R-B_SOURCING-64 | Supplier share link expiry 14 days — **[C] real choice – later**: supplier share link is not built yet (R-B_SOURCING-64) – its expiry setting comes with it |
 | MR-0424 | R-B_SOURCING-3 | PO payment due dates come from the payment-terms template; without one, deposit due = PO date and balance due = expected ready date? — **[S] already a setting**: payment-terms templates |
-| MR-0425 | R-B_SOURCING-5 | Owner entity is required on a PO (old tool allowed empty)? — **[C] real choice – to become a setting**: owner entity required on a PO (yes / no) – next batch |
-| MR-0426 | R-B_SOURCING-8 | Local purchase payment due date = order date + 30 days (editable)? — **[C] real choice – to become a setting**: local purchase due days – next batch |
+| MR-0425 | R-B_SOURCING-5 | Owner entity is required on a PO (old tool allowed empty)? — **[C] real choice – later**: the PO form checks come with the old-entry / PO form round (R-B_SOURCING-5 form only) – its switch comes with it |
+| MR-0426 | R-B_SOURCING-8 | Local purchase payment due date = order date + 30 days (editable)? — **[C] real choice – later**: local purchase is not built yet (R-B_SOURCING-8) – its due-days setting comes with it |
 | MR-0427 | R-B_SOURCING-13 | Old-entry import reads up to 5 paid-amount and 5 freight-cost column sets per entry, once? — **[D] design rule (no real alternative)**: old-entry import format |
 | MR-0428 | R-B_SOURCING-26 | Task SRC_SHIP_ARRIVING when the ETA is within 3 days (SRC_SHIP_ARRIVING_DAYS = 3), priority NORMAL? — **[S] already a setting**: Tasks › Rules (sys_rules): priority / due days / owner |
 | MR-0429 | R-B_SOURCING-26 task table + 06C_task_codes.csv | Task SRC_OVER_ALLOC (units unallocated or over-allocated) with priority NORMAL? — **[S] already a setting**: Tasks › Rules (sys_rules): priority / due days / owner |
@@ -163,7 +163,7 @@ Each line already works with the default shown. **Classified 22 Nov (7e-132):** 
 | MR-0518 | R-B_SOURCING-63 | What happens when a supplier claim is settled (credit / refund)? → proposed: Negative cost on the product + new landed-cost version — **[D] design rule (no real alternative)**: claim settlement accounting – one correct way |
 | MR-1457 | 009 §S2 | Approval rule roles (F-07): SRC_OLD_ENTRY → PARTNER, SRC_OVERPAY and SRC_LC_OVERRIDE → OWNER; risk MEDIUM; no phone check. — **[S] already a setting**: Approvals › rules (roles, risk) |
 | MR-1464 | 07_ICC §3 (F-03) | ICC stages (F-03): ordered = PO qty − produced; production = produced − shipped; transit = shipped − received. — **[D] design rule (no real alternative)**: ICC stage formula |
-| MR-1478 | R-B_SOURCING-66 | Supplier rated D shows a red chip on PO / RFQ pickers but does not block (R-B_SOURCING-66). — **[C] real choice – to become a setting**: supplier rated D: warn or block – next batch |
+| MR-1478 | R-B_SOURCING-66 | Supplier rated D shows a red chip on PO / RFQ pickers but does not block (R-B_SOURCING-66). — **[C] real choice – later**: supplier rating chip is not built yet (R-B_SOURCING-66 partial) – warn / block comes with it |
 | MR-1515 | 06C_Task_Codes/06C_TASK_CODES.md §5 | new task SRC_OLD_ENTRY_REJECTED raised when: Old entry (historical purchase) approval rejected – needs correction — **[S] already a setting**: task code – priority, owner rule, on/off on Tasks › Rules (sys_rules) |
 
 ### Core/Platform (24)
@@ -252,13 +252,13 @@ Each line already works with the default shown. **Classified 22 Nov (7e-132):** 
 | Line | Rule | Default (question) |
 |---|---|---|
 | MR-0072 | R-A_SALES-89 | CUSTOMER_DATA_RETENTION_MONTHS = 24 (buyer name blanked after) — **[S] already a setting**: setting: CUSTOMER_DATA_RETENTION_MONTHS |
-| MR-0412 | R-A_SALES-1 | When a sales batch is replaced, show a diff of old against new lines and keep the old batch restorable from the recycle bin for 30 days? — **[C] real choice – to become a setting**: recycle bin days – later batch |
+| MR-0412 | R-A_SALES-1 | When a sales batch is replaced, show a diff of old against new lines and keep the old batch restorable from the recycle bin for 30 days? — **[B] now a setting**: Choices › sales recycle bin days (recommended 30) (7e-134) |
 | MR-0413 | R-A_SALES-18 | Raise task SAL_MONTH_MISSING when an active shop has no sales batch by day 5 of the next month (now read from the marketplace profile overdue_days, #110)? — **[S] already a setting**: setting: overdue_days |
 | MR-0414 | R-A_SALES-29 | May the Owner switch the VA share basis to "actual" from the next month on? — **[S] already a setting**: VA share basis per agreement |
-| MR-0415 | R-A_SALES-40 | Deleted sales batches and lines go to the recycle bin for 30 days? — **[C] real choice – to become a setting**: recycle bin days – later batch |
-| MR-0416 | R-A_SALES-46 | Sales report export to Excel / CSV up to 20,000 rows (old tool had only PDF and Word)? — **[C] real choice – to become a setting**: export row limit – later batch |
+| MR-0415 | R-A_SALES-40 | Deleted sales batches and lines go to the recycle bin for 30 days? — **[B] now a setting**: Choices › sales recycle bin days (recommended 30) (7e-134) |
+| MR-0416 | R-A_SALES-46 | Sales report export to Excel / CSV up to 20,000 rows (old tool had only PDF and Word)? — **[B] now a setting**: Choices › sales export Excel / CSV rows (recommended 20,000) (7e-134) |
 | MR-0417 | R-A_SALES-51 | Send the annual sales report automatically on day 6 of each month by e-mail / WhatsApp? — **[C] real choice – to become a setting**: annual report send day – later batch |
-| MR-0418 | R-A_SALES-53 | Bulk delete of sales lines: Owner only, and a second approval when more than 500 lines? — **[C] real choice – to become a setting**: bulk delete second approval above N lines – later batch |
+| MR-0418 | R-A_SALES-53 | Bulk delete of sales lines: Owner only, and a second approval when more than 500 lines? — **[B] now a setting**: Choices › bulk delete second person above … lines (recommended 500) (7e-134) |
 | MR-0419 | R-A_SALES-63 | Price tolerance in the sales / purchase audit = £0.01? — **[C] real choice – to become a setting**: audit price tolerance – later batch |
 | MR-0420 | R-A_SALES-64 | A dropship hold order not used after 14 days raises task DS_HOLD_UNUSED (DS_HOLD_DAYS = 14)? — **[S] already a setting**: setting: DS_HOLD_DAYS |
 | MR-0421 | R-A_SALES-68 | Shop codes are upper case with 2–10 letters / digits? — **[D] design rule (no real alternative)**: shop code format |
@@ -317,7 +317,7 @@ Each line already works with the default shown. **Classified 22 Nov (7e-132):** 
 
 | Line | Rule | Default (question) |
 |---|---|---|
-| MR-0050 | R-D-92 | Country of origin default = the supplier's country — **[C] real choice – to become a setting**: country of origin default – later batch |
+| MR-0050 | R-D-92 | Country of origin default = the supplier's country — **[C] real choice – later**: country of origin default comes with the product origin field round (R-D-92) |
 | MR-0132 | 18_Labels v1.7 §12 | Label sheet presets (margins / gaps of the 4-, 8- and 21-up A4 sheets) — **[S] already a setting**: label sheet presets editable |
 | MR-0550 | 18_Labels §11 | Packing slip shows the buyer address? → No (WH_PACKSLIP_SHOW_ADDRESS = N) — **[S] already a setting**: setting: WH_PACKSLIP_SHOW_ADDRESS |
 | MR-1393 | 18_Labels v1.7 §13.4 | printer model from the sticker and the roll size by one test print (96 × 136 or 100 × 150) — **[D] design rule (no real alternative)**: printer setup step |

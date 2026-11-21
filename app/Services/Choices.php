@@ -124,6 +124,12 @@ class Choices
             '1' => ['Yes, choose a reason', 'Suggested.'], '0' => ['No, the reason is optional', 'The history shows "no reason given".']]],
         'ACCOUNT_DUE_DAYS' => ['Accounts & subscriptions: "Due soon" (amber) means due within …', 'Recommended: 7 days – one week to pay or renew.', '7', [
             '3' => ['3 days', ''], '7' => ['7 days', 'Suggested.'], '14' => ['14 days', ''], '30' => ['30 days', '']]],
+        'SALE_RECYCLE_DAYS' => ['Sales: deleted or replaced sale lines stay in the recycle bin (Undo) for …', 'Recommended: 30 days – long enough to notice a wrong delete at month close.', '30', [
+            '7' => ['7 days', ''], '30' => ['30 days', 'Suggested.'], '60' => ['60 days', ''], '90' => ['90 days', '']]],
+        'SALE_BULK_APPROVAL_LINES' => ['Sales: a bulk delete needs a second person above …', 'Recommended: 500 lines – a normal month of one shop goes through, a bigger delete is checked by a second person.', '500', [
+            '100' => ['100 lines', ''], '500' => ['500 lines', 'Suggested.'], '1000' => ['1,000 lines', ''], '5000' => ['5,000 lines', '']]],
+        'SALE_EXPORT_MAX_ROWS' => ['Sales report export: Excel / CSV up to …', 'Recommended: 20,000 rows – a year of a busy shop; a bigger file is slow to open. PDF and Word keep their own smaller limits.', '20000', [
+            '5000' => ['5,000 rows', ''], '20000' => ['20,000 rows', 'Suggested.'], '50000' => ['50,000 rows', ''], '100000' => ['100,000 rows', '']]],
         'HIDDEN_MARGIN_ROLES' => ['Owner Home › Invoicing / Profit: who sees the row "Hidden margin"?', 'Recommended: Owner only – a partner\'s share is worked out on the net profit, so the margin kept by the company stays with the Owner.', 'OWNER', []],
     ];
 

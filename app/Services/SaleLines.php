@@ -302,7 +302,9 @@ class SaleLines
     // ---------- R-A_SALES-40: delete a line or a whole month (to the recycle bin, with Undo) ----------
     // ---------- R-A_SALES-53: bulk delete of the Pending sales of a shop between two dates ----------
     public const BULK_WARNING = 'This deletes all rows between From and To for the selected shop.';
-    public const BULK_SECOND_APPROVAL = 500;
+    public const BULK_SECOND_APPROVAL = 500;      // the default; Settings › Choices SALE_BULK_APPROVAL_LINES
+    public static function bulkLimit(): int { return (int) Choices::get('SALE_BULK_APPROVAL_LINES', (int) (Context::ent() ?: 0) ?: null) ?: self::BULK_SECOND_APPROVAL; }
+    public static function binDays(): int { return (int) Choices::get('SALE_RECYCLE_DAYS', (int) (Context::ent() ?: 0) ?: null) ?: 30; }      // Settings › Choices
 
     private static function bulkQuery(int $shopId, string $from, string $to) { return DB::table('t_sales')->where('fk_id_ent', Context::ent())->where('fk_id_branch', $shopId)->whereBetween('d_order', [$from, $to])->where('sale_source', '<>', 'history')->where('status', 'Pending')->where(fn ($w) => $w->whereNull('f_locked')->orWhere('f_locked', 0)); }
 
@@ -316,7 +318,7 @@ class SaleLines
         $q = self::bulkQuery($shopId, $from, $to); $n = (clone $q)->count(); $m = (clone $q)->where('fk_id_import', '>', 0)->distinct()->count('fk_id_import');
         $other = DB::table('t_sales')->where('fk_id_ent', Context::ent())->where('fk_id_branch', $shopId)->whereBetween('d_order', [$from, $to])->where('sale_source', '<>', 'history')->count() - $n;
         return ['lines' => $n, 'batches' => $m, 'left_alone' => $other, 'text' => "$n line(s) in $m batch(es) will be deleted" . ($other ? ". $other line(s) that are confirmed or refunded stay." : '.'), 'warning' => self::BULK_WARNING, 'shop' => SalesImport::label($shop),
-            'needs_approval' => $n > self::BULK_SECOND_APPROVAL, 'approval_text' => $n > self::BULK_SECOND_APPROVAL ? 'More than ' . self::BULK_SECOND_APPROVAL . ' lines: a second person must approve before anything is deleted.' : null];
+            'needs_approval' => $n > self::bulkLimit(), 'approval_text' => $n > self::bulkLimit() ? 'More than ' . self::bulkLimit() . ' lines: a second person must approve before anything is deleted.' : null];
     }
 
     /** Apply with a reason. Up to 500 lines at once; above that the request waits for a second person (Approvals) and is carried out on approval. */
@@ -336,7 +338,7 @@ class SaleLines
             $group = "bulk:$shopId:" . time(); $n = 0; $imports = [];
             foreach (self::bulkQuery($shopId, $from, $to)->lockForUpdate()->get() as $s) { if ((int) $s->fk_id_import) $imports[(int) $s->fk_id_import] = 1; self::bin($s, $group, mb_substr("Bulk delete $from to $to: $reason", 0, 250)); $n++; }
             Audit::log('t_branches', $shopId, 'DELETE', ['from' => $from, 'to' => $to, 'lines' => $n, 'batches' => count($imports)], 'Bulk delete of sales: ' . $reason, (int) Context::ent());
-            return ['message' => "$n sale line(s) deleted. They stay in the recycle bin for 30 days.", 'lines' => $n, 'undo' => $group, 'waiting' => false];
+            return ['message' => "$n sale line(s) deleted. They stay in the recycle bin for " . self::binDays() . " days.", 'lines' => $n, 'undo' => $group, 'waiting' => false];
         });
     }
 
@@ -367,7 +369,7 @@ class SaleLines
         $q = DB::table('t_sales')->where('fk_id_ent', Context::ent())->where('fk_id_branch', $branchId)->whereRaw("DATE_FORMAT(d_order,'%Y-%m') = ?", [$month])->where('sale_source', '<>', 'history');
         $n = (clone $q)->count(); $conf = (clone $q)->where(fn ($w) => $w->where('status', 'Confirmed')->orWhere('f_locked', 1))->count(); $name = date('F Y', strtotime($month . '-01'));
         return ['shop' => $shop, 'lines' => $n, 'confirmed' => $conf, 'month_name' => $name,
-            'text' => "All $n sale line(s) of {$shop->shop_no} - $name and its error list will be deleted. You can import this month again afterwards. They go to the recycle bin for 30 days."];
+            'text' => "All $n sale line(s) of {$shop->shop_no} - $name and its error list will be deleted. You can import this month again afterwards. They go to the recycle bin for " . self::binDays() . " days."];
     }
 
     public static function deleteMonth(int $branchId, string $month): array
@@ -393,7 +395,7 @@ class SaleLines
     {
         return DB::transaction(function () use ($group) {
             $rows = DB::table('mo_recycle_bin')->where('group_key', $group)->where('fk_id_ent', Context::ent())->where('table_name', 't_sales')->whereNull('restored_at')->lockForUpdate()->get();
-            if ($rows->isEmpty()) throw new \InvalidArgumentException('Nothing to put back – it was restored already, or the 30 days are over.');
+            if ($rows->isEmpty()) throw new \InvalidArgumentException('Nothing to put back – it was restored already, or the ' . self::binDays() . ' days are over.');
             $u = Auth::user(); Perm::need($u, 'orders.saleDelete'); $back = 0; $skipped = 0;
             foreach ($rows as $b) {
                 $row = json_decode($b->row_json, true);
@@ -409,7 +411,7 @@ class SaleLines
     }
 
     /** Night job: the bin is emptied after 30 days. */
-    public static function purgeBin(int $days = 30): int { return DB::table('mo_recycle_bin')->where('deleted_at', '<', now()->subDays($days))->delete(); }
+    public static function purgeBin(?int $days = null): int { return DB::table('mo_recycle_bin')->where('deleted_at', '<', now()->subDays($days ?? self::binDays()))->delete(); }
 
     public static function history(int $id): array
     {
