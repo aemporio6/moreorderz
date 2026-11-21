@@ -64,6 +64,16 @@ class SalesReportsTest extends TestCase
         DB::table('t_account_branches')->where('fk_id_branch', $this->shop)->update(['d_to' => '2026-06-30']); $this->assertSame('Vera Seller', ShopLabel::list($this->owner, ['today' => '2026-07-10'])[0]['va']);      // assignment ended: the seller field is the fallback
     }
 
+    public function test_a_person_limited_to_vendors_sees_only_their_inventory_in_the_reports(): void
+    {
+        $this->world(); $ven = DB::table('t_account')->insertGetId($this->fill('t_account', ['fk_id_ent' => 1, 'first_name' => 'Ven', 'sur_name' => 'Dor', 'f_active' => 1]));
+        $mine = DB::table('t_product_vendors')->insertGetId($this->fill('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'V-1', 'product_name_vendor' => 'Vendor item', 'f_active' => 1, 'fk_id_vendor' => $ven])); $b = $this->batch($this->shop, 7, 0, 10);
+        $this->line($this->shop, $b, '2026-07-05', 100, 60, 40, 1, ['fk_product_id' => $mine]); $this->line($this->shop, $b, '2026-07-06', 50, 20, 30);
+        $this->assertSame(150.0, (float) SalesReports::annual(['year' => 2026], $this->owner)['total']['sale']);
+        $u = \App\Models\User::create(['login_id' => 'ven-r@test', 'password_hash' => 'x', 'role_code' => 'PARTNER', 'display_name' => 'Ven', 'fk_id_ent' => 1, 'f_active' => 1]); \App\Services\Perm::setScope((int) $u->id, 'VENDOR', [$ven], (int) $this->owner->id);
+        $this->actingAs($u); $this->assertSame(100.0, (float) SalesReports::annual(['year' => 2026], $u)['total']['sale']);
+    }
+
     public function test_annual_report_with_the_example_of_the_rule(): void
     {
         $this->world(); $b = $this->batch($this->shop, 7, 40, 10); $this->line($this->shop, $b, '2026-07-05', 2000, 1100, 900, 3); $this->line($this->shop, $b, '2026-07-20', 100, 200, -100, 1);

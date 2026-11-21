@@ -75,6 +75,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('permissions/set', [AdminController::class, 'permSet']);
         Route::post('permissions/user', [AdminController::class, 'permUser']);
         Route::post('permissions/scope', [AdminController::class, 'permScope']);
+        Route::post('permissions/roles', [AdminController::class, 'permExtraRoles']);
         Route::post('permissions/field', [AdminController::class, 'permField']);
         Route::post('permissions/request', [AdminController::class, 'permRequest']);
         Route::post('permissions/requests/{id}', [AdminController::class, 'permDecide'])->whereNumber('id');
@@ -327,6 +328,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('sales/import', [OrdersController::class, 'saleImportHome']);
         Route::get('sales/import/fee', [OrdersController::class, 'saleImportFee']);
         Route::get('sales/import/name', [OrdersController::class, 'saleImportName']);
+        Route::post('sales/import/detect', [OrdersController::class, 'saleImportDetect']);
         Route::post('sales/import', [OrdersController::class, 'saleImportRun']);
         Route::get('sales/import/sku', [OrdersController::class, 'saleImportSku']);
         Route::post('sales/import/restore', [OrdersController::class, 'saleImportRestore']);

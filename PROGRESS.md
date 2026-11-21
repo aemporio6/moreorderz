@@ -485,3 +485,16 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - Not done (honest): the sales reports are not narrowed by the vendor scope yet; there is no built-in role called "Vendor" – the limit works on any role.
 - Tests: 326 pass (1 new).
 - Register after this batch: BUILT 367 of 1,433 (26 %); Sales 95 of 155 (61 %).
+
+### Batch 7e-18 (21 Nov 2026)
+- **R-A_SALES-3 completed** (which shop a file belongs to): Sale Columns has a new field "Seller ID" (`SalesImport::SELLER_FIELD`, SALE set only). `SalesImport::sellerIn(path, marketplace)` reads it in the first 200 rows and matches it to `t_branches.seller_id` (the shop form's "Seller / merchant id"). Order: seller id > file name; the month and year still come from the name.
+  - Screen: choosing a file sends its first 64 KB to `POST api/sales/import/detect` and fills the shop from the seller id.
+  - Server: a seller id of another shop asks "I'm sure" before anything is saved; several seller ids or an unknown one give a warning.
+- **R-A_SALES-82 completed** (rights):
+  - `Perm::ALIASES` maps every right name of the rule (`sale.import`, `daily_order.status`, old `tiktok.*` …) to the code the tool checks; `Perm::has` / `need` / `explain` accept both.
+  - A person may hold extra roles (`mo_user_roles`, migration `000038`, Permissions › People › "Roles"); his rights are the union of all his roles. A right given or taken away personally still comes first.
+  - New rights `orders.saleSeeInvestor` (every role by default; the investor column is empty without it) and `orders.salesAudit` (for the sales audits still to build).
+- The sales reports are now narrowed by the vendor scope too.
+- **Bug fixed**: the Import sales screen did not open at all ("Cannot access 'feeHint' before initialization") since commit `65c75aa` (fee hint from the money report). Found by the browser check of this batch; the function now comes before its first use.
+- Tests: 330 pass (new `SalesRightsTest` 2; 1 new import test; 1 new report test).
+- Register after this batch: BUILT 372 of 1,433 (26 %); Sales 95 of 155 (61 %) – the 5 new lines are outside Sales.

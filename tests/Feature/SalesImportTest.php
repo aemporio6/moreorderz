@@ -80,6 +80,25 @@ class SalesImportTest extends TestCase
         $this->assertSame(1, $this->go($f, ['month' => 6, 'sure' => true], true, '101A_july26.csv')['stats']['saved']);
     }
 
+    public function test_the_seller_id_inside_the_file_comes_before_the_file_name(): void
+    {
+        $this->world(); SalesImport::saveColumns($this->mp, 'SALE', ['order_no' => 'Order number', 'order_date' => 'Sale date', 'cust_name' => 'Buyer first name, Buyer last name', 'cust_contacts' => 'Buyer email,Buyer phone', 'sku' => 'Custom label', 'product_info' => 'Item title', 'qty' => 'Quantity', 'sale_rate' => 'Sold for', 'total_amount' => 'Total price', 'seller_id' => 'Seller ID']);
+        $other = DB::table('t_branches')->insertGetId($this->fill('t_branches', ['fk_id_ent' => 1, 'fk_id_marketplace' => $this->mp, 'shop_no' => '202B', 'shop_name' => 'Toys', 'iso_branch' => 'P2', 'f_active' => 1, 'fulfilment_channel' => 'OTHER', 'seller_id' => 'toys-uk']));
+        DB::table('t_branches')->where('id', $this->shop)->update(['seller_id' => 'PETS-UK']); $h = self::HEAD . ',Seller ID'; $row = fn (string $no, string $sid) => $this->row($no) . ",$sid";
+        $p = $this->file([$row('S-1', 'Toys-UK'), $row('S-2', 'toys-uk')], $h);
+        // on the screen: the file is named for 101A, but the seller id says 202B – the seller id wins, the month still comes from the name
+        $d = SalesImport::detect($p, '101A_july26.csv', null); $this->assertSame([$other, 'seller_id', 7, 2026], [$d['shop'], $d['source'], $d['month'], $d['year']]); $this->assertSame('Detected from seller id Toys-UK in the file ✓', $d['detected']); $this->assertStringContainsString('the seller id in the file wins', $d['note']);
+        // on the server: choosing 101A for a file of 202B asks first
+        $r = $this->go($p); $this->assertSame(["The seller id Toys-UK in the file belongs to shop 202B (Toys), but you selected shop 101A (Pets)"], $r['name_mismatch']); $this->assertSame(0, DB::table('t_sales')->count());
+        // the file of 101A named for 202B: no question about the shop (the seller id matches), only about nothing else
+        $p2 = $this->file([$row('S-3', 'pets-uk')], $h); $r = $this->go($p2, [], false, '202B_july26.csv'); $this->assertArrayNotHasKey('name_mismatch', $r); $this->assertStringContainsString('Seller id pets-uk in the file matches shop 101A (Pets) ✓', $r['detected']);
+        // two seller ids in one file: not used, a warning; an unknown seller id: a warning, the file name decides
+        $p3 = $this->file([$row('S-4', 'pets-uk'), $row('S-5', 'toys-uk')], $h); $this->assertStringContainsString('more than one seller id', SalesImport::detect($p3, '101A_july26.csv', $this->mp)['seller_note']); $this->assertSame($this->shop, SalesImport::detect($p3, '101A_july26.csv', $this->mp)['shop']);
+        $p4 = $this->file([$row('S-6', 'nobody')], $h); $r = $this->go($p4, [], false); $this->assertStringContainsString('Seller id nobody in the file is not set on any of your shops', implode(' ', $r['warnings']));
+        // without a Seller ID column the file name alone decides, as before
+        $p5 = $this->file([$this->row('S-7')]); $this->assertSame([$this->shop, 'file_name'], [SalesImport::detect($p5, '101A_july26.csv', null)['shop'], SalesImport::detect($p5, '101A_july26.csv', null)['source']]);
+    }
+
     public function test_mapping_joins_columns_and_names_a_missing_required_header(): void
     {
         $this->world();

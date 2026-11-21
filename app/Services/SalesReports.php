@@ -45,6 +45,7 @@ class SalesReports
     private static function lines(int $year, array $f, ?object $u, bool $summary = false)
     {
         $q = DB::table('t_sales as s')->where('s.fk_id_ent', Context::ent())->whereBetween('s.d_order', ["$year-01-01", "$year-12-31"])->where('s.sale_source', $summary ? '=' : '<>', 'summary'); Perm::mine($q, 's.fk_id_branch');
+        if (($mine = Perm::vendors($u)) !== null) $q->whereIn('s.fk_product_id', DB::table('t_product_vendors')->whereIn('fk_id_vendor', $mine)->select('id'));      // a person limited to vendors sees only their inventory, in the reports too
         if (! empty($f['marketplace'])) $q->where('s.fk_id_marketplace', (int) $f['marketplace']);
         if (! empty($f['shop'])) $q->where('s.fk_id_branch', (int) $f['shop']);
         if (! empty($f['vendor'])) $q->where('s.fk_id_vendor', (int) $f['vendor']);                                                                                                        // project / vendor of the line

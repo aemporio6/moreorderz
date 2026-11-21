@@ -17,7 +17,9 @@ class SalesImport
     public const MATCH_FIELDS = ['ship_name' => 'Delivered To', 'ship_address' => 'Address', 'ship_city' => 'City', 'ship_postcode' => 'Postcode', 'ship_phone' => 'Phone'];
     public const REQUIRED = ['order_no', 'order_date', 'sku', 'qty', 'sale_rate'];
     public const JOINED = ['cust_name' => ' ', 'cust_contacts' => ', ', 'product_info' => ', '];
-    public const SETS = ['SALE' => ['marketplace_sale_columns', 'sale_field', self::FIELDS], 'DS' => ['marketplace_ds_columns', 'ds_field', self::FIELDS], 'MATCH' => ['marketplace_5_matching_rule_columns', 'match_field', self::MATCH_FIELDS]];
+    /** The seller / store id column of a marketplace's own export: the first detector of the shop (R-A_SALES-3). Not required. */
+    public const SELLER_FIELD = ['seller_id' => 'Seller ID'];
+    public const SETS = ['SALE' => ['marketplace_sale_columns', 'sale_field', self::FIELDS + self::SELLER_FIELD], 'DS' => ['marketplace_ds_columns', 'ds_field', self::FIELDS], 'MATCH' => ['marketplace_5_matching_rule_columns', 'match_field', self::MATCH_FIELDS]];
     private const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
 
     public static function label(object $shop): string { return trim((string) $shop->shop_no) . ' (' . trim((string) $shop->shop_name) . ')'; }
@@ -80,6 +82,42 @@ class SalesImport
     }
 
     // ---------- R-A_SALES-3: shop + month from the file name ----------
+    /**
+     * The seller id inside the file (R-A_SALES-3, first detector): the value of the marketplace's "Seller ID" column (Sale Columns) in the first rows,
+     * matched to the shop whose seller id it is. Returns ['value' => ?string, 'values' => [...], 'shop' => ?object, 'message' => ?string].
+     * Without a marketplace every marketplace's Seller ID column is tried.
+     */
+    public static function sellerIn(string $path, ?int $marketplaceId = null): array
+    {
+        $ent = (int) Context::ent(); $mps = $marketplaceId ? [$marketplaceId] : DB::table('marketplace_sale_columns')->where('sale_field', 'seller_id')->whereIn('fk_id_ent', [0, $ent])->distinct()->pluck('fk_marketplace_id')->map(fn ($x) => (int) $x)->all();
+        foreach ($mps as $mp) {
+            $names = self::columns($mp)['seller_id'] ?? []; if (! $names) continue;
+            try { $csv = Parse::csv($path, $names, 'Sale Columns'); } catch (\Throwable $e) { continue; }
+            $have = array_flip($csv['headers']); if (! array_filter($names, fn ($h) => isset($have[Parse::header($h)]))) continue;
+            $vals = []; foreach (array_slice($csv['rows'], 0, 200) as [, $row]) { $v = self::mapped($row, $names, 'seller_id'); if ($v !== '') $vals[mb_strtolower($v)] ??= $v; }
+            if (! $vals) continue; $vals = array_values($vals);
+            if (count($vals) > 1) return ['value' => null, 'values' => $vals, 'shop' => null, 'marketplace' => $mp, 'message' => 'The file holds more than one seller id (' . implode(', ', array_slice($vals, 0, 5)) . '), so the shop is not taken from it.'];
+            $shops = Perm::mine(DB::table('t_branches'), 'id')->where('fk_id_ent', $ent)->where('fk_id_marketplace', $mp)->whereRaw('LOWER(TRIM(seller_id)) = ?', [mb_strtolower($vals[0])])->get();
+            if ($shops->isEmpty()) return ['value' => $vals[0], 'values' => $vals, 'shop' => null, 'marketplace' => $mp, 'message' => "Seller id {$vals[0]} in the file is not set on any of your shops. Set it on the shop (Seller ID), or select the shop yourself."];
+            $active = $shops->where('f_active', 1)->values();
+            if ($active->isEmpty()) return ['value' => $vals[0], 'values' => $vals, 'shop' => null, 'marketplace' => $mp, 'message' => 'Seller id ' . $vals[0] . ' belongs to shop ' . self::label($shops[0]) . ", which is inactive, so its sales can't be imported. Activate the shop first."];
+            if ($active->count() > 1) return ['value' => $vals[0], 'values' => $vals, 'shop' => null, 'marketplace' => $mp, 'message' => $active->count() . " shops have seller id {$vals[0]}: " . $active->map(fn ($s) => self::label($s))->implode(', ') . '. Select the right shop.'];
+            return ['value' => $vals[0], 'values' => $vals, 'shop' => $active[0], 'marketplace' => $mp, 'message' => null];
+        }
+        return ['value' => null, 'values' => [], 'shop' => null, 'marketplace' => null, 'message' => null];
+    }
+
+    /** Screen detection: the seller id inside the file first, then the file name (month and year always come from the name). */
+    public static function detect(string $path, string $name, ?int $marketplaceId = null): array
+    {
+        $fn = self::fileName($name, $marketplaceId); $sel = self::sellerIn($path, $marketplaceId);
+        if ($sel['shop']) { $s = $sel['shop']; $mp = (string) (DB::table('cat_marketplaces')->where('id', $s->fk_id_marketplace)->selectRaw("COALESCE(NULLIF(marketplace_short,''), marketplace_descr) n")->value('n') ?? '');
+            $month = ! empty($fn['month']) ? ', ' . $fn['month_name'] : '';
+            return ['shop' => (int) $s->id, 'marketplace' => (int) $s->fk_id_marketplace, 'source' => 'seller_id', 'seller_id' => $sel['value'], 'message' => 'Filled from the seller id in the file: ' . self::label($s) . ", $mp$month.", 'detected' => "Detected from seller id {$sel['value']} in the file ✓", 'ok' => true] + array_diff_key($fn, ['choices' => 1, 'message' => 1])
+                + (! empty($fn['shop_no']) && strtolower((string) $fn['shop_no']) !== strtolower((string) $s->shop_no) ? ['note' => "The file name says shop {$fn['shop_no']}; the seller id in the file wins."] : []); }
+        return $fn + ['source' => ! empty($fn['shop']) ? 'file_name' : null] + ($sel['message'] ? ['seller_note' => $sel['message']] : []);
+    }
+
     public static function fileName(string $name, ?int $marketplaceId = null): array
     {
         $ent = (int) Context::ent(); $base = preg_replace('/\.[A-Za-z0-9]{2,5}$/', '', trim($name));
@@ -222,15 +260,7 @@ class SalesImport
     {
         $shop = self::preCheck($d, ['name' => $fileName, 'size' => $size], $u);
         $ent = (int) Context::ent(); $m = (int) $d['month']; $y = (int) $d['year']; $mn = self::monthName($m, $y); $label = self::label($shop); $period = sprintf('%04d-%02d', $y, $m);
-        // the file name against what was chosen (the same detection as on the screen, on the server too)
-        $fn = self::fileName($fileName, (int) $d['marketplace']); $warnings = [];
-        if (! empty($fn['ok'])) {
-            $w = [];
-            if (strtolower((string) $fn['shop_no']) !== strtolower((string) $shop->shop_no)) $w[] = "The file name says shop {$fn['shop_no']}, but you selected shop {$shop->shop_no}";
-            if ((int) $fn['month'] !== $m || (int) $fn['year'] !== $y) $w[] = "The file name says {$fn['month_name']}, but you selected $mn";
-            if ($w && empty($d['sure'])) return ['name_mismatch' => $w, 'message' => implode('. ', $w) . '. Tick "I\'m sure" to continue.'];
-            $warnings = array_merge($warnings, $w);
-        }
+        $warnings = [];
         $totals = ($d['nature'] ?? 'Normal') === 'Totals';
         $old = self::batchOf((int) $shop->id, $m, $y, $totals ? 'Totals' : 'Normal');
         if ($old && $old->status !== 'Pending' || Ledger::periodLocked($ent, $period)) throw new \InvalidArgumentException("Shop $label - $mn is confirmed and saved permanently, so it can't be imported again.");
@@ -246,6 +276,17 @@ class SalesImport
                 elseif (count($found) < count($hs)) $warnings[] = "Column not found for $lab: " . implode(', ', array_diff($hs, $found)); }
             if ($missing) throw new \InvalidArgumentException('These columns are missing from the CSV: ' . implode('; ', $missing) . '. Check the file is the right marketplace export, or update Sale Columns.');
         } else $csv = self::totalsCsv($path);
+        // which shop and month the file belongs to, against what was chosen: the seller id inside the file first, then the file name (R-A_SALES-3; the same detection as on the screen, on the server too)
+        $w = []; $sel = $totals ? ['shop' => null, 'value' => null, 'message' => null] : self::sellerIn($path, (int) $shop->fk_id_marketplace); $fn = self::fileName($fileName, (int) $d['marketplace']);
+        if ($sel['shop'] && (int) $sel['shop']->id !== (int) $shop->id) $w[] = "The seller id {$sel['value']} in the file belongs to shop " . self::label($sel['shop']) . ", but you selected shop $label";
+        elseif (! $sel['shop'] && ! empty($sel['value']) && $sel['message']) $warnings[] = $sel['message'];
+        if (! empty($sel['values']) && count($sel['values']) > 1) $warnings[] = $sel['message'];
+        if (! empty($fn['ok'])) {
+            if (! $sel['shop'] && strtolower((string) $fn['shop_no']) !== strtolower((string) $shop->shop_no)) $w[] = "The file name says shop {$fn['shop_no']}, but you selected shop {$shop->shop_no}";      // the seller id in the file wins over the name
+            if ((int) $fn['month'] !== $m || (int) $fn['year'] !== $y) $w[] = "The file name says {$fn['month_name']}, but you selected $mn";
+        }
+        if ($w && empty($d['sure'])) return ['name_mismatch' => $w, 'message' => implode('. ', $w) . '. Tick "I\'m sure" to continue.'];
+        $warnings = array_merge($warnings, $w); $sellerSeen = $sel['shop'] && (int) $sel['shop']->id === (int) $shop->id ? "Seller id {$sel['value']} in the file matches shop $label ✓" : null;
 
         if ($old && empty($d['replace'])) {
             $deducted = DB::table('t_sales')->where('fk_id_import', $old->id)->where('f_stock_deducted', 1)->count(); $by = DB::table('t_users')->where('id', $old->imported_by)->value('display_name');
@@ -352,7 +393,7 @@ class SalesImport
             $inBatch = $st['saved'] - $st['moved'];
             DB::table('t_sale_imports')->where('id', $batch)->update(['total_rows' => $st['file_rows'], 'saved_rows' => $inBatch, 'error_rows' => $st['errors'], 'skipped_rows' => $st['skipped'], 'out_of_period_rows' => $st['out_of_period'], 'warnings_json' => json_encode($warnings), 'stats_json' => json_encode($st), 'updated_at' => now()]);
             $msg = "{$st['saved']} sale line(s) imported: {$st['active']} active inventory, {$st['ds']} drop shipping, {$st['unmatched']} not matched.";
-            $res = ['message' => $msg, 'batch' => $batch, 'applied' => $apply, 'shop' => $label, 'month' => $mn, 'stats' => $st + ['fee' => (float) $d['fee'], 'va_share_pct' => 0.0], 'warnings' => $warnings, 'detected' => $csv['detected'] ?? null, 'date_format' => $dateFormat ? ['field' => 'Order Date', 'read_as' => $dateFormat, 'last' => $lastFmt ?: null, 'text' => "Order Date read as $dateFormat" . ($lastFmt && $lastFmt === $dateFormat ? ' (as last time)' : '')] : null, 'file_detected' => $fn['detected'] ?? null,
+            $res = ['message' => $msg, 'batch' => $batch, 'applied' => $apply, 'shop' => $label, 'month' => $mn, 'stats' => $st + ['fee' => (float) $d['fee'], 'va_share_pct' => 0.0], 'warnings' => $warnings, 'detected' => trim(($sellerSeen ? $sellerSeen . ' · ' : '') . ($csv['detected'] ?? ''), ' ·') ?: null, 'date_format' => $dateFormat ? ['field' => 'Order Date', 'read_as' => $dateFormat, 'last' => $lastFmt ?: null, 'text' => "Order Date read as $dateFormat" . ($lastFmt && $lastFmt === $dateFormat ? ' (as last time)' : '')] : null, 'file_detected' => $fn['detected'] ?? null,
                 'proof' => ['text' => "file rows {$st['file_rows']} = saved {$st['saved']} + errors {$st['errors']} + skipped {$st['skipped']}", 'ok' => $proofOk], 'diff' => $diff, 'errors' => array_slice($errors, 0, 100), 'errors_more' => max(0, count($errors) - 100),
                 'unmatched' => $unmatchedRows, 'unmatched_more' => max(0, $st['unmatched'] - count($unmatchedRows)), 'out_of_period' => ['count' => $st['out_of_period'] + $st['moved'], 'mode' => $d['out_mode'] ?? 'keep', 'text' => ($st['out_of_period'] + $st['moved']) ? ($st['out_of_period'] + $st['moved']) . " lines dated outside $mn" : null]];
             if (! $apply) { DB::rollBack(); return $res; }

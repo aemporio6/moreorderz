@@ -121,7 +121,20 @@ class Perm
     ];
     public const ACTIONS = ['VIEW' => 'See', 'ADD' => 'Add', 'EDIT' => 'Change', 'DELETE' => 'Delete', 'EXPORT' => 'Export'];
 
+    /** The names of the rights list in the sales rules (R-A_SALES-82) → the codes this tool checks. Old names (tiktok.*) stay as aliases. */
+    public const ALIASES = [
+        'sale.import' => 'orders.saleImport', 'sale.edit' => 'orders.saleEdit', 'sale.carrier' => 'orders.saleCarrier', 'sale.refund' => 'orders.saleRefund', 'sale.delete' => 'orders.saleDelete', 'sale.delete_month' => 'orders.saleDeleteMonth',
+        'sale.confirm' => 'orders.CONFIRM', 'sale.unlock' => 'orders.saleUnlock', 'sale.see_cost' => 'orders.MONEY', 'sale.see_investor' => 'orders.saleSeeInvestor', 'sale.export' => 'orders.saleExport',
+        'ds.rematch' => 'orders.dsRematch', 'ds.link' => 'orders.dsLink', 'ds.see_contact' => 'orders.dsSeeContact',
+        'case.create' => 'orders.saleCase', 'case.remark' => 'orders.saleCaseAdmin', 'case.resolve' => 'orders.saleCase',
+        'health.edit_own' => 'orders.healthOwn', 'health.edit_any' => 'orders.healthAny',
+        'daily_order.add' => 'orders.fulfilAdd', 'daily_order.status' => 'orders.fulfilManage', 'daily_order.bulk' => 'orders.fulfilManage', 'tiktok.add' => 'orders.fulfilAdd', 'tiktok.status' => 'orders.fulfilManage', 'tiktok.bulk' => 'orders.fulfilManage',
+        'audit.run' => 'orders.salesAudit', 'report.sales' => 'orders.saleReports', 'va_statement.create' => 'orders.vaStatement', 'va_statement.approve' => 'orders.vaStatementApprove', 'setup.marketplace' => 'setup.marketplaces', 'setup.carrier' => 'setup.carriers',
+    ];
+    public static function code(string $code): string { return self::ALIASES[$code] ?? $code; }
+
     private static array $cat = [];
+    private static array $extraRoles = [];
     private static array $rolePerms = [];
     private static array $userPerms = [];
     private static array $roles = [];
@@ -129,7 +142,7 @@ class Perm
     private static ?array $viewAs = null;
     private static ?array $fieldRules = null;
 
-    public static function flush(): void { self::$cat = self::$rolePerms = self::$userPerms = self::$roles = []; self::$viewAs = null; self::$fieldRules = null; Rights::flush(); }
+    public static function flush(): void { self::$cat = self::$rolePerms = self::$userPerms = self::$roles = self::$extraRoles = []; self::$viewAs = null; self::$fieldRules = null; Rights::flush(); }
 
     public static function viewAs(?string $base, ?string $key = null): void { self::$viewAs = $base ? [$base, $key ?: $base] : null; }
     public static function viewing(): ?array { return self::$viewAs; }
@@ -163,6 +176,8 @@ class Perm
         $c['orders.dsUpload'] = ['Upload a drop shipping supplier-orders file for a shop and month', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
         $c['orders.dsUndo'] = ['Undo (delete) a drop shipping upload', 'Orders and dispatch', ['OWNER']];
         $c['orders.dsPlatformAdd'] = ['Add a supplier platform directly (others propose it)', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL']];
+        $c['orders.saleSeeInvestor'] = ['See the investors of a sale line', 'Orders and dispatch', User::ROLES];
+        $c['orders.salesAudit'] = ['Run the sales audits (stock, price, fee and profit checks)', 'Orders and dispatch', ['OWNER', 'MANAGER', 'FINANCE', 'ACCOUNTANT']];
         $c['orders.healthOwn'] = ['Fill in the monthly account health of the shops where you are the seller or the owner', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
         $c['orders.healthAny'] = ['See the account health of every VA and shop, and enter it for a VA', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL']];
         $c['orders.saleCase'] = ['Raise a case on a sale, write in its thread, resolve, reopen and remove it', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
@@ -238,6 +253,7 @@ class Perm
 
     public static function has(?object $u, string $code): bool
     {
+        $code = self::code($code);
         [$base, $key] = self::rolesOf($u);
         if (! $base) return false;
         if ($key === 'OWNER') return true;
@@ -245,15 +261,33 @@ class Perm
             $mine = self::userRows((int) $u->id);
             if (isset($mine[$code])) return $mine[$code] === 'GRANTED';
         }
-        return self::roleCan($base, $key, $code);
+        if (self::roleCan($base, $key, $code)) return true;
+        if (self::$viewAs && $u->role_code === 'OWNER') return false;
+        foreach (self::extraRoles((int) $u->id) as $r) if (self::roleCan(self::baseOf($r), $r, $code)) return true;      // several roles = the union of their rights (never an exact role match)
+        return false;
+    }
+
+    /** The extra roles of a person beside his main role (R-A_SALES-82). */
+    public static function extraRoles(int $userId): array { return self::$extraRoles[$userId] ??= DB::table('mo_user_roles')->where('user_id', $userId)->orderBy('role_code')->pluck('role_code')->all(); }
+
+    private static function baseOf(string $role): string { if (in_array($role, User::ROLES, true)) return $role; return (string) (DB::table('mo_roles')->where('role_code', $role)->value('like_role') ?: $role); }
+
+    public static function setExtraRoles(int $userId, array $roles, int $by): array
+    {
+        $main = DB::table('t_users')->where('id', $userId)->first() ?? throw new \InvalidArgumentException('Person not found.'); $known = array_keys(self::roles()); $roles = array_values(array_unique(array_filter(array_map('strval', $roles))));
+        foreach ($roles as $r) { if ($r === 'OWNER') throw new \InvalidArgumentException('Owner cannot be an extra role.'); if (! in_array($r, $known, true)) throw new \InvalidArgumentException("Unknown role $r."); }
+        $roles = array_values(array_diff($roles, [$main->custom_role ?: $main->role_code]));
+        DB::transaction(function () use ($userId, $roles, $by) { DB::table('mo_user_roles')->where('user_id', $userId)->delete(); foreach ($roles as $r) DB::table('mo_user_roles')->insert(['user_id' => $userId, 'role_code' => $r, 'created_by' => $by, 'created_at' => now()]); Audit::log('t_users', $userId, 'UPDATE', ['extra roles' => $roles]); });
+        unset(self::$extraRoles[$userId]); return $roles;
     }
 
     /** Why the answer is what it is – shown to the person and to the Owner. */
     public static function explain(?object $u, string $code): string
     {
-        [$base, $key] = self::rolesOf($u); $what = self::label($code);
+        $code = self::code($code); [$base, $key] = self::rolesOf($u); $what = self::label($code);
         if (! $base) return 'Not signed in.';
         $mine = self::userRows((int) $u->id);
+        if (! isset($mine[$code]) && ! self::roleCan($base, $key, $code) && ! (self::$viewAs && $u->role_code === 'OWNER')) foreach (self::extraRoles((int) $u->id) as $r) if (self::roleCan(self::baseOf($r), $r, $code)) return "Allowed: your extra role $r has \"$what\".";
         if (isset($mine[$code])) return $mine[$code] === 'GRANTED' ? "Allowed: \"$what\" was given to you personally." : "Not allowed: \"$what\" was taken away from you personally. Ask the Owner.";
         $rows = self::roleRows((string) $key);
         if (array_key_exists($code, $rows)) return $rows[$code] ? "Allowed: the role $key has \"$what\"." : "Not allowed: the role $key had \"$what\" switched off. Ask the Owner.";
@@ -263,7 +297,7 @@ class Perm
     /** Stop with a plain sentence that names the right, so the person can ask for exactly that. */
     public static function need(?object $u, string $code): void
     {
-        if (self::has($u, $code)) return;
+        $code = self::code($code); if (self::has($u, $code)) return;
         abort(response()->json(['message' => 'Your role cannot do this here: "' . self::label($code) . '". Ask the Owner if you need it.', 'perm' => $code, 'why' => self::explain($u, $code), 'can_request' => true], 403));
     }
 

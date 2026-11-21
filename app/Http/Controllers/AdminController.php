@@ -396,7 +396,7 @@ class AdminController extends Controller
         $users = DB::table('t_users')->orderBy('display_name')->get(['id', 'login_id', 'display_name', 'role_code', 'custom_role', 'f_active'])->map(fn ($u) => [
             'id' => $u->id, 'name' => $u->display_name ?: $u->login_id, 'role' => $u->custom_role ?: $u->role_code, 'active' => (bool) $u->f_active,
             'own' => DB::table('mo_user_perms')->where('user_id', $u->id)->get(['perm_code', 'effect', 'reason', 'until'])->map(fn ($p) => (array) $p + ['label' => P::label($p->perm_code)])->all(),
-            'shops' => DB::table('mo_user_scopes')->where(['user_id' => $u->id, 'kind' => 'SHOP'])->pluck('ref_id')->all(), 'vendors' => DB::table('mo_user_scopes')->where(['user_id' => $u->id, 'kind' => 'VENDOR'])->pluck('ref_id')->all()])->all();
+            'shops' => DB::table('mo_user_scopes')->where(['user_id' => $u->id, 'kind' => 'SHOP'])->pluck('ref_id')->all(), 'vendors' => DB::table('mo_user_scopes')->where(['user_id' => $u->id, 'kind' => 'VENDOR'])->pluck('ref_id')->all(), 'extra_roles' => P::extraRoles((int) $u->id)])->all();
         return ['roles' => array_values($roles), 'built_in' => User::ROLES, 'rights' => $rights, 'matrix' => $matrix, 'users' => $users,
             'shops' => DB::table('t_branches')->where('fk_id_ent', Context::ent())->orderBy('shop_no')->get(['id', DB::raw("CONCAT(COALESCE(shop_no,''),' ',COALESCE(shop_name,'')) as name")]),
             'vendors' => DB::table('t_account as a')->whereIn('a.id', DB::table('t_product_vendors')->where('fk_id_ent', Context::ent())->where('fk_id_vendor', '>', 0)->distinct()->select('fk_id_vendor'))->orderBy('a.first_name')->get(['a.id', DB::raw("TRIM(CONCAT_WS(' ', NULLIF(a.account_code,''), NULLIF(a.first_name,''), NULLIF(a.sur_name,''))) as name")]),
@@ -426,6 +426,13 @@ class AdminController extends Controller
         P::need($r->user(), 'admin.permissions');
         $d = $r->validate(['user_id' => 'required|integer', 'code' => 'required|string|max:120', 'effect' => 'nullable|in:GRANTED,REVOKED', 'reason' => 'nullable|string|max:255', 'until' => 'nullable|date']);
         return $this->guard(function () use ($d, $r) { P::setUser((int) $d['user_id'], $d['code'], $d['effect'] ?? null, (string) ($d['reason'] ?? ''), $d['until'] ?? null, (int) $r->user()->id); return ['ok' => true]; });
+    }
+
+    public function permExtraRoles(Request $r)
+    {
+        P::need($r->user(), 'admin.permissions');
+        $d = $r->validate(['user_id' => 'required|integer|exists:t_users,id', 'roles' => 'array', 'roles.*' => 'string|max:40']);
+        return $this->guard(fn () => ['ok' => true, 'roles' => P::setExtraRoles((int) $d['user_id'], $d['roles'] ?? [], (int) $r->user()->id)]);
     }
 
     public function permScope(Request $r)

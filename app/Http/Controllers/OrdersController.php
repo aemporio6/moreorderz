@@ -306,6 +306,12 @@ class OrdersController extends Controller
             'can_refresh_va' => \App\Services\Perm::has($u, 'orders.saleUnlock'),
             'shops' => array_map(fn ($s) => ['id' => $s['id'], 'marketplace' => $s['marketplace'], 'active' => (int) $s['active'], 'name' => $s['label'], 'va' => $s['va'], 'va_pct' => $s['va_pct']], \App\Services\ShopLabel::list($u))];
     }
+    public function saleImportDetect(Request $r)
+    {
+        $this->can($r, 'orders.saleImport'); $f = $r->file('file');      // the screen sends only the first part of the file: enough for the header and the first rows
+        if (! $f || ! $f->isValid()) return \App\Services\SalesImport::fileName((string) $r->input('name'), (int) $r->input('marketplace') ?: null);
+        return \App\Services\SalesImport::detect($f->getRealPath(), (string) $r->input('name'), (int) $r->input('marketplace') ?: null);
+    }
     public function saleImportName(Request $r) { $this->can($r, 'orders.saleImport'); return \App\Services\SalesImport::fileName((string) $r->query('name'), (int) $r->query('marketplace') ?: null); }
     public function saleImportRun(Request $r)
     {
