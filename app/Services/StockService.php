@@ -320,7 +320,8 @@ class StockService
     {
         $by = DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->join('cat_inventory_locations as c', 'c.id', '=', 'b.fk_id_location')->leftJoin('t_account as a', 'a.id', '=', 'l.fk_id_owner')
             ->where('l.fk_id_product', $productId)->where('b.qty', '<>', 0)->orderBy('l.received_date')->orderBy('l.id')->orderBy('c.location_name')
-            ->get(['c.location_name as location', 'c.kind', 'l.id as lot_id', 'l.lot_code', 'l.received_date', 'l.unit_cost_gbp', 'l.visibility', 'l.landed_status', 'b.qty', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as owner")]);
+            ->get(['c.location_name as location', 'c.kind', 'l.id as lot_id', 'l.lot_code', 'l.received_date', 'l.unit_cost_gbp', 'l.visibility', 'l.landed_status', 'b.qty', 'l.po_id', 'l.fk_id_cycle', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as owner")])
+            ->map(function ($r) { $r->type = ProductsList::lotType($r); return $r; });      // R-D-25 chip on the lot
         return ['units' => self::balance($productId), 'available' => self::available($productId), 'rows' => $by];
     }
 

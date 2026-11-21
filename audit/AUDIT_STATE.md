@@ -125,4 +125,5 @@ How to work each step: build → test → change the verdict lines in `audit/ver
 | 7e-66 | R-D-46 Stock alerts page (StockAlerts: rows, counted-qty update with reason, approval, STK_LOW, Buy more / Create PO) → MR-0464, MR-0888, MR-0977 BUILT | done | 572 / 1,433 (40%) | 427 tests |
 | 7e-67 | R-D-2 SKU live check (SkuCheck: exact block with link, look-alike warning, available; 500 ms on product form + child cards; server check on save) → MR-0457, MR-0905, MR-0955 BUILT | done | 575 / 1,433 (40%) | 429 tests |
 | 7e-68 | R-C-42 linked shops by role (Owner / Seller chips from the shops, inactive greyed; pickers every shop; party pickers by active role, first name) → MR-0449, MR-0835, MR-0864 BUILT | done | 578 / 1,433 (40%) | 431 tests |
-| 7e-69 | NEXT → recount; 3-line R-B_SOURCING-51, R-D-8, R-H-19, R-A_SALES-87, R-FIN-22, R-FIN-47, R-G_CORE-96 …; rest of Sourcing 39 / 28 | todo | | |
+| 7e-69 | R-D-25 ownership chip on product and lot + filter by type (products list, export, lots page) → MR-0461, MR-0901, MR-0952 BUILT | done | 581 / 1,433 (41%) | 432 tests |
+| 7e-70 | NEXT → recount; 3-line R-B_SOURCING-51, R-G_CORE-2, R-H-19, R-A_SALES-87, R-FIN-22, R-FIN-47, R-G_CORE-96 …; rest of Sourcing 39 / 28 | todo | | |

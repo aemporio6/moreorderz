@@ -43,6 +43,32 @@ class ProductsList
         return $m === 'POOL' ? 'CENTRAL' : ($m === 'PRIVATE' ? 'PRIVATE' : null);
     }
 
+    public const OWNER_TYPES = ['JOINT', 'HOLDING', 'CENTRAL', 'PRIVATE'];
+
+    /** The SQL of type() so the list can be filtered by the chip (same order: investors first, then the marketplace mode). */
+    public static function typeFilter($q, string $type, ?int $mp): void
+    {
+        $inv = '(SELECT COUNT(DISTINCT pi.fk_id_account) FROM t_product_investors pi WHERE pi.fk_id_product = p.id)';
+        $mode = fn (string $m) => 'EXISTS (SELECT 1 FROM t_product_visibility v WHERE v.fk_id_product = p.id AND UPPER(v.visibility_mode) = ' . "'$m'" . ($mp ? ' AND v.fk_id_marketplace = ' . (int) $mp : '') . ')';
+        match ($type) {
+            'JOINT' => $q->whereRaw("$inv >= 2"),
+            'HOLDING' => $q->whereRaw("$inv = 1"),
+            'CENTRAL' => $q->whereRaw("$inv = 0 AND " . $mode('POOL')),
+            'PRIVATE' => $q->whereRaw("$inv = 0 AND " . ($mp ? $mode('PRIVATE') : 'NOT ' . $mode('POOL') . ' AND ' . $mode('PRIVATE'))),
+        };
+    }
+
+    /** The chip of one lot (R-D-25): its investors (sourcing investments of the lot's PO / cycle) ≥ 2 → JOINT, 1 → HOLDING, else the lot's pool / private. */
+    public static function lotType(object $lot): ?string
+    {
+        $n = (int) DB::table('t_src_investments')->where('f_active', 1)->where(fn ($w) => $w->when($lot->po_id, fn ($x) => $x->orWhere('fk_id_po', $lot->po_id))->when($lot->fk_id_cycle, fn ($x) => $x->orWhere('fk_id_cycle', $lot->fk_id_cycle))
+            ->when(! $lot->po_id && ! $lot->fk_id_cycle, fn ($x) => $x->whereRaw('1 = 0')))->whereNotIn('status', ['CANCELLED', 'REFUNDED'])->distinct()->count('fk_id_investor');
+        if ($n >= 2) return 'JOINT';
+        if ($n === 1) return 'HOLDING';
+        $v = strtoupper((string) $lot->visibility);
+        return $v === 'POOL' ? 'CENTRAL' : ($v === 'PRIVATE' ? 'PRIVATE' : null);
+    }
+
     /** R-D-37: ICC days-of-cover status when the product has sales history in ICC, else the stock / min-level rule. */
     public static function cover(object $p): array
     {
@@ -71,7 +97,7 @@ class ProductsList
     {
         $v = ['per' => in_array((int) ($d['per'] ?? 20), self::SIZES, true) ? (int) $d['per'] : 20, 'set' => ($d['set'] ?? '') === 'pricing' ? 'pricing' : 'default',
             'status' => in_array($d['status'] ?? 'active', ['active', 'inactive', 'all', 'hidden', 'deleted'], true) ? $d['status'] : 'active', 'mp' => isset($d['mp']) && ctype_digit((string) $d['mp']) ? (int) $d['mp'] : null,
-            'q' => mb_substr(trim((string) ($d['q'] ?? '')), 0, 100), 'hidden' => array_values(array_intersect((array) ($d['hidden'] ?? []), array_keys(self::DEFAULT_COLS + self::PRICING_COLS)))];
+            'q' => mb_substr(trim((string) ($d['q'] ?? '')), 0, 100), 'type' => in_array(strtoupper((string) ($d['type'] ?? '')), self::OWNER_TYPES, true) ? strtoupper($d['type']) : '', 'hidden' => array_values(array_intersect((array) ($d['hidden'] ?? []), array_keys(self::DEFAULT_COLS + self::PRICING_COLS)))];
         DB::table('t_user_column_prefs')->updateOrInsert(['fk_id_user' => $u->id, 'page_key' => self::PAGE], ['prefs_json' => json_encode($v), 'hidden_columns' => '', 'updated_at' => now()]);
         return ['message' => 'Saved as your default view', 'view' => $v];
     }
@@ -82,6 +108,7 @@ class ProductsList
         $st = $f['status'] ?? 'active';
         if ($st === 'active') $q->where('p.f_active', 1); elseif ($st === 'inactive') $q->where('p.f_active', 0)->where('p.row_state', 'ACTIVE');
         elseif ($st === 'hidden') $q->where('p.row_state', 'HIDDEN'); elseif ($st === 'deleted') $q->where('p.row_state', 'DELETED'); else $q->where('p.row_state', '<>', 'DELETED');      // R-D-9: "Hidden products" saved view; the recycle bin
+        if (in_array($ty = strtoupper((string) ($f['type'] ?? '')), self::OWNER_TYPES, true)) self::typeFilter($q, $ty, ! empty($f['mp']) ? (int) $f['mp'] : null);      // R-D-25 filter by the chip
         if (($t = trim((string) ($f['q'] ?? ''))) !== '') { $like = '%' . addcslashes($t, '%_\\') . '%'; $q->where(fn ($w) => $w->where('p.product_name_vendor', 'like', $like)->orWhere('p.SKU_VENDOR', 'like', $like)->orWhere('p.ean', 'like', $like)->orWhere('p.id', ctype_digit(ltrim($t, 'MP-')) ? (int) ltrim($t, 'MP-') : -1)); }
         return $q;
     }
@@ -97,7 +124,7 @@ class ProductsList
         $mps = DB::table('cat_marketplaces')->whereIn('fk_id_ent', [0, $ent])->where('f_active', 1)->orderBy('marketplace_short')->get(['id', DB::raw("COALESCE(NULLIF(marketplace_short,''), NULLIF(marketplace_descr,''), id) as name")]);
         $money = $u && Perm::has($u, 'stock.prices');
         return ['rows' => $out, 'total' => $total, 'page' => $page, 'pages' => $pages, 'per' => $per, 'sizes' => self::SIZES, 'footer' => "Showing {$a}–{$b} of $total · Page $page of $pages",
-            'pager' => range(max(1, $page - 3), min($pages, $page + 3)), 'marketplaces' => $mps, 'columns' => self::DEFAULT_COLS, 'pricing_columns' => self::PRICING_COLS, 'row_status' => self::ROW_STATUS, 'types' => self::TYPES,
+            'pager' => range(max(1, $page - 3), min($pages, $page + 3)), 'marketplaces' => $mps, 'columns' => self::DEFAULT_COLS, 'pricing_columns' => self::PRICING_COLS, 'row_status' => self::ROW_STATUS, 'types' => self::TYPES, 'owner_types' => self::OWNER_TYPES,
             'view' => self::view($u), 'money' => $money, 'pricing_needs_mp' => ($f['set'] ?? '') === 'pricing' && ! $mp];
     }
 

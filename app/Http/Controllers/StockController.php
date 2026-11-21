@@ -48,8 +48,8 @@ class StockController extends Controller
     public function products(Request $r)
     {
         \App\Services\Perm::need($r->user(), 'stock.SEE');
-        $f = $r->only(['q', 'status', 'mp', 'set', 'page', 'per']); $v = \App\Services\ProductsList::view($r->user());
-        if (! $r->has('per')) $f += ['per' => $v['per'], 'set' => $v['set'], 'status' => $v['status'], 'mp' => $v['mp'] ?? null, 'q' => $v['q'] ?? ''];      // the person's default view
+        $f = $r->only(['q', 'status', 'mp', 'set', 'page', 'per', 'type']); $v = \App\Services\ProductsList::view($r->user());
+        if (! $r->has('per')) $f += ['per' => $v['per'], 'set' => $v['set'], 'status' => $v['status'], 'mp' => $v['mp'] ?? null, 'q' => $v['q'] ?? '', 'type' => $v['type'] ?? ''];      // the person's default view
         return \App\Services\ProductsList::page((int) Context::ent(), $f, $r->user());
     }
     /** Investor ids are company parties (R-D-80). */
@@ -124,7 +124,7 @@ class StockController extends Controller
     public function productsExport(Request $r, string $format)
     {
         \App\Services\Perm::need($r->user(), 'stock.SEE');
-        $x = \App\Services\ProductsList::export((int) Context::ent(), $r->only(['q', 'status', 'mp', 'set', 'hidden']), $format, $r->user());
+        $x = \App\Services\ProductsList::export((int) Context::ent(), $r->only(['q', 'status', 'mp', 'set', 'hidden', 'type']), $format, $r->user());
         return response($x['body'], 200, ['Content-Type' => $x['type'], 'Content-Disposition' => 'attachment; filename="' . $x['name'] . '"']);
     }
 
@@ -170,12 +170,14 @@ class StockController extends Controller
         if ($v = $r->query('q')) $q->where(fn ($w) => $w->where('l.sku', 'like', "%$v%")->orWhere('l.lot_code', 'like', "%$v%"));
         if ($r->query('nocost') === '1') $q->where('l.unit_cost_gbp', '<=', 0);
         $money = \App\Services\Perm::has($r->user(), 'stock.MONEY');
-        $cols = ['l.id', 'l.lot_code', 'l.sku', 'p.id as product_id', 'p.product_name_vendor as name', 'l.source', 'l.received_date', 'l.qty', 'l.qty_left', 'l.visibility', 'l.landed_status', 'l.po_id', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as owner")];
+        $cols = ['l.id', 'l.lot_code', 'l.sku', 'p.id as product_id', 'p.product_name_vendor as name', 'l.source', 'l.received_date', 'l.qty', 'l.qty_left', 'l.visibility', 'l.landed_status', 'l.po_id', 'l.fk_id_cycle', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as owner")];
         if ($money) $cols[] = 'l.unit_cost_gbp';
         $noCost = DB::table('fin_lots')->where('company_id', Context::ent())->where('qty_left', '>', 0)->where('unit_cost_gbp', '<=', 0)->count();
         $rows = $q->orderBy('l.received_date')->orderBy('l.id')->limit(500)->get($cols); $qc = \App\Services\SourcingExtras::qcOfPos($rows->pluck('po_id')->filter()->unique()->values()->all());
         foreach ($rows as $l) $l->qc = $l->po_id ? ($qc[$l->po_id] ?? null) : null;   // R-B_SOURCING-65: the lot shows the latest QC of its PO
-        return ['rows' => $rows, 'show_value' => $money, 'no_cost' => $noCost, 'can_cost' => \App\Services\Perm::has($r->user(), 'stock.lots_may')];
+        foreach ($rows as $l) $l->type = \App\Services\ProductsList::lotType($l);      // R-D-25 chip on the lot, filterable
+        if (in_array($ty = strtoupper((string) $r->query('type', '')), \App\Services\ProductsList::OWNER_TYPES, true)) $rows = $rows->filter(fn ($l) => $l->type === $ty)->values();
+        return ['rows' => $rows, 'owner_types' => \App\Services\ProductsList::OWNER_TYPES, 'show_value' => $money, 'no_cost' => $noCost, 'can_cost' => \App\Services\Perm::has($r->user(), 'stock.lots_may')];
     }
 
     public function lotCost(Request $r, int $id)
