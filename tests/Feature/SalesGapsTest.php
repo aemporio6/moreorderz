@@ -165,4 +165,24 @@ class SalesGapsTest extends TestCase
         $this->assertSame([-1, (int) $orig->id, $next], [(int) $c->qty, (int) $c->fk_id_reverses, substr((string) $c->consumed_on, 0, 10)]);
         $this->assertSame($next, substr((string) DB::table('gl_journals')->where('source_type', 'RETURN')->where('source_id', $id)->value('journal_date'), 0, 10));
     }
+
+    public function test_fee_comes_from_the_money_report_and_every_refusal_has_a_fix_link(): void
+    {
+        $this->world(); $this->assertNull(SalesImport::feeFromReport($this->shop, 7, 2026));
+        $r = $this->import([['F-1', '05/07/2026', 'Ann', '', 'S1', 'T', '1', '9']], ['fee' => '12.50']); $this->assertSame('typed', DB::table('t_sale_imports')->where('id', $r['batch'])->value('fee_source'));
+        $this->assertContains('The fee was typed – it is replaced when the money report of this shop and month arrives', $r['warnings']);
+        // the money report of the month arrives: two statements with fees −2.32 and −12.74
+        foreach ([[-2.32, '2026-07-10'], [-12.74, '2026-07-24'], [-9.00, '2026-08-02']] as $i => [$fee, $day]) DB::table('mo_settlements')->insert($this->fill('mo_settlements', ['fk_id_ent' => 1, 'fk_id_branch' => $this->shop, 'statement_id' => "ST-$i", 'statement_date' => $day, 'currency' => 'GBP', 'fees' => $fee, 'status' => 'LOADED']));
+        $this->assertSame([15.06, 2], [SalesImport::feeFromReport($this->shop, 7, 2026)['fee'], SalesImport::feeFromReport($this->shop, 7, 2026)['statements']]);
+        $this->assertSame(1, SalesImport::applyReportFees()); $b = DB::table('t_sale_imports')->where('id', $r['batch'])->first(); $this->assertSame([15.06, 'report'], [(float) $b->marketplace_fee, $b->fee_source]); $this->assertSame(0, SalesImport::applyReportFees());
+        $this->getJson('/api/sales/import/fee?shop=' . $this->shop . '&month=7&year=2026')->assertOk()->assertJsonPath('report.fee', 15.06);
+        // an import with the report's fee is marked "report"; a different typed fee is warned
+        $r2 = $this->import([['F-9', '05/08/2026', 'Ann', '', 'S1', 'T', '1', '9']], ['month' => 8, 'fee' => '9.00'], '101A_aug26.csv'); $this->assertSame('report', DB::table('t_sale_imports')->where('id', $r2['batch'])->value('fee_source'));
+        // fix links
+        $this->assertSame('#/rec/t_branch/' . $this->shop, SalesImport::fixFor("Shop 101A (Pets) is inactive, so sales can't be imported for it. Activate the shop first, or choose another shop.", ['shop' => $this->shop])['url']);
+        $this->assertSame('marketplace_of_shop', SalesImport::fixFor('Shop 101A (Pets) belongs to a different marketplace.', [])['action']); $this->assertSame('sale_columns', SalesImport::fixFor('Sale Columns are not set for this marketplace: Qty.', [])['action']); $this->assertNull(SalesImport::fixFor('Select a shop.', []));
+        DB::table('t_branches')->where('id', $this->shop)->update(['f_active' => 0]);
+        $f = \Illuminate\Http\UploadedFile::fake()->createWithContent('101A_july26.csv', "Order number\nX\n");
+        $this->post('/api/sales/import', ['file' => $f, 'marketplace' => $this->mp, 'shop' => $this->shop, 'month' => 7, 'year' => 2026, 'fee' => '0'], ['Accept' => 'application/json'])->assertStatus(422)->assertJsonPath('fix.label', 'Open the shop to activate it');
+    }
 }

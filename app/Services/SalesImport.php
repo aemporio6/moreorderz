@@ -99,6 +99,41 @@ class SalesImport
         return $out + ['shop' => (int) $s->id, 'marketplace' => (int) $s->fk_id_marketplace, 'message' => 'Filled from the file name: ' . self::label($s) . ", $mp, $mn.", 'detected' => "Detected from file name $base ✓"];
     }
 
+    // ---------- R-A_SALES-2: the fee from the money report, and a fix link per message ----------
+    /** Marketplace fee of a shop + month from its money report (the fees of every statement dated in the month), or null when no money report is loaded. */
+    public static function feeFromReport(int $shopId, int $month, int $year): ?array
+    {
+        $from = sprintf('%04d-%02d-01', $year, $month); $q = DB::table('mo_settlements')->where('fk_id_ent', Context::ent())->where('fk_id_branch', $shopId)->whereBetween('statement_date', [$from, date('Y-m-t', strtotime($from))]);
+        $n = (clone $q)->count(); if (! $n) return null;
+        return ['fee' => round(abs((float) (clone $q)->sum('fees')), 2), 'statements' => $n, 'text' => "From the money report of this shop and month ($n statement(s)). You can still change it."];
+    }
+
+    /** Pending batches whose fee was typed take the fee of the money report once that report is loaded. Returns the number of batches changed. */
+    public static function applyReportFees(): int
+    {
+        $n = 0;
+        foreach (DB::table('t_sale_imports')->where('fk_id_ent', Context::ent())->where('status', 'Pending')->where('fee_source', 'typed')->where('import_nature', '<>', 'Totals')->get(['id', 'fk_id_branch', 'period_month', 'period_year', 'marketplace_fee']) as $b) {
+            $r = self::feeFromReport((int) $b->fk_id_branch, (int) $b->period_month, (int) $b->period_year); if (! $r) continue;
+            DB::table('t_sale_imports')->where('id', $b->id)->update(['marketplace_fee' => $r['fee'], 'fee_source' => 'report', 'updated_at' => now()]); Audit::log('t_sale_imports', $b->id, 'UPDATE', ['marketplace_fee' => [(float) $b->marketplace_fee, $r['fee']]], 'The typed fee was replaced by the money report', (int) Context::ent()); $n++;
+        }
+        return $n;
+    }
+
+    /** What the person can do about a refusal: ['label' => …, 'url' => …] or null. */
+    public static function fixFor(string $message, array $d): ?array
+    {
+        $shop = (int) ($d['shop'] ?? 0); $mp = (int) ($d['marketplace'] ?? 0);
+        return match (true) {
+            str_contains($message, 'is inactive') => ['label' => 'Open the shop to activate it', 'url' => "#/rec/t_branch/$shop"],
+            str_contains($message, 'belongs to a different marketplace') => ['label' => 'Change the marketplace to the one of this shop', 'action' => 'marketplace_of_shop'],
+            str_contains($message, "don't have rights") => ['label' => 'Ask the Owner for this shop', 'url' => '#/permissions'],
+            str_contains($message, 'Sale Columns are not set') || str_contains($message, 'columns are missing from the CSV') => ['label' => 'Open Sale Columns of this marketplace', 'action' => 'sale_columns'],
+            str_contains($message, 'is confirmed and saved permanently') => ['label' => 'Show the sales of that month', 'url' => '#/sales'],
+            str_contains($message, 'not up to date for the sales module') => ['label' => 'Open System health', 'url' => '#/health'],
+            default => null,
+        };
+    }
+
     // ---------- R-A_SALES-2: pre-checks, in the rule's order ----------
     /** Returns the shop row, or throws with the rule's message. $file = ['name' =>, 'size' =>] or null when no file was sent. */
     public static function preCheck(array $d, ?array $file, ?object $u): object
@@ -207,6 +242,8 @@ class SalesImport
                 'message' => "Shop $label already has sales imported for $mn."];
         }
 
+        $rep = $totals ? null : self::feeFromReport((int) $shop->id, $m, $y); $feeSource = $rep && abs($rep['fee'] - (float) $d['fee']) < 0.005 ? 'report' : 'typed';
+        if (! $totals && $feeSource === 'typed') $warnings[] = $rep ? 'The fee you typed (' . number_format((float) $d['fee'], 2) . ') differs from the money report (' . number_format($rep['fee'], 2) . ')' : 'The fee was typed – it is replaced when the money report of this shop and month arrives';
         DB::beginTransaction();
         try {
             $replaced = 0; $diff = null; $oldKeys = [];
@@ -218,7 +255,7 @@ class SalesImport
                 DB::table('t_sales')->where('fk_id_import', $old->id)->delete(); DB::table('t_sale_import_errors')->where('fk_id_import', $old->id)->delete(); DB::table('t_sale_imports')->where('id', $old->id)->delete();
             }
             $batch = (int) DB::table('t_sale_imports')->insertGetId(RecordService::fillNotNull('t_sale_imports', ['fk_id_ent' => $ent, 'fk_id_branch' => $shop->id, 'fk_id_marketplace' => $shop->fk_id_marketplace, 'import_nature' => $totals ? 'Totals' : 'Normal', 'file_name' => mb_substr($fileName, 0, 255), 'period_month' => $m, 'period_year' => $y,
-                'marketplace_fee' => (float) $d['fee'], 'fee_source' => 'typed', 'status' => 'Pending', 'imported_by' => $u->id ?? null, 'imported_at' => now(), 'replaced_rows' => $replaced] + self::vaOf($shop, $m, $y)));
+                'marketplace_fee' => (float) $d['fee'], 'fee_source' => $feeSource, 'status' => 'Pending', 'imported_by' => $u->id ?? null, 'imported_at' => now(), 'replaced_rows' => $replaced] + self::vaOf($shop, $m, $y)));
             $st = ['saved' => 0, 'active' => 0, 'ds' => 0, 'unmatched' => 0, 'errors' => 0, 'skipped' => 0, 'out_of_period' => 0, 'moved' => 0, 'merged' => 0, 'qty' => 0, 'sale' => 0.0, 'buy' => 0.0, 'profit' => 0.0, 'cost_current' => 0, 'cost_product' => 0, 'file_rows' => count($csv['rows'])];
             $errors = []; $seen = []; $nosku = []; $newKeys = []; $unmatchedRows = []; $fmts = [];
             $from = sprintf('%04d-%02d-01', $y, $m); $to = date('Y-m-t', strtotime($from)); $cur = Fx::code((int) $shop->fk_id_payout_currency ?: null, $ent);

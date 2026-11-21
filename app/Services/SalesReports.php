@@ -17,6 +17,7 @@ class SalesReports
     /** Pending batches follow their lines; a confirmed batch keeps the amount it had at Confirm (changed only by "Refresh VA %"). */
     public static function syncShares(?int $batchId = null): void
     {
+        SalesImport::applyReportFees();      // a typed fee gives way to the money report once it is loaded
         $q = DB::table('t_sale_imports')->where('fk_id_ent', Context::ent())->where('status', 'Pending'); if ($batchId) $q->where('id', $batchId);
         foreach ($q->get(['id', 'marketplace_fee', 'va_share_percentage', 'va_share_amount']) as $b) {
             $amt = round(((float) DB::table('t_sales')->where('fk_id_import', $b->id)->sum('profit') - (float) $b->marketplace_fee) * (float) $b->va_share_percentage / 100, 2);

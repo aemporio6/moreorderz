@@ -309,11 +309,13 @@ class OrdersController extends Controller
     public function saleImportName(Request $r) { $this->can($r, 'orders.saleImport'); return \App\Services\SalesImport::fileName((string) $r->query('name'), (int) $r->query('marketplace') ?: null); }
     public function saleImportRun(Request $r)
     {
-        return $this->run(function () use ($r) {
-            $this->can($r, 'orders.saleImport'); $f = $r->file('file'); $d = $r->only(['nature', 'marketplace', 'shop', 'month', 'year', 'fee', 'out_mode', 'delimiter', 'header_line']) + ['replace' => $r->boolean('replace'), 'sure' => $r->boolean('sure')];
+        $this->can($r, 'orders.saleImport'); $f = $r->file('file'); $d = $r->only(['nature', 'marketplace', 'shop', 'month', 'year', 'fee', 'out_mode', 'delimiter', 'header_line']) + ['replace' => $r->boolean('replace'), 'sure' => $r->boolean('sure')];
+        try {
             if (! $f || ! $f->isValid()) { \App\Services\SalesImport::preCheck($d, null, $r->user()); throw new \InvalidArgumentException('Choose a CSV file to upload.'); }
             return \App\Services\SalesImport::run($f->getRealPath(), $f->getClientOriginalName(), (int) $f->getSize(), $d, $r->user(), $r->boolean('apply'));
-        });
+        } catch (\Illuminate\Database\QueryException $e) { report($e); return response()->json(['message' => 'Something went wrong on our side. Nothing was saved. The details are in the system log.'], 500); }
+        catch (\InvalidArgumentException|\RuntimeException $e) { if ($e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) throw $e;
+            return response()->json(['message' => $e->getMessage(), 'errors' => ['_form' => [$e->getMessage()]], 'fix' => \App\Services\SalesImport::fixFor($e->getMessage(), $d)], 422); }      // every refusal says what to do about it
     }
     public function saleImportErrors(Request $r, int $id) { $this->can($r, 'orders.saleImport'); return \App\Services\SalesImport::errors($id); }
     public function saleImportUnmatched(Request $r, int $id)
@@ -401,4 +403,6 @@ class OrdersController extends Controller
     public function saleDsPick(Request $r, int $id) { return $this->run(fn () => \App\Services\DsMatch::pick($id, (int) $r->input('item'), $r->user())); }
 
     public function saleOutOfPeriod(Request $r) { return $this->run(fn () => \App\Services\SalesImport::answerOutOfPeriod((int) $r->input('shop'), (string) $r->input('month'), (string) $r->input('mode'), (string) $r->input('reason'), $r->user())); }
+
+    public function saleImportFee(Request $r) { $this->can($r, 'orders.saleImport'); return ['report' => \App\Services\SalesImport::feeFromReport((int) $r->query('shop'), (int) $r->query('month'), (int) $r->query('year'))]; }
 }

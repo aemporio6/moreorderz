@@ -288,6 +288,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('sales/unlock', [OrdersController::class, 'saleUnlockInfo']);
         Route::post('sales/unlock', [OrdersController::class, 'saleUnlock']);
         Route::get('sales/import', [OrdersController::class, 'saleImportHome']);
+        Route::get('sales/import/fee', [OrdersController::class, 'saleImportFee']);
         Route::get('sales/import/name', [OrdersController::class, 'saleImportName']);
         Route::post('sales/import', [OrdersController::class, 'saleImportRun']);
         Route::get('sales/import/sku', [OrdersController::class, 'saleImportSku']);
