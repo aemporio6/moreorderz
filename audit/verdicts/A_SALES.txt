@@ -66,8 +66,8 @@
 66|P|function saveColumns|three mapping sets per marketplace with the rule's cleaning (trim, empties, case-insensitive de-dup); Sale Columns drive the import. 5-matching set is read by the drop-shipping match; extra columns built (R-A_SALES-45). Missing: the DS Columns set is saved but the supplier-file upload that reads it belongs to the Products rules (R-D-73 …); per-field notes
 67|F|form:marketplace_field|form only; field builder not built
 68|F|form:cat_marketplace|form + list; ISO checks, questions checklist not built
-69|F|form:t_carrier_pkg_svc|forms + lists; effective-dated rates not built
-70|M||preset matrix with gaps not built
+69|B|class Carriers|carrier (name ≤ 150, active), packages (weight, L / W / H), services, preset = carrier + package + service + group name + rate (after create only name and rate change), packing (name ≤ 100, rate ≥ 0, shown name-£rate), lists sorted by carrier / package / service; presets have a real unique id; services carry "offered on" marketplaces instead of hard-coded ids; carrier and packing rates carry a start date and a sale line stores the rate of its date. Tested with the rule's example (2.00 → 2.20 from 01-08: a July line and its edit keep 2.00)
+70|P|function matrix|every carrier × package × service combination, a combination without a preset is red with Add, existing rows Edit / Delete, the rule's columns, rate history per preset and packing, cheapest service for a weight / size used by Edit Carrier / Packing. Tested with the rule's example (new package → one red row per service). Missing: the cheapest suggestion inside the label flow
 71|F|form:customer_case|form only; case flow / dedupe / SLA not built
 72|B|class ShopReminders|shop, month, year, type, description all required; PENDING → Resolve → RESOLVED → Revert; Pending newest first, Resolved oldest first, text cut to 250, the list stays on its tab; scope = the person's shops; monthly templates per type make the reminder and a task on the 1st of each month with Resolve / Reopen. Tested with the rule's example (task on 01-12-2026, due 05-12)
 73|F|form:t_shop_feedback|form only; health grid, increments, alerts not built

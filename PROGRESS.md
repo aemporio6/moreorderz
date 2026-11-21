@@ -326,3 +326,12 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - **Shop monthly reminders** (R-A_SALES-72) – `app/Services/ShopReminders.php`, screen `#/shop-reminders` (menu 6.8), migration `000027` (`mo_reminder_templates`, rule `SHOP_REMINDER`). Pending / Resolved lists, Resolve / Revert / Edit / Remove; **Monthly templates**: on the 1st of each month the night job makes the reminder for the shop (or every active shop) with a task due on the template's day; resolving the reminder closes the task, reverting opens it again.
 - **Partly built, said honestly**: 65 – the VA share is not yet its own line on the Month Close page; the VA is the shop's seller (the shop assignment role of the spec is not built).
 - Tests: 274 pass (5,346 checks); new `VaStatementTest` (3) and `ShopRemindersTest` (2) with the rules' examples. Browser checked.
+
+## Sales batch 5, part 3 – carriers, dated postage rates, preset matrix (21 Nov 2026)
+- New service `app/Services/Carriers.php`, screen `#/carriers` (menu 17.4, also in search), migration `000028` (`mo_rate_history`, `t_carrier_pkg_svc.f_active`, `t_carrier_services.offered_on`; today's rates become the first period of every preset and packing).
+- **Rates with a start date** (R-A_SALES-69): "Edit" a preset or packing → new rate + the day it starts. The list shows today's rate; a rate that starts later waits (night job `Carriers::applyDue`). `SaleLines::carrierRate / packingRate` and the Edit Carrier / Packing popup read the rate of the **order date**, so a July line keeps July's postage after an August change. "Rate history" button on every preset and packing.
+- **Model**: carriers, packages (weight it takes, L / W / H), services (with "offered on" marketplaces – empty = everywhere), presets (carrier + package + service + group name + rate; after create only name and rate change), packings. Delete of a preset that products or lines use switches it off instead.
+- **Preset matrix** (70): every carrier × package × service; a combination without a preset is a red row with "Add". **Cheapest for a weight / size** button; the same suggestion is used in Edit Carrier / Packing (product weight and dimensions, services of the line's marketplace).
+- New right `setup.carriers` (Owner, Manager). Everyone with order access may look.
+- **Partly built, said honestly**: 70 – the cheapest suggestion is not yet inside the label-buying flow.
+- Tests: 277 pass; new `tests/Feature/CarriersTest.php` (3) with the rules' examples. Browser checked with a made-up carrier (removed again).
