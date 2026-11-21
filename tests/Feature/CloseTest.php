@@ -145,7 +145,7 @@ class CloseTest extends TestCase
     {
         $c = collect(\App\Services\Choices::all(1))->keyBy('key');
         $this->assertSame(['1', '1', 'FORWARD'], [$c['PROFIT_SHARE_AFTER_OVERHEADS']['value'], $c['CLOSE_FIRST_FILE_PARTIAL']['value'], $c['LATE_LINES_LOCKED_MONTH']['value']], 'the recommended way is the default');
-        foreach ($c as $x) { $this->assertGreaterThanOrEqual(2, count($x['options'])); $this->assertCount($x['fact'] ? 0 : 1, array_filter($x['options'], fn ($o) => $o['recommended'])); }
+        foreach ($c as $x) { $this->assertGreaterThanOrEqual(2, count($x['options'])); $this->assertCount($x['fact'] ? 0 : ($x['multi'] ? count(explode(',', \App\Services\Choices::LIST[$x['key']][2])) : 1), array_filter($x['options'], fn ($o) => $o['recommended'])); }      // a multiple choice recommends its default list
         $mgr = $this->makeUser('MANAGER');
         $this->actingAs($mgr)->getJson('/api/choices')->assertOk()->assertJsonPath('can_edit', false);
         $this->postJson('/api/choices', ['key' => 'LATE_LINES_LOCKED_MONTH', 'value' => 'REFUSE'])->assertStatus(403);

@@ -76,7 +76,7 @@ class DashCards
         $rows = [['Outstanding to settle (now)', number_format((float) $open->v, 2) . ' (' . (int) $open->n . ' invoices)']];
         if ($unc) $rows[] = ['Periods not settled', (string) $unc];
         $rows[] = ['Settlement periods (period)', (string) (int) $per->n]; $rows[] = ['Gross profit (period)', number_format((float) $per->g, 2)]; $rows[] = ['Net profit (period)', number_format((float) $per->net, 2)];
-        if ($role === 'OWNER') $rows[] = ['Hidden margin (period)', number_format((float) $per->hm, 2)];
+        if (Choices::has('HIDDEN_MARGIN_ROLES', $ent, $role)) $rows[] = ['Hidden margin (period)', number_format((float) $per->hm, 2)];
         if ($split) $rows[] = ['Profit split (Inv/Own/VA/Hnd)', implode(' / ', array_map($pc, [$split->investor_pct, $split->owner_pct, $split->va_pct, $split->handler_pct]))];
         $has = (int) $open->n || $unc || (int) $per->n || $split;
         return ['title' => 'Invoicing / Profit', 'rows' => $has ? $rows : [], 'show' => (bool) $has];

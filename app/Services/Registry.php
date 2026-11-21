@@ -130,7 +130,7 @@ class Registry
                 ->get(['i.id', 'i.reference_name'])->map(fn ($r) => [(string) $r->id, $r->reference_name])->all();
         }
         if ($kind === 'party') {      // R-C-42: active people with the active role(s), sorted by first name; while nobody carries the role yet (before the roles are filled in) every person is offered
-            $roles = array_values(array_filter(array_map('trim', explode(',', strtoupper($arg)))));
+            $roles = str_starts_with($arg, '@') ? Choices::list(substr($arg, 1), $ent) : array_values(array_filter(array_map('trim', explode(',', strtoupper($arg)))));      // party:@CHOICE = the roles of a Settings › Choices multiple choice
             if (in_array('VA', $roles, true) || in_array('SELLER', $roles, true)) $roles = array_values(array_unique(array_merge($roles, ['VA', 'SELLER'])));
             $with = $roles ? DB::table('t_account_in_types as i')->join('cat_account_types as t', 't.id', '=', 'i.fk_id_account_type')->where('i.f_active', 1)->where('t.f_active', 1)->whereIn(DB::raw('UPPER(t.role_code)'), $roles)->distinct()->pluck('i.fk_id_account')->all() : [];
             return self::tableOptions('t_account', $ent, $q, $limit, false, $with ?: null);

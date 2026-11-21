@@ -2,6 +2,8 @@
 
 > **Owner rule 22 Nov 03:47:** no more questions. Every suggestion below is accepted as the default and built that way, and each one becomes a setting with options (dropdown / yes-no) and a "Recommended: … because …" help, so it can be changed later. This page is now a record only.
 
+> Already settings: B1 (Rights › SOURCING › see_money), B4 (Choices › Who sees every product?), B11 (Alerts › finance rules › roles), B18 (Rights › buying.LANDED_FINAL), B21 (Alerts › Thresholds › rule_snooze_days), B3 and B5 (Choices, 7e-127). Being turned into settings next: B6, B7, B8, B9, B10, B12, B14, B15, B19, B22, B24, B25 and the MR lines.
+
 
 Updated 21 Nov 2026 (batch 7e-101). How to answer: write **OK** next to a line to keep the suggested default, or write your own answer. Nothing here stops the building – every line already runs with the suggested default – except part A.
 
@@ -32,9 +34,9 @@ Updated 21 Nov 2026 (batch 7e-101). How to answer: write **OK** next to a line t
 |---|---|---|---|
 | B1 ✔ | R-F_SETUP-16 | SOURCING does not see money (PO value, cost); Owner, Manager, Finance, Accountant, Partner do | Rights › role SOURCING › see_money |
 | B2 | R-F_SETUP-16 | Accounts listed in the old DASH_PARTNER setting got the role PARTNER | People › roles |
-| B3 ✔ | R-F_SETUP-38 | Directors 1–3 are picked only from people with role Owner, Director or Partner (owner: "yes" again 22 Nov 03:38) | — (fixed rule; no setting) |
+| B3 ✔ | R-F_SETUP-38 | Directors 1–3 are picked only from people with role Owner, Director or Partner (owner: "yes" again 22 Nov 03:38) | **setting: Choices › Directors 1–3 are picked from people with the role …** (multiple, All, + Add a role; recommended Owner, Director, Partner) – 7e-127 |
 | B4 ✔ | R-D-21 / R-D-17 | Every product is seen by Owner, Manager and the ADMN-SUPER role; everybody else is limited (owner: "yes" again 22 Nov 03:39) | Choices › Who sees every product? |
-| B5 ✔ | R-F_SETUP-29 | The row Hidden margin is shown to the Owner only (partners do not see it) (owner: "yes" again 22 Nov 03:44) | — (fixed rule; no setting) |
+| B5 ✔ | R-F_SETUP-29 | The row Hidden margin is shown to the Owner only (partners do not see it) (owner: "yes" again 22 Nov 03:44) | **setting: Choices › who sees the row "Hidden margin"** (multiple, All, + Add a role; recommended Owner only) – 7e-127 |
 | B6 ✔ | R-F_SETUP-27 | A custom period with From after To is swapped | — |
 | B7 | R-B_SOURCING-18 | Parent fields carried by Save & Next are locked; the unlock icon changes them | — |
 | B8 | R-B_SOURCING-4 | A repeated cycle takes the last agreed price (latest PO line, else the supplier's RFQ final price, else the old target) | — |

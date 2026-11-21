@@ -24,7 +24,7 @@ class DirectorPickers
         'fk_director_1_reg_mobile' => ['mobile', 't_account_mobiles', 'Select Mobile'],
         'fk_director_1_reg_email' => ['email', 't_account_emails', 'Select Email'],
     ];
-    public const ROLES = ['OWNER', 'DIRECTOR', 'PARTNER'];
+    /* the director roles are the Settings › Choices multiple choice DIRECTOR_ROLES (default Owner, Director, Partner); registry source party:@DIRECTOR_ROLES */
     public const DIRECTORS = ['fk_director_1', 'fk_director_2', 'fk_director_3'];
     public const ADD_ROLE = 'DIRECTOR';
 

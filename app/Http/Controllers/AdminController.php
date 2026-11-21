@@ -187,7 +187,7 @@ class AdminController extends Controller
     public function saveChoice(Request $r)
     {
         \App\Services\Perm::need($r->user(), 'admin.saveChoice');
-        $d = $r->validate(['key' => 'required|string|max:60', 'value' => 'nullable|string|max:30', 'shop' => 'nullable|integer']);
+        $d = $r->validate(['key' => 'required|string|max:60', 'value' => 'nullable|string|max:500', 'shop' => 'nullable|integer']);
         try {
             if (! empty($d['shop'])) { \App\Services\Choices::setShop($d['key'], (int) $d['shop'], (string) ($d['value'] ?? ''), (int) Context::ent()); return ['message' => 'Saved for this shop – it applies from now on']; }
             \App\Services\Choices::set($d['key'], (string) ($d['value'] ?? ''), (int) Context::ent());

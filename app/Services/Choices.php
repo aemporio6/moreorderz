@@ -80,7 +80,39 @@ class Choices
         'VAT_REGISTERED' => ['Is the company registered for VAT?', 'This is a fact about the company, not a preference. It decides where the VAT inside fees and expenses goes.', '0', [
             '0' => ['No', 'VAT paid on fees and expenses is part of the cost.'],
             '1' => ['Yes', 'VAT on marketplace fees and on expenses is kept apart as VAT to claim back (account 1400) and shown in the VAT report.']], true],
+        // owner rule 22 Nov 03:47 / 03:48: my suggestions are the defaults, never locked – a list of roles is a multiple choice with All and + Add
+        'DIRECTOR_ROLES' => ['Company form: Directors 1–3 are picked from people with the role …', 'Recommended: Owner, Director and Partner – the people who can sign for a company. "+ Add" on a director makes a new person with role Director.', 'OWNER,DIRECTOR,PARTNER', []],
+        'HIDDEN_MARGIN_ROLES' => ['Owner Home › Invoicing / Profit: who sees the row "Hidden margin"?', 'Recommended: Owner only – a partner\'s share is worked out on the net profit, so the margin kept by the company stays with the Owner.', 'OWNER', []],
     ];
+
+    /** Multiple choices: key → where the options come from (party roles = roles of people, login roles = roles of logins). Value = comma list or ALL. */
+    public const MULTI = ['DIRECTOR_ROLES' => 'party_roles', 'HIDDEN_MARGIN_ROLES' => 'login_roles'];
+
+    /** [code => [label, effect]] of a multiple choice (All first). */
+    public static function options(string $key): array
+    {
+        if (! isset(self::MULTI[$key])) return self::LIST[$key][3];
+        $o = ['ALL' => ['All roles', 'Every role, also roles added later.']];
+        if (self::MULTI[$key] === 'party_roles') foreach (\Illuminate\Support\Facades\DB::table('cat_account_types')->where('f_active', 1)->whereNotNull('role_code')->where('role_code', '<>', '')->orderBy('sort')->orderBy('account_type_name')->get(['role_code', 'account_type_name']) as $r) $o[strtoupper((string) $r->role_code)] ??= [(string) $r->account_type_name, ''];
+        else foreach (Perm::roles() as $code => $r) if ($r['active']) $o[$code] = [$r['label'], ''];
+        foreach (explode(',', self::LIST[$key][2]) as $d) $o[$d] ??= [ucfirst(strtolower($d)), ''];      // the recommended roles are always offered
+        return $o;
+    }
+
+    /** The roles of a multiple choice as a list (ALL → every option). */
+    public static function list(string $key, ?int $ent): array
+    {
+        $v = array_values(array_filter(array_map('trim', explode(',', strtoupper(self::get($key, $ent))))));
+        return in_array('ALL', $v, true) ? array_values(array_diff(array_keys(self::options($key)), ['ALL'])) : $v;
+    }
+
+    /** Is $role in the multiple choice $key? (ALL → yes) */
+    public static function has(string $key, ?int $ent, ?string $role): bool
+    {
+        if ($role === null || $role === '') return false;
+        $v = array_map('trim', explode(',', strtoupper(self::get($key, $ent))));
+        return in_array('ALL', $v, true) || in_array(strtoupper($role), $v, true);
+    }
 
     /** Choices a shop can have its own value for (several shops, several values); the company value is the default for every other shop. */
     public const PER_SHOP = ['PROFIT_SHARE_AFTER_OVERHEADS', 'CLOSE_FIRST_FILE_PARTIAL', 'LATE_LINES_LOCKED_MONTH', 'WH_UNSHIPPED_AT_CONFIRM', 'DEFAULT_PROFIT_ROUTE', 'LOT_OWNER_SHARE', 'TEMU_SALE_VALUE', 'DS_MIN_MARGIN', 'VA_EXPENSES_BEFORE_SHARE', 'VA_SALARY_SOURCE', 'OUTPUT_VAT_MODE', 'STATEMENT_SEND'];
@@ -107,14 +139,16 @@ class Choices
     {
         $out = [];
         foreach (self::LIST as $key => $row) {
-            [$q, $why, $def, $opts] = $row; $fact = ! empty($row[4]);
-            $cur = self::get($key, $ent); if (! isset($opts[$cur])) $cur = $def;
+            [$q, $why, $def] = $row; $opts = self::options($key); $fact = ! empty($row[4]); $multi = isset(self::MULTI[$key]);
+            $cur = self::get($key, $ent); if (! $multi && ! isset($opts[$cur])) $cur = $def;
+            $recList = $multi ? explode(',', $def) : [$def];
             $shops = [];
             if (in_array($key, self::PER_SHOP, true)) foreach (\Illuminate\Support\Facades\DB::table('t_branches')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name']) as $b) {
                 $v = Settings::get($key . '@' . $b->id, $ent, null); $shops[] = ['id' => $b->id, 'name' => $b->shop_name, 'value' => $v !== null && $v !== '' && isset($opts[$v]) ? (string) $v : ''];
             }
             $out[] = ['key' => $key, 'question' => $q, 'why' => $why, 'value' => $cur, 'recommended' => $fact ? null : $def, 'per_shop' => in_array($key, self::PER_SHOP, true), 'shops' => $shops,
-                'options' => array_map(fn ($v, $o) => ['value' => (string) $v, 'label' => $o[0], 'effect' => $o[1], 'recommended' => ! $fact && (string) $v === $def], array_keys($opts), $opts), 'fact' => $fact];
+                'options' => array_map(fn ($v, $o) => ['value' => (string) $v, 'label' => $o[0], 'effect' => $o[1], 'recommended' => ! $fact && in_array((string) $v, $recList, true)], array_keys($opts), $opts), 'fact' => $fact,
+                'multi' => $multi, 'values' => $multi ? array_values(array_filter(explode(',', strtoupper($cur)))) : null, 'add_url' => $multi ? (self::MULTI[$key] === 'party_roles' ? '#/list/cat_account_type' : '#/rights') : null];
         }
         return $out;
     }
@@ -122,7 +156,12 @@ class Choices
     public static function set(string $key, string $value, int $ent): void
     {
         if (! isset(self::LIST[$key])) throw new \InvalidArgumentException('Unknown choice.');
-        if (! isset(self::LIST[$key][3][$value])) throw new \InvalidArgumentException('Choose one of the options shown.');
+        if (isset(self::MULTI[$key])) {
+            $v = array_values(array_unique(array_filter(array_map('trim', explode(',', strtoupper($value))))));
+            if (! $v) throw new \InvalidArgumentException('Choose at least one role (or All).');
+            $ok = self::options($key); foreach ($v as $x) if (! isset($ok[$x])) throw new \InvalidArgumentException("Choose roles from the list ($x is not one).");
+            $value = in_array('ALL', $v, true) ? 'ALL' : implode(',', $v);
+        } elseif (! isset(self::LIST[$key][3][$value])) throw new \InvalidArgumentException('Choose one of the options shown.');
         $old = self::get($key, $ent);
         Settings::set($key, $value, $ent, Context::userId());
         Audit::log('sys_settings', null, 'UPDATE', ['choice' => $key, 'from' => $old, 'to' => $value], null, $ent);
