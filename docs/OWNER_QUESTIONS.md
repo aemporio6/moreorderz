@@ -19,7 +19,7 @@ Updated 21 Nov 2026 (batch 7e-101). How to answer: write **OK** next to a line t
 
 | # | What | Why it is needed | Suggested |
 |---|---|---|---|
-| A1 ✔ | Google Drive connection on the server | Document links are checked only for the http(s) form now; a check that the Drive file exists and is shared (R-B_SOURCING-49) and Drive uploads need the company Drive connected on the server (the developer sets it up; no password in chat). | Yes, connect the company Drive |
+| A1 ✔ | Google Drive connection on the server | Document links are checked only for the http(s) form now; a check that the Drive file exists and is shared (R-B_SOURCING-49) and Drive uploads need the company Drive connected on the server (the developer sets it up; no password in chat). | Yes, connect the company Drive (owner: "yes" again 22 Nov 03:42 – the developer connects it on the server; evidence files can then move to Drive) |
 | A2 ✔ | Company logo file | PDFs (PO, GRN, statements) print without a logo until one is uploaded in Settings. | Send the logo once (PNG or SVG) |
 | A3 ✔ | Product visibility of the real products | A non-super user (VA, seller …) only sees products that are Pool, or Private in his shops (R-D-21). Products without visibility are hidden from them. | Set Pool / Private per marketplace on every product (bulk edit can do it) |
 
