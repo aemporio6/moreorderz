@@ -436,6 +436,16 @@ class OrdersController extends Controller
     public function shopHealthSave(Request $r) { return $this->run(fn () => \App\Services\ShopHealth::save((int) $r->input('shop'), (int) $r->input('year'), (int) $r->input('month'), (string) $r->input('field'), $r->input('value'), $r->user())); }
     public function shopHealthTrend(Request $r, int $shop) { return $this->run(fn () => \App\Services\ShopHealth::trend($shop, (int) $r->query('year', date('Y')), $r->user())); }
 
+    // ---------- cases on a sale (R-A_SALES-71) ----------
+    public function saleCases(Request $r) { return $this->run(fn () => \App\Services\SaleCases::list($r->only(['status', 'shop', 'type', 'q', 'overdue']), $r->user())); }
+    public function saleCaseTypes(Request $r) { $this->can($r, 'orders.saleCase'); return ['types' => \App\Services\SaleCases::types(), 'admin' => \App\Services\SaleCases::admin($r->user()), 'reply_days' => \App\Services\SaleCases::replyDays()]; }
+    public function saleCaseRaise(Request $r, int $id) { return $this->run(fn () => $r->boolean('quick') ? \App\Services\SaleCases::quickAdd($id, $r->user()) : \App\Services\SaleCases::raise($id, $r->input('type'), $r->input('reason'), $r->user())); }
+    public function saleCaseThread(Request $r, int $id) { return $this->run(fn () => \App\Services\SaleCases::thread($id, $r->user())); }
+    public function saleCaseDo(Request $r, int $id, string $what)
+    {
+        return $this->run(fn () => match ($what) { 'remark' => \App\Services\SaleCases::remark($id, $r->input('admin_remarks'), $r->user()), 'reply' => \App\Services\SaleCases::reply($id, $r->input('note'), $r->user()), 'resolve' => \App\Services\SaleCases::resolve($id, $r->user()), 'revert' => \App\Services\SaleCases::revert($id, $r->user()), 'remove' => \App\Services\SaleCases::remove($id, $r->user()), default => abort(404) });
+    }
+
     // ---------- marketplace master, its questions, the checklist per shop (R-A_SALES-68) ----------
     public function marketplaces(Request $r) { $this->can($r, 'orders.SEE'); return \App\Services\Marketplaces::list($r->user()); }
     public function marketplaceSave(Request $r) { return $this->run(fn () => \App\Services\Marketplaces::save($r->except(['id']), (int) $r->input('id') ?: null, $r->user())); }

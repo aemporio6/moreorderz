@@ -321,7 +321,7 @@ MR-0240|B|form:t_packings|standard form + list with role rights and history
 MR-0241|F|form:t_sale|Gen-1 import not built (old rows imported as history)
 MR-0242|B|class VaStatements|the shop + month payslip is the VA statement: computed, saved with versions, PDF, Owner approval, payables
 MR-0243|P|class SaleLines|sales listing, edit, refund, delete line / month with Undo, annual + detailed reports built; manual order entry is the New order form; bulk delete with preview / approval not built
-MR-0244|F|form:t_sale_order_reminders|form only
+MR-0244|B|class SaleCases|order reminders PENDING ↔ RESOLVED with list, edit (admin remarks), remove, resolve, revert; reads the tables directly (no missing view), rights orders.saleCase / saleCaseAdmin + shop scope, linked to the current sale line id (re-linked when the line is imported again); each one is a task SALE_QUERY linked to the sale
 MR-0246|B|class SalesImport|generic sales import with pre-checks that stop the import, listing, edit, refund, drop-shipping match, month confirm – all built and tested
 MR-0247|B|class ShopHealth|seller metrics per shop and month as a KPI row with history (who entered what); values bound in queries (no SQL built from the request); rights by code orders.healthOwn / orders.healthAny, not by a role number
 MR-0248|P|tracking-upload|orders by file / hand with tracking upload layouts; the TikTok wizard screens not built

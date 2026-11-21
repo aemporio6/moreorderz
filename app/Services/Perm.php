@@ -165,6 +165,8 @@ class Perm
         $c['orders.dsPlatformAdd'] = ['Add a supplier platform directly (others propose it)', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL']];
         $c['orders.healthOwn'] = ['Fill in the monthly account health of the shops where you are the seller or the owner', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
         $c['orders.healthAny'] = ['See the account health of every VA and shop, and enter it for a VA', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL']];
+        $c['orders.saleCase'] = ['Raise a case on a sale, write in its thread, resolve, reopen and remove it', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
+        $c['orders.saleCaseAdmin'] = ['Answer cases with admin remarks, quick-add a general case, see general cases', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL']];
         $c['orders.shopReminders'] = ['Add, resolve and remove shop monthly reminders', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
         $c['orders.shopReminderTemplates'] = ['Set the monthly reminder templates of the shops', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL']];
         $c['setup.marketplaces'] = ['Set marketplaces and their questions', 'Setup', ['OWNER', 'MANAGER']];

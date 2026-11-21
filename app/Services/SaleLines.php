@@ -97,6 +97,7 @@ class SaleLines
             'refund' => [$pending && $can('orders.saleRefund'), $pending ? $no('orders.saleRefund') : 'Only Pending lines can be refunded here'],
             'view_refund' => [$s->status === 'Refunded', null],
             'log' => [true, null],
+            'case' => [$can('orders.saleCase') && $s->sale_source !== 'summary', $no('orders.saleCase')],
             'delete' => [! self::confirmed($s) && $can('orders.saleDelete'), self::confirmed($s) ? 'Confirmed lines are saved permanently' : $no('orders.saleDelete')],
             'open_product' => [(int) $s->fk_product_id > 0, null], 'open_ds' => [(int) ($s->fk_drp_item ?? 0) > 0, null],
         ];

@@ -409,3 +409,15 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - Not built yet (honest): filling the values from a marketplace API (the rule says "later").
 - Tests: 311 pass; new `ShopHealthTest` (3).
 - Register after this batch: BUILT 345 of 1,433 (24 %); Sales 80 of 155 (52 %).
+
+### Batch 7e-11 (21 Nov 2026)
+- **Cases on a sale** (R-A_SALES-71; old name "sale reminders"): service `SaleCases`, screen `#/sale-cases`, "Raise a case" in the ⋮ menu of a sale line, endpoints `api/sale-cases*` and `api/sales/{id}/case`, thread table `mo_sale_case_notes` (migration `000033`; data stays in `t_sale_order_reminders`).
+  - A seller chooses a Reminder Type (list `REMINDER_TYPE` without `REM-GEN`) and writes the reason; both are required and each error shows under its field.
+  - Same shop + order no + SKU (+ type) again → "Order already added in reminders". Same key under a new sale id (the month was imported again) → the link moves to the new line.
+  - Manager quick add uses the general type `REM-GEN`; general cases are never shown to other people.
+  - Edit = admin remarks only. Resolve, Revert, Remove (recycle bin).
+  - Each case is a task `SALE_QUERY` linked to the order, due on the reply-by date (setting `SALE_CASE_REPLY_DAYS`, default 1 – owner to confirm). Bell notices go to the managers on a new case and to the seller on a reply or resolve.
+  - Lists Pending / Overdue / Resolved, ordered by order no; buy rate, buy amount and profit only with the money right.
+- Reminder types must be added in Setup › Lists › Reminder type (the migration adds only "General").
+- Tests: 314 pass; new `SaleCasesTest` (3).
+- Register after this batch: BUILT 350 of 1,433 (24 %); Sales 83 of 155 (54 %).

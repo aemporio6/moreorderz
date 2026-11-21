@@ -299,6 +299,11 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('sales/export', [OrdersController::class, 'saleExport']);
         Route::get('sales/unlock', [OrdersController::class, 'saleUnlockInfo']);
         Route::post('sales/unlock', [OrdersController::class, 'saleUnlock']);
+        Route::get('sale-cases', [OrdersController::class, 'saleCases']);
+        Route::get('sale-cases/types', [OrdersController::class, 'saleCaseTypes']);
+        Route::post('sales/{id}/case', [OrdersController::class, 'saleCaseRaise'])->whereNumber('id');
+        Route::get('sale-cases/{id}', [OrdersController::class, 'saleCaseThread'])->whereNumber('id');
+        Route::post('sale-cases/{id}/{what}', [OrdersController::class, 'saleCaseDo'])->whereNumber('id');
         Route::get('shop-health', [OrdersController::class, 'shopHealth']);
         Route::post('shop-health', [OrdersController::class, 'shopHealthSave']);
         Route::get('shop-health/{shop}/trend', [OrdersController::class, 'shopHealthTrend'])->whereNumber('shop');
