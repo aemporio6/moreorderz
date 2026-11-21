@@ -119,6 +119,13 @@ class BuyingController extends Controller
     public function shipmentPoSave(Request $r, int $id) { $this->can($r, 'buying.BUY'); return $this->run(fn () => \App\Services\ShipmentLinks::save((int) Context::ent(), $id, $r->only(['po', 'planned', 'actual', 'reason']))); }
     public function shipmentPoRemove(Request $r, int $id, int $po) { $this->can($r, 'buying.BUY'); return $this->run(fn () => \App\Services\ShipmentLinks::remove((int) Context::ent(), $id, $po)); }
     public function cycleOverview(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\CycleAlerts::overview((int) Context::ent(), $id, $r->user())); }
+    /** R-F_SETUP-2 Cycle Journey / R-F_SETUP-12 Cycle Summary: JSON, or ?pdf=1 for the PDF. */
+    public function journey(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(function () use ($r, $id) { $money = \App\Services\Perm::has($r->user(), 'buying.MONEY'); if (! $r->boolean('pdf')) return \App\Services\CycleReports::journey((int) Context::ent(), $id, $money);
+        $x = \App\Services\CycleReports::journeyPdf((int) Context::ent(), $id, $money); return response($x['body'], 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="' . $x['name'] . '"']); }); }
+    public function summary(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(function () use ($r, $id) { $money = \App\Services\Perm::has($r->user(), 'buying.MONEY');
+        if (! $r->boolean('pdf')) { $s = \App\Services\CycleReports::summary((int) Context::ent(), $id); if (! $money) unset($s['money'], $s['import_vat'], $s['footnote']); return $s; }
+        if (! $money) abort(403, 'The cycle summary shows money – it needs the right to see buying money.');
+        $x = \App\Services\CycleReports::summaryPdf((int) Context::ent(), $id); return response($x['body'], 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="' . $x['name'] . '"']); }); }
     /** R-B_SOURCING-18: after a step form's save – the next step's form, its preset (locked parents) and the records that already exist. */
     public function cycleNext(Request $r) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\WorkflowContext::saveNext((string) $r->input('form'), (int) $r->input('id'), (int) \Illuminate\Support\Facades\Auth::id())); }
     /** The carried context of a cycle for the user, and the preset of a step form opened inside it. */

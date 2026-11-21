@@ -1,5 +1,5 @@
 1|P|class ReportService|reports catalogue (25) with date range + CSV; the 3-group hub with cycle / PO pickers not built
-2|M||Cycle Journey report not built
+2|B|function journey|Cycle Journey: CycleReports::journey – header "Cycle: <code> | Stage: <current> | Progress: n%" from the stage engine, seven blocks in order (Products, RFQs, Purchase Orders, Payments, Destination Allocations, Shipments, Landings / GRN), active rows, timeline order with a first Date column, a link per row, empty = "No <block> yet" or "Skipped" (skipped_steps), money columns only with buying.MONEY; page #/cycle-journey/{id} with the stage strip, PDF CycleJourney_<code>_<yyyymmdd>.pdf via PrintService::pdf; CycleReportsTest (2 POs, 0 GRN, rfq skipped); clicked in a browser
 3|P|function landedCost|landed cost report; all 10 buckets, variance vs target not built
 4|P|class ReportService|supplier balances + PO payments reports; ageing chips, Pay action, FX-correct grouping partly
 5|P|class ReportService|stock by location / on hand reports; channel allocation block, as-of date not built
@@ -9,7 +9,7 @@
 9|P|po/\{id\}|PO page with payments and terms; link-unlinked-payment, totals warnings not built
 10|M||PO documents roll-up not built
 11|P|'Purchase order'|purchase order PDF from the print service; company header, schedule, bank, versions, send to supplier not built
-12|M||Cycle Summary PDF not built
+12|B|function summaryPdf|Cycle Summary: CycleReports::summary (one service, also for the screen) + summaryPdf (cycle_summary_a4): title, meta Status · Priority · Stage · Progress, Products, Suppliers of the POs else RFQs else "-", Money | Quantities grid in the base currency (purchase cost Σ PO line totals × PO rate, paid Σ base amounts, outstanding, freight in base, customs duty, landed cost / unit 4 dp without superseded runs | ordered, produced with %, received, allocated / unallocated, damaged / missing, QC pass rate 1 dp), footnote with import VAT "reclaimable", file CycleSummary_<code>_<yyyymmdd>.pdf, needs buying.MONEY; button on the cycle page; CycleReportsTest (800 (80.0%), 95.0 %, 4.8000); PDF opened in a browser
 13|M||GRN PDF + carton label not built
 14|B|function payCustoms|import VAT never in landed cost (kept apart for the VAT return)
 15|M||widget isolation / per-card errors not built

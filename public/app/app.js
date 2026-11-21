@@ -188,6 +188,7 @@
       if (r === '#/buying') return await pageBuying();
       if ((mt = r.match(/^#\/research\/(\d+)/))) return await pageResearch(+mt[1]);
       if ((mt = r.match(/^#\/cycle-extras\/(\d+)/))) return await pageCycleExtras(+mt[1]);
+      if ((mt = r.match(/^#\/cycle-journey\/(\d+)/))) return await pageCycleJourney(+mt[1]);
       if (r.startsWith('#/direct-po')) return await pageDirectPo(null, null);
       if ((mt = r.match(/^#\/cycle\/(\d+)/))) { await pageCycle(+mt[1]); if (r.includes('tab=payments')) { const h = $$('#main h3').find(x => x.textContent.startsWith('3. Payments')); if (h) h.scrollIntoView({ block: 'start' }); } return; }
       if (r.startsWith('#/quick-buy')) return await pageQuickBuy(+(new URLSearchParams(r.split('?')[1] || '').get('product')) || null);
@@ -3165,6 +3166,16 @@
       busy(true); try { const r = await withDup(x => api('quick-buy', { method: 'POST', body: { supplier: +$('#qbS').value || null, date: $('#qbD').value, location: +$('#qbL').value || null, bank: +$('#qbB').value || null, reference: $('#qbR').value || null, note: $('#qbN').value || null, lines, ...x } })); toast(r.message); go('#/cycle/' + r.cycle); }
       catch (e) { $('#qbMsg').textContent = e.message; } busy(false); };
   }
+  // R-F_SETUP-2: Cycle Journey – seven blocks in timeline order, each row links to its record; empty = "No … yet" or "Skipped"
+  async function pageCycleJourney(id) {
+    busy(true); let j; try { j = await api(`cycle/${id}/journey`); } catch (e) { busy(false); return toast(e.message, 'err'); } busy(false);
+    const cell = v => typeof v === 'number' ? `<td class="num">${v.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>` : `<td>${esc(v ?? '')}</td>`;
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/buying">Buying</a> › <a href="#/cycle/${id}">${esc(j.cycle.code)}</a> ›</div><h1>Cycle Journey</h1><div class="sub" id="cjHead">${esc(j.header)}</div></div>
+      <div class="actions"><a class="btn" href="/api/cycle/${id}/journey?pdf=1" target="_blank" rel="noopener">PDF</a></div></div>
+      <div class="card"><div class="card-b">${stageStrip(j.steps, j.progress_pct)}</div></div>
+      ${j.blocks.map(b => `<div class="card" style="margin-top:12px" data-block="${b.key}"><div class="card-h"><h3>${esc(b.title)}</h3><span class="small muted">${b.rows.length}</span></div>${b.rows.length ? `<div class="tbl-wrap"><table class="t"><thead><tr>${b.cols.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${b.rows.map(r => `<tr class="click" data-link="${esc(r.link)}">${r.cells.map(cell).join('')}</tr>`).join('')}</tbody></table></div>` : `<div class="empty" data-empty>${esc(b.empty_text)}</div>`}</div>`).join('')}`;
+    $$('#main tr[data-link]').forEach(tr => tr.onclick = () => go(tr.dataset.link));
+  }
   async function pageCycleExtras(id) {
     busy(true); let d; try { d = await api(`cycle/${id}/extras`); } finally { busy(false); }
     const R = d.rights, again = () => pageCycleExtras(id), c = d.cycle, curOpts = (d.currencies || []).map(x => [x, x]);
@@ -3217,7 +3228,7 @@
     const c = d.cycle, R = d.rights, again = () => pageCycle(id), poOf = pid => d.pos.find(p => p.id === pid) || {};
     const sec = (title, n, body, btn) => `<div class="card" style="margin-top:12px"><div class="card-h"><h3>${title}${n !== null ? ' · ' + n : ''}</h3>${btn || ''}</div>${body}</div>`;
     const tbl = (heads, rows, empty) => `<div class="tbl-wrap"><table class="t"><thead><tr>${heads.map(h => `<th${h.startsWith('#') ? ' class="num"' : ''}>${h.replace(/^#/, '')}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table>${rows.length ? '' : `<div class="empty">${empty}</div>`}</div>`;
-    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/buying">Buying</a> › ${esc(c.code)}</div><h1>${esc(c.name || c.code)}</h1><div class="sub"><a class="btn sm" href="#/cycle-extras/${c.id}" style="float:right;margin-left:8px">Samples · QC · Customs</a>${d.research ? `From research <a href="#/research/${d.research.id}">${esc(d.research.research_code)}</a> · estimated margin ${d.research.est_margin_pct ?? '—'} % · ` : ''}${d.products.map(p => esc(p.sku || p.name)).join(', ')} · target ${c.target_qty} units</div></div></div>
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/buying">Buying</a> › ${esc(c.code)}</div><h1>${esc(c.name || c.code)}</h1><div class="sub"><a class="btn sm" href="#/cycle-extras/${c.id}" style="float:right;margin-left:8px">Samples · QC · Customs</a><a class="btn sm" href="#/cycle-journey/${c.id}" style="float:right;margin-left:8px">Cycle Journey</a>${R.money ? `<a class="btn sm" href="/api/cycle/${c.id}/summary?pdf=1" target="_blank" rel="noopener" style="float:right;margin-left:8px">Summary PDF</a>` : ''}${d.research ? `From research <a href="#/research/${d.research.id}">${esc(d.research.research_code)}</a> · estimated margin ${d.research.est_margin_pct ?? '—'} % · ` : ''}${d.products.map(p => esc(p.sku || p.name)).join(', ')} · target ${c.target_qty} units</div></div></div>
       <div class="card"><div class="card-b">${d.stages ? `<div class="small" style="margin-bottom:6px">Stage: <b>${esc(d.stages.current_name)}</b> · Progress: <b>${d.stages.progress_pct}%</b>${d.stages.missing_text ? ` · <span style="color:#b7791f">${esc(d.stages.missing_text)}</span>` : ''}</div>${stageStrip(d.stages.steps)}<div style="margin-top:8px">` : ''}${stepBar(d.steps)}${d.stages ? '</div>' : ''}</div></div><div id="cyOver"></div>
       ${sec('1. Quotes', d.rfqs.length, tbl(['Quote', 'Supplier', '#Qty', '#MOQ', '#Price', 'Currency', '#Lead days', 'Status', ''], d.rfqs.map(q => `<tr><td>${esc(q.rfq_code)}</td><td>${esc(q.supplier || '')}</td><td class="num">${+q.qty}</td><td class="num">${q.moq === null ? '' : +q.moq}</td><td class="num">${q.price === undefined || q.price === null ? '' : (+q.price).toFixed(2)}</td><td>${esc(q.currency || '')}</td><td class="num">${q.lead_days === null ? '' : +q.lead_days}</td><td>${stChip(q.status)}</td>
         <td style="white-space:nowrap">${R.buy && q.status !== 'ACCEPTED' ? `<button class="btn sm" data-acc="${q.id}">Accept</button>` : ''}${R.buy && q.status === 'ACCEPTED' && !d.pos.length ? `<button class="btn sm primary" data-mkpo="${q.id}" data-qty="${+q.qty}">Make PO</button>` : ''}</td></tr>`), 'No quote on this cycle.'))}
