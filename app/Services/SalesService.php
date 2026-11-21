@@ -22,7 +22,7 @@ class SalesService
         $out = ['new' => 0, 'updated' => 0, 'unmatched' => 0, 'short' => 0, 'ids' => []];
         $batch = $opt['batch'] ?? null;
         foreach ($lines as $i => $l) {
-            $r = DB::transaction(function () use ($l, $i, $shop, $ent, $batch) {
+            $r = DB::transaction(function () use ($l, $i, $shop, $ent, $batch, $opt) {
                 foreach (['order_no', 'd_order', 'sku', 'qty'] as $k) if (! isset($l[$k]) || $l[$k] === '') throw new \InvalidArgumentException('Line ' . ($i + 1) . ": $k is missing.");
                 $qty = (int) $l['qty']; if ($qty <= 0) throw new \InvalidArgumentException('Line ' . ($i + 1) . ': quantity must be more than zero.');
                 $sku = trim((string) $l['sku']); $pack = 1; $listing = null;
@@ -55,7 +55,7 @@ class SalesService
                 }
                 $short = 0;
                 if ($product && $row['fulfilment_channel'] === 'SELF') { DispatchService::reserve($id); $short = (int) DB::table('wh_reservations')->where('fk_id_sale', $id)->whereNotIn('status', ['RELEASED'])->value('qty_short'); }
-                if ($total <= 0) TaskEngine::open('SAL_ZERO', [$id], "Sale line with zero value: order {$row['order_no']} · $sku", ['ent' => $ent, 'module' => 't_sales', 'record_id' => $id]);
+                if ($total <= 0 && empty($opt['no_zero_task'])) TaskEngine::open('SAL_ZERO', [$id], "Sale line with zero value: order {$row['order_no']} · $sku", ['ent' => $ent, 'module' => 't_sales', 'record_id' => $id]);
                 return ['id' => $id, 'kind' => $kind, 'unmatched' => ! $product, 'short' => $short > 0];
             });
             $out['ids'][] = $r['id'];
@@ -118,6 +118,7 @@ class SalesService
         $pre = self::confirmPreview($branchId, $month);
         if ($pre['already_confirmed']) throw new \RuntimeException('This month is already confirmed.');
         if ($pre['lines'] === 0) throw new \RuntimeException('There are no sale lines to confirm in this month.');
+        if ($why = Fulfilment::confirmBlock($branchId, $month)) throw new \RuntimeException($why);      // a daily fulfilment order without its sale price blocks Confirm (R-A_SALES-75)
         $shop = DB::table('t_branches')->where('id', $branchId)->first();
         if ($pre['shortages']) {
             foreach ($pre['shortages'] as $sh) TaskEngine::open('SAL_STOCK_SHORT', [$sh['sku'], $branchId . '-' . $month], "Not enough stock to confirm $month of {$shop->shop_name}: {$sh['sku']} needs {$sh['needed']}, has {$sh['in_stock']}", ['ent' => $ent, 'module' => 't_product_vendors', 'record_id' => $sh['product']]);

@@ -421,3 +421,16 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - Reminder types must be added in Setup › Lists › Reminder type (the migration adds only "General").
 - Tests: 314 pass; new `SaleCasesTest` (3).
 - Register after this batch: BUILT 350 of 1,433 (24 %); Sales 83 of 155 (54 %).
+
+### Batch 7e-12 (21 Nov 2026)
+- **Fulfilment orders** (R-A_SALES-75 / 76 / 77): service `Fulfilment`, screen `#/fulfilment` (menu 6.3), endpoints `api/fulfilment*`, table `mo_sale_fulfilment` (migration `000034`).
+  - Each order is a normal sale line made through `SalesService::intake` (stock reserved, dispatch flow) with its extra fields (buyer, recipient, address lines, custom fields) beside it. It works for any marketplace.
+  - A seller adds (right `orders.fulfilAdd`) and sees only his own rows. A manager / TL (`orders.fulfilManage`) sets carrier service, tracking and status – on edit only – and has check-all, Change Status, Delete Selected.
+  - Rows are red or green: for a manager by status, for a seller by "tracking filled".
+  - Search needs an option first ("Please select an option first"). Managers have date presets; a seller has one date.
+  - "Export for carrier": `TikTokSale_YYYYmmddHHMMSS.csv`, 25 columns. Phone format is the Choice `FULFIL_PHONE_FORMAT` (National digits only = default / as the old tool).
+  - The sale price of such a line is 0 until the money report gives it; Month Confirm is refused while a fulfilment line of that month has no price. `intake` got the option `no_zero_task` so these lines do not open the zero-value task.
+- Not built yet (honest): carrier templates (Click & Drop / Evri / DPD) and parcel data from the product pack (rest of 77); "Close daily orders" that fills the prices from the money report (R-A_SALES-84); the mapped CSV import into this queue (78 / 79).
+- Dev database note: while cleaning up after the browser check, 11 stock reservations that pointed to sale lines that no longer exist were removed from the dev demo data.
+- Tests: 317 pass; new `FulfilmentTest` (3).
+- Register after this batch: BUILT 351 of 1,433 (24 %); Sales 84 of 155 (54 %).

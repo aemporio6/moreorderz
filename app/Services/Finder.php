@@ -16,6 +16,7 @@ class Finder
     public const ACTIONS = [
         ['Sales lines', 'sales list edit sale refund carrier packing delete month loss lines', '#/sales', 'orders.SEE'],
         ['Import sales', 'import monthly sales file csv upload shop month sale columns fix not matched', '#/sales-import', 'orders.saleImport'],
+        ['Fulfilment orders', 'fulfilment daily order entry tiktok manual order tracking carrier file export click and drop', '#/fulfilment', 'orders.fulfilSee'],
         ['Cases on sales', 'case sale reminder late delivery customer complaint query reason admin remarks resolve', '#/sale-cases', 'orders.saleCase'],
         ['Account health', 'account health shop feedback positive negative defect rate seller level monthly va', '#/shop-health', 'orders.healthOwn'],
         ['Drop shipping orders', 'drop shipping dropship supplier orders list totals paid buyer tracking linked sale', '#/ds-orders', 'orders.SEE'],

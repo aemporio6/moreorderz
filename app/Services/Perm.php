@@ -167,6 +167,10 @@ class Perm
         $c['orders.healthAny'] = ['See the account health of every VA and shop, and enter it for a VA', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL']];
         $c['orders.saleCase'] = ['Raise a case on a sale, write in its thread, resolve, reopen and remove it', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
         $c['orders.saleCaseAdmin'] = ['Answer cases with admin remarks, quick-add a general case, see general cases', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL']];
+        $c['orders.fulfilSee'] = ['See the daily fulfilment orders (a seller sees the ones he added)', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
+        $c['orders.fulfilAdd'] = ['Add a daily fulfilment order', 'Orders and dispatch', ['VA']];
+        $c['orders.fulfilManage'] = ['Fulfilment orders: set status, carrier service and tracking, bulk change and delete, see every seller', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL']];
+        $c['orders.fulfilExport'] = ['Export fulfilment orders as the carrier file', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
         $c['orders.shopReminders'] = ['Add, resolve and remove shop monthly reminders', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
         $c['orders.shopReminderTemplates'] = ['Set the monthly reminder templates of the shops', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL']];
         $c['setup.marketplaces'] = ['Set marketplaces and their questions', 'Setup', ['OWNER', 'MANAGER']];

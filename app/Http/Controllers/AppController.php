@@ -71,7 +71,8 @@ class AppController extends Controller
         if ($no === '13.2') return '#/tasks?scope=all';
         if ($no === '13.3') return '#/tasks';
         if ($no === '3.1' || $no === '3.3') return '#/buying';
-        if (in_array($no, ['6.3', '7.1', '7.2', '7.3', '7.5'], true)) return '#/orders';
+        if ($no === '6.3') return '#/fulfilment';
+        if (in_array($no, ['7.1', '7.2', '7.3', '7.5'], true)) return '#/orders';
         if ($no === '4.3') return '#/work';
         if ($no === '6.2') return '#/sales';
         if ($no === '6.5') return '#/confirm';

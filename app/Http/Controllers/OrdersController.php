@@ -446,6 +446,16 @@ class OrdersController extends Controller
         return $this->run(fn () => match ($what) { 'remark' => \App\Services\SaleCases::remark($id, $r->input('admin_remarks'), $r->user()), 'reply' => \App\Services\SaleCases::reply($id, $r->input('note'), $r->user()), 'resolve' => \App\Services\SaleCases::resolve($id, $r->user()), 'revert' => \App\Services\SaleCases::revert($id, $r->user()), 'remove' => \App\Services\SaleCases::remove($id, $r->user()), default => abort(404) });
     }
 
+    // ---------- daily fulfilment orders (R-A_SALES-75 / 76 / 77) ----------
+    private function fulfilFilters(Request $r): array { return $r->only(['shop', 'status', 'date', 'from', 'to', 'preset', 'range', 'by', 'q', 'page', 'per_page', 'ids']); }
+    public function fulfilment(Request $r)
+    {
+        return $this->run(function () use ($r) { if ($r->query('format') !== 'csv') return \App\Services\Fulfilment::list($this->fulfilFilters($r), $r->user());
+            $x = \App\Services\Fulfilment::export($this->fulfilFilters($r), $r->user()); return response($x['body'], 200, ['Content-Type' => 'text/csv; charset=UTF-8', 'Content-Disposition' => 'attachment; filename="' . $x['name'] . '"']); });
+    }
+    public function fulfilmentSave(Request $r, ?int $id = null) { return $this->run(fn () => \App\Services\Fulfilment::save($r->all(), $id, $r->user())); }
+    public function fulfilmentBulk(Request $r) { return $this->run(fn () => \App\Services\Fulfilment::bulk((array) $r->input('ids', []), (string) $r->input('action'), $r->user(), $r->input('status'))); }
+
     // ---------- marketplace master, its questions, the checklist per shop (R-A_SALES-68) ----------
     public function marketplaces(Request $r) { $this->can($r, 'orders.SEE'); return \App\Services\Marketplaces::list($r->user()); }
     public function marketplaceSave(Request $r) { return $this->run(fn () => \App\Services\Marketplaces::save($r->except(['id']), (int) $r->input('id') ?: null, $r->user())); }
