@@ -126,4 +126,5 @@ How to work each step: build → test → change the verdict lines in `audit/ver
 | 7e-67 | R-D-2 SKU live check (SkuCheck: exact block with link, look-alike warning, available; 500 ms on product form + child cards; server check on save) → MR-0457, MR-0905, MR-0955 BUILT | done | 575 / 1,433 (40%) | 429 tests |
 | 7e-68 | R-C-42 linked shops by role (Owner / Seller chips from the shops, inactive greyed; pickers every shop; party pickers by active role, first name) → MR-0449, MR-0835, MR-0864 BUILT | done | 578 / 1,433 (40%) | 431 tests |
 | 7e-69 | R-D-25 ownership chip on product and lot + filter by type (products list, export, lots page) → MR-0461, MR-0901, MR-0952 BUILT | done | 581 / 1,433 (41%) | 432 tests |
-| 7e-70 | NEXT → recount; 3-line R-B_SOURCING-51, R-G_CORE-2, R-H-19, R-A_SALES-87, R-FIN-22, R-FIN-47, R-G_CORE-96 …; rest of Sourcing 39 / 28 | todo | | |
+| 7e-70 | R-B_SOURCING-51 typed sourcing settings (SourcingSettings page with history; QC pass chip from SRC_QC_PASS_GREEN; old divisor 0 → 5000) → MR-0439, MR-0599, MR-0769 BUILT | done | 584 / 1,433 (41%) | 435 tests |
+| 7e-71 | NEXT → recount; 3-line R-G_CORE-2, R-H-19, R-A_SALES-87, R-FIN-22, R-FIN-47, R-G_CORE-96, R-H-57 …; rest of Sourcing 39 / 28 | todo | | |

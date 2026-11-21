@@ -48,7 +48,7 @@
 48|M||cycle product documents not built
 49|M||link check / preview not built
 50|P|form:t_src_cycles|cycle list with generic filters; deep filters (bank ref, investor) not built
-51|P|class Settings|settings exist; the typed sourcing settings list (LC methods etc.) not complete
+51|B|class SourcingSettings|Settings › Sourcing (#/settings/sourcing, Owner): typed list at company level – BASE_CURRENCY, VOLUMETRIC_DIVISOR (+ per mode, ≤ 0 never stored, old 0 → 5000), LC_FREIGHT / DUTY (Value / Quantity / Weight / CBM) / LOSS_UNITS, LC_OVERRIDE_APPROVAL_PCT, SRC_MONEY_TOL, SRC_QC_PASS_GREEN (now drives the QC pass chip), SRC_PAY_REMIND_DAYS, SRC_SHIP_ARRIVING_DAYS, DASH_PARTNER / DASH_MANAGER (active people), INVESTOR_ROLE (roles master); every change with history; SourcingSettingsTest
 52|P|form:cat_src_lov|lists from the registry; system-value lock not built
 53|F|form:t_src_suppliers|party roles behind the lists partly (supplier form)
 54|P|function save|required fields from the registry; the spec messages not all

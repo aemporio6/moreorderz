@@ -163,6 +163,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('warehouse/mode', [StockController::class, 'whMode']);
         Route::post('warehouse/mode', [StockController::class, 'whModeApply']);
         Route::get('putaway', [StockController::class, 'putaways']);
+        Route::get('settings/sourcing', [StockController::class, 'sourcingSettings']);
+        Route::post('settings/sourcing', [StockController::class, 'sourcingSettingSave']);
         Route::get('sku-check', [StockController::class, 'skuCheck']);
         Route::get('stock-alerts', [StockController::class, 'stockAlerts']);
         Route::post('stock-alerts/{id}', [StockController::class, 'stockAlertUpdate'])->whereNumber('id');

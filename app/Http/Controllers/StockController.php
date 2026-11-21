@@ -64,6 +64,16 @@ class StockController extends Controller
     public function putaways(Request $r) { \App\Services\Perm::need($r->user(), 'stock.CHANGE'); return ['rows' => \App\Services\WarehouseMode::putaways((int) Context::ent()), 'bins' => \Illuminate\Support\Facades\DB::table('cat_inventory_locations')->where('fk_id_ent', Context::ent())->where('kind', 'BIN')->where('f_active', 1)->orderBy('pick_seq')->limit(500)->get(['id', 'location_name as name'])]; }
     public function putaway(Request $r, int $id) { \App\Services\Perm::need($r->user(), 'stock.CHANGE'); return $this->run(fn () => \App\Services\WarehouseMode::putaway((int) Context::ent(), $id, (int) $r->input('bin'), $r->filled('qty') ? (int) $r->input('qty') : null)); }
 
+    /** Settings › Sourcing (R-B_SOURCING-51). */
+    public function sourcingSettings(Request $r) { $this->can($r, 'admin.owner'); return \App\Services\SourcingSettings::page((int) Context::ent()); }
+    public function sourcingSettingSave(Request $r)
+    {
+        $this->can($r, 'admin.owner');
+        try { return \App\Services\SourcingSettings::save((int) Context::ent(), (string) $r->input('key', ''), $r->input('value')); }
+        catch (\App\Services\ValidationErrors $e) { return response()->json(['message' => $e->getMessage(), 'errors' => array_map(fn ($m) => [$m], $e->errors)], 422); }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+    }
+
     /** SKU live check (R-D-2) for the child cards of a parent. */
     public function skuCheck(Request $r) { $this->can($r, 'stock.SEE'); return \App\Services\SkuCheck::check((int) Context::ent(), (string) $r->query('sku', ''), $r->integer('id') ?: null); }
 
