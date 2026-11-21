@@ -43,7 +43,7 @@
 43|B|function move|change a SKU's home, units moved, 2 labels queued
 44|B|function refill|refill of a main home + nightly WH_REPLEN task
 45|B|class CountService|count sessions with frozen system numbers
-46|P|function approve|second person approves the differences; recount step not built
+46|B|function needsRecount|per line variance = counted − system; above WH_RECOUNT_THRESHOLD_UNITS (2) or WH_RECOUNT_THRESHOLD_PCT (5 %) → recount by another person, blind (the first number hidden from the recounter), task WH_COUNT_RECOUNT, submit refused until recounted, the recount is the number that counts; submit → variance value at the product's last FINAL cost; above WH_COUNT_APPROVAL_VALUE (100) or ADJUST_APPROVAL_QTY → approval (maker-checker, FIN_APPROVE task), below → posted at once; posting: loss → bin → MISSING (count_loss moves, book unchanged), gain → MISSING → bin first (count_found), the rest found stock; units in MISSING older than WH_MISSING_WRITE_OFF_DAYS (30) → WH_MISSING_STOCK (nightly), write-off = adjustment − by WH_LOSS_LOT_RULE (Choice FIFO / pro rata by owner) into stock loss 5500; the Recount column on the count screen. Rule test passes (system 20, counted 17 → recount 17 → submit £12 < limit → bin −3, Missing +3, book unchanged; after 30 days write-off → lots −3 FIFO, stock loss); clicked in a browser
 47|M||automatic counts not built
 48|B|function adjust|adjustments with reason codes
 49|F|form:fba_shipment|form only

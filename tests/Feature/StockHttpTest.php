@@ -85,13 +85,16 @@ class StockHttpTest extends TestCase
         $this->assertTrue($c['count']['blind']);
         $this->assertNull($c['lines'][0]['qty_system'], 'blind count hides the system number');
         $this->postJson("/api/stock/counts/$id/lines", ['lines' => [['product' => $p, 'qty' => 9, 'note' => 'one missing']]])->assertOk();
-        $this->postJson("/api/stock/counts/$id/submit")->assertOk();
+        $this->postJson("/api/stock/counts/$id/submit")->assertStatus(422);                         // 1 of 10 = 10 %: a recount first (R-H-46)
+        $this->actingAs($mgr)->postJson("/api/stock/counts/$id/recount", ['product' => $p, 'qty' => 9])->assertOk(); $this->actingAs($wh);
+        \App\Services\Settings::set('WH_COUNT_APPROVAL_VALUE', '1', 1);                              // above the limit: approval
+        $this->postJson("/api/stock/counts/$id/submit")->assertOk()->assertJsonPath('needs_approval', true);
         $this->postJson("/api/stock/counts/$id/approve")->assertStatus(403);                       // warehouse cannot approve
         $this->assertSame(10, $this->getJson("/api/stock/counts/$id")->json('lines.0.qty_system'), 'after submit the system number shows');
         $this->actingAs($mgr)->postJson("/api/stock/counts/$id/post")->assertStatus(422);          // not approved yet
         $this->postJson("/api/stock/counts/$id/approve")->assertOk();
         $this->postJson("/api/stock/counts/$id/post")->assertOk()->assertJsonPath('lines_posted', 1);
-        $this->assertSame(9, Stock::balance($p));
+        $this->assertSame([9, 10], [Stock::balance($p, $a), Stock::balance($p)]);      // the missing unit waits in Missing, the book is unchanged
 
         $mp = DB::table('cat_marketplaces')->insertGetId($this->fill('cat_marketplaces', ['fk_id_ent' => 1]));
         $this->postJson("/api/prices/$p", ['marketplace' => $mp, 'raw_price' => 5, 'sale_price' => 9.99, 'from_date' => '2026-08-01'])->assertOk();
@@ -103,6 +106,6 @@ class StockHttpTest extends TestCase
         $this->actingAs($wh)->postJson('/api/stock/bins', ['parent' => $a, 'zone' => 'C', 'levels' => 1, 'positions' => 1, 'create' => true])->assertStatus(403);
         $this->actingAs($wh)->getJson('/api/stock/pool')->assertStatus(403);                       // pool shows money
         $this->assertCount(1, $this->actingAs($mgr)->getJson('/api/stock/pool')->assertOk()->json('rows'));
-        $this->assertSame([], $this->getJson('/api/stock/held')->assertOk()->json('rows'));
+        $this->assertSame([['MISSING', 1]], array_map(fn ($r) => [$r['kind'], $r['qty']], $this->getJson('/api/stock/held')->assertOk()->json('rows')));      // the counted-short unit is held in Missing
     }
 }

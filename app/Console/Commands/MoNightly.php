@@ -21,7 +21,8 @@ class MoNightly extends Command
             $low = StockService::lowStockTasks((int) $ent);
             \App\Services\BuyingService::staleResearch((int) $ent);
             \App\Services\CycleAlerts::sweep((int) $ent);
-            \App\Services\DueEngine::run((int) $ent);      // every stored renewal / expiry / payment date reminds (R-C-46)
+            \App\Services\DueEngine::run((int) $ent);
+            \App\Services\CountService::missingTasks((int) $ent);      // units missing too long (R-H-46)      // every stored renewal / expiry / payment date reminds (R-C-46)
             \App\Services\MoneyService::unmatchedTasks((int) $ent);
             \App\Services\MoneyService::staleTasks((int) $ent);
             \App\Services\CloseService::openTasks((int) $ent);

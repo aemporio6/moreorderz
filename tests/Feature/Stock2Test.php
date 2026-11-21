@@ -31,21 +31,26 @@ class Stock2Test extends TestCase
 
     public function test_count_posts_only_the_difference_and_needs_a_second_person(): void
     {
+        \App\Services\Settings::set('WH_COUNT_APPROVAL_VALUE', '5', 1);      // a low limit: this count needs the maker-checker approval
         $id = Count::open(1, $this->wh);
         $this->assertSame(20, (int) DB::table('t_stock_count_lines')->where('fk_id_count', $id)->value('qty_system'));
         try { Count::submit($id); $this->fail('uncounted submitted'); } catch (\RuntimeException $e) { $this->assertStringContainsString('not counted yet', $e->getMessage()); }
         Count::enter($id, $this->p, 18, 'two missing on shelf');
         Stock::consumeForSale(1, 5001, $this->p, 5, $this->wh);                  // stock moves after the snapshot
+        try { Count::submit($id); $this->fail('no recount'); } catch (\RuntimeException $e) { $this->assertStringContainsString('need a recount by another person', $e->getMessage()); }      // 2 of 20 = 10 % > 5 %
+        try { Count::recount($id, $this->p, 18); $this->fail('own recount'); } catch (\RuntimeException $e) { $this->assertStringContainsString('Another person', $e->getMessage()); }
+        $me = (int) Context::userId(); $other = $this->makeUser('WAREHOUSE'); Context::set(1, $other->id); Count::recount($id, $this->p, 18); Context::set(1, $me);
         $s = Count::submit($id);
-        $this->assertSame(-8.00, $s['variance_value']);
+        $this->assertSame([-8.00, true], [$s['variance_value'], $s['needs_approval']]);
         try { Count::approve($id); $this->fail('self approval'); } catch (\RuntimeException $e) { $this->assertStringContainsString('Somebody else', $e->getMessage()); }
         try { Count::post($id); $this->fail('posted without approval'); } catch (\RuntimeException $e) { $this->assertStringContainsString('SUBMITTED', $e->getMessage()); }
         $mgr = $this->makeUser('MANAGER'); Context::set(1, $mgr->id);
         Count::approve($id);
         $r = Count::post($id);
-        $this->assertSame(['lines_posted' => 1, 'value' => -8.00], $r);
-        $this->assertSame(13, Stock::balance($this->p), '20 − 5 sold − 2 difference; the counted 18 is never written over the stock');
-        $this->assertSame('count_adjust', DB::table('t_stock_movements')->where('source_type', 'COUNT')->value('movement_type'));
+        $this->assertSame(['lines_posted' => 1, 'value' => 0.0], $r);      // a loss is not booked yet: the units wait in Missing
+        $miss = Stock::systemLocation(1, 'MISSING');
+        $this->assertSame([13, 2, 15], [Stock::balance($this->p, $this->wh), Stock::balance($this->p, $miss), Stock::balance($this->p)], '20 − 5 sold − 2 moved to Missing; the counted 18 is never written over the stock');
+        $this->assertSame('count_loss', DB::table('t_stock_movements')->where('source_type', 'COUNT')->value('movement_type'));
         $this->assertSame(Stock::value(1), Ledger::balance(1, '1200'));
         $this->expectExceptionMessage('POSTED');
         Count::post($id);
@@ -56,11 +61,28 @@ class Stock2Test extends TestCase
         $other = DB::table('t_product_vendors')->insertGetId($this->fill('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'LEAD-02', 'product_name_vendor' => 'Lead', 'stock' => 0, 'f_active' => 1]));
         $id = Count::open(1, $this->wh);
         Count::enter($id, $this->p, 20); Count::enter($id, $other, 3);
-        Count::submit($id);
-        Context::set(1, $this->makeUser('MANAGER')->id);
-        Count::approve($id); Count::post($id);
+        $me = (int) Context::userId(); Context::set(1, $this->makeUser('WAREHOUSE')->id); Count::recount($id, $other, 3); Context::set(1, $me);      // 3 more than expected: recounted
+        $s = Count::submit($id); $this->assertFalse($s['needs_approval']);      // value 0 (no cost yet) → posted at once
         $this->assertSame(3, Stock::balance($other, $this->wh));
         $this->assertSame(20, Stock::balance($this->p));
+    }
+
+    public function test_rule_example_missing_then_write_off_fifo(): void
+    {
+        $id = Count::open(1, $this->wh); Count::enter($id, $this->p, 17);
+        $me = (int) Context::userId(); Context::set(1, $this->makeUser('WAREHOUSE')->id); Count::recount($id, $this->p, 17); Context::set(1, $me);
+        $s = Count::submit($id); $miss = Stock::systemLocation(1, 'MISSING');
+        $this->assertSame([-12.0, false], [$s['variance_value'], $s['needs_approval']]);      // 3 × 4.00 < 100 → posted at once
+        $this->assertSame([17, 3, 20], [Stock::balance($this->p, $this->wh), Stock::balance($this->p, $miss), Stock::balance($this->p)]);      // bin −3, Missing +3, book unchanged
+        $this->assertSame(0.0, round(Ledger::balance(1, '5500'), 2));
+        DB::table('wh_missing_units')->update(['created_at' => now()->subDays(31)]);
+        Count::missingTasks(1); $sku = DB::table('t_product_vendors')->where('id', $this->p)->value('SKU_VENDOR'); $this->assertTrue(\App\Services\TaskEngine::isOpen('WH_MISSING_STOCK', [$sku]));
+        $w = Count::writeOffMissing(1, $this->p); $this->assertSame(3, $w['written_off']);
+        $this->assertSame([0, 17, 12.0], [Stock::balance($this->p, $miss), Stock::balance($this->p), round(Ledger::balance(1, '5500'), 2)]);      // lots −3, stock loss £12
+        $this->assertFalse(\App\Services\TaskEngine::isOpen('WH_MISSING_STOCK', [$sku])); $this->assertSame(Stock::value(1), Ledger::balance(1, '1200'));
+        // a later count that finds one more: nothing left in Missing, so it is found stock
+        $id2 = Count::open(1, $this->wh); Count::enter($id2, $this->p, 18); Context::set(1, $this->makeUser('WAREHOUSE')->id); Count::recount($id2, $this->p, 18); Context::set(1, $me);
+        Count::submit($id2); $this->assertSame(18, Stock::balance($this->p, $this->wh));
     }
 
     public function test_price_periods_close_each_other_and_a_sale_date_finds_its_price(): void

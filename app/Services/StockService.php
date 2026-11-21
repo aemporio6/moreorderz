@@ -82,9 +82,9 @@ class StockService
             foreach ($picks as $pk) {
                 self::addBalance($pk['lot'], $fromLoc, -$pk['qty']);
                 self::addBalance($pk['lot'], $toLoc, $pk['qty']);
-                $a = self::move($ent, $productId, 'transfer_out', -$pk['qty'], $fromLoc, $pk['lot'], $pk['owner'], $pk['cost'], $opt['source_type'] ?? 'TRANSFER', $opt['source_id'] ?? null, $reason);
+                $a = self::move($ent, $productId, $opt['type_out'] ?? 'transfer_out', -$pk['qty'], $fromLoc, $pk['lot'], $pk['owner'], $pk['cost'], $opt['source_type'] ?? 'TRANSFER', $opt['source_id'] ?? null, $reason);
                 $pair ??= $a;
-                $b = self::move($ent, $productId, 'transfer_in', $pk['qty'], $toLoc, $pk['lot'], $pk['owner'], $pk['cost'], $opt['source_type'] ?? 'TRANSFER', $opt['source_id'] ?? null, $reason, $pair);
+                $b = self::move($ent, $productId, $opt['type_in'] ?? 'transfer_in', $pk['qty'], $toLoc, $pk['lot'], $pk['owner'], $pk['cost'], $opt['source_type'] ?? 'TRANSFER', $opt['source_id'] ?? null, $reason, $pair);
                 DB::table('t_stock_movements')->where('id', $a)->update(['pair_id' => $pair]);
                 $out[] = ['lot' => $pk['lot'], 'qty' => $pk['qty']];
             }

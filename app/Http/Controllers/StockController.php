@@ -170,7 +170,12 @@ class StockController extends Controller
         $c = DB::table('t_stock_counts as c')->leftJoin('cat_inventory_locations as l', 'l.id', '=', 'c.fk_id_location')->where('c.id', $id)->where('c.fk_id_ent', Context::ent())->first(['c.*', 'l.location_name as location']) ?? abort(404);
         $blind = $c->f_blind && $c->status === 'OPEN';        // blind count: the counter does not see the system number until he submits
         $lines = DB::table('t_stock_count_lines as l')->join('t_product_vendors as p', 'p.id', '=', 'l.fk_id_product')->where('l.fk_id_count', $id)->orderBy('p.SKU_VENDOR')
-            ->get(['l.fk_id_product as product_id', 'p.SKU_VENDOR as sku', 'p.product_name_vendor as name', 'l.qty_system', 'l.qty_counted', 'l.note']);
+            ->get(['l.fk_id_product as product_id', 'p.SKU_VENDOR as sku', 'p.product_name_vendor as name', 'l.qty_system', 'l.qty_counted', 'l.note', 'l.qty_recount', 'l.counted_by']);
+        $me = (int) $r->user()->id;
+        foreach ($lines as $l) {      // a difference above the limits needs a recount by another person, who does not see the first number (R-H-46)
+            $l->needs_recount = $l->qty_counted !== null && CountService::needsRecount((int) $l->qty_system, (int) $l->qty_counted, (int) Context::ent()); $l->counted_by_me = (int) $l->counted_by === $me;
+            if ($l->needs_recount && ! $l->counted_by_me && $l->qty_recount === null && $c->status === 'OPEN') $l->qty_counted = null; unset($l->counted_by);
+        }
         if ($blind) foreach ($lines as $l) $l->qty_system = null;
         return ['count' => ['id' => $c->id, 'code' => $c->count_code, 'status' => $c->status, 'location' => $c->location, 'date' => $c->d_count, 'variance_value' => $c->variance_value, 'blind' => (bool) $blind, 'mine' => (int) $c->counted_by === $r->user()->id], 'lines' => $lines];
     }
@@ -189,11 +194,25 @@ class StockController extends Controller
         return $this->run(function () use ($d, $id) { foreach ($d['lines'] as $l) CountService::enter($id, $l['product'], $l['qty'], $l['note'] ?? null); return ['message' => 'Count saved']; });
     }
 
+    public function countRecount(Request $r, int $id)
+    {
+        $this->can($r, 'stock.CHANGE');
+        $d = $r->validate(['product' => 'required|integer', 'qty' => 'required|integer|min:0']);
+        return $this->run(function () use ($d, $id) { CountService::recount($id, $d['product'], $d['qty']); return ['message' => 'Recount saved']; });
+    }
+
+    public function missingWriteOff(Request $r, int $productId)
+    {
+        $this->can($r, 'stock.countApprove');
+        $d = $r->validate(['qty' => 'nullable|integer|min:1', 'reason' => 'nullable|string|max:200']);
+        return $this->run(fn () => CountService::writeOffMissing((int) Context::ent(), $productId, $d['qty'] ?? null, $d['reason'] ?? null));
+    }
+
     public function countStep(Request $r, int $id, string $step)
     {
         $this->can($r, in_array($step, ['approve', 'post'], true) ? 'stock.countApprove' : 'stock.CHANGE');
         return $this->run(fn () => match ($step) {
-            'submit' => CountService::submit($id) + ['message' => 'Count submitted for approval'],
+            'submit' => CountService::submit($id),
             'approve' => (function () use ($id) { CountService::approve($id); return ['message' => 'Count approved']; })(),
             'post' => CountService::post($id) + ['message' => 'Differences posted to stock'],
             'cancel' => (function () use ($id) { CountService::cancel($id); return ['message' => 'Count cancelled']; })(),
