@@ -16,6 +16,7 @@ class Finder
     public const ACTIONS = [
         ['Sales lines', 'sales list edit sale refund carrier packing delete month loss lines', '#/sales', 'orders.SEE'],
         ['Import sales', 'import monthly sales file csv upload shop month sale columns fix not matched', '#/sales-import', 'orders.saleImport'],
+        ['Drop shipping orders', 'drop shipping dropship supplier orders list totals paid buyer tracking linked sale', '#/ds-orders', 'orders.SEE'],
         ['Upload drop shipping orders', 'drop shipping dropship supplier orders file upload csv platform aliexpress undo history', '#/ds-upload', 'orders.dsUpload'],
         ['Annual sale report', 'annual sale report year month by month va share store share net profit', '#/sales-annual', 'orders.saleReports'],
         ['Detailed sale report', 'detailed sale report shops months grid yearly', '#/sales-detailed', 'orders.saleReports'],

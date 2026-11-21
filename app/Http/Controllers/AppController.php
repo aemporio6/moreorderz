@@ -76,6 +76,7 @@ class AppController extends Controller
         if ($no === '6.2') return '#/sales';
         if ($no === '6.5') return '#/confirm';
         if ($no === '10.6') return '#/va-statements';
+        if ($no === '6.7') return '#/ds-orders';
         if ($no === '6.8') return '#/shop-reminders';
         if ($no === '17.4') return '#/carriers';
         if ($no === '8.1') return '#/returns';

@@ -419,6 +419,18 @@ class OrdersController extends Controller
     public function dsUploadUndo(Request $r, int $id) { return $this->run(fn () => \App\Services\DsUpload::undo($id, $r->user())); }
     public function dsPlatformAdd(Request $r) { return $this->run(fn () => \App\Services\DsUpload::addPlatform((string) $r->input('name'), $r->user())); }
 
+    // ---------- drop shipping orders: list, item, re-match, delete, export (R-D-85, 79) ----------
+    private function dsFilters(Request $r): array { return $r->only(['q', 'platform', 'marketplace', 'shop', 'upload', 'from', 'to', 'range', 'linked', 'sort', 'page', 'per_page']); }
+    public function dsOrders(Request $r)
+    {
+        return $this->run(function () use ($r) { if ($r->query('format') !== 'csv') return \App\Services\DsOrders::list($this->dsFilters($r), $r->user());
+            $x = \App\Services\DsOrders::csv($this->dsFilters($r), $r->user()); return response($x['body'], 200, ['Content-Type' => 'text/csv; charset=UTF-8', 'Content-Disposition' => 'attachment; filename="' . $x['name'] . '"']); });
+    }
+    public function dsOrder(Request $r, int $id) { return $this->run(fn () => \App\Services\DsOrders::item($id, $r->user())); }
+    public function dsOrderRematch(Request $r, int $id) { return $this->run(fn () => \App\Services\DsOrders::rematch($id, $r->user())); }
+    public function dsOrderSales(Request $r, int $id) { return $this->run(fn () => \App\Services\DsOrders::saleChoices($id, (string) $r->query('q'), $r->user())); }
+    public function dsOrderDelete(Request $r, int $id) { return $this->run(fn () => \App\Services\DsOrders::delete($id, $r->user())); }
+
     // ---------- marketplace master, its questions, the checklist per shop (R-A_SALES-68) ----------
     public function marketplaces(Request $r) { $this->can($r, 'orders.SEE'); return \App\Services\Marketplaces::list($r->user()); }
     public function marketplaceSave(Request $r) { return $this->run(fn () => \App\Services\Marketplaces::save($r->except(['id']), (int) $r->input('id') ?: null, $r->user())); }

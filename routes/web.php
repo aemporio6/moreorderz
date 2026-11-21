@@ -299,6 +299,11 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('sales/export', [OrdersController::class, 'saleExport']);
         Route::get('sales/unlock', [OrdersController::class, 'saleUnlockInfo']);
         Route::post('sales/unlock', [OrdersController::class, 'saleUnlock']);
+        Route::get('ds-orders', [OrdersController::class, 'dsOrders']);
+        Route::get('ds-orders/{id}', [OrdersController::class, 'dsOrder'])->whereNumber('id');
+        Route::get('ds-orders/{id}/sales', [OrdersController::class, 'dsOrderSales'])->whereNumber('id');
+        Route::post('ds-orders/{id}/rematch', [OrdersController::class, 'dsOrderRematch'])->whereNumber('id');
+        Route::post('ds-orders/{id}/delete', [OrdersController::class, 'dsOrderDelete'])->whereNumber('id');
         Route::get('ds-upload', [OrdersController::class, 'dsUploadHome']);
         Route::post('ds-upload', [OrdersController::class, 'dsUploadStage']);
         Route::post('ds-upload/run', [OrdersController::class, 'dsUploadRun']);

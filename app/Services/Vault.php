@@ -98,6 +98,7 @@ class Vault
         if ($table === 'drp_items' && ! Perm::has(\Illuminate\Support\Facades\Auth::user(), 'orders.dsSeeContact') && \Illuminate\Support\Facades\Auth::check()) {
             if (isset($row['ship_address']) && trim((string) $row['ship_address']) !== '' && ! self::isMasked($row['ship_address'])) $row['ship_address'] = '•••';
             if (isset($row['ship_phone']) && trim((string) $row['ship_phone']) !== '' && ! self::isMasked($row['ship_phone'])) $row['ship_phone'] = DsMatch::maskPhone((string) $row['ship_phone']);
+            if (isset($row['raw_json']) && trim((string) $row['raw_json']) !== '') $row['raw_json'] = '•••';      // the original file row holds the same address and phone (R-D-79)
         }
         foreach (self::kinds($table) as $col => $kind) {
             if (! array_key_exists($col, $row) || $row[$col] === null || $row[$col] === '' || self::isMasked($row[$col])) continue;

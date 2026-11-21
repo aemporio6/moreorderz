@@ -384,3 +384,15 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - Not built yet (honest): the drop-shipping list page with totals bar and item page (R-D-85), the "Show rows" filter per upload, masking per role on every DS screen (R-D-79), one shared reader for every import type (R-D-74), alias lists compared with the Field Registry (R-D-75).
 - Tests: 304 pass; new `DsUploadTest` (9).
 - Register after this batch: BUILT 333 of 1,433 (23 %); Sales 68 of 155 (44 %); Products 16 of 101.
+
+### Batch 7e-9 (21 Nov 2026)
+- **Drop shipping orders list** (R-D-85): service `DsOrders`, screen `#/ds-orders` (menu 6.7 "Dropshipping" opens it), endpoints `api/ds-orders*`.
+  - Filters: text (350 ms wait), platform, marketplace (narrows the shops), shop, linked / not linked, dates with chips, "Upload #n" chip. Sorts: newest, oldest, highest cost, last uploaded.
+  - Totals bar: rows · items · total paid per currency (example "3 rows · 3 items · £15.00 · $8.00").
+  - Item page `#/ds-orders/<id>`: 4 figures, cards (Product, Shipped to, Order and delivery, Upload), original file row, linked sale lines with profit (red below zero), Match manually, Re-match, Delete (recycle bin; refused while a sale line is linked).
+  - CSV export of the filtered list, masked like the screen.
+- **Buyer privacy** (R-D-79): without the right `orders.dsSeeContact` the address shows "•••", the phone "••••••" + last 3 digits, and the original file row and error rows are hidden – on the list, item page, export, API and the generic list / record.
+- **Upload history**: "Show rows" opens the list filtered to that upload (R-D-78 now complete).
+- Not built yet (honest): inventory-sharing screen (R-D-94), edit of a drop-shipping order by hand, one shared reader for every import type (R-D-74), alias lists compared with the Field Registry (R-D-75).
+- Tests: 308 pass; new `DsOrdersTest` (4).
+- Register after this batch: BUILT 340 of 1,433 (24 %); Sales 75 of 155 (48 %).
