@@ -1,6 +1,6 @@
 # Register audit – state and how to resume (updated after every area)
 
-> **Owner rule (22 Nov 03:47):** do NOT send choice questions any more. Every suggestion I make is the default and is built that way – but never as a locked rule: each choice is a setting with options (dropdown / yes-no / field) and a help line "Recommended: … because …", so it can be changed later without the developer. OWNER_QUESTIONS stays as a record only.
+> **Owner rule (22 Nov 03:47):** do NOT send choice questions any more. Every suggestion I make is the default and is built that way – but never as a locked rule: each choice is a setting with options (dropdown / yes-no / field) and a help line "Recommended: … because …", so it can be changed later without the developer. OWNER_QUESTIONS stays as a record only. **Addition 03:48:** every such setting follows the registry form standard (the "markaz"): dropdown with + Add (new value), All, multiple choice where it fits, default = my suggestion, and the suggestion/help line – the same as every other form.
 
 > **Owner principle (22 Nov 03:33):** the whole system is ONE – every part built in order and linked to the others (events, one message door, one owner function, one registry, one task engine); every batch status says what the new work links to and which link is still open.
 
