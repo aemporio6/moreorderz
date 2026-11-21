@@ -104,4 +104,5 @@ How to work each step: build → test → change the verdict lines in `audit/ver
 | 7e-45 | Shop health metrics R-G_CORE-83 BUILT (eBay default limits, task to the shop's TL, closes when green, service-metrics import, activity log link) | done | 504/1433 | 399 tests |
 | 7e-46 | Products not listed per shop R-D-58 BUILT (NotListed: universe, summary, drill-down, LST_CREATE tasks that close by themselves) | done | 507/1433 | 400 tests |
 | 7e-47 | My Partner Account R-FIN-19 BUILT (PartnerAccount: as-of vs compare, return %, stock share, profit by product, never-shows strip, Owner view-as audited, Reinvest, notify switches) | done | 510/1433 | 401 tests |
-| 7e-48 | NEXT → recount; 3-line closers (R-G_CORE-94, R-A_SALES-67, R-H-49 …); rest of Sourcing 39 / 28 | todo | | |
+| 7e-48 | Task owner order + priority R-G_CORE-94 BUILT (TaskOwner: record user → cycle → shop → category default → role fewest open, absence cover, "no ROLE set"; ICC_RED/money URGENT; old roles mapped; why-owner on Tasks) | done | 513/1433 | 402 tests |
+| 7e-49 | NEXT → recount; 3-line closers (R-A_SALES-67 field builder, R-H-49 inbound shipment …); rest of Sourcing 39 / 28 | todo | | |

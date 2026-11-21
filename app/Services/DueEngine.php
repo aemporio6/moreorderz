@@ -17,8 +17,8 @@ class DueEngine
     {
         $rule = (string) $src->owner_rule;
         if (str_starts_with($rule, 'record.')) { $col = substr($rule, 7); $v = $row->$col ?? null;
-            if ($v && in_array($col, ['fk_id_account'], true)) { $u = (int) DB::table('t_users')->where('fk_id_account', $v)->where('f_active', 1)->value('id'); if ($u) return $u; }
-            elseif ($v && Schema::hasTable('t_users') && DB::table('t_users')->where('id', $v)->exists()) return (int) $v; }
+            if ($v && in_array($col, ['fk_id_account'], true)) { $u = TaskOwner::usable((int) DB::table('t_users')->where('fk_id_account', $v)->where('f_active', 1)->value('id')); if ($u) return $u; }
+            elseif ($v && ($u = TaskOwner::usable((int) $v))) return $u; }      // the same owner order as rule tasks: active, not absent, else his cover (R-G_CORE-94)
         if (str_starts_with($rule, 'role:')) { $role = substr($rule, 5); if ($u = TaskEngine::fewestOpen($role, $ent)) return $u; }
         return (int) (DB::table('t_users')->where('role_code', 'OWNER')->where('f_active', 1)->orderBy('id')->value('id') ?? 0);
     }
