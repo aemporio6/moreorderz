@@ -121,7 +121,7 @@ class TaskActions
         self::hist($pid, null, 'status', $p->status, 'DONE', 'all subtasks approved');
         EventBus::fire('TASK_DONE', 'tasks', $pid, ['from' => $p->status, 'to' => 'DONE', 'via' => 'SYSTEM'], (int) $p->fk_id_ent);
         $to = $p->assigned_by_user_id ? [(int) $p->assigned_by_user_id] : DB::table('t_users')->whereIn('role_code', ['PARTNER', 'MANAGER'])->where('f_active', 1)->pluck('id')->map(fn ($x) => (int) $x)->all();
-        foreach ($to as $uid) AlertRules::send('N7', $uid, ['first_name' => self::first($uid), 'task_ref' => TaskFlow::ref($pid), 'title' => $p->title, 'owner_name' => $p->owner_user_id ? self::name((int) $p->owner_user_id) : 'the team', 'link' => self::link()], $pid, "N7:$pid:" . date('YmdHi'));
+        foreach ($to as $uid) AlertRules::send('N7', $uid, ['first_name' => self::first($uid), 'task_ref' => TaskFlow::ref($pid), 'title' => $p->title, 'owner_name' => $p->owner_user_id ? self::name((int) $p->owner_user_id) : 'the team', 'link' => self::link()], $pid, "N7:$pid:" . date('YmdHi') . ':0');      // same key as the TaskAlerts N7 sweep (done_at, n = 0)
         return true;
     }
 
@@ -213,7 +213,7 @@ class TaskActions
             if ((int) $t->owner_user_id === $to) throw new \InvalidArgumentException('Refused: that person already owns it.');
             $warn = [];
             if (TaskOwner::absent($to)) { $c = TaskOwner::usable($to); $warn[] = self::name($to) . ' is absent' . ($c && $c !== $to ? ' – ' . self::name($c) . ' covers.' : ' and has no cover.'); }
-            DB::table('tasks')->where('id', $id)->update(['owner_user_id' => $to, 'acknowledged_at' => null, 'last_update_at' => now()]);
+            DB::table('tasks')->where('id', $id)->update(['owner_user_id' => $to, 'acknowledged_at' => null, 'reassigned_at' => now(), 'last_update_at' => now()]);
             self::hist($id, (int) $u->id, 'owner_user_id', $t->owner_user_id ? (string) $t->owner_user_id : null, (string) $to, trim($reason));
             if (DB::table('task_helpers')->where('task_id', $id)->where('user_id', $to)->delete()) self::hist($id, (int) $u->id, 'helper_removed', (string) $to, null, 'became owner');
             Audit::log('tasks', $id, 'UPDATE', ['owner_user_id' => [$t->owner_user_id, $to]], trim($reason));
@@ -354,10 +354,27 @@ class TaskActions
     {
         $c = DB::table('task_checklist')->where('id', $itemId)->first() ?? throw new \InvalidArgumentException('Checklist item not found.');
         $t = self::task((int) $c->task_id); self::open($t);
+        if ($t->status === 'DONE') throw new \InvalidArgumentException('Refused: the checklist is locked once the task is done.');      // R-G_CORE-27
         if (! self::contributor($t, $u)) throw new \InvalidArgumentException('Refused: only the people working on the task can tick its checklist.');
         DB::table('task_checklist')->where('id', $itemId)->update(['is_done' => $done ? 1 : 0, 'done_by' => $done ? $u->id : null, 'done_at' => $done ? now() : null]);
         self::hist((int) $t->id, (int) $u->id, 'checklist', $done ? '0' : '1', $done ? '1' : '0', mb_substr((string) $c->text, 0, 200));
+        DB::table('tasks')->where('id', $t->id)->update(['last_update_at' => now()]); TaskAlerts::fresh((int) $t->id);
         return $done ? 'Ticked.' : 'Unticked.';
+    }
+
+    /** R-G_CORE-27: add a checklist item (text up to 255, sorted in steps of 10) while the task is open and not done. */
+    public static function addItem(int $id, object $u, string $text): string
+    {
+        $t = self::task($id); self::open($t);
+        if ($t->status === 'DONE') throw new \InvalidArgumentException('Refused: the checklist is locked once the task is done.');
+        if (! self::contributor($t, $u)) throw new \InvalidArgumentException('Refused: only the people working on the task can add to its checklist.');
+        $text = trim($text); if ($text === '') throw new \InvalidArgumentException('Write the item first.');
+        if (mb_strlen($text) > 255) throw new \InvalidArgumentException('A checklist item is at most 255 characters.');
+        $sort = (int) ceil(((int) DB::table('task_checklist')->where('task_id', $id)->max('sort')) / 10) * 10 + 10;
+        DB::table('task_checklist')->insert(['task_id' => $id, 'text' => $text, 'sort' => $sort, 'is_done' => 0]);
+        self::hist($id, (int) $u->id, 'checklist', null, 'ADDED', mb_substr($text, 0, 200));
+        DB::table('tasks')->where('id', $id)->update(['last_update_at' => now()]); TaskAlerts::fresh($id);
+        return 'Item added.';
     }
 
     public static function comment(int $id, object $u, string $text): string
@@ -366,7 +383,9 @@ class TaskActions
         if (! TaskFlow::canSee($t, $u)) throw new \InvalidArgumentException('Task not found.');
         if (trim($text) === '') throw new \InvalidArgumentException('Write the comment first.');
         DB::table('task_comments')->insert(['task_id' => $id, 'at' => now(), 'user_id' => $u->id, 'text' => mb_substr(trim($text), 0, 2000), 'via' => 'APP']);
-        DB::table('tasks')->where('id', $id)->update(['last_update_at' => now()]);
+        if ((int) $t->owner_user_id === (int) $u->id || DB::table('task_helpers')->where('task_id', $id)->where('user_id', $u->id)->exists()) {      // R-G_CORE-27: a comment by the owner or a helper is an update
+            DB::table('tasks')->where('id', $id)->update(['last_update_at' => now()]); TaskAlerts::fresh($id);
+        }
         return 'Comment added.';
     }
 
@@ -388,7 +407,7 @@ class TaskActions
         } elseif ($ref && trim($ref) !== '') $row += ['type' => 'REFERENCE', 'reference_id' => mb_substr(trim($ref), 0, 120)];
         else throw new \InvalidArgumentException('Add a file, a link or a reference.');
         DB::table('task_evidence')->insert(RecordService::fillNotNull('task_evidence', $row));
-        DB::table('tasks')->where('id', $id)->update(['last_update_at' => now()]);
+        DB::table('tasks')->where('id', $id)->update(['last_update_at' => now()]); TaskAlerts::fresh($id);
         self::hist($id, (int) $u->id, 'evidence', null, $row['type'], $row['file_name'] ?? $row['url'] ?? $row['reference_id'] ?? null);
         return 'Proof added.';
     }
@@ -402,7 +421,10 @@ class TaskActions
         $p = self::panel($id, $u); $partner = self::partner($u); $name = fn ($x) => $x ? self::name((int) $x) : null;
         $row = TaskLists::decorate(DB::table('tasks as t')->leftJoin('t_users as u', 'u.id', '=', 't.owner_user_id')->leftJoin('task_categories as c', 'c.id', '=', 't.category_id')->where('t.id', $id)->get(['t.*', 'u.display_name as owner', 'c.name as category']), $u)[0];
         $stale = (int) AlertRules::threshold('stale_days') ?: 7; $banners = [];
-        if (in_array($t->status, TaskFlow::OPEN, true) && strtotime((string) ($t->last_update_at ?: $t->created_at)) < time() - $stale * 86400) $banners[] = ['STALE', "No update for more than $stale days."];
+        if (str_contains((string) $t->flags, 'STALE') || (in_array($t->status, TaskAlerts::ACTIVE, true) && strtotime((string) ($t->last_update_at ?: $t->created_at)) < time() - $stale * 86400)) {      // R-G_CORE-27 (day count new)
+            $sd = (int) floor((time() - strtotime((string) ($t->last_update_at ?: $t->created_at))) / 86400);
+            $banners[] = ['STALE', "No update for a while (STALE – $sd days). Tick a checklist item, add proof or write a comment to clear it."];
+        }
         if (str_contains((string) $t->flags, 'REPEAT_BLOCKED')) $banners[] = ['REPEAT_BLOCKED', 'The next repeat of this task was not created because this one is still open. Close it and the next one appears.'];
         if ($p['waits_for'] && $p['waits_for']['blocked']) $banners[] = ['BLOCKED', "Blocked: waits for {$p['waits_for']['ref']} {$p['waits_for']['title']}. No reminders until it is approved."];
         if ($t->status === 'STUCK') $banners[] = ['STUCK', 'Stuck since ' . substr((string) $t->stuck_since, 0, 10) . ' on ' . (Guide::STUCK_ON[$t->stuck_on_type] ?? 'something') . ': ' . ($t->stuck_on_type === 'USER' ? $name($t->stuck_on_id) : $t->stuck_on_text)];

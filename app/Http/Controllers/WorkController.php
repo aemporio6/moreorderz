@@ -175,6 +175,7 @@ class WorkController extends Controller
     public function taskProofOn(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskActions::proofOn($id, $r->user())); }
     public function taskComment(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskActions::comment($id, $r->user(), (string) $r->input('text'))); }
     public function taskProof(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskActions::addProof($id, $r->user(), $r->file('file'), $r->input('link'), $r->input('reference'), $r->input('note'))); }
+    public function taskItem(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskActions::addItem($id, $r->user(), (string) $r->input('text'))); }
     public function taskTick(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskActions::tick($id, $r->user(), $r->boolean('done'))); }
     public function taskImportTemplate() { return response(\App\Services\TaskImport::template(), 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => 'attachment; filename="tasks_import_template.csv"']); }
     public function taskImport(Request $r)

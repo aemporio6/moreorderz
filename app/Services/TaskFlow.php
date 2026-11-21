@@ -109,6 +109,7 @@ class TaskFlow
             DB::table('tasks')->where('id', $id)->update(['status' => $to, 'last_update_at' => now(), 'done_at' => $to === 'DONE' ? now() : null,
                 'start_at' => $to === 'DOING' ? ($t->start_at ?: now()) : $t->start_at, 'stuck_since' => $to === 'STUCK' ? now() : null, 'stuck_on_text' => $to === 'STUCK' ? mb_substr((string) $note, 0, 255) : null]);
             self::history($id, (int) $u->id, $t->status, $to, $note ?: ($via !== 'APP' ? "By $via" : null));
+            TaskAlerts::fresh($id);      // R-G_CORE-27 a status move ends a stale spell
             Audit::log('tasks', $id, 'UPDATE', ['status' => [$t->status, $to], 'via' => $via]);
             EventBus::fire(['DOING' => $t->status === 'STUCK' ? 'TASK_UNBLOCKED' : 'TASK_STARTED', 'STUCK' => 'TASK_STUCK', 'DONE' => 'TASK_DONE'][$to] ?? 'TASK_STARTED', 'tasks', $id, ['from' => $t->status, 'to' => $to, 'via' => $via], (int) $t->fk_id_ent);      // an event per move (Home, history)
             return DB::table('tasks')->where('id', $id)->first();

@@ -203,13 +203,13 @@ class AlertRules
      * Returns the tm_messages ids written (empty when the rule is off, or the task is blocked for N2/N3/N5/N12).
      * $template overrides the rule's template (N13 team digest). Never twice: UNIQUE (event_key, channel).
      */
-    public static function send(string $code, int $userId, array $vars, ?int $taskId, string $eventKey, ?string $template = null, string $lang = 'en'): array
+    public static function send(string $code, int $userId, array $vars, ?int $taskId, string $eventKey, ?string $template = null, string $lang = 'en', string $prefix = '', string $suffix = ''): array
     {
         $r = self::rule($code);
         if (! $r || ! $r->is_active) return [];
         if ($r->skip_blocked && self::isBlocked($taskId)) return [];
         $user = DB::table('t_users')->where('id', $userId)->first(); if (! $user) return [];
-        $m = self::render($template ?? $r->template_key, $vars, $lang);
+        $m = self::render($template ?? $r->template_key, $vars, $lang); $m['text'] = $prefix . $m['text'] . $suffix;      // N2 "ESCALATED: ", N7 Managers "You may approve it."
         $ids = []; $key = mb_substr($eventKey . '|u' . $userId, 0, 120);
         // R-G_CORE-47 quiet hours / R-G_CORE-3: only N1 of an URGENT task goes through at once; the bell (INAPP) is never delayed
         $acc = PersonChannels::account($userId); $urgent = $code === 'N1' && $taskId && DB::table('tasks')->where('id', $taskId)->value('priority') === 'URGENT';
@@ -237,7 +237,7 @@ class AlertRules
      */
     public static function stuckSweep(?\DateTimeInterface $now = null): int
     {
-        $now = $now ? \Carbon\Carbon::instance($now) : now();
+        $now = $now ? \Carbon\Carbon::instance(\DateTime::createFromInterface($now)) : now();
         if (! self::allows('N6', 'INAPP') && ! self::allows('N6', 'WHATSAPP') && ! self::allows('N6', 'EMAIL')) return 0;
         $after = max(1, (int) self::threshold('stuck_alert_days')); $every = max(1, (int) self::threshold('stuck_repeat_days'));
         $sent = 0;
