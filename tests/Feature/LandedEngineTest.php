@@ -72,7 +72,9 @@ class LandedEngineTest extends TestCase
         $this->assertSame(-560.0, round(Ledger::balance(1, '1210'), 2));      // the 560 of costs came off the costs on the way (paid into it when the bills are paid)
         $this->assertSame(3, DB::table('t_src_landed_cost')->where('fk_id_cycle', $this->cy)->count()); $this->assertSame(2, DB::table('t_src_landed_lines')->where('fk_id_landed', $r['run'])->count());
         $this->assertStringContainsString('Freight (typed) 100.00 (VALUE 25%)', (string) DB::table('fin_lots')->where('fk_id_product', $this->a)->where('source', 'GRN')->value('cost_formula'));
-        try { Buy::landedCost($this->po, ['freight' => 1]); $this->fail(); } catch (\RuntimeException $e) { $this->assertStringContainsString('already FINAL', $e->getMessage()); }
+        $v = Buy::landedCost($this->po, ['freight' => 400, 'duty' => 160, 'freight_method' => 'VALUE', 'loss' => 'WRITE_OFF', 'other' => 40]);      // R-B_SOURCING-60: a later version, FINAL by itself
+        $this->assertSame('FINAL', $v['status']); $this->assertSame('SUPERSEDED', DB::table('t_src_landed_cost')->where('id', $r['run'])->value('landed_status'));
+        $this->assertSame(Stock::value(1), Ledger::balance(1, '1200')); $this->assertTrue(Ledger::trialBalance(1)['balanced']);
     }
 
     public function test_cost_rows_paid_amount_fee_lines_and_no_import_vat(): void

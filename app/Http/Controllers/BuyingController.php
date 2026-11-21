@@ -36,7 +36,7 @@ class BuyingController extends Controller
     {
         $role = $r->user()->role_code; $money = \App\Services\Perm::has($r->user(), 'see_money');
         return ['buy' => in_array($role, self::BUY, true), 'pay' => in_array($role, self::PAY, true), 'receive' => in_array($role, self::RECEIVE, true), 'landed_cost' => $money && in_array($role, self::COST, true),
-            'go' => in_array($role, ['OWNER', 'MANAGER', 'PARTNER'], true), 'money' => $money];      // R-F_SETUP-16: one check, no role list
+            'go' => in_array($role, ['OWNER', 'MANAGER', 'PARTNER'], true), 'money' => $money, 'landed_final' => \App\Services\Perm::has($r->user(), \App\Services\LandedVersions::FINAL_RIGHT)];      // R-F_SETUP-16: one check, no role list
     }
 
     public function dashboard(Request $r)
@@ -341,7 +341,35 @@ class BuyingController extends Controller
     {
         $this->can($r, 'buying.COST');
         $d = $r->validate(['freight' => 'nullable|numeric|min:0', 'duty' => 'nullable|numeric|min:0', 'other' => 'nullable|numeric|min:0', 'final' => 'boolean', 'freight_method' => 'nullable|in:QUANTITY,VALUE,WEIGHT,CBM', 'duty_method' => 'nullable|in:QUANTITY,VALUE,WEIGHT,CBM', 'other_method' => 'nullable|in:QUANTITY,VALUE,WEIGHT,CBM', 'loss' => 'nullable|in:ABSORB,WRITE_OFF']);
-        return $this->run(fn () => Buy::landedCost($id, $d) + ['message' => ! empty($d['final']) ? 'Landed cost is FINAL' : 'Landed cost saved (provisional)']);
+        if (! empty($d['final']) && ! \App\Services\Perm::has($r->user(), \App\Services\LandedVersions::FINAL_RIGHT)) return response()->json(['message' => 'Partner / Manager only'], 403);      // R-B_SOURCING-46 / 55
+        return $this->run(function () use ($id, $d) { $x = Buy::landedCost($id, $d);
+            return $x + ['message' => ! $x['applied'] ? "Version v{$x['version']} saved – it waits: {$x['waiting']}" : ($x['status'] === 'FINAL' ? "Landed cost v{$x['version']} is FINAL" : "Landed cost v{$x['version']} saved (provisional)")]; });
+    }
+
+    /** R-B_SOURCING-46 preview: nothing saved. */
+    public function landedPreview(Request $r, int $id)
+    {
+        $this->can($r, 'buying.COST');
+        $d = $r->validate(['freight' => 'nullable|numeric|min:0', 'duty' => 'nullable|numeric|min:0', 'other' => 'nullable|numeric|min:0', 'freight_method' => 'nullable|in:QUANTITY,VALUE,WEIGHT,CBM', 'duty_method' => 'nullable|in:QUANTITY,VALUE,WEIGHT,CBM', 'loss' => 'nullable|in:ABSORB,WRITE_OFF']);
+        return $this->run(fn () => \App\Services\LandedVersions::preview($id, array_filter($d, fn ($v) => $v !== null)) + ['may_final' => \App\Services\Perm::has($r->user(), \App\Services\LandedVersions::FINAL_RIGHT)]);
+    }
+
+    /** R-B_SOURCING-43 / 45 / 60: the lines of a run (ten buckets, calc, override) and the versions of its cycle. */
+    public function landedRun(Request $r, int $runId)
+    {
+        $this->can($r, 'buying.MONEY');
+        $h = DB::table('t_src_landed_cost')->where('id', $runId)->where('fk_id_ent', Context::ent())->first() ?? abort(404);
+        $lines = DB::table('t_src_landed_lines as l')->leftJoin('t_product_vendors as p', 'p.id', '=', 'l.fk_id_product')->where('l.fk_id_landed', $runId)->orderBy('l.id')->get(['l.*', 'p.SKU_VENDOR as sku']);
+        $versions = DB::table('t_src_landed_cost')->where('f_active', 1)->where(fn ($q) => $h->fk_id_cycle ? $q->where('fk_id_cycle', $h->fk_id_cycle) : $q->where('fk_id_po', $h->fk_id_po))->orderByDesc('id')->get(['id', 'lc_code', 'run_version', 'landed_status', 'total_cost', 'landed_cost_per_unit', 'created_at', 'warnings']);
+        return ['run' => $h, 'lines' => $lines, 'versions' => $versions, 'buckets' => \App\Services\LandedEngine::BUCKETS, 'may_final' => \App\Services\Perm::has($r->user(), \App\Services\LandedVersions::FINAL_RIGHT), 'limit_pct' => \App\Services\LandedVersions::limitPct((int) Context::ent())];
+    }
+
+    /** R-B_SOURCING-45 override of one landed line (empty = back to calculated). */
+    public function landedOverride(Request $r, int $lineId)
+    {
+        $this->can($r, 'buying.COST');
+        $d = $r->validate(['unit' => 'nullable|numeric|min:0', 'reason' => 'nullable|string|max:255']);
+        return $this->run(fn () => \App\Services\LandedVersions::override($lineId, isset($d['unit']) && $d['unit'] !== '' ? (float) $d['unit'] : null, (string) ($d['reason'] ?? '')));
     }
 
     public function fx(Request $r)

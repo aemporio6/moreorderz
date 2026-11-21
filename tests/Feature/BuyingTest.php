@@ -150,7 +150,9 @@ class BuyingTest extends TestCase
         $this->assertSame(4693.02, Stock::value(1));                    // 980 × 4.7888
         $this->assertSame(Stock::value(1), Ledger::balance(1, '1200'), 'stock value = stock account, to the penny');
         $this->assertTrue(Ledger::trialBalance(1)['balanced']);
-        try { Buy::landedCost($po, ['freight' => 1]); $this->fail('final changed'); } catch (\RuntimeException $e) { $this->assertStringContainsString('already FINAL', $e->getMessage()); }
+        // R-B_SOURCING-60 (v1.7): a run after FINAL is a later version – FINAL by itself here (received, Balanced, rates present); the books stay equal
+        $v2 = Buy::landedCost($po, ['freight' => 1]); $this->assertSame(['FINAL', true, 2], [$v2['status'], $v2['applied'], $v2['version']]);
+        $this->assertSame(Stock::value(1), Ledger::balance(1, '1200'), 'still to the penny after v2'); $this->assertTrue(Ledger::trialBalance(1)['balanced']);
 
         $w = Buy::cycle($go['cycle']);
         $this->assertSame(['done', 'done', 'done', 'done', 'done', 'done'], array_column($w['steps'], 'state'));

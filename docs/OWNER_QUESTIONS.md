@@ -44,6 +44,8 @@ Updated 21 Nov 2026 (batch 7e-101). How to answer: write **OK** next to a line t
 | B15 | R-FIN-51 | A location counts as "at FBA" when its kind is FBA / FC / AMAZON / MARKETPLACE / 3PL, or when an inbound shipment was sent to it. Give your fulfilment-centre locations one of these kinds | — |
 | B16 | R-FIN-4 | Your company has no finance settings row yet, so the tax reserve before partner shares is 0 % VAT + 0 % corporation tax. The form shows the spec defaults (0 % and 19 %); saving it once starts the reserve at what you enter. Please open Setup › Company & finance settings and save the rates you want | — |
 | B17 | R-FIN-6 | Payouts are now matched to the bank within ± 3 days (the spec default; the old code used 5 when the setting was empty). Change "Match payouts within" if your marketplaces pay later | — |
+| B18 | R-B_SOURCING-46 / 55 | "Make FINAL" for landed cost and approving a landed-cost override are for Owner, Manager and Partner (new right buying.LANDED_FINAL – change it in Rights) | — |
+| B19 | R-B_SOURCING-46 | After new freight, customs or GRN rows the landed cost is worked out again as PROVISIONAL by itself, 5 minutes after the last change (never once it is FINAL) | — |
 
 ## C. Suggested defaults written in the specification (220 lines)
 

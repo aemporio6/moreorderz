@@ -29,6 +29,35 @@ class LandedEngine
 
     public static function kindOfCostType(?string $type): string { $t = (string) $type; return preg_match(self::FREIGHT_WORDS, $t) && ! preg_match(self::VALUE_WORDS, $t) ? 'FREIGHT' : 'OTHER'; }
 
+    /** R-B_SOURCING-43: the ten buckets of a landed-cost line (product value first; import VAT is never one). */
+    public const BUCKETS = ['product_cost' => 'Product', 'packaging_cost' => 'Packaging / supplier charges', 'inspection_cost' => 'Inspection', 'origin_cost' => 'Origin / export',
+        'freight_cost' => 'Freight', 'insurance_cost' => 'Insurance', 'customs_duty' => 'Customs duty', 'destination_cost' => 'Destination', 'last_mile_cost' => 'Last mile', 'other_cost' => 'Other'];
+
+    /** R-B_SOURCING-36 cost type → bucket: main freight → freight, origin / export → origin, destination / customs clearance → destination, last mile, insurance; Agent Fee / Other → other. */
+    public static function bucketOf(?string $costType, bool $duty = false): string
+    {
+        if ($duty) return 'customs_duty';
+        $t = strtolower((string) $costType);
+        return match (true) {
+            (bool) preg_match('/insur/', $t) => 'insurance_cost',
+            (bool) preg_match('/origin|export/', $t) => 'origin_cost',
+            (bool) preg_match('/destination|clearance|port charge|terminal/', $t) => 'destination_cost',
+            (bool) preg_match('/last.?mile|delivery to|haulage to warehouse/', $t) => 'last_mile_cost',
+            (bool) preg_match('/inspect|qc|audit/', $t) => 'inspection_cost',
+            (bool) preg_match('/packag|packing|label|carton|supplier charge/', $t) => 'packaging_cost',
+            (bool) preg_match('/agent|commission|other|fee/', $t) => 'other_cost',
+            (bool) preg_match(self::FREIGHT_WORDS, $t) => 'freight_cost',
+            default => 'other_cost',
+        };
+    }
+
+    /** Total = Σ buckets; per unit = accepted > 0 ? round(total ÷ accepted, 4) : 0. */
+    public static function bucketTotal(array $b, float $accepted): array
+    {
+        $total = round(array_sum(array_map(fn ($k) => (float) ($b[$k] ?? 0), array_keys(self::BUCKETS))), 2);
+        return [$total, $accepted > 0 ? round($total / $accepted, 4) : 0.0];
+    }
+
     /**
      * Pure calculation. $products: key => [name, value, ordered, gross, cbm, accepted, damaged, missing, has_grn]; $costs: [[label, amount, method]].
      * Returns per product: shares per cost, total, unit cost (4 dp), loss; plus warnings and the formula text.
@@ -49,7 +78,7 @@ class LandedEngine
             $sum = array_sum($basis); $left = $amount; $last = end($keys);
             foreach ($keys as $k) {
                 $s = $k === $last ? round($left, 2) : ($sum > 0 ? round($amount * $basis[$k] / $sum, 2) : 0.0);      // 2 dp; the last product takes the remainder, so the shares add up to the cost exactly
-                $left = round($left - $s, 2); $out[$k]['shares'][] = ['cost' => $label, 'method' => $method, 'pct' => $sum > 0 ? round($basis[$k] / $sum * 100, 2) : 0, 'amount' => $s]; $out[$k]['extra'] = round($out[$k]['extra'] + $s, 2);
+                $left = round($left - $s, 2); $out[$k]['shares'][] = ['cost' => $label, 'method' => $method, 'pct' => $sum > 0 ? round($basis[$k] / $sum * 100, 2) : 0, 'amount' => $s, 'bucket' => $costs[$ci][3] ?? self::bucketOf($label)]; $out[$k]['extra'] = round($out[$k]['extra'] + $s, 2);
             }
         }
         foreach ($keys as $k) {

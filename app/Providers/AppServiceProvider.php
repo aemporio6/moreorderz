@@ -31,6 +31,7 @@ class AppServiceProvider extends ServiceProvider
         \App\Services\Approvals::handler('DS_PLATFORM_ADD', function (object $a, bool $ok) {      // a proposed supplier platform is added only after a manager said yes
             if ($ok) { $d = json_decode($a->change_json, true); if (! \Illuminate\Support\Facades\DB::table('drp_platforms')->whereRaw('LOWER(platform_name) = ?', [mb_strtolower($d['name'])])->exists()) \Illuminate\Support\Facades\DB::table('drp_platforms')->insert(['platform_name' => $d['name'], 'f_active' => 1, 'created_by' => $d['by'] ?? null, 'created_at' => now()]); }
         });
+        \App\Services\Approvals::handler('SRC_LC_OVERRIDE', fn (object $a, bool $ok) => \App\Services\LandedVersions::decided($a, $ok));      // R-B_SOURCING-45
         \App\Services\Approvals::handler('EXPENSE', function (object $a, bool $ok) {
             if ($ok) { \Illuminate\Support\Facades\DB::table('fin_expenses')->where('id', $a->entity_id)->update(['f_active' => 1]); \App\Services\MoneyService::postExpense((int) $a->entity_id); }
         });

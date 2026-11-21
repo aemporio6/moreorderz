@@ -277,6 +277,9 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('po/{id}', [BuyingController::class, 'po'])->whereNumber('id');
         Route::post('po/{id}/confirm', [BuyingController::class, 'confirmPo'])->whereNumber('id');
         Route::post('po/{id}/landed', [BuyingController::class, 'landed'])->whereNumber('id');
+        Route::post('po/{id}/landed/preview', [BuyingController::class, 'landedPreview'])->whereNumber('id');
+        Route::get('landed/{runId}', [BuyingController::class, 'landedRun'])->whereNumber('runId');
+        Route::post('landed-lines/{lineId}/override', [BuyingController::class, 'landedOverride'])->whereNumber('lineId');
         Route::post('pay', [BuyingController::class, 'pay']);
         Route::post('shipment', [BuyingController::class, 'shipment']);
         Route::get('shipment/{id}/lines', [BuyingController::class, 'shipmentLines'])->whereNumber('id');

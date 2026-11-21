@@ -68,6 +68,13 @@ class ProfitService
             }
             $orderKey[$s->fk_id_branch . '|' . $s->order_no] ??= [$s->fk_product_id, $s->sku, $s->name, $s->d_order];
         }
+        // 1b. R-B_SOURCING-60 / R-FIN-47: cost corrections for units sold in a LOCKED month land in the shop's next open month (never in the locked one)
+        if (\Illuminate\Support\Facades\Schema::hasTable('fin_cogs_corrections'))
+            foreach (\App\Services\Perm::mine(DB::table('fin_cogs_corrections as c'), 'c.fk_id_branch')->leftJoin('t_product_vendors as p', 'p.id', '=', 'c.fk_id_product')->where('c.fk_id_ent', $ent)
+                ->whereBetween('c.target_month', [substr($from, 0, 7), substr($to, 0, 7)])->when($shop, fn ($q) => $q->where('c.fk_id_branch', $shop))->get(['c.*', 'p.SKU_VENDOR as sku', 'p.product_name_vendor as name']) as $c) {
+                [$k, $n] = $lotView ? $lotKey((int) $c->lot_id, null) : $keyOf($c->fk_id_branch, $c->fk_id_product, $c->sku, $c->name, $c->target_month . '-01');
+                $rows[$k] ??= $blank($k, $n); $rows[$k]['cost'] += (float) $c->amount;
+            }
         // 2. marketplace costs from booked statements (everything in the money file except net sales; a cost is a positive number here)
         $lines = DB::table('fin_settlement_lines as l')->join('mo_settlements as m', fn ($j) => $j->on('m.fk_id_branch', '=', 'l.branch_id')->on('m.statement_id', '=', 'l.settlement_id'))->where('l.company_id', $ent)->whereIn('m.status', ['POSTED', 'PAID'])
             ->where('l.amount_type', '<>', 'NET_SALES')->whereBetween('m.statement_date', [$from, $to])->groupBy('l.branch_id', 'l.order_id', 'm.statement_date')->selectRaw('l.branch_id, l.order_id, m.statement_date d, SUM(l.amount) v')->get();

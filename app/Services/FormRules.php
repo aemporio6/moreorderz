@@ -36,12 +36,28 @@ class FormRules
         return $code + $inherit + OwnItems::check($formKey, $data, $old, $id) + self::checkForm($formKey, $data, $old, $id, $already);      // R-C-20: an own item must be the person's own
     }
 
+    /**
+     * R-B_SOURCING-43 manual landed-cost line (a cycle without the data): total = Σ the ten buckets, per unit = accepted > 0 ? total ÷ accepted (4 dp) : 0,
+     * cost source MANUAL. A line made by a landed-cost run is changed by a new run or an override, never by hand.
+     */
+    private static function landedManual(array &$data, array $old, ?int $id): array
+    {
+        if ($id && ($old['landed_status'] ?? 'MANUAL') !== 'MANUAL') return ['_form' => 'This line was made by a landed-cost run – change it with a new run or an override.'];
+        $v = fn (string $c) => (float) (array_key_exists($c, $data) ? $data[$c] : ($old[$c] ?? 0));
+        $b = []; foreach (array_keys(LandedEngine::BUCKETS) as $c) $b[$c] = $v($c);
+        foreach ($b as $c => $x) if ($x < 0) return [$c => 'Costs cannot be negative.'];
+        [$total, $unit] = LandedEngine::bucketTotal($b, $v('accepted_qty'));
+        $data['total_cost'] = $total; $data['landed_cost_per_unit'] = $unit; $data['landed_status'] = 'MANUAL';
+        return [];
+    }
+
     private static function checkForm(string $formKey, array &$data, array $old, ?int $id, array $already = []): array
     {
         $table = Registry::table($formKey);
         if ($table === 't_src_cartons') return self::cartons($data, $old);
         if ($table === 't_src_documents') return self::document($data, $old, $already);      // R-B_SOURCING-47 / 49
-        if ($table === 'fin_categories') return self::finCategory($data, $old, $id);      // form standard: money categories get a form
+        if ($table === 'fin_categories') return self::finCategory($data, $old, $id);
+        if ($table === 't_src_landed_cost') return self::landedManual($data, $old, $id);      // R-B_SOURCING-43 manual landed line      // form standard: money categories get a form
         if ($table === 't_product_vendors') return ProductFamily::check($data, $old, $id) + SkuCheck::onSave($data, $old, $id) + self::productCodes($data, $old);      // R-D-1 family coding / checks, R-D-2 exact SKU in the company
         if (in_array($table, ['t_src_products', 't_product_vendors'], true)) return self::productCodes($data, $old);
         if ($table === 'cat_ip_burgers') return self::isp($data);
