@@ -76,7 +76,7 @@ class TaskScore
             Audit::log('tasks', $taskId, 'APPROVE', ['quality' => $quality, 'score' => $p['score']]);
             $ref = 'T-' . str_pad((string) $taskId, 4, '0', STR_PAD_LEFT);
             if ($t->owner_user_id) AlertRules::send('APPROVED', (int) $t->owner_user_id, ['first_name' => self::first((int) $t->owner_user_id), 'task_ref' => $ref, 'title' => $t->title, 'quality' => $quality, 'score' => $p['score'], 'link' => self::link()], $taskId, "AP:$taskId");
-            TaskActions::unblock($taskId, 'approved'); TaskActions::rollUp($taskId);      // R-G_CORE-11 waiting TODO tasks get N10, R-G_CORE-12 parent roll-up
+            TaskActions::unblock($taskId, 'approved'); TaskActions::rollUp($taskId); TaskRepeat::onClosed($taskId);      // R-G_CORE-26 the next repeat      // R-G_CORE-11 waiting TODO tasks get N10, R-G_CORE-12 parent roll-up
             return $p + ['message' => "$ref approved – score {$p['score']} ({$p['text']})."];
         });
     }

@@ -125,7 +125,7 @@ class TaskFlow
         DB::table('tasks')->where('id', $id)->update(['status' => 'CANCELLED', 'cancelled_at' => now(), 'cancelled_by_user_id' => $u->id, 'last_update_at' => now()]);
         self::history($id, (int) $u->id, $t->status, 'CANCELLED', trim($reason)); Audit::log('tasks', $id, 'UPDATE', ['status' => [$t->status, 'CANCELLED']], trim($reason));
         EventBus::fire('TASK_CANCELLED', 'tasks', $id, ['from' => $t->status, 'reason' => trim($reason)], (int) $t->fk_id_ent);
-        TaskActions::unblock($id, 'cancelled'); TaskActions::rollUp($id);      // R-G_CORE-11 waiting tasks may start, R-G_CORE-12 the parent may be done now
+        TaskActions::unblock($id, 'cancelled'); TaskActions::rollUp($id); TaskRepeat::onClosed($id);      // R-G_CORE-11 waiting tasks may start, R-G_CORE-12 the parent may be done now
         return DB::table('tasks')->where('id', $id)->first();
     }
 }

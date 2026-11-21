@@ -531,6 +531,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('returns', [OrdersController::class, 'receiveReturn']);
         Route::get('tasks', [WorkController::class, 'tasks']);
         Route::get('tasks/dashboard', [WorkController::class, 'tasksDashboard']);
+        Route::get('tasks/team', [WorkController::class, 'tasksTeam']);
+        Route::get('tasks/weekly', [WorkController::class, 'tasksWeekly']);
         Route::get('tasks/attention', [WorkController::class, 'tasksAttention']);
         Route::get('tasks/export', [WorkController::class, 'tasksExport']);
         Route::get('tasks/{id}/page', [WorkController::class, 'taskPage'])->whereNumber('id');

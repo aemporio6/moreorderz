@@ -183,6 +183,15 @@ class WorkController extends Controller
         return $this->act(fn () => \App\Services\TaskImport::run($r->user(), $f->getClientOriginalName(), (string) file_get_contents($f->getRealPath()), $r->boolean('apply'), $r->boolean('notify')));
     }
     public function taskImportUndo(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskImport::undo($id, $r->user())); }
+    /** R-G_CORE-40 Team page + leaderboard, R-G_CORE-44 weekly report screen, R-G_CORE-26 a suggested recurring task. */
+    public function tasksTeam(Request $r) { return $this->act(fn () => \App\Services\TaskTeam::page($r->user(), $r->query('month'))); }
+    public function tasksWeekly(Request $r)
+    {
+        if (! \App\Services\TaskLists::boss($r->user())) abort(403, 'The weekly report is for a Partner or Manager.');
+        $mon = (string) $r->query('week', '') ?: \App\Services\TaskWeekly::lastWeek(new \DateTimeImmutable())[0];
+        $mon = date('Y-m-d', strtotime('monday this week', strtotime($mon)));
+        $d = \App\Services\TaskWeekly::data($mon); return $d + ['html' => \App\Services\TaskWeekly::html($d)];
+    }
     public function taskBulkUndo(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskBulk::undo($id, $r->user())); }
 
     /** Approve / send back (R-G_CORE-7) and the score preview (R-G_CORE-8). */

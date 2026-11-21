@@ -54,7 +54,8 @@ class TmQueue
                     $note = $c->adapter === 'WHATSAPP_LOG' ? 'log provider' : null;
                 } else {
                     if (! Messenger::emailReady()) { self::wait($m, 'No e-mail server is set up (MAIL_… lines of the .env file). It goes out as soon as one is.'); $done['waiting']++; continue; }
-                    Mail::raw((string) $m->text, function ($msg) use ($m) {
+                    $send = str_starts_with(ltrim((string) $m->text), '<') ? 'html' : 'raw';      // an HTML report (N14) goes as HTML
+                    Mail::$send((string) $m->text, function ($msg) use ($m) {
                         $msg->to((string) $m->to_address)->subject((string) ($m->subject ?: 'MoreOrderz'));
                         $f = (string) ($m->attachment ?? '');
                         if ($f !== '' && \Illuminate\Support\Facades\Storage::disk('local')->exists($f)) $msg->attach(\Illuminate\Support\Facades\Storage::disk('local')->path($f), ['as' => basename($f)]);

@@ -118,6 +118,7 @@ class TaskCreate
         $partner = in_array($u->role_code ?? '', ['OWNER', 'PARTNER'], true);
         if (isset($d['amount']) && $d['amount'] !== '' && $d['amount'] !== null && ! $partner && ! $system) throw new \InvalidArgumentException('Refused: only a Partner may enter an amount.');
         if (! empty($d['confidential']) && ! $partner && ! $system) throw new \InvalidArgumentException('Refused: only a Partner may mark a task confidential.');
+        if ($e = TaskRepeat::check($d)) throw new \InvalidArgumentException('Refused: ' . lcfirst(reset($e)));      // R-G_CORE-26
         $warn = []; $hist = null; $realOwner = $owner;
         if ($a = TaskOwner::absent($owner)) {
             $cover = TaskOwner::usable($owner);
@@ -131,6 +132,8 @@ class TaskCreate
                 'owner_user_id' => $realOwner, 'assigned_by_user_id' => (int) $u->id, 'priority' => $pr, 'status' => 'TODO',      // a task that waits for another stays TODO; N10 tells the owner when it is approved
                 'created_at' => now(), 'due_at' => $due . ' 23:59:59', 'source' => 'MANUAL', 'linked_module' => $mod, 'linked_record_id' => $rec, 'depends_on_task_id' => $dep, 'parent_task_id' => $parent ? (int) $parent->id : null, 'reference_id' => $parent->reference_id ?? null,
                 'evidence_required' => $evidence ? 1 : 0, 'evidence_waived_by' => $evidence ? null : (int) $u->id, 'evidence_waived_at' => $evidence ? null : now(),
+                'repeat_type' => $d['repeat_type'] === 'NONE' ? 'NONE' : $d['repeat_type'], 'repeat_n' => (int) ($d['repeat_n'] ?? 0) ?: null, 'repeat_weekday' => (int) ($d['repeat_weekday'] ?? 0) ?: null,
+                'repeat_day_of_month' => (int) ($d['repeat_day_of_month'] ?? 0) ?: null, 'repeat_until' => ! empty($d['repeat_until']) ? $d['repeat_until'] : null,
                 'amount_gbp' => isset($d['amount']) && $d['amount'] !== '' && $d['amount'] !== null ? round((float) $d['amount'], 2) : null, 'is_confidential' => ! empty($d['confidential']) ? 1 : 0, 'last_update_at' => now()]));
             if (! $evidence) DB::table('task_history')->insert(['task_id' => $id, 'at' => now(), 'user_id' => (int) $u->id, 'field' => 'evidence_required', 'old_value' => '1', 'new_value' => '0',
                 'reason' => $system ? 'set by System' : 'switched off at create by ' . ($u->role_code ?? '') . ': ' . mb_substr(trim((string) $d['evidence_reason']), 0, 200)]);
