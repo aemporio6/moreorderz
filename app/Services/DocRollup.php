@@ -13,6 +13,27 @@ use Illuminate\Support\Facades\DB;
 class DocRollup
 {
     public const NOTE = 'Files stay in Google Drive – only metadata is stored here; nothing heavy loads until you click.';
+    /** R-B_SOURCING-47: the add note on the PO tab and the required-fields alert (old texts). */
+    public const PO_ADD_NOTE = 'Cycle and PO are linked automatically. File stays in Google Drive.';
+    public const REQUIRED = 'Document Name and Google Drive URL are required';
+    /** R-B_SOURCING-49 */
+    public const BAD_LINK = 'URL missing or not a valid link';
+    /** label => [table, code column] – "via Payment PAY-…-01" */
+    public const CODES = ['Direct PO' => ['t_src_po', 'po_number'], 'Purchase Order' => ['t_src_po', 'po_number'], 'Payment' => ['t_src_payments', 'payment_code'], 'Shipment' => ['t_src_shipments', 'shipment_code'],
+        'QC' => ['t_src_qc', 'qc_code'], 'GRN' => ['t_src_grn', 'grn_number'], 'Product Master' => ['t_product_vendors', 'SKU_VENDOR'], 'Cycle Product' => ['t_src_cycle_products', 'product_name'], 'Product' => ['t_src_cycle_products', 'product_name'],
+        'RFQ' => ['t_src_rfq', 'rfq_code'], 'Sample' => ['t_src_samples', 'sample_code'], 'Customs' => ['t_src_customs', 'customs_code'], 'Cycle' => ['t_src_cycles', 'cycle_code']];
+
+    /** R-B_SOURCING-49: a link is valid when it starts with http:// or https:// (any case). */
+    public static function linkOk(?string $url): bool { return (bool) preg_match('~^https?://\S+~i', trim((string) $url)); }
+
+    private static function code(string $label, string $col, $doc): ?string
+    {
+        $id = (int) ($doc->$col ?? 0); if (! $id) return null;
+        [$t, $c] = self::CODES[$label] ?? [null, null];
+        if (! $t || ! Registry::hasColumn($t, $c)) { $t = ['fk_id_production' => 't_src_production', 'fk_id_freight' => 't_src_freight', 'fk_id_investment' => 't_src_investments', 'fk_id_allocation' => 't_src_allocations'][$col] ?? null; $c = $t ? Registry::labelColumn($t) : null; }
+        $v = $t && $c ? DB::table($t)->where('id', $id)->value($c) : null;
+        return $v !== null && $v !== '' ? (string) $v : '#' . $id;
+    }
 
     private static function ids(string $t, string $col, array $in, bool $active = true): array
     {
@@ -53,15 +74,16 @@ class DocRollup
         foreach ($paths as $label => [$col, $ids]) {
             if (! $ids) continue;
             foreach (DB::table('t_src_documents as d')->leftJoin('t_users as u', 'u.id', '=', DB::raw('COALESCE(NULLIF(d.uploaded_by, 0), d.created_by)'))->where('d.fk_id_ent', $ent)->where('d.f_active', 1)->whereIn("d.$col", $ids)
-                ->get(['d.id', 'd.doc_type', 'd.doc_name', 'd.drive_url', 'd.created_at', 'u.display_name as by']) as $d) {
-                $rows[$d->id] ??= ['id' => (int) $d->id, 'type' => (string) $d->doc_type, 'name' => (string) $d->doc_name, 'via' => [], 'uploaded_by' => $d->by, 'uploaded_on' => $d->created_at ? substr((string) $d->created_at, 0, 10) : null,
-                    'url' => $d->drive_url, 'preview' => self::preview($d->drive_url)];
-                if (! in_array($label, $rows[$d->id]['via'], true)) $rows[$d->id]['via'][] = $label;
+                ->get(['d.id', 'd.doc_type', 'd.doc_name', 'd.drive_url', 'd.created_at', 'u.display_name as by', "d.$col"]) as $d) {
+                $ok = self::linkOk($d->drive_url);
+                $rows[$d->id] ??= ['id' => (int) $d->id, 'type' => (string) $d->doc_type, 'name' => (string) $d->doc_name, 'via' => [], 'via_detail' => [], 'uploaded_by' => $d->by, 'uploaded_on' => $d->created_at ? substr((string) $d->created_at, 0, 10) : null,
+                    'url' => $ok ? $d->drive_url : null, 'link_ok' => $ok, 'link_problem' => $ok ? null : self::BAD_LINK, 'preview' => $ok ? self::preview($d->drive_url) : null];
+                if (! in_array($label, $rows[$d->id]['via'], true)) { $rows[$d->id]['via'][] = $label; $rows[$d->id]['via_detail'][] = trim($label . ' ' . (self::code($label, $col, $d) ?? '')); }
             }
         }
         $rows = array_values($rows);
         usort($rows, fn ($a, $b) => [mb_strtolower($a['type']), mb_strtolower($a['name']), $a['id']] <=> [mb_strtolower($b['type']), mb_strtolower($b['name']), $b['id']]);
-        foreach ($rows as &$r) $r['linked_via'] = implode(', ', $r['via']); unset($r);
+        foreach ($rows as &$r) { $r['linked_via'] = implode(', ', $r['via']); $r['linked_via_detail'] = 'via ' . implode(', ', $r['via_detail']); } unset($r);
         return $rows;
     }
 
@@ -77,13 +99,29 @@ class DocRollup
     {
         $po = DB::table('t_src_po')->where('id', $poId)->where('fk_id_ent', $ent)->first(['id', 'po_number', 'po_code', 'fk_id_cycle']) ?? throw new \InvalidArgumentException('Not found.');
         return ['po' => ['id' => (int) $po->id, 'number' => $po->po_number ?: $po->po_code, 'cycle' => (int) $po->fk_id_cycle ?: null], 'rows' => self::collect($ent, self::poPaths($ent, $po)), 'note' => self::NOTE,
-            'add_url' => $po->fk_id_cycle ? "#/cycle-extras/{$po->fk_id_cycle}?po={$po->id}&add=1" : null, 'add_preset' => ['fk_id_po' => (int) $po->id, 'fk_id_cycle' => (int) $po->fk_id_cycle ?: null]];
+            'add_url' => $po->fk_id_cycle ? "#/cycle-extras/{$po->fk_id_cycle}?po={$po->id}&add=1" : null, 'add_preset' => ['fk_id_po' => (int) $po->id, 'fk_id_cycle' => (int) $po->fk_id_cycle ?: null],
+            'add_note' => self::PO_ADD_NOTE, 'title' => $po->po_number ?: $po->po_code];
     }
 
     public static function forCycle(int $ent, int $cy): array
     {
         $c = DB::table('t_src_cycles')->where('id', $cy)->where('fk_id_ent', $ent)->first(['id', 'cycle_code']) ?? throw new \InvalidArgumentException('Not found.');
         return ['cycle' => ['id' => (int) $c->id, 'code' => $c->cycle_code], 'rows' => self::collect($ent, self::cyclePaths($cy)), 'note' => self::NOTE, 'add_preset' => ['fk_id_cycle' => $cy]];
+    }
+
+    /**
+     * R-B_SOURCING-48: documents of one cycle product – on the cycle product ("Product"), on POs that have it in a line ("Purchase Order"),
+     * on its product master ("Product Master"); sorted by type; empty "No documents yet".
+     */
+    public static function forCycleProduct(int $ent, int $cpId): array
+    {
+        $cp = DB::table('t_src_cycle_products')->where('id', $cpId)->where('fk_id_ent', $ent)->first(['id', 'product_name', 'sku', 'fk_id_product', 'fk_id_cycle']) ?? throw new \InvalidArgumentException('Not found.');
+        $pos = DB::table('t_src_po_lines as l')->join('t_src_po as p', 'p.id', '=', 'l.fk_id_po')->where('l.f_active', 1)->where('p.f_active', 1)
+            ->where(fn ($w) => $w->where('l.fk_id_cycle_product', $cpId)->when($cp->fk_id_product, fn ($x) => $x->orWhere(fn ($y) => $y->where('l.fk_id_product', $cp->fk_id_product)->where('p.fk_id_cycle', $cp->fk_id_cycle))))
+            ->distinct()->pluck('p.id')->map(fn ($x) => (int) $x)->all();
+        $paths = ['Product' => ['fk_id_cycle_product', [$cpId]], 'Purchase Order' => ['fk_id_po', $pos], 'Product Master' => ['fk_id_product', $cp->fk_id_product ? [(int) $cp->fk_id_product] : []]];
+        return ['cycle_product' => ['id' => (int) $cp->id, 'name' => $cp->product_name, 'sku' => $cp->sku], 'rows' => self::collect($ent, $paths), 'note' => self::NOTE, 'empty' => 'No documents yet',
+            'add_preset' => ['fk_id_cycle_product' => $cpId, 'fk_id_cycle' => (int) $cp->fk_id_cycle ?: null, 'fk_id_product' => (int) $cp->fk_id_product ?: null]];
     }
 
     /** A product: its master documents and every document of every cycle it is in. */

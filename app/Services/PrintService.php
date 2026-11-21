@@ -471,7 +471,7 @@ class PrintService
     private static function head(int $ent, string $title, string $code): string
     {
         $c = DB::table('t_enterprise')->where('id', $ent)->first(['ent_name']);
-        return '<table style="width:100%"><tr><td><h1>' . self::e($title) . '</h1><div class="mut">' . self::e($c->ent_name ?? '') . ' · printed ' . date('d M Y H:i') . '</div></td>'
+        return '<table style="width:100%"><tr><td style="width:20mm;vertical-align:top">' . Brand::img($ent, 16) . '</td><td><h1>' . self::e($title) . '</h1><div class="mut">' . self::e($c->ent_name ?? '') . ' · printed ' . date('d M Y H:i') . '</div></td>'
             . '<td class="r" style="width:70mm"><img src="' . self::barcode($code) . '" style="width:62mm;height:11mm"><div style="font-size:8pt">' . self::e($code) . '</div></td></tr></table>';
     }
 

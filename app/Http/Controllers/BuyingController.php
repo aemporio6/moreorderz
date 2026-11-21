@@ -59,7 +59,8 @@ class BuyingController extends Controller
     {
         $this->can($r, 'buying.SEE');
         $ent = Context::ent();
-        return ['banks' => DB::table('fin_bank_accounts')->where('company_id', $ent)->where('is_active', 1)->get(['id', DB::raw("CONCAT(bank_name, ' · ', account_label) as name"), 'currency']),
+        $pays = in_array($r->user()->role_code, self::PAY, true);      // our bank accounts only for the people who pay (owner answer 21 Nov 2026: sourcing sees amounts, not banks)
+        return ['banks' => $pays ? DB::table('fin_bank_accounts')->where('company_id', $ent)->where('is_active', 1)->get(['id', DB::raw("CONCAT(bank_name, ' · ', account_label) as name"), 'currency']) : [],
             'locations' => DB::table('cat_inventory_locations')->where('fk_id_ent', $ent)->where(fn ($w) => $w->where('f_active', 1)->orWhereNull('f_active'))->whereNotIn('kind', ['DAMAGED', 'RETURNS', 'WRITTEN_OFF', 'QUARANTINE', 'MISSING', 'TRANSIT'])->orderBy('location_name')->limit(500)->get(['id', 'location_name as name']),
             'suppliers' => DB::table('t_src_suppliers')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('supplier_name')->limit(500)->get(['id', 'supplier_name as name']),
             'products' => DB::table('t_product_vendors')->where('fk_id_ent', $ent)->orderBy('SKU_VENDOR')->limit(500)->get(['id', DB::raw("CONCAT(SKU_VENDOR, ' · ', product_name_vendor) as name")]),
@@ -191,6 +192,10 @@ class BuyingController extends Controller
     public function poSend(Request $r, int $id) { $this->can($r, 'buying.BUY'); return $this->run(fn () => \App\Services\PoPdf::send((int) Context::ent(), $id, (string) $r->input('via'))); }
 
     /** R-F_SETUP-10: document roll-up of a PO / cycle / product (duplicates merged with every "Linked via"). */
+    /** R-B_SOURCING-4: Repeat this cycle. */
+    public function cycleRepeat(Request $r, int $id) { $this->can($r, 'buying.BUY'); return $this->run(fn () => \App\Services\CycleRepeat::repeat((int) Context::ent(), $id, (int) $r->user()->id)); }
+    /** R-B_SOURCING-48: documents of one cycle product. */
+    public function cycleProductDocs(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\DocRollup::forCycleProduct((int) Context::ent(), $id)); }
     public function poDocs(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\DocRollup::forPo((int) Context::ent(), $id)); }
     public function cycleDocs(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\DocRollup::forCycle((int) Context::ent(), $id)); }
     public function productDocs(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\DocRollup::forProduct((int) Context::ent(), $id)); }

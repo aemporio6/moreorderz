@@ -59,7 +59,7 @@ class GrnPrint
     {
         $d = self::data($ent, $id); $s = $d['summary']; $dt = fn ($v) => $v ? date('d-m-Y', strtotime((string) $v)) : '—';
         $cell = fn ($l, $v) => '<td style="width:33%;vertical-align:top;padding:1mm 2mm 2mm 0"><div class="mut">' . $l . '</div><div class="big">' . self::e($v ?? '—') . '</div></td>';
-        $o = '<div class="in"><h1>' . self::e($d['title']) . '</h1><table style="width:100%">'
+        $o = '<div class="in"><div style="float:right">' . Brand::img($ent, 15) . '</div><h1>' . self::e($d['title']) . '</h1><table style="width:100%">'
             . '<tr>' . $cell('GRN Number', $d['no']) . $cell('Date', $dt($d['date'])) . $cell('Cycle / Warehouse', trim(($d['cycle'] ?? '—') . ' / ' . ($d['warehouse'] ?? '—'))) . '</tr>'
             . '<tr>' . $cell('Shipment', $d['shipment']) . $cell('Received By', $d['received_by']) . $cell('Arrival date', $dt($d['arrival'])) . '</tr>'
             . '<tr>' . $cell('Cartons expected / received', self::n($d['cartons_expected']) . ' / ' . self::n($d['cartons_received'])) . $cell('Receiving QC status', $d['qc_status']) . '<td></td></tr></table>'

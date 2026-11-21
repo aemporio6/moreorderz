@@ -40,6 +40,7 @@ class FormRules
     {
         $table = Registry::table($formKey);
         if ($table === 't_src_cartons') return self::cartons($data, $old);
+        if ($table === 't_src_documents') return self::document($data, $old, $already);      // R-B_SOURCING-47 / 49
         if ($table === 't_product_vendors') return ProductFamily::check($data, $old, $id) + SkuCheck::onSave($data, $old, $id) + self::productCodes($data, $old);      // R-D-1 family coding / checks, R-D-2 exact SKU in the company
         if (in_array($table, ['t_src_products', 't_product_vendors'], true)) return self::productCodes($data, $old);
         if ($table === 'cat_ip_burgers') return self::isp($data);
@@ -66,6 +67,17 @@ class FormRules
         if ($strict) foreach (self::COMPANY_REQUIRED as $c) { $v = $val($c); if (($v === null || $v === '') && ! isset($already[$c]) && ! isset($e[$c])) $e[$c] = (Registry::labelOf('cat_company_house', $c) ?? $c) . ' is required.'; }
         $iso = $val('iso_code'); if ($strict && is_string($iso) && $iso !== '' && ! isset($e['iso_code']) && self::isoTaken($iso, $id)) $e['iso_code'] = 'This ISO code already exists. Please add another';
         return $e + DirectorPickers::check($data, $old);      // R-F_SETUP-36: the four pickers hold Director 1's own items
+    }
+
+    /** R-B_SOURCING-47 / 49: name and Drive URL required (old alert); a URL without http(s):// is refused "Must start with https://". */
+    private static function document(array &$data, array $old, array $already = []): array
+    {
+        if (isset($already['drive_url'])) return ['drive_url' => 'Must start with https://'];      // the general link check took the value out already
+        $v = fn (string $c) => array_key_exists($c, $data) ? trim((string) $data[$c]) : trim((string) ($old[$c] ?? ''));
+        if ($v('doc_name') === '' || $v('drive_url') === '') return ['_form' => DocRollup::REQUIRED, ($v('doc_name') === '' ? 'doc_name' : 'drive_url') => DocRollup::REQUIRED];
+        if (array_key_exists('drive_url', $data)) { $data['drive_url'] = trim((string) $data['drive_url']); if (! DocRollup::linkOk($data['drive_url'])) return ['drive_url' => 'Must start with https://'];
+            if (preg_match('~^http://~i', $data['drive_url']) && preg_match('~(^|\.)google\.com/~i', $data['drive_url'])) $data['drive_url'] = 'https://' . substr($data['drive_url'], 7); }
+        return [];
     }
 
     /**

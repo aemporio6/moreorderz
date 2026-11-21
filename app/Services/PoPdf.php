@@ -51,7 +51,7 @@ class PoPdf
     {
         $d = self::data($ent, $id, $bank); $c = $d['company']; $dt = fn ($v) => $v ? date('d-m-Y', strtotime((string) $v)) : '—';
         $teal = '#0b7285'; $th = 'background:#e7f5f8;border:0.2mm solid #999;padding:1mm;text-align:left;font-size:8.5pt'; $td = 'border:0.2mm solid #999;padding:1mm;vertical-align:top';
-        $o = '<div class="in" style="font-family:Arial,\'DejaVu Sans\',sans-serif"><table style="width:100%"><tr><td style="vertical-align:top"><div class="big" style="font-size:12pt">' . self::e($c['name']) . '</div><div class="mut">'
+        $o = '<div class="in" style="font-family:Arial,\'DejaVu Sans\',sans-serif"><table style="width:100%"><tr><td style="width:20mm;vertical-align:top">' . Brand::img($ent, 17) . '</td><td style="vertical-align:top"><div class="big" style="font-size:12pt">' . self::e($c['name']) . '</div><div class="mut">'
             . implode('<br>', array_map(fn ($x) => self::e($x), array_filter([$c['address'], $c['number'] ? 'Company no ' . $c['number'] : null, $c['vat'] ? 'VAT ' . $c['vat'] : null, trim(implode(' · ', array_filter([$c['phone'], $c['email']])))]))) . '</div></td>'
             . '<td style="text-align:right;vertical-align:top"><div style="font-size:18pt;color:' . $teal . ';font-weight:bold">PURCHASE ORDER</div><div class="big">' . self::e($d['code']) . '</div></td></tr></table>'
             . '<div style="border-bottom:0.6mm solid ' . $teal . ';margin:2mm 0 3mm"></div><table style="width:100%">';

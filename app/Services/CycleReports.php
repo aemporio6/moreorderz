@@ -102,7 +102,7 @@ class CycleReports
     public static function journeyPdf(int $ent, int $id, bool $money = true): array
     {
         $j = self::journey($ent, $id, $money);
-        $h = '<html><head><meta charset="utf-8"><style>' . self::CSS . '</style></head><body><h1>' . self::e($j['header']) . '</h1>';
+        $h = '<html><head><meta charset="utf-8"><style>' . self::CSS . '</style></head><body><div style="float:right">' . Brand::img($ent, 15) . '</div><h1>' . self::e($j['header']) . '</h1>';
         foreach ($j['blocks'] as $b) {
             $h .= '<h2>' . self::e($b['title']) . '</h2>';
             if (! $b['rows']) { $h .= '<div class="muted">' . self::e($b['empty_text']) . '</div>'; continue; }
@@ -121,7 +121,7 @@ class CycleReports
         $rows = [['Purchase Cost', $f2($m['purchase_cost']), 'Ordered', $n($q['ordered'])], ['Paid', $f2($m['paid']), 'Produced', $s['qty_text']['produced']], ['Outstanding', $f2($m['outstanding']), 'Received', $n($q['received'])],
             ['Freight', $f2($m['freight']), 'Allocated / Unallocated', $n($q['allocated']) . ' / ' . $n($q['unallocated'])], ['Customs Duty', $f2($m['customs_duty']), 'Damaged / Missing', $n($q['damaged']) . ' / ' . $n($q['missing'])],
             ['<b>Landed Cost / Unit</b>', number_format($m['landed_per_unit'], 4) . $b, '<b>QC Pass Rate</b>', number_format($q['qc_pass_rate'], 1) . ' %']];
-        $h = '<html><head><meta charset="utf-8"><style>' . self::CSS . '</style></head><body><h1>' . self::e($s['title']) . '</h1>'
+        $h = '<html><head><meta charset="utf-8"><style>' . self::CSS . '</style></head><body><div style="float:right">' . Brand::img($ent, 15) . '</div><h1>' . self::e($s['title']) . '</h1>'
             . '<div>Status: <b>' . self::e($s['status']) . '</b> · Priority: <b>' . self::e($s['priority'] ?: '-') . '</b> · Stage: <b>' . self::e($s['stage']) . '</b> · Progress: <b>' . $s['progress_pct'] . '%</b></div>'
             . '<div style="margin:4px 0 10px">Products: ' . self::e($s['products']) . ' · Suppliers: ' . self::e($s['suppliers']) . '</div>'
             . '<table><thead><tr><th>Money</th><th class="num"></th><th>Quantities</th><th class="num"></th></tr></thead><tbody>'

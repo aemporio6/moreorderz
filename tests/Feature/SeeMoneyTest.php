@@ -13,8 +13,9 @@ class SeeMoneyTest extends TestCase
 
     public function test_without_see_money_the_api_returns_no_money_keys(): void
     {
-        foreach (['VA', 'SOURCING', 'STOCK', 'CS'] as $role) $this->assertFalse(Perm::byDefault($role, 'buying.MONEY'), "$role is off by default");
-        foreach (['OWNER', 'PARTNER', 'FINANCE'] as $role) $this->assertTrue(Perm::byDefault($role, 'buying.MONEY'), "$role is on by default");
+        foreach (['VA', 'STOCK', 'CS'] as $role) $this->assertFalse(Perm::byDefault($role, 'buying.MONEY'), "$role is off by default");
+        foreach (['OWNER', 'PARTNER', 'FINANCE', 'SOURCING'] as $role) $this->assertTrue(Perm::byDefault($role, 'buying.MONEY'), "$role is on by default (owner answer: sourcing sees the amounts)");
+        Perm::setRole('SOURCING', 'buying.MONEY', false, $this->owner->id); Perm::flush();      // the Owner switches it off → the server drops every money key
         $this->assertSame('buying.MONEY', Perm::code('see_money'), 'one permission');
 
         $u = $this->makeUser('SOURCING'); $this->actingAs($u);
@@ -34,5 +35,6 @@ class SeeMoneyTest extends TestCase
         $this->assertTrue($this->getJson('/api/buying')->json('rights.money'));
         $this->getJson('/api/buying/card/payments')->assertOk();
         $this->assertArrayHasKey('value', $this->getJson('/api/buying/card/buyingcard')->json('data'));
+        $this->assertSame([], $this->getJson('/api/buying/pick')->assertOk()->json('banks'), 'sourcing sees amounts, never our bank accounts');
     }
 }

@@ -612,3 +612,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-98 (21 Nov): Inventory Management health card R-F_SETUP-28 BUILT (six rows, each a filtered product list; mismatch task also checks the location qty). +1 register line (663). 486 tests.
 - 7e-99 (21 Nov): product row scope R-D-21 and super roles by code R-D-17 BUILT (list, search, export, record, dropdowns, top search). +4 register lines (667). 488 tests.
 - 7e-100 (21 Nov): Sales card R-F_SETUP-26 BUILT (filters, rows, by channel / by VA drill-down). 668 register lines. 491 tests. From 7e-101: bigger batches.
+- 7e-101 (21 Nov, first bigger batch): R-B_SOURCING-47 / 48 / 49 / 4 BUILT; owner answers applied (SOURCING money without banks, demo products Pool, logo on PDF headers); OWNER_QUESTIONS.md. +7 register lines (675). 497 tests.

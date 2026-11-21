@@ -243,7 +243,7 @@ class RecordService
             ->map(fn ($h) => ['action' => $h->action, 'at' => $h->created_at, 'by' => $h->display_name ?: 'System', 'reason' => $h->reason, 'changes' => $h->action === 'UPDATE' ? json_decode($h->changes_json ?: '[]', true) : null])->all();
         if ($table === 'cat_company_house') $sections['Accountancy Hub (read-only here)'] = AccHub::display($id);      // kept once, in the Hub (IC-17, R-F_SETUP-35)
         $lc = Registry::labelColumn($table);
-        return ['form_key' => $formKey, 'id' => $id, 'form_title' => Registry::fields($formKey)[0]['form_title'], 'title' => (string) ($row[$lc] ?? "#$id"),
+        return ['form_key' => $formKey, 'table' => $table, 'id' => $id, 'form_title' => Registry::fields($formKey)[0]['form_title'], 'title' => (string) ($row[$lc] ?? "#$id"),
             'sections' => $sections, 'parents' => $parents, 'children' => array_values($children), 'tasks' => $tasks, 'history' => $hist];
     }
 
