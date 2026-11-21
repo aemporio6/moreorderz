@@ -1,5 +1,8 @@
 # Owner questions (MoreOrderz)
 
+> **Owner rule 22 Nov 03:47:** no more questions. Every suggestion below is accepted as the default and built that way, and each one becomes a setting with options (dropdown / yes-no) and a "Recommended: … because …" help, so it can be changed later. This page is now a record only.
+
+
 Updated 21 Nov 2026 (batch 7e-101). How to answer: write **OK** next to a line to keep the suggested default, or write your own answer. Nothing here stops the building – every line already runs with the suggested default – except part A.
 
 ## Answered by the Owner (21 Nov 2026)

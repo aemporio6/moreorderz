@@ -39,6 +39,27 @@ class CloseService
         return DB::table('aud_runs')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->where('period_month', $month)->where('status', '<>', 'SUPERSEDED')->orderByDesc('version')->first();
     }
 
+    /**
+     * A shop-month opens (06_ENGINES §D PERIOD_OPENED): the OPEN close run is made once and PERIOD_OPENED fires once for it – templates with that trigger
+     * (R-G_CORE-25, e.g. "Month close") then make their tasks for the shop. $why: "month started", "first check", "placeholder for a correction".
+     */
+    public static function open(int $ent, int $branchId, string $month, string $why = 'month started'): object
+    {
+        if ($run = self::run($ent, $branchId, $month)) return $run;
+        $id = DB::table('aud_runs')->insertGetId(RecordService::fillNotNull('aud_runs', ['run_code' => Numbering::next('CLS', $ent), 'fk_id_ent' => $ent, 'fk_id_branch' => $branchId, 'period_month' => $month, 'version' => 1, 'status' => 'OPEN', 'created_at' => now()]));
+        EventBus::fire('PERIOD_OPENED', 'aud_runs', $id, ['shop' => $branchId, 'month' => $month, 'why' => $why], $ent);
+        return DB::table('aud_runs')->where('id', $id)->first();
+    }
+
+    /** Every active shop opens the current month on its first day (worker; once per shop-month). Returns the number opened. */
+    public static function openMonth(?\DateTimeInterface $now = null): int
+    {
+        $m = ($now ? \DateTimeImmutable::createFromInterface($now) : new \DateTimeImmutable())->format('Y-m'); $n = 0;
+        foreach (DB::table('t_branches')->where('f_active', 1)->get(['id', 'fk_id_ent']) as $s)
+            if (! self::run((int) $s->fk_id_ent, (int) $s->id, $m)) { self::open((int) $s->fk_id_ent, (int) $s->id, $m); $n++; }
+        return $n;
+    }
+
     /** Has this shop anything in this month (sale lines or statements)? */
     public static function hasActivity(int $ent, int $branchId, string $from, string $to): bool
     {
@@ -157,10 +178,7 @@ class CloseService
             $run = self::run($ent, $branchId, $month);
             if ($run && $run->status === 'LOCKED') return self::page($ent, $branchId, $month);
             $e = self::evaluate($ent, $branchId, $month); $fig = self::figures($ent, $branchId, $month);
-            if (! $run) {
-                $id = DB::table('aud_runs')->insertGetId(RecordService::fillNotNull('aud_runs', ['run_code' => Numbering::next('CLS', $ent), 'fk_id_ent' => $ent, 'fk_id_branch' => $branchId, 'period_month' => $month, 'version' => 1, 'status' => 'OPEN', 'created_at' => now()]));
-                $run = DB::table('aud_runs')->where('id', $id)->first();
-            }
+            if (! $run) $run = self::open($ent, $branchId, $month, 'first check');      // the shop-month opens (PERIOD_OPENED)
             $waived = DB::table('aud_check_waivers')->where('fk_id_run', $run->id)->get()->keyBy('check_code'); $red = 0; $n = 0;
             foreach ($e['checks'] as $c) {
                 $status = $c['status']; $w = $waived[$c['code']] ?? null;

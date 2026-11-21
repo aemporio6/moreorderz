@@ -46,9 +46,10 @@ class LandedVersions
             $d = round($new - (float) $r->unit_cost_gbp, 4); if ($d == 0.0) continue;
             $month = substr((string) ($r->d_order ?: $r->consumed_on), 0, 7);
             if ($r->fk_id_branch && self::isLocked((int) $r->fk_id_branch, $month)) {
-                $amt = round($d * (float) $r->qty, 2); $fwd += $amt;
+                $amt = round($d * (float) $r->qty, 2); $fwd += $amt; $target = self::nextOpen((int) $r->fk_id_branch, $month);
+                CloseService::open($ent, (int) $r->fk_id_branch, $target, 'placeholder for a correction');      // IC-6: a placeholder month opens (PERIOD_OPENED) when none exists yet
                 DB::table('fin_cogs_corrections')->insert(['fk_id_ent' => $ent, 'fk_id_branch' => (int) $r->fk_id_branch, 'fk_id_product' => $prod ?: ((int) $r->fk_id_product ?: null), 'lot_id' => $lotId, 'source_month' => $month,
-                    'target_month' => self::nextOpen((int) $r->fk_id_branch, $month), 'units' => (float) $r->qty, 'unit_delta' => $d, 'amount' => $amt, 'reason' => mb_substr($reason, 0, 255), 'source_type' => $srcType, 'source_id' => $srcId,
+                    'target_month' => $target, 'units' => (float) $r->qty, 'unit_delta' => $d, 'amount' => $amt, 'reason' => mb_substr($reason, 0, 255), 'source_type' => $srcType, 'source_id' => $srcId,
                     'created_by' => Context::userId(), 'created_at' => now()]);
                 continue;      // the locked month keeps its figure
             }

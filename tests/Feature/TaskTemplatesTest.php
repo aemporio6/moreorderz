@@ -102,5 +102,6 @@ class TaskTemplatesTest extends TestCase
         $grn = DB::table('t_src_grn')->insertGetId(RecordService::fillNotNull('t_src_grn', ['fk_id_ent' => 1, 'grn_number' => 'GRN-T1', 'f_active' => 1]));
         $this->assertStringContainsString('refused: Refused: nobody found for role STOCK', (string) TaskTemplates::fire('GRN_POSTED', 't_src_grn', $grn, 1));
         $this->assertSame('GRN_SAVED_GRN', DB::table('tm_trigger_seen')->where('record_id', $grn)->value('event'), 'old memory key');
+        $this->assertNotEmpty(array_filter(TaskTemplates::health(), fn ($w) => str_contains($w, "GRN_SAVED_GRN #$grn made no tasks")), 'a refusal shows on System › Health');
     }
 }

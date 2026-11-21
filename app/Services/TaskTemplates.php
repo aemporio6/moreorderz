@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Schema;
 class TaskTemplates
 {
     /** event → [table, link module of the task, the memory key of tm_trigger_seen]. */
-    public const EVENTS = ['PO_CONFIRMED' => ['t_src_po', 'PO', 'PO_CONFIRMED'], 'GRN_POSTED' => ['t_src_grn', 'GRN', 'GRN_SAVED_GRN'], 'PERIOD_OPENED' => ['fin_periods', null, 'PERIOD_OPENED']];
+    public const EVENTS = ['PO_CONFIRMED' => ['t_src_po', 'PO', 'PO_CONFIRMED'], 'GRN_POSTED' => ['t_src_grn', 'GRN', 'GRN_SAVED_GRN'], 'PERIOD_OPENED' => ['aud_runs', null, 'PERIOD_OPENED']      /* a shop-month: its SHOP link comes from fk_id_branch (recordFor) */];
     public const ROLES = ['VA' => 'role:VA', 'CATEGORY_DEFAULT' => 'role:VA', 'MANAGER' => 'role:MANAGER|role:PARTNER', 'PARTNER' => 'role:PARTNER', 'WAREHOUSE' => 'role:WAREHOUSE', 'STOCK' => 'role:STOCK'];
 
     private static function role(?object $u): string { return strtoupper((string) ($u->role_code ?? '')); }
@@ -73,8 +73,9 @@ class TaskTemplates
         $rec = ! empty($d['record']) ? (int) $d['record'] : null;
         if ($mod && ! $rec) throw new \InvalidArgumentException('Refused: pick the ' . (TaskCreate::MODULES[$mod][4] ?? 'record') . ' from the search list.');
         if ($mod && ($m = TaskCreate::MODULES[$mod] ?? null) && ! DB::table($m[0])->where('id', $rec)->exists()) throw new \InvalidArgumentException('Refused: ' . ucfirst($m[4]) . " #$rec does not exist.");
-        if ($rec && DB::table('tasks')->where('template_id', $tplId)->where('linked_record_id', $rec)->where('status', '<>', 'CANCELLED')->exists())
-            throw new \InvalidArgumentException("Refused: \"$tpl->name\" tasks already exist for " . self::label($mod, $rec) . '.');
+        $period = trim((string) ($d['period'] ?? ''));      // a monthly template (PERIOD_OPENED): once per shop AND month
+        if ($rec && DB::table('tasks')->where('template_id', $tplId)->where('linked_record_id', $rec)->where('status', '<>', 'CANCELLED')->when($period !== '', fn ($q) => $q->where('reference_id', $period))->exists())
+            throw new \InvalidArgumentException("Refused: \"$tpl->name\" tasks already exist for " . self::label($mod, $rec) . ($period !== '' ? " ($period)" : '') . '.');
         $start = trim((string) ($d['start'] ?? '')) ?: date('Y-m-d');
         if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $start)) throw new \InvalidArgumentException('Refused: the start date must look like 2026-11-06.');
         $table = $mod ? (TaskCreate::MODULES[$mod][0] ?? null) : null;
@@ -86,15 +87,15 @@ class TaskTemplates
             if (! $who || ($step === 'owner' && $note)) throw new \InvalidArgumentException("Refused: nobody found for role $role (item \"$it->title\"). Add the role in Setup > Sourcing LOV or set a category default owner.");
             $owners[$it->id] = [$who, $step];
         }
-        $ids = DB::transaction(function () use ($items, $owners, $tpl, $u, $ent, $mod, $rec, $d, $start, $system) {
+        $ids = DB::transaction(function () use ($items, $owners, $tpl, $u, $ent, $mod, $rec, $d, $start, $system, $period) {
             $map = [];
             foreach ($items as $it) {
                 [$who, $step] = $owners[$it->id];
                 $dep = $it->depends_on_item_id ? ($map[$it->depends_on_item_id] ?? null) : null;
                 $id = (int) DB::table('tasks')->insertGetId(RecordService::fillNotNull('tasks', ['fk_id_ent' => $ent, 'title' => mb_substr((string) $it->title, 0, 255), 'category_id' => $it->category_id,
-                    'owner_user_id' => $who, 'assigned_by_user_id' => $system ? 0 : (int) $u->id,      // 0 = System (bosses approve) 'priority' => 'NORMAL', 'status' => 'TODO', 'created_at' => now(), 'last_update_at' => now(),
+                    'owner_user_id' => $who, 'assigned_by_user_id' => $system ? 0 : (int) $u->id /* 0 = System (bosses approve) */, 'priority' => 'NORMAL', 'status' => 'TODO', 'created_at' => now(), 'last_update_at' => now(),
                     'due_at' => date('Y-m-d', strtotime("$start +" . (int) $it->offset_days . ' days')) . ' 23:59:59', 'source' => 'TEMPLATE', 'template_id' => $tpl->id, 'linked_module' => $mod, 'linked_record_id' => $rec,
-                    'reference_id' => trim((string) ($d['reference'] ?? '')) ?: null, 'depends_on_task_id' => $dep, 'due_changes' => 0, 'evidence_required' => 1, 'flags' => '', 'is_confidential' => 0]));
+                    'reference_id' => $period !== '' ? $period : (trim((string) ($d['reference'] ?? '')) ?: null), 'depends_on_task_id' => $dep, 'due_changes' => 0, 'evidence_required' => 1, 'flags' => '', 'is_confidential' => 0]));
                 $map[$it->id] = $id;
                 DB::table('task_history')->insert(['task_id' => $id, 'at' => now(), 'user_id' => $system ? null : (int) $u->id, 'field' => 'status', 'old_value' => null, 'new_value' => 'TODO',
                     'reason' => mb_substr("From template \"$tpl->name\"" . ($system ? ' (by event)' : '') . " – owner by $step", 0, 255)]);
@@ -148,7 +149,7 @@ class TaskTemplates
         $sys = (object) ['id' => 0, 'role_code' => 'SYSTEM', 'fk_id_ent' => $ent]; $out = []; $n = 0;
         try { foreach ($tpls as $t) {
             try { $rec = self::recordFor((string) $t->linked_module, $event, $table, $row); if ($rec === false) throw new \InvalidArgumentException('Refused: no ' . strtoupper((string) $t->linked_module) . ' on this record.');
-                $r = self::create((int) $t->id, $sys, ['record' => $rec, 'reference' => (string) ($row->po_number ?? $row->grn_number ?? '')], true, $ent); $n += count($r['ids']); $out[] = "$t->name: created " . count($r['ids']) . ' tasks'; }
+                $r = self::create((int) $t->id, $sys, ['record' => $rec, 'reference' => (string) ($row->po_number ?? $row->grn_number ?? ''), 'period' => (string) ($row->period_month ?? ''), 'start' => $event === 'PERIOD_OPENED' && ! empty($row->period_month) ? max(date('Y-m-d'), $row->period_month . '-01') : null], true, $ent); $n += count($r['ids']); $out[] = "$t->name: created " . count($r['ids']) . ' tasks'; }
             catch (\InvalidArgumentException $e) { $out[] = "$t->name: refused: " . $e->getMessage(); }
         } } catch (\Throwable $e) { DB::table('tm_trigger_seen')->where('event', $key)->where('record_id', $recordId)->delete(); throw $e; }      // a crash frees the claim, so the event retry fires again
         $txt = mb_substr(implode(' · ', $out), 0, 255);
@@ -162,6 +163,7 @@ class TaskTemplates
         $mod = strtoupper(trim($mod)); if ($mod === '' || $mod === 'NONE') return null;
         if ($mod === (self::EVENTS[$event][1] ?? null)) return (int) $row->id;
         if ($mod === 'PO' && ! empty($row->fk_id_po)) return (int) $row->fk_id_po;
+        if ($mod === 'SHOP' && ! empty($row->fk_id_branch)) return (int) $row->fk_id_branch;      // a shop-month (PERIOD_OPENED) → its shop
         if ($mod === 'CYCLE') { $cy = (int) ($row->fk_id_cycle ?? 0) ?: (! empty($row->fk_id_po) ? (int) DB::table('t_src_po')->where('id', $row->fk_id_po)->value('fk_id_cycle') : 0); return $cy ?: false; }
         return false;
     }
@@ -192,6 +194,8 @@ class TaskTemplates
             if ($table && ! Schema::hasTable($table)) $w[] = "Template \"$t->name\" ($t->trigger_event) is switched off: table $table is missing.";
             if (! $table && ! DB::table('sys_event_types')->where('event_code', $t->trigger_event)->exists()) $w[] = "Template \"$t->name\": event $t->trigger_event is not in the event list.";
         }
+        foreach (DB::table('tm_trigger_seen')->where('result', 'like', '%refused:%')->where('created_at', '>=', now()->subDays(7))->orderByDesc('id')->limit(10)->get() as $r)      // an event template that made no tasks is shown, not silent
+            $w[] = "Template on $r->event #$r->record_id made no tasks – " . mb_substr((string) $r->result, 0, 200);
         return $w;
     }
 }
