@@ -1,5 +1,7 @@
 # Register audit – state and how to resume (updated after every area)
 
+> **Owner principle (22 Nov 03:33):** the whole system is ONE – every part built in order and linked to the others (events, one message door, one owner function, one registry, one task engine); every batch status says what the new work links to and which link is still open.
+
 Goal (owner, 21 Nov 2026 02:13): every one of the 1,547 lines of `claude/v1.7/MASTER_REGISTER_v1.7.csv` (project doc) gets a status with proof. Then build everything that is not BUILT.
 
 ## Method
@@ -181,4 +183,5 @@ How to work each step: build → test → change the verdict lines in `audit/ver
 | 7e-122 | R-G_CORE-17 / 22 / 23 BUILT (delegations incl. money approvals, 8 hard rules + Team box, SLA categories), R-G_CORE-16 F → PARTIAL (HR calendar open), G-40 note updated; delegation / category owner pickers now logins; PARTNER added to menu 13.5 | done | 760 BUILT (+4), 53 % | 578 tests, browser desktop + phone, checksums same |
 | 7e-123 | R-G_CORE-50 timed alerts BUILT (N2 not acknowledged + escalation, N3 due tomorrow, N5 late + Managers, N7 waiting approval repeat + Managers, N12 stale; one minute run in mo:events), R-G_CORE-27 checklist + STALE flag F → BUILT (add item, lock at DONE, flag + banner + list chip); tasks.reassigned_at (migration 000110) | done | 760 → 762 BUILT, 53 % | 583 tests, browser desktop + phone, checksums same |
 | 7e-124 | R-G_CORE-28 comments + @mentions (watcher, N9, confidential skipped + warning, one attachment, @ picker) and R-G_CORE-29 evidence (spec kinds, 15 MB, rights before write, EXIF time + GPS map, files streamed through the rights check, gallery) F → BUILT; WhatsApp comments / media use the same doors; Reassign button re-checked in the browser for the owner (works) | done | 762 → 766 BUILT, 53 % | 585 tests, browser desktop + phone, checksums same |
-| 7e-125 | NEXT → recount, then up to 6 related rules: G-24 task templates (create from template, owner resolution), G-25 templates fired by events (baseline, once per record) – or another close group | todo | | |
+| 7e-125 | R-G_CORE-24 task templates F → BUILT ("Create these tasks" page, owners first through the one owner function, real rollback, once per record, usage), R-G_CORE-25 templates fired by events P (listeners, go-live baseline 4 POs + 4 GRNs, HISTORICAL never, claim once, result text, Health warning; open: PERIOD_OPENED is not fired yet); migration 000111 | done | 766 → 768 BUILT, 54 % | 587 tests, browser desktop + phone with dump/restore (a real create), checksums same |
+| 7e-126 | NEXT → recount, then up to 6 related rules: PERIOD_OPENED from month close (finishes G-25) + G-35 job runs, or G-30 history per record / G-18 workload – a close group | todo | | |

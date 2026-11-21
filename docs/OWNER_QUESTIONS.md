@@ -29,7 +29,7 @@ Updated 21 Nov 2026 (batch 7e-101). How to answer: write **OK** next to a line t
 |---|---|---|---|
 | B1 ✔ | R-F_SETUP-16 | SOURCING does not see money (PO value, cost); Owner, Manager, Finance, Accountant, Partner do | Rights › role SOURCING › see_money |
 | B2 | R-F_SETUP-16 | Accounts listed in the old DASH_PARTNER setting got the role PARTNER | People › roles |
-| B3 ✔ | R-F_SETUP-38 | Directors 1–3 are picked only from people with role Owner, Director or Partner | — |
+| B3 ✔ | R-F_SETUP-38 | Directors 1–3 are picked only from people with role Owner, Director or Partner (owner: "yes" again 22 Nov 03:38) | — (fixed rule; no setting) |
 | B4 ✔ | R-D-21 / R-D-17 | Every product is seen by Owner, Manager and the ADMN-SUPER role; everybody else is limited | Choices › Who sees every product? |
 | B5 ✔ | R-F_SETUP-29 | The row Hidden margin is shown to the Owner only (partners do not see it) | — |
 | B6 ✔ | R-F_SETUP-27 | A custom period with From after To is swapped | — |

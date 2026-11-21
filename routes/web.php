@@ -536,6 +536,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('delegation/{id}/end', [WorkController::class, 'delegationEnd'])->whereNumber('id');
         Route::post('delegation/propose', [WorkController::class, 'delegationPropose']);
         Route::get('tasks/weekly', [WorkController::class, 'tasksWeekly']);
+        Route::get('task-templates', [WorkController::class, 'taskTemplates']);
+        Route::post('task-templates/{id}/create', [WorkController::class, 'taskTemplateCreate'])->whereNumber('id');
         Route::get('tasks/attention', [WorkController::class, 'tasksAttention']);
         Route::get('tasks/export', [WorkController::class, 'tasksExport']);
         Route::get('tasks/{id}/page', [WorkController::class, 'taskPage'])->whereNumber('id');

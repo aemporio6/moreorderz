@@ -65,6 +65,8 @@ class FormRules
         if ($table === 'user_absence') return TaskSettings::absence($data, $old, $id);      // R-G_CORE-16
         if ($table === 'tm_delegations') return TaskSettings::delegation($data, $old, $id);      // R-G_CORE-17
         if ($table === 'task_categories') return TaskSettings::category($data, $old, $id);      // R-G_CORE-23
+        if ($table === 'task_templates') return TaskTemplates::checkTemplate($data, $old, $id);      // R-G_CORE-24
+        if ($table === 'task_template_items') return TaskTemplates::checkItem($data, $old, $id);
         if ($table === 't_src_cartons') return self::cartons($data, $old);
         if ($table === 't_src_documents') return self::document($data, $old, $already);      // R-B_SOURCING-47 / 49
         if ($table === 'fin_categories') return self::finCategory($data, $old, $id);

@@ -200,6 +200,7 @@
       if (r.startsWith('#/not-listed')) return await pageNotListed(Object.fromEntries(new URLSearchParams(r.split('?')[1] || '')));
       if (r.startsWith('#/alerts')) return await pageAlerts();
       if (/^#\/task\/\d+/.test(r)) return await pageTask(+r.split('/')[2]);
+      if (r.startsWith('#/task-templates')) return await pageTaskTemplates();      // R-G_CORE-24 / 25
       if (r.startsWith('#/tasks/team') || (r.startsWith('#/tasks') && r.includes('scope=team'))) return await pageTaskTeam();      // menu 13.5 Team & settings
       if (r.startsWith('#/tasks') && r.includes('scope=weekly')) return await pageTaskWeekly();
       if (r.startsWith('#/tasks')) return await pageTasks(r.includes('scope=dashboard') ? 'dashboard' : r.includes('scope=all') ? 'all' : r.includes('scope=stuck_on_me') ? 'stuck_on_me' : r.includes('scope=to_approve') ? 'to_approve' : 'mine');
@@ -1992,11 +1993,36 @@
   }
 
   // R-G_CORE-40 Team & Settings page + monthly leaderboard
+  // ---------- R-G_CORE-24 task templates ("Create these tasks"), R-G_CORE-25 fired by events ----------
+  async function pageTaskTemplates() {
+    busy(true); let d; try { d = await api('task-templates'); } catch (e) { busy(false); return toast(e.message, 'err'); } busy(false);
+    const trig = x => x === 'MANUAL' ? 'By hand only' : 'Also by itself when ' + x.replace(/_/g, ' ').toLowerCase();
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/tasks/team">Team &amp; settings</a> ›</div><h1>Task templates</h1><div class="sub">A template is a set of tasks for one record (e.g. a PO): each item gets its owner, its due date (start + offset days) and, when it waits for another item, it stays blocked until that one is approved.</div></div>
+      <div class="actions">${d.can.manage ? '<a class="btn" href="#/list/task_template">Edit templates</a><a class="btn" href="#/list/task_template_item">Edit items</a>' : ''}</div></div>
+      ${d.health.length ? `<div class="card" style="border-left:3px solid var(--err)">${d.health.map(w => `<div class="small">${esc(w)}</div>`).join('')}</div>` : ''}
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px">${d.rows.map(t => `<div class="card"><div class="card-h"><h3>${esc(t.name)}</h3>${t.active ? '' : '<span class="chip plain">off</span>'}</div>
+        <div class="small muted">${t.module_label ? 'For one ' + esc(t.module_label) + ' · ' : ''}${esc(trig(t.trigger))} · used ${t.used}×</div>
+        <ol style="margin:8px 0 10px 18px;padding:0">${t.items.map(i => `<li class="small" style="${i.active ? '' : 'opacity:.5;text-decoration:line-through'}">${esc(i.title)} <span class="muted">· ${esc(i.role)} · +${i.offset} d${i.waits_for ? ' · waits for item ' + (t.items.findIndex(x => x.id === i.waits_for) + 1) : ''}</span></li>`).join('') || '<li class="small muted">No items yet.</li>'}</ol>
+        ${d.can.create && t.active ? `<button class="btn sm primary" data-tpl="${t.id}">Create these tasks</button>` : ''}</div>`).join('') || `<div class="empty">${ic('check')}<div>No templates yet.${d.can.manage ? ' Add one under Edit templates.' : ''}</div></div>`}</div>`;
+    $$('#main [data-tpl]').forEach(b => b.onclick = () => {
+      const t = d.rows.find(x => x.id === +b.dataset.tpl); let rec = null;
+      const m = modal('Create these tasks: ' + t.name, 'Each person is told on WhatsApp. Priority NORMAL.', `<div class="form" style="display:grid;gap:10px">
+        ${t.module ? `<label>${esc(t.module_label)}<input id="ttRec" placeholder="search and pick…" autocomplete="off"><div id="ttList" class="small"></div></label>` : ''}
+        <label>Reference<input id="ttRef" maxlength="120"></label><label>Start date<input id="ttStart" type="date" value="${new Date().toISOString().slice(0, 10)}"></label>
+        <div class="small muted">${t.items.filter(i => i.active).length} task(s): ${t.items.filter(i => i.active).map(i => esc(i.title) + ' (+' + i.offset + ' d)').join(', ')}</div></div>`, '<button class="btn primary" id="ttGo">Create</button>');
+      const $m = s2 => $(s2, m.ov);
+      if (t.module) { let tm; $m('#ttRec').oninput = () => { rec = null; clearTimeout(tm); tm = setTimeout(async () => { const q = $m('#ttRec').value.trim(); if (q.length < 2 && !/^\d+$/.test(q)) return ($m('#ttList').innerHTML = '');
+        try { const r = await api(`tasks/new/records?module=${encodeURIComponent(t.module)}&q=${encodeURIComponent(q)}`); $m('#ttList').innerHTML = r.rows.length ? r.rows.map(x => `<a href="#" data-pk="${x.id}" style="display:block">${esc(x.label)}</a>`).join('') : '<span class="muted">Nothing found</span>';
+          $$('[data-pk]', $m('#ttList')).forEach(a => a.onclick = e => { e.preventDefault(); $m('#ttRec').value = a.textContent; $m('#ttList').innerHTML = ''; rec = +a.dataset.pk; }); } catch (e) { $m('#ttList').textContent = e.message; } }, 300); }; }
+      $m('#ttGo').onclick = async () => { try { const r = await api(`task-templates/${t.id}/create`, { method: 'POST', body: { record: rec, reference: $m('#ttRef').value, start: $m('#ttStart').value } }); m.close(); toast(r.message); pageTaskTemplates(); } catch (e) { toast(e.message, 'err'); } };
+    });
+  }
+
   async function pageTaskTeam() {
     const qs = new URLSearchParams(location.hash.split('?')[1] || '');
     busy(true); let d; try { d = await api('tasks/team' + (qs.get('month') ? '?month=' + qs.get('month') : '')); } catch (e) { busy(false); return toast(e.message, 'err'); } busy(false);
     const lb = d.leaderboard, card = (h, body, act) => `<div class="card"><div class="card-h"><h3>${h}</h3>${act || ''}</div>${body}</div>`;
-    $('#main').innerHTML = `<div class="page-head"><div><h1>Team &amp; settings</h1><div class="sub">Workload, moved due dates, SLA per category, absence, delegations, recurring tasks and the monthly leaderboard.</div></div><div class="actions"><div class="seg"><button type="button" data-sc="mine">Mine</button><button type="button" data-sc="all">All tasks</button><button type="button" data-sc="dashboard">Dashboard</button><button type="button" class="on">Team</button><button type="button" data-sc="weekly">Weekly report</button></div></div></div>
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Team &amp; settings</h1><div class="sub">Workload, moved due dates, SLA per category, absence, delegations, recurring tasks and the monthly leaderboard.</div></div><div class="actions"><a class="btn" href="#/task-templates">Templates</a><div class="seg"><button type="button" data-sc="mine">Mine</button><button type="button" data-sc="all">All tasks</button><button type="button" data-sc="dashboard">Dashboard</button><button type="button" class="on">Team</button><button type="button" data-sc="weekly">Weekly report</button></div></div></div>
       <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px">
       ${card('Workload', d.workload.map(w => `<div style="margin:6px 0"><div class="small">${esc(w.name)} · ${w.open} / ${w.limit} <b style="color:${w.state === 'Overloaded' ? 'var(--err)' : w.state === 'Full' ? 'var(--warn,#b7791f)' : 'inherit'}">${w.state}</b></div><div style="background:var(--line);height:8px;border-radius:4px"><div style="width:${Math.min(100, Math.round(100 * w.open / Math.max(1, w.limit)))}%;height:8px;border-radius:4px;background:${w.state === 'Overloaded' ? '#7C2D12' : w.state === 'Full' ? '#B7791F' : '#0F5E63'}"></div></div></div>`).join('') || '<div class="empty">Nobody has open tasks.</div>')}
       ${card('Due date moved more than twice', d.moved.map(x => `<div class="small" style="padding:3px 0"><a href="#/task/${x.id}">${esc(x.text)}</a></div>`).join('') || '<div class="empty">None.</div>')}

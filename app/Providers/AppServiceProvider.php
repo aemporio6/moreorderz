@@ -42,6 +42,7 @@ class AppServiceProvider extends ServiceProvider
         });
         // a supplier-orders file of a shop + month was applied: its not-matched sale lines are matched again by themselves (R-A_SALES-25)
         EventBus::listen('DS_BATCH_APPLIED', function (array $e) { $p = $e['payload']; if (! empty($p['month']) && ! empty($p['year'])) \App\Services\DsMatch::afterDsBatch((int) ($p['shop'] ?? $e['entity_id']), (int) $p['month'], (int) $p['year']); });
+        foreach (array_keys(\App\Services\TaskTemplates::EVENTS) as $ev) EventBus::listen($ev, fn (array $e) => \App\Services\TaskTemplates::fire($e['code'], (string) $e['entity'], (int) $e['entity_id'], (int) $e['ent']));      // R-G_CORE-25 templates fired by events
         EventBus::listen('GRN_POSTED', function (array $e) {
             foreach (DB::table('fin_lots')->whereIn('id', $e['payload']['lots'] ?? [])->pluck('fk_id_product')->unique() as $pid) DispatchService::fillShorts((int) $pid);
         });
