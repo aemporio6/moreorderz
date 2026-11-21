@@ -36,6 +36,7 @@ class ReportService
         'expenses' => ['Money', 'Expenses by category', 'Booked expenses of the period per category and shop (cancelled ones left out).', self::FIN + [3 => 'MANAGER'], true],
         'ledger' => ['Money', 'Ledger lines (export for the accountant)', 'Every journal line of the period: date, number, account, debit, credit, memo.', self::FIN, true],
         'tasks_week' => ['Tasks', 'Tasks per person', 'Per person in the period: tasks closed, late now, stuck now, average score.', ['OWNER', 'MANAGER', 'TL'], true],
+        'team_engagements' => ['People', 'Team engagements', 'One row per running engagement at the end date: person, marketplace, shop, start, renewal, share %, salary and its GBP value. Download as team_engagements_{YYYY-MM}.xlsx.', ['OWNER', 'MANAGER', 'FINANCE'], true],
         'users' => ['People', 'Logins and roles', 'Every login: role, company, active, last sign-in, open sign-ins.', ['OWNER', 'MANAGER'], false],
         'menu' => ['System', 'Menu and who sees it', 'Every screen of the menu with its number and the roles that see it.', ['OWNER', 'MANAGER'], false],
         'close' => ['Money', 'Month close status', 'Every shop × month of the period: open, checked or locked, with the locked profit.', ['OWNER', 'MANAGER', 'FINANCE', 'ACCOUNTANT'], true],
@@ -306,6 +307,13 @@ class ReportService
             $rows[] = ['who' => $login, 'closed' => (int) ($c->n ?? 0), 'score' => $c && $c->s !== null ? round((float) $c->s, 1) : null, 'open' => (int) ($o->n ?? 0), 'late' => (int) ($o->late ?? 0), 'stuck' => (int) ($o->stuck ?? 0)]; }
         usort($rows, fn ($a, $b) => [$b['closed'], $a['late']] <=> [$a['closed'], $b['late']]);
         return [[['who', 'Person', 'text'], ['closed', 'Closed in the period', 'int'], ['score', 'Average score', 'pct'], ['open', 'Open now', 'int'], ['late', 'Late now', 'int'], ['stuck', 'Stuck now', 'int']], $rows, 'Closed = done or approved in the period; open, late and stuck are today\'s figures. The list is the leaderboard: most closed first.'];
+    }
+
+    private static function r_team_engagements(int $ent, string $from, string $to): array
+    {
+        $rows = JobPay::engagements($ent, substr($to, 0, 7));
+        return [[['code', 'Person code', 'text'], ['name', 'Name', 'text'], ['marketplace', 'Marketplace', 'text'], ['shop', 'Shop', 'text'], ['start', 'Start', 'date'], ['renewal', 'Renewal', 'date'], ['share', 'Share %', 'pct'], ['salary_text', 'Salary', 'text'], ['salary_gbp', 'GBP salary', 'money']],
+            array_map(fn ($r) => $r + ['salary_text' => $r['salary'] ? number_format($r['salary'], 2) . ' ' . $r['currency'] : ''], $rows), 'Engagements running on ' . date('d M Y', strtotime(date('Y-m-t', strtotime($to)))) . '. GBP salary = salary ÷ the row\'s £ rate, else the month-end FX rate.'];
     }
 
     private static function r_users(int $ent, string $from, string $to): array

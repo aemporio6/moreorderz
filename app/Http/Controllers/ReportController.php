@@ -26,6 +26,15 @@ class ReportController extends Controller
         catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
     }
 
+    /** Team engagements as team_engagements_{YYYY-MM}.xlsx (R-C-40). */
+    public function teamXlsx(Request $r)
+    {
+        \App\Services\Perm::need($r->user(), 'report:team_engagements');
+        [, $to] = $this->dates($r); $month = substr($to, 0, 7); $x = \App\Services\JobPay::xlsx((int) Context::ent(), $month);
+        Audit::log('reports', null, 'EXPORT', ['report' => 'team_engagements', 'month' => $month, 'rows' => $x['rows']], null, (int) Context::ent());
+        return response($x['body'], 200, ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition' => 'attachment; filename="' . $x['name'] . '"']);
+    }
+
     public function csv(Request $r, string $key)
     {
         \App\Services\Perm::need($r->user(), 'report:' . $key);

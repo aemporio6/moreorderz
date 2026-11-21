@@ -141,7 +141,10 @@ class AppController extends Controller
         $rows = \Illuminate\Support\Facades\DB::table('t_account_job_history as j')->leftJoin('cat_marketplaces as m', 'm.id', '=', 'j.fk_id_marketplace')->leftJoin('t_branches as b', 'b.id', '=', 'j.fk_id_branch')->leftJoin('cat_currency as c', 'c.id', '=', 'j.fk_id_currency')
             ->where('j.fk_id_account', $id)->where('j.f_active', 1)->orderByDesc('j.id')->get(['j.*', 'm.marketplace_short as marketplace', 'b.shop_no', 'b.shop_name', 'c.currency_code']);
         $soon = date('Y-m-d', strtotime('+30 days'));
-        return ['form' => 't_account_job_history', 'rows' => $rows->map(fn ($j) => (array) $j + ['renewal_soon' => $j->d_contract_renewal_date && $j->d_contract_renewal_date <= $soon && ! $j->d_end_date, 'running' => ! $j->d_end_date])->all()];
+        $ent = (int) \App\Services\Context::ent(); $today = date('Y-m-d');
+        $out = $rows->map(fn ($j) => (array) $j + ['renewal_soon' => $j->d_contract_renewal_date && $j->d_contract_renewal_date <= $soon && ! $j->d_end_date, 'running' => ! $j->d_end_date || $j->d_end_date >= $today, 'salary_gbp' => \App\Services\JobPay::salaryGbp($j, $ent, $today)])->all();
+        $run = array_filter($out, fn ($j) => $j['running'] && (! $j['d_job_start_date'] || $j['d_job_start_date'] <= $today));
+        return ['form' => 't_account_job_history', 'rows' => $out, 'totals' => ['running' => count($run), 'monthly_gbp' => round(array_sum(array_map(fn ($j) => (float) $j['salary_gbp'], $run)), 2)]];
     }
 
     public function formCalc(\Illuminate\Http\Request $r, string $key) { Rights::check('VIEW', $key); return \App\Services\FormRules::calc($key, (array) $r->input('values', [])); }

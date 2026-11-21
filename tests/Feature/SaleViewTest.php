@@ -66,9 +66,9 @@ class SaleViewTest extends TestCase
     public function test_columns_per_person_drive_the_export(): void
     {
         $this->world(); $this->import(['A-1,05/07/2026,Ann,BOWL-01,Dog bowl,1,9.00,RM']);
-        $c = SaleView::columns($this->owner); $this->assertSame(9, count($c['fixed'])); $this->assertSame(11, count($c['optional'])); $this->assertSame('', $c['count']);
+        $c = SaleView::columns($this->owner); $this->assertSame(9, count($c['fixed'])); $this->assertSame(12, count($c['optional']));      // + VA commission (info), R-C-40 $this->assertSame('', $c['count']);
         $r = SaleView::saveHidden($this->owner, ['raw_price', 'order_no', 'no_such_key']); $this->assertSame(['raw_price'], $r['hidden']); $this->assertSame('Saved for your account', $r['message']);      // fixed and unknown keys are dropped
-        $this->assertSame('(10/11)', SaleView::columns($this->owner)['count']);
+        $this->assertSame('(11/12)', SaleView::columns($this->owner)['count']);
         $labels = array_column(SaleView::visible($this->owner), 'label'); $this->assertNotContains('Raw Price', $labels); $this->assertContains('Buy Rate', $labels); $this->assertSame('Order No', $labels[0]);
         $pdf = SaleView::export($this->f(), 'pdf', $this->owner, '2026-08-02 10:15:00');
         $this->assertStringStartsWith('%PDF', $pdf['body']); $this->assertStringNotContainsString('Raw Price', $pdf['html']); $this->assertStringContainsString('Buy Rate', $pdf['html']); $this->assertSame('sales_2026-08-02_101500.pdf', $pdf['name']);
@@ -141,8 +141,8 @@ class SaleViewTest extends TestCase
         $as = fn (int $acc, string $role, string $from, ?string $to) => DB::table('t_account_branches')->insert($this->fill('t_account_branches', ['fk_id_branch' => $this->shop, 'fk_id_account' => $acc, 'role_code' => $role, 'd_from' => $from, 'f_active' => 1]) + ['d_to' => $to]);
         $as($old, 'VA', '2026-01-01', '2026-07-15'); $as($new, 'SELLER', '2026-07-16', null); $as($old, 'SUPERVISOR', '2026-01-01', null);
         $shop = DB::table('t_branches')->where('id', $this->shop)->first();
-        $this->assertSame([$new, 12.0], array_values(SalesImport::vaOf($shop, 7, 2026))); $this->assertSame([$old, 20.0], array_values(SalesImport::vaOf($shop, 6, 2026)));      // 30 June falls in the old VA's dates, 31 July in the new one's
-        DB::table('t_account_branches')->where('fk_id_branch', $this->shop)->delete(); $this->assertSame([$seed, 5.0], array_values(SalesImport::vaOf($shop, 7, 2026)));      // no assignment row: the shop's seller field is the fallback
+        $this->assertSame([$new, 12.0, 0], array_values(SalesImport::vaOf($shop, 7, 2026))); $this->assertSame([$old, 20.0, 0], array_values(SalesImport::vaOf($shop, 6, 2026)));      // 30 June falls in the old VA's dates, 31 July in the new one's
+        DB::table('t_account_branches')->where('fk_id_branch', $this->shop)->delete(); $this->assertSame([$seed, 5.0, 0], array_values(SalesImport::vaOf($shop, 7, 2026)));      // no assignment row: the shop's seller field is the fallback
     }
 
     public function test_filters_carrier_group_company_batch_and_the_lists_for_the_controls(): void

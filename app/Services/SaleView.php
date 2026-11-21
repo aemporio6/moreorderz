@@ -11,8 +11,8 @@ use Illuminate\Support\Facades\DB;
 class SaleView
 {
     public const FIXED = ['order_no' => 'Order No', 'd_order' => 'Order Date', 'cust_name' => 'Cust. Name', 'cust_contacts' => 'Cust. Contacts', 'sku' => 'SKU', 'product_info' => 'Product Info', 'qty' => 'Qty', 'sale_rate' => 'Sale Rate', 'total_amount' => 'Total Amt'];
-    public const OPTIONAL = ['visibility' => 'Visibility', 'investor' => 'Investor', 'company' => 'Owner/Vendor', 'raw_price' => 'Raw Price', 'carrier' => 'Carrier', 'packing' => 'Packing', 'buy_rate' => 'Buy Rate', 'buy_amount' => 'Buy Amount', 'profit' => 'Profit', 'd_buy' => 'Buy Date', 'url' => 'URL'];
-    public const MONEY = ['raw_price', 'carrier', 'packing', 'buy_rate', 'buy_amount', 'profit', 'd_buy', 'url'];      // only for people who may see cost
+    public const OPTIONAL = ['visibility' => 'Visibility', 'investor' => 'Investor', 'company' => 'Owner/Vendor', 'raw_price' => 'Raw Price', 'carrier' => 'Carrier', 'packing' => 'Packing', 'buy_rate' => 'Buy Rate', 'buy_amount' => 'Buy Amount', 'profit' => 'Profit', 'va_commission' => 'VA commission (info)', 'd_buy' => 'Buy Date', 'url' => 'URL'];
+    public const MONEY = ['raw_price', 'carrier', 'packing', 'buy_rate', 'buy_amount', 'profit', 'va_commission', 'd_buy', 'url'];      // only for people who may see cost
     public const NUMERIC = ['qty', 'sale_rate', 'total_amount', 'raw_price', 'carrier', 'packing', 'buy_rate', 'buy_amount', 'profit'];
     public const LIMITS = ['pdf' => 1500, 'docx' => 5000, 'xlsx' => 20000, 'csv' => 20000];
     public const NAMES = ['pdf' => 'PDF', 'docx' => 'Word', 'xlsx' => 'Excel', 'csv' => 'CSV'];
@@ -223,6 +223,7 @@ class SaleView
             'd_order' => $r['d_order'] ? date('d-m-Y', strtotime((string) $r['d_order'])) : '', 'd_buy' => ! empty($r['d_buy']) ? date('d-m-Y', strtotime((string) $r['d_buy'])) : '',
             'qty' => (string) (int) $r['qty'], 'sale_rate', 'total_amount', 'raw_price', 'buy_rate', 'buy_amount', 'profit' => $m($r[$key] ?? 0),
             'carrier' => $m($r['carrier_rate'] ?? 0) . (! empty($r['carrier_name']) ? "\n" . $r['carrier_name'] : ''), 'packing' => $m($r['packing_rate'] ?? 0) . (! empty($r['packing_name']) ? "\n" . $r['packing_name'] : ''),
+            'va_commission' => isset($r['va_commission']) ? $m($r['va_commission']) . ' (' . rtrim(rtrim(number_format((float) $r['va_pct'], 2, '.', ''), '0'), '.') . '%)' : '',
             'visibility' => $r['kind'] === 'DS' ? 'Drop shipping' . (! empty($r['ds_platform']) ? " ({$r['ds_platform']})" : '') : (string) $r['visibility'],
             'investor' => ! empty($r['ds']) ? trim(($r['ds']['buyer'] ?? '') . "\n" . ($r['ds']['platform'] ?? '') . "\nDS qty: " . ($r['ds']['qty'] ?? '')) : (string) ($r['investor'] ?? 'None'), 'url' => (string) ($r['product_url'] ?? ''),
             default => str_starts_with($key, 'xc_') ? (string) ($r['xc'][$key] ?? '') : (string) ($r[$key] ?? ''),

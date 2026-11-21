@@ -231,10 +231,9 @@ class SalesImport
     {
         $end = date('Y-m-t', mktime(0, 0, 0, $month, 1, $year));
         $va = self::vaAccount((int) $shop->id, $end);
-        if (! $va) $va = (int) ($shop->fk_id_seller ?? 0); if (! $va) return ['va_share_percentage' => 0];
-        $row = DB::table('t_account_job_history')->where('fk_id_account', $va)->where('fk_id_marketplace', (int) $shop->fk_id_marketplace)->where(fn ($w) => $w->whereNull('d_job_start_date')->orWhere('d_job_start_date', '<=', $end))
-            ->where(fn ($w) => $w->whereNull('d_end_date')->orWhere('d_end_date', '>=', $end))->orderByDesc('d_job_start_date')->orderByDesc('id')->first();
-        return ['fk_id_va_account' => $va, 'va_share_percentage' => round((float) ($row->share_percentage ?? 0), 2)];
+        if (! $va) $va = (int) ($shop->fk_id_seller ?? 0); if (! $va) return ['va_share_percentage' => 0, 'va_share_missing' => 1];
+        $row = JobPay::row($va, (int) $shop->fk_id_marketplace, (int) $shop->id, $end);      // valid on the period end, the shop's own row first (R-C-40)
+        return ['fk_id_va_account' => $va, 'va_share_percentage' => round((float) ($row->share_percentage ?? 0), 2), 'va_share_missing' => $row && $row->share_percentage !== null ? 0 : 1];
     }
 
     /** The batch of a shop + month, if any. */
@@ -485,7 +484,7 @@ class SalesImport
             ->map(function ($i) { $q = DB::table('t_sales')->where('fk_id_import', $i->id);
                 return ['id' => $i->id, 'shop' => $i->fk_id_branch, 'shop_no' => $i->shop_no, 'shop_name' => $i->shop_name, 'marketplace' => $i->marketplace, 'month' => self::monthName((int) $i->period_month, (int) $i->period_year), 'period' => sprintf('%04d-%02d', $i->period_year, $i->period_month), 'file' => $i->file_name, 'nature' => $i->import_nature,
                     'lines' => (clone $q)->count(), 'ds' => (clone $q)->where('sale_source', 'ds')->count(), 'out' => (int) $i->out_of_period_rows, 'errors' => (int) $i->error_rows, 'unmatched' => (clone $q)->where('sale_source', 'unmatched')->count(), 'deducted' => (clone $q)->where('f_stock_deducted', 1)->count(),
-                    'fee' => (float) $i->marketplace_fee, 'va_pct' => (float) $i->va_share_percentage, 'imported_at' => $i->imported_at ? date('d-m-Y H:i', strtotime((string) $i->imported_at)) : '', 'imported_by' => $i->by_name, 'status' => $i->status]; })->all();
+                    'fee' => (float) $i->marketplace_fee, 'va_pct' => (float) $i->va_share_percentage, 'va_missing' => (bool) ($i->va_share_missing ?? 0), 'imported_at' => $i->imported_at ? date('d-m-Y H:i', strtotime((string) $i->imported_at)) : '', 'imported_by' => $i->by_name, 'status' => $i->status]; })->all();
         // shop × month for the last 12 months: Pending / Confirmed / missing
         $shops = Perm::mine(DB::table('t_branches'), 'id')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_no')->get(['id', 'shop_no', 'shop_name']); $months = [];
         for ($k = 0; $k < 12; $k++) { $t = mktime(0, 0, 0, (int) date('n') - $k, 1, (int) date('Y')); $months[] = ['key' => date('Y-m', $t), 'label' => date('M y', $t), 'm' => (int) date('n', $t), 'y' => (int) date('Y', $t)]; }
