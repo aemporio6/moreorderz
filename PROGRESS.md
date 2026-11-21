@@ -522,3 +522,13 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - Not built yet (honest): saved formats as export templates of the List Standard (M116); reading a profile's own daily orders report without a saved format (needs R-A_SALES-87).
 - Tests: 336 pass (new `CsvConvertTest` 4; `FulfilmentTest` checks ORDERS_FILE).
 - Register after this batch: BUILT 373 of 1,433 (26 %); Sales 95 of 155 (61 %).
+
+### Batch 7e-21 (21 Nov 2026)
+- **R-A_SALES-88 completed** (the sales task table):
+  - `SalesWatch::tasks($ent)` raises the shop × month tasks (`SAL_REFUND_OPEN`, `DS_UNMATCHED`, `SAL_HUB_MISMATCH`) and closes every sales task whose problem is gone: `SAL_ZERO` (the line has a value / a refund / is gone), `SAL_STOCK_SHORT` (the month is confirmed), `SAL_RETURN_EXPECTED` (return booked), `PRICE_HISTORY_MISSING` (a period covers the date), `SAL_DAILY_OPEN` (every daily line priced) and the three above. It runs at night (`MoNightly` → `SalesWatch::nightly`) and right after Confirm, refund decisions, refund link / reject and Close daily orders; a booked return closes its task at once.
+  - `Fulfilment::closeDaily` raises `SAL_DAILY_OPEN` for a daily-only shop when lines stay without price.
+  - Task owner (IC-9) in `TaskEngine::assignee`: the record's user → the shop's VA → the person of the role with the fewest open tasks (main, custom or extra role) → for a role nobody holds the next one (`STOCK` → `WAREHOUSE`) → the Owner. Priorities P1 / P2 / P3 → HIGH / NORMAL / LOW; money at risk above setting `TASK_URGENT_MONEY` (£1,000) → URGENT.
+  - Hub figures: Month Close shows "Marketplace hub figures" for shops whose profile has hub totals; the figures are typed per fee bucket (`mo_hub_figures`, migration `000040`, right `orders.hubFigures`) and compared with the money files; a difference above `HUB_TOLERANCE` (£1) opens `SAL_HUB_MISMATCH`.
+- Not clicked in a browser: the hub figures card (no dev shop has a marketplace profile with hub totals).
+- Tests: 341 pass (new `SalesTasksTest` 5).
+- Register after this batch: BUILT 373 of 1,433 (26 %); Sales 95 of 155 (61 %).

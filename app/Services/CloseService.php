@@ -238,7 +238,7 @@ class CloseService
             'owner_note' => $run->owner_note ?? null, 'locked_at' => $run->locked_at ?? null, 'locked_by' => $run && $run->locked_by ? DB::table('t_users')->where('id', $run->locked_by)->value('display_name') : null,
             'run_id' => $run->id ?? null, 'statements' => $locked ? WaterfallService::statementFiles($ent, null, (int) $run->id) : [],
             'shares' => $locked ? ($snap['shares'] ?? null) : PartnerService::monthShares($ent, $branchId, $month),
-            'out_of_period' => SalesImport::outOfPeriod($branchId, $month), 'va_share' => VaStatements::closeLine($branchId, $month),
+            'out_of_period' => SalesImport::outOfPeriod($branchId, $month), 'va_share' => VaStatements::closeLine($branchId, $month), 'hub' => ($p = $shop->fk_id_mp_profile ? DB::table('mp_profiles')->where('id', $shop->fk_id_mp_profile)->value('hub_totals_available') : 0) ? ['rows' => SalesWatch::hubRows($branchId, $month), 'tolerance' => (float) Settings::get('HUB_TOLERANCE', $ent, 1.00)] : null,
             'ended' => $to < date('Y-m-d'), 'has_activity' => self::hasActivity($ent, $branchId, $from, $to), 'ledger_locked_up_to' => (string) Settings::get('GL_LOCKED_UPTO', $ent, '')];
     }
 

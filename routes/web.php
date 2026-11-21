@@ -306,6 +306,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('fulfilment', [OrdersController::class, 'fulfilmentSave']);
         Route::post('fulfilment/bulk', [OrdersController::class, 'fulfilmentBulk']);
         Route::post('fulfilment/close-daily', [OrdersController::class, 'fulfilmentCloseDaily']);
+        Route::post('close/hub-figures', [OrdersController::class, 'hubFigures']);
         Route::post('csv-convert', [OrdersController::class, 'csvConvertUpload']);
         Route::post('csv-convert/format', [OrdersController::class, 'csvConvertFormat']);
         Route::post('csv-convert/format/{id}/delete', [OrdersController::class, 'csvConvertFormatDelete'])->whereNumber('id');

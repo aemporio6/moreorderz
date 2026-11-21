@@ -181,6 +181,7 @@ class Perm
         $c['orders.csvConvert'] = ['Convert a CSV file to the standard sheet (download or into the fulfilment queue)', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
         $c['orders.csvFormats'] = ['Map CSV columns and save convert formats', 'Orders and dispatch', ['OWNER', 'MANAGER']];
         $c['orders.importUpdate'] = ['Update existing sale lines from a file (only the mapped columns)', 'Orders and dispatch', ['OWNER', 'MANAGER']];
+        $c['orders.hubFigures'] = ['Type the marketplace hub figures of a shop and month (fee buckets)', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'FINANCE']];
         $c['orders.healthOwn'] = ['Fill in the monthly account health of the shops where you are the seller or the owner', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
         $c['orders.healthAny'] = ['See the account health of every VA and shop, and enter it for a VA', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL']];
         $c['orders.saleCase'] = ['Raise a case on a sale, write in its thread, resolve, reopen and remove it', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];

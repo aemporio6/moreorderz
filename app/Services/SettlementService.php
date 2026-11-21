@@ -291,6 +291,7 @@ class SettlementService
             $x = self::refund($ent, (int) $s->id, $amount, 'Marketplace money file' . (isset(RefundProposals::LABELS[$p->refund_kind]) ? ' – ' . RefundProposals::LABELS[$p->refund_kind] . ' refund' : ''), (int) $p->id);
             DB::table('t_sale_refund_proposals')->where('id', $p->id)->update(['status' => 'ACCEPTED', 'decided_by' => Context::userId(), 'decided_at' => now()]);
         });
+        SalesWatch::tasks($ent);      // SAL_REFUND_OPEN closes when no proposal of the shop × month is left
     }
 
     /**

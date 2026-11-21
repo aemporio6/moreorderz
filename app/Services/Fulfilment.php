@@ -182,6 +182,9 @@ class Fulfilment
                 DB::table('t_sales')->where('id', $l->id)->update($upd); DB::table('mo_sale_fulfilment')->where('fk_id_sale', $l->id)->update(['closed_price' => $amount, 'closed_at' => now()]); Audit::log('t_sales', (int) $l->id, 'UPDATE', ['total_amount' => [(float) $l->total_amount, $amount], 'by' => 'Close daily orders']); $filled++;
             }
         });
+        $ym = sprintf('%04d-%02d', $year, $month);
+        if ($noMoney && self::dailyOnly($shop)) TaskEngine::open('SAL_DAILY_OPEN', [$shopId, $ym], count($noMoney) . ' daily order(s) of ' . SalesImport::label($shop) . " · $mn have no price after Close daily orders – Confirm is blocked", ['ent' => (int) $shop->fk_id_ent, 'module' => 't_branches', 'record_id' => $shopId, 'shop' => $shopId, 'fix_url' => '#/fulfilment']);
+        SalesWatch::tasks((int) $shop->fk_id_ent);
         $n = count($noMoney); $msg = "$mn: $filled line(s) got their price from the money report" . ($n ? ", $n line(s) have no money line yet" : '') . ($kept ? ', ' . count($kept) . ' line(s) changed by hand after the last run were not changed' : '') . '.';
         return ['message' => $msg, 'filled' => $filled, 'no_price' => $noMoney, 'kept' => $kept, 'ask_overwrite' => (bool) $kept, 'daily_only' => self::dailyOnly($shop)];
     }

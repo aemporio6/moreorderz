@@ -109,7 +109,7 @@ class RefundProposals
     public static function link(int $id, ?int $saleId, ?string $sku, ?object $u): array
     {
         Perm::need($u, 'money.refunds_may');
-        return DB::transaction(function () use ($id, $saleId, $sku, $u) {
+        $r = DB::transaction(function () use ($id, $saleId, $sku, $u) {
             $p = self::open($id, 'UNKNOWN', $u); $ent = (int) Context::ent(); $sku = trim((string) $sku);
             $sale = $saleId ? DB::table('t_sales')->where('id', $saleId)->where('fk_id_ent', $ent)->where('fk_id_branch', $p->fk_id_branch)->first() : ($sku !== '' ? self::findSale($ent, (int) $p->fk_id_branch, (string) $p->order_no, $sku) : null);
             if (! $sale) throw new \InvalidArgumentException($saleId ? 'This sale line is not of the same shop.' : ($sku !== '' ? "Order {$p->order_no} has no line with SKU $sku in this shop." : 'Pick the sale line or type the right SKU.'));
@@ -120,6 +120,7 @@ class RefundProposals
             Audit::log('t_sale_refund_proposals', (int) $p->id, 'UPDATE', ['linked to sale' => $sale->id, 'order' => $sale->order_no, 'sku' => $sale->sku]);
             return ['message' => "Refund linked to order {$sale->order_no} · {$sale->sku}. It now waits for Accept or Reject."];
         });
+        SalesWatch::tasks((int) Context::ent()); return $r;
     }
 
     /** Reject a refund without a matching line (reason needed). */
@@ -127,6 +128,7 @@ class RefundProposals
     {
         Perm::need($u, 'money.refunds_may'); if (trim((string) $reason) === '') throw new \InvalidArgumentException('Give the reason for rejecting.');
         DB::transaction(function () use ($id, $reason, $u) { $p = self::open($id, 'UNKNOWN', $u); DB::table('t_sale_refund_proposals')->where('id', $p->id)->update(['status' => 'REJECTED', 'reject_reason' => trim($reason), 'decided_by' => $u->id, 'decided_at' => now()]); Audit::log('t_sale_refund_proposals', (int) $p->id, 'UPDATE', ['status' => 'REJECTED', 'reason' => trim($reason)]); });
+        SalesWatch::tasks((int) Context::ent());
         return ['message' => 'Refund rejected.'];
     }
 

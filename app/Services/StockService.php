@@ -202,6 +202,7 @@ class StockService
             if ($productId) self::refreshCache($productId);
             $cost = round($cost, 2);
             if ($cost > 0) Ledger::post($ent, Ledger::openDate($ent), 'RETURN', $saleId, [['account' => '1200', 'debit' => $cost], ['account' => '5000', 'credit' => $cost]], ['memo' => "Return of sale #$saleId back into stock"]);
+            TaskEngine::close('SAL_RETURN_EXPECTED', [$saleId], 'The return was booked as received');
             return ['cost_back' => $cost];
         });
     }

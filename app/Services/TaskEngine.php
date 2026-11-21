@@ -30,7 +30,7 @@ class TaskEngine
         $data = [
             'fk_id_ent' => $ent, 'title' => mb_substr($title, 0, 255), 'description' => $opt['description'] ?? null,
             'category_id' => $rule->category_id ?: 1, 'owner_user_id' => self::assignee($rule->assign_to, $ent, $opt),
-            'priority' => $rule->level === 'URGENT' ? 'URGENT' : (in_array($rule->priority, ['HIGH', 'NORMAL', 'LOW'], true) ? $rule->priority : 'NORMAL'),
+            'priority' => $rule->level === 'URGENT' || (isset($opt['amount']) && abs((float) $opt['amount']) > (float) Settings::get('TASK_URGENT_MONEY', $ent, 1000)) ? 'URGENT' : self::priorityOf((string) $rule->priority),      // money at risk above TASK_URGENT_MONEY → URGENT (IC-9)
             'status' => 'TODO', 'created_at' => now(), 'due_at' => now()->addDays((int) $rule->due_days)->toDateString(),
             'source' => 'RULE', 'rule_code' => $ruleCode, 'dedupe_key' => $key,
             'linked_module' => $opt['module'] ?? null, 'linked_record_id' => $opt['record_id'] ?? null,
@@ -102,14 +102,32 @@ class TaskEngine
         }
     }
 
+    /** P1 → HIGH, P2 → NORMAL, P3 → LOW (IC-9); the plain words stay as they are. */
+    public static function priorityOf(string $p): string { $p = strtoupper(trim($p)); return ['P1' => 'HIGH', 'P2' => 'NORMAL', 'P3' => 'LOW'][$p] ?? (in_array($p, ['URGENT', 'HIGH', 'NORMAL', 'LOW'], true) ? $p : 'NORMAL'); }
+
+    /** A role that nobody holds hands its tasks to the next one (06C: "STOCK role fewest open → WAREHOUSE"). */
+    private const ROLE_NEXT = ['STOCK' => 'WAREHOUSE', 'PARTNER' => 'OWNER'];
+
+    /** The active person of a role with the fewest open tasks (main role, a custom role built on it, or an extra role); ties → the lowest id. */
+    public static function fewestOpen(string $role, int $ent): int
+    {
+        $custom = DB::table('mo_roles')->where('like_role', $role)->pluck('role_code')->all();
+        $ids = DB::table('t_users')->where('f_active', 1)->where(fn ($w) => $w->where('fk_id_ent', $ent)->orWhereNull('fk_id_ent'))->where(fn ($w) => $w->where('role_code', $role)->orWhereIn('custom_role', $custom ?: ['-'])->orWhereIn('id', DB::table('mo_user_roles')->where('role_code', $role)->select('user_id')))->pluck('id');
+        if ($ids->isEmpty()) return 0;
+        $open = DB::table('tasks')->whereIn('owner_user_id', $ids)->whereIn('status', ['TODO', 'DOING', 'STUCK'])->groupBy('owner_user_id')->selectRaw('owner_user_id, COUNT(*) n')->pluck('n', 'owner_user_id');
+        return (int) $ids->sortBy(fn ($id) => [(int) ($open[$id] ?? 0), $id])->first();
+    }
+
+    /** Owner order (IC-9): the record's user → the shop's VA / TL → the role with the fewest open tasks → the Owner. */
     private static function assignee(?string $assignTo, int $ent, array $opt): int
     {
         if (! empty($opt['owner_user_id'])) return (int) $opt['owner_user_id'];
-        if ($assignTo && str_starts_with($assignTo, 'role:')) {
-            $role = substr($assignTo, 5);
-            $u = DB::table('t_users')->where('role_code', $role)->where('f_active', 1)->where(fn ($w) => $w->where('fk_id_ent', $ent)->orWhereNull('fk_id_ent'))->orderBy('id')->value('id');
-            if ($u) return (int) $u;
+        foreach (array_filter(array_map('trim', explode('|', (string) $assignTo))) as $a) {
+            if ($a === 'record.created_by' && ! empty($opt['module']) && ! empty($opt['record_id']) && \Illuminate\Support\Facades\Schema::hasColumn($opt['module'], 'created_by')) { $u = (int) DB::table($opt['module'])->where('id', $opt['record_id'])->value('created_by'); if ($u && DB::table('t_users')->where('id', $u)->where('f_active', 1)->exists()) return $u; continue; }
+            if (str_starts_with($a, 'shop.') && ! empty($opt['shop'])) { $acc = SalesImport::vaAccount((int) $opt['shop'], date('Y-m-d')) ?: (int) DB::table('t_branches')->where('id', $opt['shop'])->value('fk_id_seller'); $u = $acc ? (int) DB::table('t_users')->where('fk_id_account', $acc)->where('f_active', 1)->value('id') : 0; if ($u) return $u; continue; }
+            if (str_starts_with($a, 'role:')) { $role = substr($a, 5); while ($role) { if ($u = self::fewestOpen($role, $ent)) return $u; $role = self::ROLE_NEXT[$role] ?? null; } }
         }
+        if (str_starts_with((string) $assignTo, 'record.') || str_starts_with((string) $assignTo, 'shop.')) { if ($u = self::fewestOpen('VA', $ent)) return $u; }      // the record's / shop's person is not known: the VA with the fewest open tasks
         return (int) (DB::table('t_users')->where('role_code', 'OWNER')->where('f_active', 1)->orderBy('id')->value('id') ?? 0);
     }
 

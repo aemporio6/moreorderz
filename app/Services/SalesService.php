@@ -134,7 +134,7 @@ class SalesService
             TaskEngine::open('WH_UNSHIPPED_LINES', ['late-' . $branchId . '-' . $month], "{$pre['lines']} sale line(s) of {$shop->shop_name} are dated in $month, which is locked – decide what to do with them", ['ent' => $ent, 'module' => 't_branches', 'record_id' => $branchId]);
             throw new \RuntimeException("Month $month is locked and the company's choice is not to book late lines forward. The Owner can change this under Settings › Choices.");
         }
-        return DB::transaction(function () use ($ent, $branchId, $month, $shop) {
+        $res = DB::transaction(function () use ($ent, $branchId, $month, $shop) {
             $shipped = StockService::systemLocation($ent, 'SHIPPED'); $end = date('Y-m-t', strtotime($month . '-01'));
             // a late line of a locked month is booked forward, dated today; the locked month itself never changes (R-FIN-47)
             $postDate = Ledger::periodLocked($ent, $month) ? date('Y-m-d') : min($end, date('Y-m-d'));
@@ -194,6 +194,8 @@ class SalesService
             EventBus::fire('SALE_MONTH_CONFIRMED', 't_branches', $branchId, ['month' => $month, 'lines' => $n, 'units' => $units, 'sales' => $revenue, 'cost' => round($cogs, 2)], $ent);
             return ['lines' => $n, 'units' => $units, 'sales' => $revenue, 'cost' => round($cogs, 2), 'profit_before_fees' => round($revenue - $cogs, 2), 'backfilled' => $backfilled];
         });
+        SalesWatch::tasks($ent);      // tasks whose problem ended with this Confirm close at once (SAL_STOCK_SHORT …)
+        return $res;
     }
 
     /** What an unlock of a confirmed shop + month would undo (for the question on the screen). */
