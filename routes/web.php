@@ -358,6 +358,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('sale-cases/{id}/{what}', [OrdersController::class, 'saleCaseDo'])->whereNumber('id');
         Route::get('shop-health', [OrdersController::class, 'shopHealth']);
         Route::post('shop-health', [OrdersController::class, 'shopHealthSave']);
+        Route::post('shop-health/import', [OrdersController::class, 'shopHealthImport']);
         Route::get('shop-health/{shop}/trend', [OrdersController::class, 'shopHealthTrend'])->whereNumber('shop');
         Route::get('ds-orders', [OrdersController::class, 'dsOrders']);
         Route::get('ds-orders/{id}', [OrdersController::class, 'dsOrder'])->whereNumber('id');

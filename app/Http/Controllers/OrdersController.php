@@ -471,6 +471,7 @@ class OrdersController extends Controller
     // ---------- account health per shop and month (R-A_SALES-73 / 74) ----------
     public function shopHealth(Request $r) { return $this->run(fn () => \App\Services\ShopHealth::page($r->only(['year', 'month', 'marketplace', 'va', 'shop']), $r->user())); }
     public function shopHealthSave(Request $r) { return $this->run(fn () => \App\Services\ShopHealth::save((int) $r->input('shop'), (int) $r->input('year'), (int) $r->input('month'), (string) $r->input('field'), $r->input('value'), $r->user())); }
+    public function shopHealthImport(Request $r) { $r->validate(['file' => 'required|file|max:5120']); return $this->run(fn () => \App\Services\ShopHealth::import((string) file_get_contents($r->file('file')->getRealPath()), $r->user())); }
     public function shopHealthTrend(Request $r, int $shop) { return $this->run(fn () => \App\Services\ShopHealth::trend($shop, (int) $r->query('year', date('Y')), $r->user())); }
 
     // ---------- cases on a sale (R-A_SALES-71) ----------

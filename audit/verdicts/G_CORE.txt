@@ -80,7 +80,7 @@
 80|M||SALE_BUY_MATCH check not built
 81|M||supplier purchase audit not built
 82|M||data-quality checks not built
-83|F|form:t_shop_feedback|form only
+83|B|class ShopHealth|one Shop health page (#/shop-health): per shop per month each metric value with green / amber / red by its limits – limits per marketplace profile (health metrics), else the company's setting HEALTH_METRICS, else the proposed eBay defaults (defect rate ≤ 0.5 % / ≤ 2 %, late shipment ≤ 3 % / ≤ 7 %, cases without seller resolution ≤ 0.3 %), seller level Top rated / Above standard / Below standard; data by manual entry (history per change) or the service-metrics report import (shop, month, metric columns, level); a red metric → HEALTH_ALERT to the shop's TL (assignment role SUPERVISOR / TL, else the TL with the fewest tasks), dedupe shop + metric + month, closed when the metric is green again (also the earlier months' tasks of that metric); the Account Health Activity list (t_shop_feedback) stays as the activity log, linked from the page. Rule test passes (2.4 % Nov → red + task to the TL; 0.4 % Dec → closed)
 84|N||old SQL views – not carried
 85|P|class Choices|settings with history
 86|M||invoice portal not built

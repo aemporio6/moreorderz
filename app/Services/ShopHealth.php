@@ -11,7 +11,8 @@ use Illuminate\Support\Facades\DB;
  */
 class ShopHealth
 {
-    public const DEFAULT_METRICS = [['code' => 'TDR', 'label' => 'TDR', 'unit' => '%', 'direction' => 'LOWER', 'amber' => null, 'red' => null], ['code' => 'LDR', 'label' => 'LDR', 'unit' => '%', 'direction' => 'LOWER', 'amber' => null, 'red' => null], ['code' => 'CCWSR', 'label' => 'CCWSR', 'unit' => '', 'direction' => 'LOWER', 'amber' => null, 'red' => null]];
+    /** R-G_CORE-83 proposed eBay defaults (owner to confirm): defect rate ≤ 0.5 % green, ≤ 2 % amber; late shipment ≤ 3 % / ≤ 7 %; cases closed without seller resolution ≤ 0.3 %. A company may set its own (setting HEALTH_METRICS, JSON); a marketplace profile's metrics win. */
+    public const DEFAULT_METRICS = [['code' => 'TDR', 'label' => 'TDR', 'unit' => '%', 'direction' => 'LOWER', 'amber' => 0.5, 'red' => 2.0], ['code' => 'LDR', 'label' => 'LDR', 'unit' => '%', 'direction' => 'LOWER', 'amber' => 3.0, 'red' => 7.0], ['code' => 'CCWSR', 'label' => 'CCWSR', 'unit' => '%', 'direction' => 'LOWER', 'amber' => null, 'red' => 0.3]];
     public const DEFAULT_LEVELS = [['code' => '1', 'label' => 'Top Rated', 'short' => 'TR', 'colour' => 'green'], ['code' => '2', 'label' => 'Above Standard', 'short' => 'AS', 'colour' => 'amber'], ['code' => '3', 'label' => 'Below Standard', 'short' => 'BS', 'colour' => 'red']];
     private const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -25,7 +26,7 @@ class ShopHealth
     public static function metrics(?int $profileId): array
     {
         $rows = $profileId ? DB::table('mp_profile_health_metrics')->where('fk_id_mp_profile', $profileId)->where('f_active', 1)->orderBy('id')->get() : collect();
-        if ($rows->isEmpty()) return self::DEFAULT_METRICS;
+        if ($rows->isEmpty()) { $j = json_decode((string) Settings::get('HEALTH_METRICS', Context::ent(), ''), true); return is_array($j) && $j ? array_values($j) : self::DEFAULT_METRICS; }
         return $rows->map(fn ($m) => ['code' => strtoupper($m->metric_code), 'label' => $m->label, 'unit' => $m->unit, 'direction' => str_starts_with(strtoupper((string) $m->direction), 'H') || strtoupper((string) $m->direction) === 'UP' ? 'HIGHER' : 'LOWER', 'amber' => $m->threshold_amber !== null ? (float) $m->threshold_amber : null, 'red' => $m->threshold_red !== null ? (float) $m->threshold_red : null])->all();
     }
 
@@ -125,14 +126,51 @@ class ShopHealth
     /** Task HEALTH_ALERT: one per shop + metric + month while the metric is red, or while the seller level is below last month's. Closed when it is fine again. */
     public static function alerts(object $shop, object $h, array $metrics): void
     {
-        $label = trim((string) $shop->shop_no) . ' (' . trim((string) $shop->shop_name) . ')'; $ym = sprintf('%04d-%02d', $h->year, $h->month); $vals = (array) json_decode((string) $h->metrics_json, true); $opt = ['ent' => (int) $h->fk_id_ent, 'module' => 'mo_shop_health', 'record_id' => (int) $h->id, 'fix_url' => '#/shop-health'];
+        $tl = self::tlOf((int) $shop->id);      // the task goes to the shop's TL (assignment role SUPERVISOR / TL), else the TL with the fewest open tasks
+        $label = trim((string) $shop->shop_no) . ' (' . trim((string) $shop->shop_name) . ')'; $ym = sprintf('%04d-%02d', $h->year, $h->month); $vals = (array) json_decode((string) $h->metrics_json, true); $opt = ['ent' => (int) $h->fk_id_ent, 'module' => 'mo_shop_health', 'record_id' => (int) $h->id, 'fix_url' => '#/shop-health'] + ($tl ? ['owner_user_id' => $tl] : []);
         foreach ($metrics as $m) { $key = [$shop->id, $m['code'], $ym];
             if (self::score($m, $vals[$m['code']] ?? null) === 'red') TaskEngine::open('HEALTH_ALERT', $key, "Shop $label: {$m['label']} is " . rtrim(rtrim(number_format((float) $vals[$m['code']], 2), '0'), '.') . $m['unit'] . ' – ' . ($m['direction'] === 'HIGHER' ? 'below' : 'above') . ' the limit ' . rtrim(rtrim(number_format((float) $m['red'], 2), '0'), '.') . $m['unit'] . " (" . self::MONTHS[$h->month - 1] . " {$h->year})", $opt);
-            else TaskEngine::close('HEALTH_ALERT', $key, 'The metric is inside its limit again'); }
+            elseif (array_key_exists($m['code'], $vals)) {      // inside its limit: this month's task and any earlier month's task of the same metric close
+                foreach (DB::table('tasks')->where('rule_code', 'HEALTH_ALERT')->where('dedupe_key', 'like', "HEALTH_ALERT:{$shop->id}:{$m['code']}:%")->whereNotIn('status', ['DONE', 'APPROVED', 'CANCELLED'])->pluck('dedupe_key') as $dk)
+                    if (substr($dk, -7) <= $ym) TaskEngine::close('HEALTH_ALERT', explode(':', substr($dk, 13)), 'The metric is inside its limit again'); } }
         $pid = $shop->fk_id_mp_profile ? (int) $shop->fk_id_mp_profile : null; $order = array_map(fn ($l) => (string) $l['code'], self::levels($pid)); [$py, $pm] = (int) $h->month === 1 ? [$h->year - 1, 12] : [$h->year, $h->month - 1]; $prev = DB::table('mo_shop_health')->where(['fk_id_branch' => $shop->id, 'year' => $py, 'month' => $pm])->value('seller_level');
         $now = array_search((string) $h->seller_level, $order, true); $was = array_search((string) $prev, $order, true); $key = [$shop->id, 'LEVEL', $ym];
         if ($now !== false && $was !== false && $now > $was) TaskEngine::open('HEALTH_ALERT', $key, "Shop $label: seller level dropped from " . self::levelOf($prev, $pid)['label'] . ' to ' . self::levelOf($h->seller_level, $pid)['label'] . ' (' . self::MONTHS[$h->month - 1] . " {$h->year})", $opt);
         else TaskEngine::close('HEALTH_ALERT', $key, 'The seller level is not below last month');
+    }
+
+    /** The shop's TL today: the assignment role SUPERVISOR / TL on the shop → its login. */
+    public static function tlOf(int $shopId): ?int
+    {
+        $d = date('Y-m-d');
+        $acc = DB::table('t_account_branches')->where('fk_id_branch', $shopId)->whereIn('role_code', ['SUPERVISOR', 'TL'])->where(fn ($w) => $w->whereNull('f_active')->orWhere('f_active', 1))
+            ->where(fn ($w) => $w->whereNull('d_from')->orWhere('d_from', '<=', $d))->where(fn ($w) => $w->whereNull('d_to')->orWhere('d_to', '>=', $d))->orderByDesc('id')->value('fk_id_account');
+        return $acc ? ((int) DB::table('t_users')->where('fk_id_account', $acc)->where('f_active', 1)->value('id') ?: null) : null;
+    }
+
+    /**
+     * Service-metrics report in (Import Center): CSV with the columns shop (shop no or id), month (YYYY-MM), and one column per metric code and / or "level".
+     * Every value goes through save() (same checks, history and alerts). Returns what was saved and the lines refused with why.
+     */
+    public static function import(string $csv, ?object $u): array
+    {
+        $lines = array_values(array_filter(preg_split('/\r\n|\r|\n/', ltrim($csv, "\xEF\xBB\xBF")), fn ($l) => trim($l) !== ''));
+        if (count($lines) < 2) throw new \InvalidArgumentException('The file has no rows.');
+        $head = array_map(fn ($h) => strtolower(trim($h)), str_getcsv($lines[0]));
+        $si = array_search('shop', $head, true); $mi = array_search('month', $head, true);
+        if ($si === false || $mi === false) throw new \InvalidArgumentException('The file needs the columns "shop" and "month" (YYYY-MM), then one column per metric code or "level".');
+        $saved = 0; $refused = [];
+        foreach (array_slice($lines, 1) as $n => $l) {
+            $c = str_getcsv($l); $sv = trim((string) ($c[$si] ?? '')); $mv = trim((string) ($c[$mi] ?? ''));
+            $shop = DB::table('t_branches')->where('fk_id_ent', Context::ent())->where(fn ($w) => $w->where('shop_no', $sv)->orWhere('id', ctype_digit($sv) ? (int) $sv : -1))->value('id');
+            if (! $shop || ! preg_match('/^(\d{4})-(\d{2})$/', $mv, $ym)) { $refused[] = 'Line ' . ($n + 2) . ': ' . (! $shop ? "shop $sv not found" : "month $mv is not YYYY-MM"); continue; }
+            foreach ($head as $i => $h) {
+                if ($i === $si || $i === $mi || ! isset($c[$i]) || trim($c[$i]) === '') continue;
+                try { self::save((int) $shop, (int) $ym[1], (int) $ym[2], $h === 'level' ? 'level' : 'metric:' . strtoupper($h), trim($c[$i]), $u); $saved++; }
+                catch (\InvalidArgumentException $e) { $refused[] = 'Line ' . ($n + 2) . " $h: " . $e->getMessage(); }
+            }
+        }
+        return ['saved' => $saved, 'refused' => $refused, 'message' => "$saved value(s) saved" . ($refused ? ', ' . count($refused) . ' refused' : '') . '.'];
     }
 
     /** One shop over the 12 months of a year (trend with a colour per metric) and who entered what. */
