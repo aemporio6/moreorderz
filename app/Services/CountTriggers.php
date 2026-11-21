@@ -20,6 +20,7 @@ class CountTriggers
     /** Add a TRIGGERED line for the bin (and product) to the bin's open triggered count, or open one. Returns the count id. */
     public static function trigger(int $ent, int $bin, ?int $product, string $source): int
     {
+        if (! Choices::has('COUNT_TRIGGERS', $ent, $source)) return 0;      // Settings › Choices: this event opens no count
         $c = DB::table('t_stock_counts')->where('fk_id_ent', $ent)->where('fk_id_location', $bin)->where('count_type', 'TRIGGERED')->where('status', 'OPEN')->first();
         if (! $c) {
             $id = (int) DB::table('t_stock_counts')->insertGetId(['fk_id_ent' => $ent, 'count_code' => Numbering::next('CNT', $ent), 'fk_id_location' => $bin, 'd_count' => date('Y-m-d'), 'status' => 'OPEN', 'counted_by' => Context::userId(),

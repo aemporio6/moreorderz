@@ -56,7 +56,8 @@ class StockAlerts
     {
         $err = [];
         if ($newQty === null || $newQty === '' || ! is_numeric($newQty) || (int) $newQty != $newQty || (int) $newQty < 0) $err['new_qty'] = 'Enter the counted quantity (a whole number, 0 or more)';
-        if (trim($reason) === '') $err['reason'] = 'Choose the reason';
+        $needReason = Choices::get('STOCK_UPDATE_REASON', $ent) === '1';      // Settings › Choices (default: required)
+        if (trim($reason) === '') { if ($needReason) $err['reason'] = 'Choose the reason'; else $reason = 'no reason given'; }
         elseif (! DB::table('cat_adjustment_reasons')->where('f_active', 1)->where('reason_name', $reason)->exists()) $err['reason'] = 'Choose a reason from the list';
         if (! $location || ! DB::table('cat_inventory_locations')->where('id', $location)->where('fk_id_ent', $ent)->exists()) $err['location'] = 'Choose the location';
         $p = DB::table('t_product_vendors')->where('id', $product)->where('fk_id_ent', $ent)->first();

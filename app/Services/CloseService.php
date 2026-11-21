@@ -23,6 +23,9 @@ class CloseService
         'ONE_PROFIT_ROUTE' => ['The shop-month has exactly one profit route', false],
     ];
 
+    /** May this check be waived? Settings › Choices CLOSE_WAIVABLE (default: the five the specification allows). */
+    public static function waivable(string $code, int $ent): bool { return isset(self::CHECKS[$code]) && Choices::has('CLOSE_WAIVABLE', $ent, $code); }
+
     private static function shop(int $ent, int $branchId): object
     {
         return DB::table('t_branches')->where('id', $branchId)->where('fk_id_ent', $ent)->first() ?? throw new \InvalidArgumentException('Choose a shop of this company.');
@@ -71,7 +74,7 @@ class CloseService
     public static function evaluate(int $ent, int $branchId, string $month): array
     {
         $shop = self::shop($ent, $branchId); [$from, $to] = self::month($month); $out = [];
-        $set = function (string $code, string $status, string $detail, int $open = 0, ?string $fix = null) use (&$out) { $out[$code] = ['code' => $code, 'title' => self::CHECKS[$code][0], 'waivable' => self::CHECKS[$code][1], 'status' => $status, 'detail' => mb_substr($detail, 0, 480), 'open_items' => $open, 'fix_url' => $fix]; };
+        $set = function (string $code, string $status, string $detail, int $open = 0, ?string $fix = null) use (&$out, $ent) { $out[$code] = ['code' => $code, 'title' => self::CHECKS[$code][0], 'waivable' => self::waivable($code, $ent), 'status' => $status, 'detail' => mb_substr($detail, 0, 480), 'open_items' => $open, 'fix_url' => $fix]; };
         $later = 'Not checked yet – this part of the tool is built in a later step.';
         $hasFiles = DB::table('mo_settlements')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->exists();
         $sts = DB::table('mo_settlements')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->whereBetween('statement_date', [$from, $to])->get();
@@ -199,7 +202,7 @@ class CloseService
     public static function waive(int $ent, int $branchId, string $month, string $code, string $reason): void
     {
         if (Context::role() !== 'OWNER') throw new \InvalidArgumentException('Only the Owner can waive a check.');
-        if (! (self::CHECKS[$code][1] ?? false)) throw new \InvalidArgumentException('This check cannot be waived – it has to be fixed.');
+        if (! self::waivable($code, $ent)) throw new \InvalidArgumentException('This check cannot be waived – it has to be fixed.');
         if (trim($reason) === '') throw new \InvalidArgumentException('Give the reason for the waiver (it is shown on the month and its statements).');
         $run = self::run($ent, $branchId, $month) ?? throw new \InvalidArgumentException('Run the checks first.');
         if ($run->status === 'LOCKED') throw new \InvalidArgumentException('This month is already LOCKED.');
@@ -258,7 +261,7 @@ class CloseService
         $checks = $run ? DB::table('aud_checks')->where('fk_id_run', $run->id)->get()->keyBy('check_code') : collect(); $rows = [];
         foreach (self::CHECKS as $code => [$title, $waivable]) {
             $c = $checks[$code] ?? null;
-            $rows[] = ['code' => $code, 'title' => $title, 'waivable' => $waivable, 'status' => $c->status ?? 'PENDING', 'detail' => $c->detail ?? 'Not run yet.', 'open_items' => (int) ($c->open_items ?? 0), 'fix_url' => $c->fix_url ?? null, 'waive_reason' => $c->waive_reason ?? null];
+            $rows[] = ['code' => $code, 'title' => $title, 'waivable' => self::waivable($code, $ent), 'status' => $c->status ?? 'PENDING', 'detail' => $c->detail ?? 'Not run yet.', 'open_items' => (int) ($c->open_items ?? 0), 'fix_url' => $c->fix_url ?? null, 'waive_reason' => $c->waive_reason ?? null];
         }
         return ['shop' => ['id' => (int) $shop->id, 'name' => $shop->shop_name], 'month' => $month, 'month_name' => date('F Y', strtotime($from)), 'status' => $run->status ?? 'OPEN', 'run_code' => $run->run_code ?? null, 'checked_at' => $run->checked_at ?? null,
             'checks' => $rows, 'red' => count(array_filter($rows, fn ($r) => $r['status'] === 'RED')), 'figures' => $locked ? ($snap['figures'] ?? []) : self::figures($ent, $branchId, $month), 'frozen' => $locked,

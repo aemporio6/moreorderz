@@ -20,7 +20,7 @@ class Subscriptions
             ->when($ent, fn ($q) => $q->where('a.fk_id_ent', $ent))->orderByRaw('s.f_active DESC, s.next_due_date IS NULL, s.next_due_date')
             ->get(['s.id', 's.f_active', 'i.item_name', 's.username', 's.billing_cycle', 's.price', 'c.currency_code as currency', 's.next_due_date', 's.payment_date', 's.f_auto_renew', 's.subscription_link', 'b.shop_name as shop', 's.fk_id_bank_account',
                 DB::raw("TRIM(CONCAT(a.first_name, ' ', a.sur_name)) as holder"), 's.fk_id_account']);
-        $today = date('Y-m-d'); $soon = date('Y-m-d', strtotime('+7 days')); $perMonth = []; $over = 0; $due = 0;
+        $today = date('Y-m-d'); $dd = (int) Choices::get('ACCOUNT_DUE_DAYS', $ent ?: null) ?: 7; $soon = date('Y-m-d', strtotime("+$dd days"));      /* Settings › Choices */ $perMonth = []; $over = 0; $due = 0;
         foreach ($rows as $r) {
             $m = self::MONTHS[$r->billing_cycle ?? 'MONTHLY'] ?? null;
             $r->per_month = $m && $r->price !== null ? round((float) $r->price / $m, 2) : null;
@@ -29,7 +29,7 @@ class Subscriptions
             if ($r->state === 'OVERDUE') $over++; if ($r->state === 'DUE') $due++;
             unset($r->username);   // the login name stays on the record page; only the vault keeps the password
         }
-        return ['rows' => $rows, 'per_month' => $perMonth, 'overdue' => $over, 'due_7' => $due, 'active' => $rows->where('f_active', 1)->count(),
+        return ['rows' => $rows, 'per_month' => $perMonth, 'overdue' => $over, 'due_7' => $due, 'due_days' => $dd, 'active' => $rows->where('f_active', 1)->count(),
             'banks' => DB::table('fin_bank_accounts')->where('company_id', $ent)->where('is_active', 1)->get(['id', DB::raw("CONCAT(bank_name, ' · ', COALESCE(account_label, '')) as name"), 'currency'])];
     }
 

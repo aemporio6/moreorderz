@@ -117,17 +117,26 @@ class Choices
             '1000' => ['1,000 characters', ''], '2000' => ['2,000 characters', 'Suggested.'], '5000' => ['5,000 characters', ''], '10000' => ['10,000 characters', '']]],
         'SOURCING_DUE_DAYS' => ['Sourcing dashboard › Supplier payments: "Due soon" means due within …', 'Recommended: 7 days – one week to arrange the money.', '7', [
             '3' => ['3 days', ''], '7' => ['7 days', 'Suggested.'], '14' => ['14 days', ''], '30' => ['30 days', '']]],
+        'COUNT_TRIGGERS' => ['Warehouse: which events open an automatic count of the bin?', 'Recommended: all four – each one means the shelf and the books may disagree. (A bin emptied by a pick is asked separately: Warehouse setting WH_COUNT_ON_ZERO.)', 'SHORT_PICK,NEGATIVE,PUTAWAY_NO_ROOM,EMPTY_NO', [
+            'SHORT_PICK' => ['A short pick (fewer units found than expected)', ''], 'NEGATIVE' => ['Taking more than the bin holds', ''], 'PUTAWAY_NO_ROOM' => ['A putaway refused for no room', ''], 'EMPTY_NO' => ['The picker says an emptied bin is not empty', '']]],
+        'CLOSE_WAIVABLE' => ['Month close: which checks may be waived (with a reason) instead of fixed?', 'Recommended: the five checks the specification allows – files that can disagree for a known reason; all others must be fixed because the figures would be wrong.', 'ORDERS_VS_TXN,HUB_TOTALS,PAYOUT_VS_BANK,PURCHASE_VS_SUPPLIER,EXPENSES', []],
+        'STOCK_UPDATE_REASON' => ['Stock alerts page: is a reason needed for every stock update?', 'Recommended: Yes – a stock change without a reason cannot be checked later (the old tool had it optional).', '1', [
+            '1' => ['Yes, choose a reason', 'Suggested.'], '0' => ['No, the reason is optional', 'The history shows "no reason given".']]],
+        'ACCOUNT_DUE_DAYS' => ['Accounts & subscriptions: "Due soon" (amber) means due within …', 'Recommended: 7 days – one week to pay or renew.', '7', [
+            '3' => ['3 days', ''], '7' => ['7 days', 'Suggested.'], '14' => ['14 days', ''], '30' => ['30 days', '']]],
         'HIDDEN_MARGIN_ROLES' => ['Owner Home › Invoicing / Profit: who sees the row "Hidden margin"?', 'Recommended: Owner only – a partner\'s share is worked out on the net profit, so the margin kept by the company stays with the Owner.', 'OWNER', []],
     ];
 
     /** Multiple choices: key → where the options come from (party roles = roles of people, login roles = roles of logins). Value = comma list or ALL. */
-    public const MULTI = ['DIRECTOR_ROLES' => 'party_roles', 'HIDDEN_MARGIN_ROLES' => 'login_roles', 'FBA_LOCATION_KINDS' => 'list:LOCATION_KIND', 'TASK_PROOF_OFF_ROLES' => 'login_roles', 'CHANNEL_SWITCH_ROLES' => 'login_roles', 'ABSENCE_ROLES' => 'login_roles', 'DELEGATION_ROLES' => 'login_roles', 'CATEGORY_ROLES' => 'login_roles'];
+    public const MULTI = ['DIRECTOR_ROLES' => 'party_roles', 'HIDDEN_MARGIN_ROLES' => 'login_roles', 'FBA_LOCATION_KINDS' => 'list:LOCATION_KIND', 'TASK_PROOF_OFF_ROLES' => 'login_roles', 'CHANNEL_SWITCH_ROLES' => 'login_roles', 'ABSENCE_ROLES' => 'login_roles', 'DELEGATION_ROLES' => 'login_roles', 'CATEGORY_ROLES' => 'login_roles', 'COUNT_TRIGGERS' => 'inline', 'CLOSE_WAIVABLE' => 'close_checks'];
 
     /** [code => [label, effect]] of a multiple choice (All first). */
     public static function options(string $key): array
     {
         if (! isset(self::MULTI[$key])) return self::LIST[$key][3];
         $src = self::MULTI[$key];
+        if ($src === 'inline') return ['ALL' => ['All', 'Every one of them.']] + self::LIST[$key][3];
+        if ($src === 'close_checks') { $o = ['ALL' => ['All checks', 'Every check may be waived.']]; foreach (CloseService::CHECKS as $c => $x) $o[$c] = [$x[0], '']; return $o; }
         if (str_starts_with($src, 'list:')) {      // a list of the registry (fixed lists the program uses have no + Add)
             $o = ['ALL' => ['All', 'Every value of the list.']];
             foreach (\Illuminate\Support\Facades\DB::table('sys_field_options')->where('list_code', substr($src, 5))->where('f_active', 1)->orderBy('sort')->get(['value', 'label']) as $r) $o[strtoupper((string) $r->value)] = [(string) $r->label, ''];
@@ -190,7 +199,7 @@ class Choices
             }
             $out[] = ['key' => $key, 'question' => $q, 'why' => $why, 'value' => $cur, 'recommended' => $fact ? null : $def, 'per_shop' => in_array($key, self::PER_SHOP, true), 'shops' => $shops,
                 'options' => array_map(fn ($v, $o) => ['value' => (string) $v, 'label' => $o[0], 'effect' => $o[1], 'recommended' => ! $fact && in_array((string) $v, $recList, true)], array_keys($opts), $opts), 'fact' => $fact,
-                'multi' => $multi, 'values' => $multi ? array_values(array_filter(explode(',', strtoupper($cur)))) : null, 'add_url' => $multi ? (self::MULTI[$key] === 'party_roles' ? '#/list/cat_account_type' : (self::MULTI[$key] === 'login_roles' ? '#/rights' : null)) : null];
+                'multi' => $multi, 'values' => $multi ? array_values(array_filter(explode(',', strtoupper($cur)))) : null, 'add_url' => $multi ? (self::MULTI[$key] === 'party_roles' ? '#/list/cat_account_type' : (self::MULTI[$key] === 'login_roles' ? '#/rights' : null)) : null];      // inline / list / close_checks: values the program uses – no + Add
         }
         return $out;
     }
@@ -200,7 +209,7 @@ class Choices
         if (! isset(self::LIST[$key])) throw new \InvalidArgumentException('Unknown choice.');
         if (isset(self::MULTI[$key])) {
             $v = array_values(array_unique(array_filter(array_map('trim', explode(',', strtoupper($value))))));
-            $what = str_starts_with(self::MULTI[$key], 'list:') ? 'value' : 'role';
+            $what = str_ends_with(self::MULTI[$key], '_roles') ? 'role' : 'value';
             if (! $v) throw new \InvalidArgumentException("Choose at least one $what (or All).");
             $ok = self::options($key); foreach ($v as $x) if (! isset($ok[$x])) throw new \InvalidArgumentException("Choose {$what}s from the list ($x is not one).");
             $value = in_array('ALL', $v, true) ? 'ALL' : implode(',', $v);

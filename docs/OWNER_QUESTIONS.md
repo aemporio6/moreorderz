@@ -60,7 +60,7 @@ Updated 21 Nov 2026 (batch 7e-101). How to answer: write **OK** next to a line t
 
 ## C. Suggested defaults written in the specification (220 lines)
 
-Each line already works with the default shown. **Classified 22 Nov (7e-132):** [S] already a setting 106 · [B] made a setting in 7e-127…132 7 · [D] design rule with no real alternative 79 · [C] real choice still fixed – being made settings in the next batches 28.
+Each line already works with the default shown. **Classified 22 Nov (7e-132):** [S] already a setting 106 · [B] made a setting in 7e-127…133 11 · [D] design rule with no real alternative 79 · [C] real choice still fixed – being made settings in the next batches 24.
 
 
 ### Stock/Warehouse (33)
@@ -73,10 +73,10 @@ Each line already works with the default shown. **Classified 22 Nov (7e-132):** 
 | MR-0528 | RULES_H_WAREHOUSE R-H-51 | One phone Work screen with tabs and one scan box — **[D] design rule (no real alternative)**: screen layout |
 | MR-0529 | RULES_H_WAREHOUSE R-H-24 | Dispatch-by from the marketplace profile's handling days + a working calendar per country — **[S] already a setting**: marketplace profile handling days + working calendar |
 | MR-0530 | RULES_H_WAREHOUSE R-H-33 | Tracking back by the profile's API when present, else its CSV upload — **[S] already a setting**: marketplace profile: API or CSV |
-| MR-0531 | RULES_H_WAREHOUSE R-H-29, R-H-30 | Pack step takes weight, suggests box from the product pack and service from carrier rules; packing materials as stock optional (default off) — **[C] real choice – to become a setting**: packing materials as stock (on / off) – next batch |
+| MR-0531 | RULES_H_WAREHOUSE R-H-29, R-H-30 | Pack step takes weight, suggests box from the product pack and service from carrier rules; packing materials as stock optional (default off) — **[C] real choice – later**: packing materials as stock is not built yet (a feature); it comes with its switch (default off) |
 | MR-0532 | RULES_H_WAREHOUSE R-H-32, R-H-55 | Void / cancel a printed label (postage refund where the carrier allows), reprint with reason, alert "printed but not handed over" — **[D] design rule (no real alternative)**: label void / reprint flow |
 | MR-0533 | RULES_H_WAREHOUSE R-H-34 … R-H-36 | Handover supports collection and drop-off, partial handover, end-of-day manifest per carrier profile, lost-parcel case and claim — **[D] design rule (no real alternative)**: handover flow |
-| MR-0534 | RULES_H_WAREHOUSE R-H-47 | Automatic counts on short pick, bin reaching zero, negative attempt, no room; plus ABC schedule — **[C] real choice – to become a setting**: automatic counts: which triggers are on – next batch |
+| MR-0534 | RULES_H_WAREHOUSE R-H-47 | Automatic counts on short pick, bin reaching zero, negative attempt, no room; plus ABC schedule — **[B] now a setting**: Choices › which events open an automatic count (multiple; recommended all four) (7e-133) |
 | MR-0535 | RULES_H_WAREHOUSE R-H-8 | One warehouse may hold stock of several companies and shops; data scope everywhere — **[D] design rule (no real alternative)**: data scope – security rule |
 | MR-0536 | RULES_H_WAREHOUSE R-H-39 … R-H-41 | Returns graded → home / RETURNS / QUARANTINE by setting; supplier-fault → supplier claim on the GRN; refund link — **[S] already a setting**: WH_RETURN_* settings |
 | MR-0537 | RULES_H_WAREHOUSE R-H-13 | Negative stock always blocked (no setting); "Found stock" adjustment instead; no warehouse action moves ownership — **[D] design rule (no real alternative)**: negative stock always blocked – a safety rule (stock can never be below 0) |
@@ -105,7 +105,7 @@ Each line already works with the default shown. **Classified 22 Nov (7e-132):** 
 
 | Line | Rule | Default (question) |
 |---|---|---|
-| MR-0471 | R-F_SETUP-4 | Accountancy: "Due in 7 days or less" shows amber (7-day window)? — **[C] real choice – to become a setting**: accountancy "due soon" window – next batch |
+| MR-0471 | R-F_SETUP-4 | Accountancy: "Due in 7 days or less" shows amber (7-day window)? — **[B] now a setting**: Choices › Accounts & subscriptions "due soon" window (recommended 7 days) (7e-133) |
 | MR-0474 | R-F_SETUP-15 | A failing dashboard card raises one admin alert per card per day? — **[C] real choice – to become a setting**: failing card alert once a day – next batch |
 | MR-0475 | R-F_SETUP-16 | Some dashboard cards are off by default for the VA, SOURCING, CS and STOCK roles? — **[S] already a setting**: Rights › dashboard cards per role |
 | MR-0476 | R-F_SETUP-21 | Sourcing dashboard "Due in 7 days" uses a 7-day window? — **[B] now a setting**: Choices › Sourcing "due soon" window (7e-132) |
@@ -209,9 +209,9 @@ Each line already works with the default shown. **Classified 22 Nov (7e-132):** 
 | MR-0459 | R-D-22 | Price guard: target margin 0 by default (PRICE_TARGET_MARGIN); a price below the floor gives a warning and task PRICE_BELOW_FLOOR? — **[S] already a setting**: setting: PRICE_TARGET_MARGIN |
 | MR-0460 | R-D-23 | New products take packing and storage fees from a company 3PL tariff, so they are never £0? — **[S] already a setting**: company 3PL tariff |
 | MR-0461 | R-D-25 | Stock ownership chip words: JOINT (2 or more investors), HOLDING (1), CENTRAL (pool), PRIVATE? — **[D] design rule (no real alternative)**: chip words |
-| MR-0462 | R-D-30 | A price-change reason is required when an existing price period is closed? — **[C] real choice – to become a setting**: price-change reason required (yes / no) – next batch |
+| MR-0462 | R-D-30 | A price-change reason is required when an existing price period is closed? — **[C] real choice – later**: the reason is not asked on the product price form yet; it becomes a setting together with a reason field there |
 | MR-0463 | R-D-41 | Stock adjustments above how many units need approval (ADJUST_APPROVAL_QTY)? Give the number. — **[S] already a setting**: setting: ADJUST_APPROVAL_QTY |
-| MR-0464 | R-D-46 | Stock alerts page: a reason is required on every stock update (old tool: optional)? — **[C] real choice – to become a setting**: stock update reason required (yes / no) – next batch |
+| MR-0464 | R-D-46 | Stock alerts page: a reason is required on every stock update (old tool: optional)? — **[B] now a setting**: Choices › stock update reason needed (recommended Yes) (7e-133) |
 | MR-0465 | R-D-59 | Listing import: "Variation details" is optional? — **[D] design rule (no real alternative)**: optional column |
 | MR-0466 | R-D-80 | Investor ids that match no company go to the review list "Unmatched investor ids" (never guessed as a person)? — **[D] design rule (no real alternative)**: never guess a person – safety |
 | MR-0467 | R-D-82 | Invoice VA lookup uses the job-history row valid on the month end? — **[D] design rule (no real alternative)**: valid row on month end – one correct way |
@@ -245,7 +245,7 @@ Each line already works with the default shown. **Classified 22 Nov (7e-132):** 
 | MR-1504 | 06C_Task_Codes/06C_TASK_CODES.md §5 | new task FIN_APPROVE raised when: Maker-checker request (payment, withdrawal, stock adjustment, expense, refund outside, check waiver, unlock, merge) — **[S] already a setting**: task code – priority, owner rule, on/off on Tasks › Rules (sys_rules) |
 | MR-1512 | 06C_Task_Codes/06C_TASK_CODES.md §5 | new task FIN_CASH_LOW raised when: FA1 free cash < company free_cash_alert_limit — **[S] already a setting**: task code – priority, owner rule, on/off on Tasks › Rules (sys_rules) |
 | MR-1516 | 06C_Task_Codes/06C_TASK_CODES.md §5 | new task INV_PARTY_INCOMPLETE raised when: Generate refused or warned: invoice party missing print details (R-INV-14) — **[S] already a setting**: task code – priority, owner rule, on/off on Tasks › Rules (sys_rules) |
-| MR-1531 | 06B IC-7 | which 5 close checks may be waived — **[C] real choice – to become a setting**: which close checks may be waived is fixed in code today – next batch |
+| MR-1531 | 06B IC-7 | which 5 close checks may be waived — **[B] now a setting**: Choices › which close checks may be waived (multiple; recommended the five of the spec) (7e-133) |
 
 ### Sales (20)
 
