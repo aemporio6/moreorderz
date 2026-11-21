@@ -476,3 +476,12 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - Known and not changed: the Pool / Private filter of the sales list still filters on the value stored at import, not on the live value (belongs to R-A_SALES-42).
 - Tests: 325 pass (1 new, 1 longer).
 - Register after this batch: BUILT 365 of 1,433 (25 %); Sales 93 of 155 (60 %).
+
+### Batch 7e-17 (21 Nov 2026)
+- **R-A_SALES-42 completed** (filters of the sales list):
+  - The Pool / Private filter now works on the live value (the product's visibility row for the shop, then for the marketplace, then the parent's; the value stored at import only when no row exists).
+  - New filter "Vendor inventory": the lines of one vendor's products.
+  - New scope kind `VENDOR` in `mo_user_scopes` (migration `000037`), read by `Perm::vendors($user)`, set on Permissions › People with the button "Vendors". A person with this scope sees only the sale lines of those vendors' products – in the list, its totals strip and its export (they share `SaleLines::filtered`).
+- Not done (honest): the sales reports are not narrowed by the vendor scope yet; there is no built-in role called "Vendor" – the limit works on any role.
+- Tests: 326 pass (1 new).
+- Register after this batch: BUILT 367 of 1,433 (26 %); Sales 95 of 155 (61 %).

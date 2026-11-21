@@ -346,7 +346,7 @@ class Perm
 
     public static function setScope(int $userId, string $kind, array $ids, int $by): void
     {
-        if (! in_array($kind, ['SHOP', 'LOCATION'], true)) throw new \InvalidArgumentException('Unknown kind.');
+        if (! in_array($kind, ['SHOP', 'LOCATION', 'VENDOR'], true)) throw new \InvalidArgumentException('Unknown kind.');
         $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
         DB::transaction(function () use ($userId, $kind, $ids, $by) {
             DB::table('mo_user_scopes')->where(['user_id' => $userId, 'kind' => $kind])->delete();
@@ -364,6 +364,14 @@ class Perm
     }
 
     /** Narrow a screen query to the shops of the signed-in person ($col = the shop column). Nothing happens for a person with all shops, or outside a request. */
+    /** Vendors whose inventory a person is limited to (the "Vendor inventory" view); null = no limit. */
+    public static function vendors(?object $u): ?array
+    {
+        if (! $u || ($u->role_code === 'OWNER' && ! self::$viewAs)) return null;
+        $ids = DB::table('mo_user_scopes')->where('user_id', $u->id)->where('kind', 'VENDOR')->pluck('ref_id')->map(fn ($x) => (int) $x)->all();
+        return $ids ?: null;
+    }
+
     public static function mine($q, string $col)
     {
         $shops = self::shops(\Illuminate\Support\Facades\Auth::user());

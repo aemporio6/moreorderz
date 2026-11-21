@@ -81,6 +81,21 @@ class SaleLinesTest extends TestCase
         $r = collect(SaleLines::list(['marketplace' => $this->mp, 'q' => 'V-1', 'from' => '2000-01-01', 'to' => '2100-01-01'], $this->owner)['rows'])->firstWhere('id', $id); $this->assertSame(['Private', 'Z, X, Y'], [$r['visibility'], $r['investor']]);      // the list shows both live
     }
 
+    public function test_vendor_inventory_view_and_the_live_pool_private_filter(): void
+    {
+        $this->world(); $ven = DB::table('t_account')->insertGetId($this->fill('t_account', ['fk_id_ent' => 1, 'first_name' => 'Vend', 'sur_name' => 'Or', 'f_active' => 1]));
+        $row = (array) DB::table('t_product_vendors')->where('id', $this->product)->first(); unset($row['id']); foreach (array_keys($row) as $k) { if (strtolower($k) === 'sku_vendor') $row[$k] = 'MAT-01'; if (strtolower($k) === 'fk_id_vendor') $row[$k] = $ven; }
+        $mat = DB::table('t_product_vendors')->insertGetId($row); $a = $this->order('VI-1', 12.99, 1, null, 'BOWL-01'); $b = $this->order('VI-2', 12.99, 1, null, 'MAT-01');
+        $f = ['marketplace' => $this->mp, 'from' => '2000-01-01', 'to' => '2100-01-01']; $nos = fn (array $x, $u) => array_column(SaleLines::list($f + $x, $u)['rows'], 'order_no');
+        $this->assertSame(['VI-2'], $nos(['vendor_inventory' => $ven], $this->owner)); $this->assertContains('Vend Or', array_column(json_decode(json_encode(SaleLines::filterLists($f, $this->owner)['vendor_inventory']), true), 'name'));
+        // a person limited to that vendor sees only its inventory, whatever he filters
+        $v = \App\Models\User::create(['login_id' => 'vendor@test', 'password_hash' => 'x', 'role_code' => 'PARTNER', 'display_name' => 'Vendor', 'fk_id_ent' => 1, 'f_active' => 1]); \App\Services\Perm::setScope((int) $v->id, 'VENDOR', [$ven], (int) $this->owner->id);
+        \App\Services\Perm::setUser((int) $v->id, 'orders.SEE', 'GRANTED', 'test', null, (int) $this->owner->id); $this->actingAs($v); $this->assertSame(['VI-2'], $nos([], $v)); $this->assertSame([], $nos(['q' => 'VI-1'], $v));
+        // Pool / Private filter is live: set after the import, it still finds the line
+        $this->actingAs($this->owner); $this->assertSame([], $nos(['visibility' => 'PRIVATE'], $this->owner)); DB::table('t_product_visibility')->insert($this->fill('t_product_visibility', ['fk_id_product' => $mat, 'fk_id_marketplace' => $this->mp, 'visibility_mode' => 'private', 'fk_id_branch' => 0]));
+        $this->assertSame(['VI-2'], $nos(['visibility' => 'PRIVATE'], $this->owner)); $this->assertSame([], $nos(['visibility' => 'POOL'], $this->owner));
+    }
+
     public function test_a_variation_child_reads_its_own_marketplace_price_and_shipping(): void
     {
         $this->world(); $row = (array) DB::table('t_product_vendors')->where('id', $this->product)->first(); unset($row['id']); foreach (array_keys($row) as $k) { if (strtolower($k) === 'sku_vendor') $row[$k] = 'BOWL-01-RED'; if (strtolower($k) === 'f_parent') $row[$k] = 3; if (strtolower($k) === 'f_id_parent') $row[$k] = $this->product; }
