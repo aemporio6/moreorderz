@@ -18,8 +18,8 @@ use Picqer\Barcode\BarcodeGeneratorPNG;
  */
 class PrintService
 {
-    public const KINDS = ['PACKING_SLIP' => 'PARCEL', 'PICK_SHEET' => 'PICK_TASK', 'MANIFEST' => 'HANDOVER', 'LOCATION' => 'LOCATION', 'PO' => 'PO', 'TEST' => 'PRINTER'];
-    public const KIND_NAMES = ['PACKING_SLIP' => 'Packing slip', 'PICK_SHEET' => 'Pick sheet', 'MANIFEST' => 'Handover sheet', 'LOCATION' => 'Bin labels', 'PO' => 'Purchase order', 'TEST' => 'Test page'];
+    public const KINDS = ['PACKING_SLIP' => 'PARCEL', 'PICK_SHEET' => 'PICK_TASK', 'MANIFEST' => 'HANDOVER', 'LOCATION' => 'LOCATION', 'PO' => 'PO', 'CARTON_MARK' => 'CARTON', 'TEST' => 'PRINTER'];
+    public const KIND_NAMES = ['PACKING_SLIP' => 'Packing slip', 'PICK_SHEET' => 'Pick sheet', 'MANIFEST' => 'Handover sheet', 'LOCATION' => 'Bin labels', 'PO' => 'Purchase order', 'CARTON_MARK' => 'Carton marks', 'TEST' => 'Test page'];
     public const REASONS = ['DAMAGED_LABEL' => 'Label damaged', 'PRINTER_JAM' => 'Printer jam', 'WRONG_PRINTER' => 'Wrong printer', 'CARRIER_CHANGED' => 'Carrier changed',
         'ADDRESS_CHANGED' => 'Address changed', 'LOCATION_CHANGED' => 'Location changed', 'VOIDED_REPLACED' => 'Voided and replaced', 'LOST' => 'Lost', 'OTHER' => 'Other'];
     private const SCOPES = ['USER' => 1, 'WORKSTATION' => 2, 'LOCATION' => 3, 'COMPANY' => 4];
@@ -44,6 +44,7 @@ class PrintService
             ['LOC_A4_24UP', 'Bin labels on A4 sheet, 24 per sheet', 'LOCATION', 'A4', 70, 37, $sheet],
             ['LOC_ROLL', 'Bin label on a roll, one per label', 'LOCATION', 'FLOW', 50, 25, null],
             ['TEST_PAGE', 'Printer test page (ruler, outline, barcodes)', 'TEST', 'FLOW', 40, 25, null],
+            ['CARTON_MARK_FLOW', 'Carton / shipping mark, one per carton', 'CARTON_MARK', 'FLOW', 96, 136, null],
         ];
         foreach ($tpl as [$code, $name, $kind, $format, $w, $h, $layout]) {
             if (DB::table('label_templates')->where('code', $code)->exists()) continue;
@@ -54,11 +55,14 @@ class PrintService
             $th = DB::table('printer_profiles')->where('code', 'SETUP_THERMAL_1')->value('id'); $a4 = DB::table('printer_profiles')->where('code', 'SETUP_A4_1')->value('id');
             $roll = DB::table('label_media')->where('code', 'SETUP_ROLL_100X150')->value('id'); $plain = DB::table('label_media')->where('code', 'SETUP_A4_PLAIN')->value('id');
             if ($th && $a4 && $roll && $plain) {
-                foreach ([['PACKING_SLIP', $th, $a4, $roll], ['PICK_SHEET', $a4, null, $plain], ['MANIFEST', $a4, null, $plain], ['PO', $a4, null, $plain], ['LOCATION', $a4, null, $plain]] as [$k, $p, $b, $m]) {
+                foreach ([['PACKING_SLIP', $th, $a4, $roll], ['CARTON_MARK', $th, $a4, $roll], ['PICK_SHEET', $a4, null, $plain], ['MANIFEST', $a4, null, $plain], ['PO', $a4, null, $plain], ['LOCATION', $a4, null, $plain]] as [$k, $p, $b, $m]) {
                     DB::table('print_routes')->insert(['fk_id_ent' => 0, 'job_kind' => $k, 'scope' => 'COMPANY', 'fk_id_printer_profile' => $p, 'fk_id_backup_printer' => $b, 'fk_id_label_media' => $m, 'copies' => 1, 'f_active' => 1]);
                 }
             }
         }
+        // a kind added later (carton marks) takes the packing-slip route of the setup when it has none
+        foreach (['CARTON_MARK' => 'PACKING_SLIP'] as $kind => $like) if (! DB::table('print_routes')->where('job_kind', $kind)->exists() && ($r = DB::table('print_routes')->where('job_kind', $like)->where('fk_id_ent', 0)->first())) {
+            $row = (array) $r; unset($row['id']); $row['job_kind'] = $kind; DB::table('print_routes')->insert($row); }
     }
 
     // ───────────────────────── routing ─────────────────────────
@@ -372,6 +376,7 @@ class PrintService
             'PACKING_SLIP' => array_map(fn ($id) => self::pSlip($ent, $id, $w), $ids),
             'MANIFEST' => array_map(fn ($id) => self::pManifest($ent, $id), $ids),
             'PO' => array_map(fn ($id) => self::pPo($ent, $id), $ids),
+            'CARTON_MARK' => array_merge(...array_map(fn ($id) => self::pCartonMarks($ent, $id), $ids)),
             'LOCATION' => self::pBins($ent, $ids, $tpl, $w, $h, $copies, $x['start_cell']),
         };
         if ($kind !== 'LOCATION' && $copies > 1) { $one = $pages; for ($c = 1; $c < $copies; $c++) $pages = array_merge($pages, $one); }
@@ -387,6 +392,17 @@ class PrintService
         $body = '';
         foreach (array_values($pages) as $i => $p) $body .= '<div class="pg' . ($i === count($pages) - 1 ? ' last' : '') . '"><div style="' . $style . '">' . $p . '</div></div>';
         return "<!doctype html><html><head><meta charset=\"utf-8\"><style>$css</style></head><body>$body</body></html>";
+    }
+
+    /** Carton / shipping marks (M49): one page per carton of a carton row – PO, SKU, carton n of N, units, net / gross, CBM (R-B_SOURCING-34). */
+    private static function pCartonMarks(int $ent, int $id): array
+    {
+        $co = DB::table('t_enterprise')->where('id', $ent)->value('ent_name');
+        return array_map(fn ($m) => '<div class="in"><div class="mut">' . self::e($co) . '</div><h1 style="font-size:20pt">' . self::e($m['po'] ?: '—') . '</h1>'
+            . '<div class="big" style="font-size:14pt">' . self::e($m['sku']) . '</div><div style="font-size:26pt;font-weight:bold;margin:3mm 0">CARTON ' . $m['n'] . ' / ' . $m['of'] . '</div>'
+            . '<table class="t"><tr><td>Units</td><td class="r big">' . $m['units'] . '</td></tr><tr><td>Net weight</td><td class="r">' . number_format($m['net'], 2) . ' kg</td></tr><tr><td>Gross weight</td><td class="r">' . number_format($m['gross'], 2) . ' kg</td></tr>'
+            . '<tr><td>Size</td><td class="r">' . self::e($m['dims']) . '</td></tr><tr><td>CBM</td><td class="r">' . number_format($m['cbm'], 4) . '</td></tr>' . ($m['hs'] ? '<tr><td>HS code</td><td class="r">' . self::e($m['hs']) . '</td></tr>' : '') . '</table>'
+            . ($m['made_in'] ? '<div class="big" style="margin-top:3mm">MADE IN ' . self::e(mb_strtoupper($m['made_in'])) . '</div>' : '') . '<div style="margin-top:3mm"><img src="' . self::barcode(($m['po'] ?: 'CTN') . '-' . $m['sku'] . '-' . $m['n']) . '" style="width:80mm;height:12mm"></div></div>', CartonCalc::marks($ent, $id));
     }
 
     private static function pTest(float $w, float $h, array $x): string

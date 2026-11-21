@@ -134,6 +134,8 @@ class AppController extends Controller
         return \App\Services\FormRules::live($key, (string) $r->query('field'), (string) $r->query('value'), (int) $r->query('id') ?: null);
     }
 
+    public function formCalc(\Illuminate\Http\Request $r, string $key) { Rights::check('VIEW', $key); return \App\Services\FormRules::calc($key, (array) $r->input('values', [])); }
+
     public function form(string $key)
     {
         Rights::check('VIEW', $key);

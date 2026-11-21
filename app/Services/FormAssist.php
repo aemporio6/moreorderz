@@ -126,6 +126,9 @@ class FormAssist
         if (! $f || $f['secret'] || ! $f['column_name'] || in_array($f['type'], ['file', 'check', 'textarea'], true) || str_starts_with((string) $f['default_rule'], 'numbering:')) return [];
         if ($table && Vault::maskRow($table, [$f['column_name'] => 'x'])[$f['column_name']] !== 'x') return [];
         $out = []; $add = function ($v, string $why) use (&$out) { $v = (string) $v; if ($v !== '' && ! isset($out[$v]) && count($out) < 2) $out[$v] = $why; };
+        // an HS code: what earlier products of the same category use (R-G_CORE-91)
+        if ($f['column_name'] === 'hs_code' && $table === 't_src_products' && ! empty($form['category']))
+            foreach (DB::table('t_src_products')->where('category', $form['category'])->whereNotNull('hs_code')->where('hs_code', '<>', '')->when(Context::ent(), fn ($q) => $q->where('fk_id_ent', Context::ent()))->groupBy('hs_code')->orderByRaw('COUNT(*) DESC')->limit(2)->pluck('hs_code') as $v) $add($v, 'used by other products of this category');
         // a listing's price: the Sale of the product on the marketplace of the listing's shop (R-D-22)
         if ((string) $f['default_rule'] === 'linked:product.sale_price' && ($prod = (int) ($form['product'] ?? $form['fk_id_product'] ?? 0)) && ($shop = (int) ($form['shop'] ?? $form['fk_id_branch'] ?? 0))) {
             $mp = (int) DB::table('t_branches')->where('id', $shop)->value('fk_id_marketplace'); $v = $mp ? DB::table('t_product_marketplace_prices')->where('fk_id_product', $prod)->where('fk_id_marketplace', $mp)->value('sale_price') : null;

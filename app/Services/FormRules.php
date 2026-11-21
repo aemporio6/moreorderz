@@ -30,6 +30,10 @@ class FormRules
     /** Clean $data in place and return field → message. $old = the stored row on edit. */
     public static function check(string $formKey, array &$data, array $old, ?int $id, array $already = []): array
     {
+        $table = Registry::table($formKey);
+        if ($table === 't_src_cartons') return self::cartons($data, $old);
+        if (in_array($table, ['t_src_products', 't_product_vendors'], true)) return self::productCodes($data, $old);
+        if ($table === 'cat_ip_burgers') return self::isp($data);
         if ($formKey !== 'cat_company_house') return [];
         $strict = self::strict($formKey); $e = []; $val = fn (string $c) => array_key_exists($c, $data) ? $data[$c] : ($old[$c] ?? null);
         if (isset($data['company_name']) && is_string($data['company_name']) && $data['company_name'] !== '') $data['company_name'] = mb_strtoupper(mb_substr($data['company_name'], 0, 1)) . mb_substr($data['company_name'], 1);
@@ -48,17 +52,66 @@ class FormRules
         return $e;
     }
 
+    /** Carton figures (R-B_SOURCING-34): every calculated column is worked out on save from the typed ones – never typed. */
+    private static function cartons(array &$data, array $old): array
+    {
+        $e = []; $v = $data + $old;
+        foreach (['unit_l', 'unit_w', 'unit_h', 'unit_net_weight', 'unit_gross_weight', 'units_per_carton', 'carton_l', 'carton_w', 'carton_h', 'carton_tare_weight', 'actual_carton_gross_weight', 'total_planned_units'] as $c)
+            if (isset($data[$c]) && $data[$c] !== '' && $data[$c] !== null && (! is_numeric($data[$c]) || (float) $data[$c] < 0)) $e[$c] = (Registry::labelOf('t_src_cartons', $c) ?? $c) . ' must be a number of 0 or more.';
+        if ($e) return $e;
+        $f = CartonCalc::calc($v, CartonCalc::divisorForRow((int) Context::ent(), $v));
+        foreach (['unit_cbm', 'volumetric_weight', 'carton_net_weight', 'carton_gross_weight', 'full_cartons', 'loose_units', 'carton_qty', 'total_units', 'total_net_weight', 'total_gross_weight', 'carton_cbm', 'total_cbm'] as $c) if (Registry::hasColumn('t_src_cartons', $c)) $data[$c] = $f[$c];
+        return [];
+    }
+
+    public static function typedStrict(): bool { return Choices::get('TYPED_CODE_CHECKS', Context::ent()) !== 'OLD'; }
+
+    /** HS code typed (digits only, 6–10, R-G_CORE-91) and carton CBM worked out (L × W × H ÷ 1,000,000, 4 dp). */
+    private static function productCodes(array &$data, array $old): array
+    {
+        $e = [];
+        if (isset($data['hs_code']) && is_string($data['hs_code']) && trim($data['hs_code']) !== '') { $hs = preg_replace('/[\s.\-]+/', '', $data['hs_code']); $data['hs_code'] = $hs;
+            if (self::typedStrict() && ! preg_match('/^\d{6,10}$/', $hs)) $e['hs_code'] = 'HS code must be 6 to 10 digits (dots and spaces are removed), for example 3924.90.00.'; }
+        $v = $data + $old; if (array_key_exists('carton_cbm', $old) || array_key_exists('carton_l', $data) || array_key_exists('carton_w', $data) || array_key_exists('carton_h', $data))
+            if (isset($v['carton_l'], $v['carton_w'], $v['carton_h']) && is_numeric($v['carton_l']) && is_numeric($v['carton_w']) && is_numeric($v['carton_h'])) $data['carton_cbm'] = round((float) $v['carton_l'] * (float) $v['carton_w'] * (float) $v['carton_h'] / 1000000, 4);
+        return $e;
+    }
+
+    /** ISP code: typed (IPBurger ISP code), letters / digits, up to 20 (R-G_CORE-91). */
+    private static function isp(array &$data): array
+    {
+        if (! isset($data['isp_code']) || ! is_string($data['isp_code']) || trim($data['isp_code']) === '') return [];
+        $data['isp_code'] = strtoupper(preg_replace('/\s+/', '', $data['isp_code']));
+        return self::typedStrict() && ! preg_match('/^[A-Z0-9]{1,20}$/', $data['isp_code']) ? ['isp_code' => 'ISP code may hold only letters and digits, up to 20.'] : [];
+    }
+
+    /** Live figures of a form while it is typed (the carton form). */
+    public static function calc(string $formKey, array $values): array
+    {
+        $t = Registry::table($formKey);
+        if ($t === 't_src_cartons') { $f = CartonCalc::calc($values, CartonCalc::divisorForRow((int) Context::ent(), $values)); unset($f['gross_used']); return $f; }
+        if (in_array($t, ['t_src_products', 't_product_vendors'], true) && is_numeric($values['carton_l'] ?? null) && is_numeric($values['carton_w'] ?? null) && is_numeric($values['carton_h'] ?? null)) return ['carton_cbm' => round((float) $values['carton_l'] * (float) $values['carton_w'] * (float) $values['carton_h'] / 1000000, 4)];
+        return [];
+    }
+
+    public static function calcFields(string $formKey): array
+    {
+        $t = Registry::table($formKey);
+        return match (true) { $t === 't_src_cartons' => ['unit_l', 'unit_w', 'unit_h', 'unit_net_weight', 'unit_gross_weight', 'units_per_carton', 'carton_l', 'carton_w', 'carton_h', 'carton_tare_weight', 'actual_carton_gross_weight', 'total_planned_units'], in_array($t, ['t_src_products', 't_product_vendors'], true) => ['carton_l', 'carton_w', 'carton_h'], default => [] };
+    }
+
     public static function isoTaken(string $iso, ?int $id = null): bool
     {
         return DB::table('cat_company_house')->where('fk_id_ent', Context::ent())->whereRaw('UPPER(iso_code) = ?', [mb_strtoupper(preg_replace('/\s+/', '', $iso))])->when($id, fn ($q) => $q->where('id', '<>', $id))->exists();
     }
 
     /** Fields checked live while the person types. */
-    public static function liveFields(string $formKey): array { return $formKey === 'cat_company_house' ? array_keys(self::COMPANY) : []; }
+    public static function liveFields(string $formKey): array { $t = Registry::table($formKey); return $formKey === 'cat_company_house' ? array_keys(self::COMPANY) : (in_array($t, ['t_src_products', 't_product_vendors'], true) ? ['hs_code'] : ($t === 'cat_ip_burgers' ? ['isp_code'] : [])); }
 
     /** Live check while typing (the old screen's message). */
     public static function live(string $formKey, string $field, string $value, ?int $id): array
     {
+        if (in_array($field, ['hs_code', 'isp_code'], true)) { $d = [$field => $value]; $e = $field === 'hs_code' ? self::productCodes($d, []) : self::isp($d); return ['ok' => ! $e, 'message' => $e[$field] ?? null, 'value' => $d[$field] ?? $value]; }
         if ($formKey !== 'cat_company_house') return ['ok' => true];
         if ($field === 'iso_code' && self::strict($formKey)) { $taken = trim($value) !== '' && self::isoTaken($value, $id); return ['ok' => ! $taken, 'message' => $taken ? 'This ISO code already exists. Please add another' : null]; }
         $d = [$field => $value]; $e = isset(self::COMPANY[$field]) ? self::check($formKey, $d, [], $id, array_fill_keys(self::COMPANY_REQUIRED, 1)) : [];

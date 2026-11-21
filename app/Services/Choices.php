@@ -13,6 +13,8 @@ class Choices
         'PROFIT_SHARE_AFTER_OVERHEADS' => ['Partners share the profit of a shop …', 'Overheads are expenses that belong to no shop. They are split between the shops by their confirmed sales of the month.', '1', [
             '1' => ['after its share of the overheads', 'A partner earns on what is really left. This is what the profit rules of the specification say.'],
             '0' => ['before overheads', 'A partner earns on the shop\'s own profit; the company carries all overheads alone.']]],
+        'TYPED_CODE_CHECKS' => ['Typed outside codes (HS code, ISP code): how strict?', 'They are typed, never numbered by the system.', 'STRICT', [
+            'STRICT' => ['Checked', 'Suggested: HS code 6–10 digits (dots and spaces removed), ISP code letters / digits up to 20.'], 'OLD' => ['Free text, as the old tool', 'Only cleaned (spaces / dots out, upper case).']]],
         'LC_FREIGHT_METHOD' => ['Landed cost: how is freight spread over the products of a cycle?', 'As the old tool: by quantity. Can be changed for one run.', 'QUANTITY', [
             'QUANTITY' => ['By quantity', 'Suggested (old tool): each unit carries the same freight.'], 'VALUE' => ['By value', 'Dearer products carry more.'], 'WEIGHT' => ['By weight', 'From the carton rows (gross weight); a product without carton data falls back to quantity.'], 'CBM' => ['By volume (CBM)', 'From the carton rows; a product without carton data falls back to quantity.']]],
         'LC_DUTY_METHOD' => ['Landed cost: how is customs duty spread?', 'Duty is charged on value, so by value is the usual way.', 'VALUE', [

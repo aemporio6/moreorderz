@@ -35,6 +35,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('company', [AppController::class, 'company']);
         Route::get('form/{key}', [AppController::class, 'form']);
         Route::get('form/{key}/live', [AppController::class, 'formLive']);
+        Route::post('form/{key}/calc', [AppController::class, 'formCalc']);
         Route::get('options/{key}/{field}', [AppController::class, 'options']);
         Route::post('options/{key}/{field}', [AppController::class, 'addOption']);
         Route::get('lookalike/{key}', [AppController::class, 'lookalike']);

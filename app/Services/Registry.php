@@ -95,7 +95,7 @@ class Registry
         }
         ksort($sections);
         return ['form_key' => $formKey, 'title' => $fields[0]['form_title'], 'kind' => $fields[0]['form_kind'], 'table' => $table, 'sections' => array_values($sections),
-            'lookalike' => FormAssist::lookalikeFields($formKey), 'live' => FormRules::liveFields($formKey), 'after_save' => FormAssist::afterSave($formKey)];
+            'lookalike' => FormAssist::lookalikeFields($formKey), 'live' => FormRules::liveFields($formKey), 'calc' => FormRules::calcFields($formKey), 'after_save' => FormAssist::afterSave($formKey)];
     }
 
     public static function labelOf(string $formKey, string $col): ?string { foreach (self::fields($formKey) as $f) if ($f['column_name'] === $col || $f['field_name'] === $col) return $f['label']; return null; }

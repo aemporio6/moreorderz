@@ -151,7 +151,7 @@ class Perm
     /** Every right that exists: code => [label, group, default roles]. Screen rights come from the generated catalogue, report rights from the report list. */
     public const PRINT_KINDS = [
         'PACKING_SLIP' => ['OWNER', 'MANAGER', 'WAREHOUSE', 'TL'], 'PICK_SHEET' => ['OWNER', 'MANAGER', 'WAREHOUSE', 'TL'], 'MANIFEST' => ['OWNER', 'MANAGER', 'WAREHOUSE', 'TL'],
-        'LOCATION' => ['OWNER', 'MANAGER', 'WAREHOUSE'], 'PO' => ['OWNER', 'MANAGER', 'SOURCING', 'FINANCE', 'ACCOUNTANT'],
+        'LOCATION' => ['OWNER', 'MANAGER', 'WAREHOUSE'], 'PO' => ['OWNER', 'MANAGER', 'SOURCING', 'FINANCE', 'ACCOUNTANT'], 'CARTON_MARK' => ['OWNER', 'MANAGER', 'SOURCING', 'WAREHOUSE'],
     ];
 
     public static function catalogue(): array

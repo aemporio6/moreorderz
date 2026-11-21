@@ -190,7 +190,7 @@ class PrintTest extends TestCase
         $x = $this->parcel();
         $new = DB::table('printer_profiles')->insertGetId(['fk_id_ent' => 1, 'code' => 'PR-NEW', 'name' => 'New thermal of another make', 'printer_kind' => 'THERMAL', 'connection' => 'USB', 'paper_format' => '100X150_MM',
             'max_print_width_mm' => 104, 'max_print_length_mm' => 250, 'f_active' => 1, 'printer_status' => 'ACTIVE', 'fk_id_adapter' => DB::table('print_adapters')->where('code', 'DRIVER_PDF')->value('id')]);
-        $this->assertSame(1, Prints::replace(1, $this->th, $new));
+        $this->assertSame(2, Prints::replace(1, $this->th, $new));      // packing slips and carton marks
         $this->assertSame($new, (int) Prints::route(1, 'PACKING_SLIP')->fk_id_printer_profile);
         $old = DB::table('printer_profiles')->where('id', $this->th)->first();
         $this->assertSame(['RETIRED', $new], [$old->printer_status, (int) $old->fk_id_replaced_by]);
