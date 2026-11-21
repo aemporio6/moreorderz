@@ -154,6 +154,10 @@ class BuyingController extends Controller
             ->get(['id', DB::raw('COALESCE(NULLIF(po_number, \'\'), po_code) as code'), 'status', 'fk_id_cycle as cycle'])];
     }
 
+    /** R-F_SETUP-11: supplier PO PDF (version n, kept with the PO) and Send to supplier. */
+    public function poPdf(Request $r, int $id) { $this->can($r, 'buying.MONEY'); return $this->run(function () use ($r, $id) { $x = \App\Services\PoPdf::make((int) Context::ent(), $id, ! $r->has('bank') || $r->boolean('bank')); return response($x['body'], 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="' . $x['file'] . '"']); }); }
+    public function poSend(Request $r, int $id) { $this->can($r, 'buying.BUY'); return $this->run(fn () => \App\Services\PoPdf::send((int) Context::ent(), $id, (string) $r->input('via'))); }
+
     /** R-F_SETUP-10: document roll-up of a PO / cycle / product (duplicates merged with every "Linked via"). */
     public function poDocs(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\DocRollup::forPo((int) Context::ent(), $id)); }
     public function cycleDocs(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\DocRollup::forCycle((int) Context::ent(), $id)); }

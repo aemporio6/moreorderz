@@ -4091,3 +4091,5 @@ research_supplier,Research › Supplier candidates,child,Supplier,1,7,moq,MOQ,nu
 research_supplier,Research › Supplier candidates,child,Supplier,1,8,lead_days,Lead time (days),number,,,,,,,all,,,,0,,,,,src_research_suppliers,lead_days,,Y,,,,
 research_supplier,Research › Supplier candidates,child,Supplier,1,9,sample_available,Sample available,check,,,,,,,all,,,,,,,,,src_research_suppliers,sample_available,,Y,,,,
 research_supplier,Research › Supplier candidates,child,Supplier,1,10,note,Note,text,,,,,,,all,,,,,,,,,src_research_suppliers,note,,Y,,,,
+t_src_suppliers,Supplier / forwarder,module,Terms,5,8,f_print_cn,Print Chinese labels,check,,,,,,,all,,,,,,On the PO PDF every row gets a second line with the product name / spec in Chinese.,,,t_src_suppliers,f_print_cn,,Y,,,,
+product,Product,library,Supplier,3,8,product_name_cn,Product name (Chinese),text,,,,,,,all,,,,,,"Printed under the English name on POs of suppliers with ""Print Chinese labels"".",,,t_product_vendors,product_name_cn,,Y,,,,

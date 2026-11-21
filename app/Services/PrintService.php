@@ -390,7 +390,7 @@ class PrintService
             'PICK_SHEET' => array_map(fn ($id) => self::pPick($ent, $id), $ids),
             'PACKING_SLIP' => array_map(fn ($id) => self::pSlip($ent, $id, $w), $ids),
             'MANIFEST' => array_map(fn ($id) => self::pManifest($ent, $id), $ids),
-            'PO' => array_map(fn ($id) => self::pPo($ent, $id), $ids),
+            'PO' => array_map(fn ($id) => PoPdf::page($ent, $id), $ids),      // R-F_SETUP-11: the po_a4 layout
             'CARTON_MARK' => array_merge(...array_map(fn ($id) => self::pCartonMarks($ent, $id), $ids)),
             'FBA_CARTON' => array_merge(...array_map(fn ($id) => self::pFbaCartons($ent, $id), $ids)),
             'FBA_ITEM' => array_merge(...array_map(fn ($id) => self::pFbaItems($ent, $id, $w), $ids)),
@@ -518,27 +518,6 @@ class PrintService
             . '<table class="t"><tr><th style="width:10mm">#</th><th>Parcel</th><th>Order</th><th>Tracking</th><th class="r">Weight</th></tr>';
         foreach ($parcels as $i => $p) $o .= '<tr><td>' . ($i + 1) . '</td><td>' . self::e($p->parcel_code) . '</td><td>' . self::e($p->order_no) . '</td><td>' . self::e($p->tracking_no) . '</td><td class="r">' . ($p->weight_g ? number_format($p->weight_g / 1000, 2) . ' kg' : '') . '</td></tr>';
         return $o . '</table><table style="width:100%;margin-top:14mm"><tr><td>Driver name: ' . self::e($s->driver_name ?: '______________________') . '</td><td>Signature: ______________________</td><td class="r">Parcels taken: ________</td></tr></table></div>';
-    }
-
-    private static function pPo(int $ent, int $id): string
-    {
-        $po = DB::table('t_src_po as p')->leftJoin('t_src_suppliers as s', 's.id', '=', 'p.fk_id_supplier')->leftJoin('cat_currency as c', 'c.id', '=', 'p.fk_id_currency')->where('p.id', $id)->where('p.fk_id_ent', $ent)
-            ->first(['p.id', 'p.po_number', 'p.po_code', 'p.po_date', 'p.status', 'p.po_total', 'p.deposit_pct', 'p.required_ship_date', 'p.notes', 's.supplier_name', 'c.currency_code']) ?? throw new \InvalidArgumentException('Purchase order not found.');
-        $no = $po->po_number ?: $po->po_code ?: ('PO-' . $po->id); $cur = $po->currency_code ?: '';
-        $lines = DB::table('t_src_po_lines as l')->leftJoin('t_product_vendors as v', 'v.id', '=', 'l.fk_id_product')->where('l.fk_id_po', $id)->where('l.f_active', 1)->orderBy('l.id')->get(['l.sku', 'v.product_name_vendor as name', 'l.qty_confirmed', 'l.qty_ordered', 'l.unit_price', 'l.line_total']);
-        $c = DB::table('t_enterprise')->where('id', $ent)->first(['ent_name', 'ent_address']);
-        $o = '<div class="in">' . self::head($ent, 'Purchase order', $no) . '<table style="width:100%;margin-top:4mm"><tr><td style="width:50%;vertical-align:top"><div class="mut">Buyer</div><div class="big">' . self::e($c->ent_name ?? '') . '</div>' . nl2br(self::e($c->ent_address ?? '')) . '</td>'
-            . '<td style="vertical-align:top"><div class="mut">Supplier</div><div class="big">' . self::e($po->supplier_name) . '</div><div class="mut">Date: ' . ($po->po_date ? date('d M Y', strtotime($po->po_date)) : '') . ($po->required_ship_date ? ' · Ship by: ' . date('d M Y', strtotime($po->required_ship_date)) : '') . ' · Status: ' . self::e($po->status) . '</div></td></tr></table>'
-            . '<table class="t"><tr><th style="width:8mm">#</th><th style="width:38mm">SKU</th><th>Product</th><th class="r" style="width:18mm">Qty</th><th class="r" style="width:26mm">Unit price</th><th class="r" style="width:30mm">Total</th></tr>';
-        foreach ($lines as $i => $l) $o .= '<tr><td>' . ($i + 1) . '</td><td>' . self::e($l->sku) . '</td><td>' . self::e(mb_substr((string) $l->name, 0, 70)) . '</td><td class="r">' . number_format((float) ($l->qty_confirmed ?: $l->qty_ordered)) . '</td><td class="r">' . number_format((float) $l->unit_price, 4) . '</td><td class="r">' . number_format((float) $l->line_total, 2) . '</td></tr>';
-        $o .= '<tr><td colspan="5" class="r big">Total ' . self::e($cur) . '</td><td class="r big">' . number_format((float) $po->po_total, 2) . '</td></tr></table>';
-        $terms = DB::table('t_src_payment_terms')->where('fk_id_po', $id)->where('f_active', 1)->orderBy('term_no')->get(['milestone', 'pct', 'planned_amount', 'due_date']);
-        if ($terms->isNotEmpty()) {
-            $o .= '<div class="big" style="margin-top:5mm">Payment terms</div><table class="t" style="margin-top:1mm"><tr><th>Step</th><th class="r">%</th><th class="r">Amount ' . self::e($cur) . '</th><th>Due</th></tr>';
-            foreach ($terms as $t) $o .= '<tr><td>' . self::e($t->milestone) . '</td><td class="r">' . (float) $t->pct . '</td><td class="r">' . number_format((float) $t->planned_amount, 2) . '</td><td>' . ($t->due_date ? date('d M Y', strtotime($t->due_date)) : '') . '</td></tr>';
-            $o .= '</table>';
-        }
-        return $o . ($po->notes ? '<div style="margin-top:4mm"><span class="mut">Notes:</span> ' . nl2br(self::e($po->notes)) . '</div>' : '') . '</div>';
     }
 
     /** Bin labels: on a label sheet (cells, start cell on a half-used sheet) or one per roll label. Returns the pages. */

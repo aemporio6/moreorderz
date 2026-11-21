@@ -252,6 +252,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('src-payments/{id}/link-term', [BuyingController::class, 'linkTerm'])->whereNumber('id');
         Route::get('src-pick/cycles', [BuyingController::class, 'pickCycles']);
         Route::get('src-pick/pos', [BuyingController::class, 'pickPos']);
+        Route::get('po/{id}/pdf', [BuyingController::class, 'poPdf'])->whereNumber('id');
+        Route::post('po/{id}/send', [BuyingController::class, 'poSend'])->whereNumber('id');
         Route::get('po/{id}/documents', [BuyingController::class, 'poDocs'])->whereNumber('id');
         Route::get('cycle/{id}/documents', [BuyingController::class, 'cycleDocs'])->whereNumber('id');
         Route::get('src-product/{id}/documents', [BuyingController::class, 'productDocs'])->whereNumber('id');
