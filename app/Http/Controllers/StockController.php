@@ -64,6 +64,34 @@ class StockController extends Controller
     public function putaways(Request $r) { \App\Services\Perm::need($r->user(), 'stock.CHANGE'); return ['rows' => \App\Services\WarehouseMode::putaways((int) Context::ent()), 'bins' => \Illuminate\Support\Facades\DB::table('cat_inventory_locations')->where('fk_id_ent', Context::ent())->where('kind', 'BIN')->where('f_active', 1)->orderBy('pick_seq')->limit(500)->get(['id', 'location_name as name'])]; }
     public function putaway(Request $r, int $id) { \App\Services\Perm::need($r->user(), 'stock.CHANGE'); return $this->run(fn () => \App\Services\WarehouseMode::putaway((int) Context::ent(), $id, (int) $r->input('bin'), $r->filled('qty') ? (int) $r->input('qty') : null)); }
 
+    /** Inbound shipment prep (R-H-49). */
+    public function inboundList(Request $r)
+    {
+        \App\Services\Perm::need($r->user(), 'stock.SEE'); $ent = (int) Context::ent();
+        return ['rows' => \App\Services\InboundShipments::list($ent), 'can_change' => \App\Services\Perm::has($r->user(), 'stock.CHANGE'),
+            'shops' => \App\Services\Perm::mine(\Illuminate\Support\Facades\DB::table('t_branches'), 'id')->where('f_active', 1)->orderBy('shop_no')->get(['id', \Illuminate\Support\Facades\DB::raw("TRIM(CONCAT_WS(' ', shop_no, shop_name)) as name")]),
+            'locations' => \Illuminate\Support\Facades\DB::table('cat_inventory_locations')->where('fk_id_ent', $ent)->where('f_active', 1)->where(fn ($w) => $w->whereNull('kind')->orWhereIn('kind', ['WAREHOUSE', 'SHELF', 'MARKETPLACE_FULFILMENT', 'THREE_PL', 'FBA', '3PL', 'TRANSIT', 'CUSTOMER']))->orderBy('location_name')->get(['id', 'location_name as name', 'kind'])];
+    }
+    public function inboundShow(Request $r, int $id) { \App\Services\Perm::need($r->user(), 'stock.SEE'); return $this->run(fn () => \App\Services\InboundShipments::page((int) Context::ent(), $id) + ['can_change' => \App\Services\Perm::has($r->user(), 'stock.CHANGE')]); }
+    public function inboundCreate(Request $r)
+    {
+        \App\Services\Perm::need($r->user(), 'stock.CHANGE');
+        $shops = \App\Services\Perm::shops($r->user()); if ($shops !== null && ! in_array((int) $r->input('shop'), $shops, true)) return response()->json(['message' => 'This shop is not yours.', 'errors' => ['shop' => ['This shop is not yours.']]], 422);
+        try { return \App\Services\InboundShipments::create((int) Context::ent(), $r->all()); }
+        catch (\App\Services\ValidationErrors $e) { return response()->json(['message' => $e->getMessage(), 'errors' => array_map(fn ($m) => [$m], $e->errors)], 422); }
+    }
+    public function inboundAction(Request $r, int $id, string $act)
+    {
+        \App\Services\Perm::need($r->user(), 'stock.CHANGE'); $ent = (int) Context::ent();
+        return $this->run(fn () => match ($act) {
+            'reserve' => \App\Services\InboundShipments::reserve($ent, $id),
+            'pick' => \App\Services\InboundShipments::pick($ent, $id, (string) $r->input('carton', ''), (string) $r->input('item', ''), (int) $r->input('qty', 1)),
+            'ship' => \App\Services\InboundShipments::shipped($ent, $id, $r->only(['date', 'carrier', 'tracking'])),
+            'receive' => \App\Services\InboundShipments::received($ent, $id, (array) $r->input('received', [])),
+            default => abort(404),
+        });
+    }
+
     /** Visibility per marketplace × shop (R-D-20). */
     public function visibility(Request $r, int $id) { \App\Services\Perm::need($r->user(), 'form:product_visibility:VIEW'); return \App\Services\ProductVisibility::get((int) Context::ent(), $id) + ['can_edit' => \App\Services\Perm::has($r->user(), 'form:product_visibility:EDIT'), 'sku' => \Illuminate\Support\Facades\DB::table('t_product_vendors')->where('id', $id)->value('SKU_VENDOR')]; }
     public function visibilitySave(Request $r, int $id)

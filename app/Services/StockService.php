@@ -77,7 +77,7 @@ class StockService
         return DB::transaction(function () use ($ent, $productId, $qty, $fromLoc, $toLoc, $reason, $opt) {
             $p = self::product($productId, $ent);
             self::location($toLoc, $ent);
-            $picks = self::pick($productId, $fromLoc, $qty, $opt['owner'] ?? null, $opt['rule'] ?? null);      // rule POOL / PRIVATE for units leaving the shelf for a sale
+            $picks = self::pick($productId, $fromLoc, $qty, $opt['owner'] ?? null, $opt['rule'] ?? null, isset($opt['lot']) ? (int) $opt['lot'] : null);      // 'lot' = only that lot (a two-step transfer keeps the lots picked)      // rule POOL / PRIVATE for units leaving the shelf for a sale
             $pair = null; $out = [];
             foreach ($picks as $pk) {
                 self::addBalance($pk['lot'], $fromLoc, -$pk['qty']);
@@ -392,13 +392,14 @@ class StockService
     // ---------- internals ----------
 
     /** Choose lots FIFO at a location and lock their balance rows. $rule: POOL / PRIVATE / null (any). Refuses when short. */
-    private static function pick(int $productId, int $locId, int $qty, ?int $owner, ?string $rule): array
+    private static function pick(int $productId, int $locId, int $qty, ?int $owner, ?string $rule, ?int $lot = null): array
     {
         $rows = DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')
             ->where('l.fk_id_product', $productId)->where('b.fk_id_location', $locId)->where('b.qty', '>', 0)
             ->when($rule === 'PRIVATE', fn ($q) => $q->where('l.fk_id_owner', $owner))
             ->when($rule === 'POOL', fn ($q) => $q->where(fn ($w) => $w->where('l.visibility', 'POOL')->orWhereNull('l.fk_id_owner')))   // pool lots and the company's own lots; never a partner's private lot
             ->when($rule === null && $owner, fn ($q) => $q->where('l.fk_id_owner', $owner))
+            ->when($lot, fn ($q) => $q->where('l.id', $lot))
             ->orderBy('l.received_date')->orderBy('l.id')->lockForUpdate()
             ->get(['b.id as bid', 'b.qty', 'l.id as lot', 'l.unit_cost_gbp as cost', 'l.fk_id_owner as owner']);
         $have = (int) $rows->sum('qty');

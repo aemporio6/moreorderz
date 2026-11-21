@@ -323,7 +323,7 @@ class DispatchService
     }
 
     /** Sellable bins of a product in walking order with the units a rule may take (oldest lot first inside the stock service). */
-    private static function binsOf(int $productId, int $ent, ?int $privateOwner): array
+    public static function binsOf(int $productId, int $ent, ?int $privateOwner): array
     {
         return DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->join('cat_inventory_locations as c', 'c.id', '=', 'b.fk_id_location')
             ->where('l.fk_id_product', $productId)->where('l.company_id', $ent)->where('b.qty', '>', 0)
@@ -335,7 +335,7 @@ class DispatchService
     }
 
     /** Private product → the lots of its owner; else pool. (Owner of the product's newest private lot, or the shop owner when it owns lots of it.) */
-    private static function ownerRule(object $sale): ?int
+    public static function ownerRule(object $sale): ?int
     {
         $type = DB::table('t_product_vendors')->where('id', $sale->fk_product_id)->value('e_product_type');
         if ($type !== 'private') return null;

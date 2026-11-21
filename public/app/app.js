@@ -162,6 +162,8 @@
       if (r === '#/investor-map') return await pageInvestorMap();
       if ((mt = r.match(/^#\/product-investors\/(\d+)/))) return await pageProductInvestors(+mt[1]);
       if (r === '#/putaway') return await pagePutaway();
+      if (r === '#/inbound') return await pageInbound();
+      if (/^#\/inbound\/\d+$/.test(r)) return await pageInboundOne(+r.split('/')[2]);
       if (r === '#/lost-parcels') return await pageLostParcels();
       if (r.startsWith('#/mp-fields')) return await pageMpFields(+((r.match(/mp=(\d+)/) || [])[1] || 0));
       if ((mt = r.match(/^#\/mp-values\/(\d+)/))) return await pageMpValues(+mt[1], +((r.match(/tab=(\d+)/) || [])[1] || 0));
@@ -1392,6 +1394,51 @@
         <td class="num"><input type="number" min="1" max="${r.qty}" value="${r.qty}" data-paq="${r.task}" style="width:80px"></td><td><button class="btn sm primary" data-pa="${r.task}">Put away</button></td></tr>`).join('')}</tbody></table>
       ${d.rows.length ? '' : `<div class="empty">${ic('check')}<div>Nothing waits in RECEIVING.</div></div>`}</div></div>`;
     $$('[data-pa]').forEach(b => b.onclick = async () => { const t = b.dataset.pa; try { toast((await api(`putaway/${t}`, { method: 'POST', body: { bin: +$(`[data-pab="${t}"]`).value, qty: +$(`[data-paq="${t}"]`).value } })).message); pagePutaway(); } catch (e) { toast(e.message, 'err'); } });
+  }
+  // ---------- inbound shipment prep, FBA / 3PL (R-H-49) ----------
+  async function pageInbound() {
+    busy(true); let d; try { d = await api('inbound'); } finally { busy(false); }
+    const chip = { DRAFT: 'plain', PICKING: 'warn', PACKED: 'warn', SHIPPED: 'ok', CLOSED: 'ok', DIFFERENCE: 'err' };
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Inbound shipments</h1><div class="sub">Stock you send to a fulfilment centre or 3PL: reserve → pick into cartons → labels → ship (units go to In transit) → centre confirms.</div></div>${d.can_change ? '<button class="btn primary" id="inNew">New shipment</button>' : ''}</div>
+      <div class="card"><div class="tbl-wrap"><table class="t" id="inList"><thead><tr><th>Shipment</th><th>Shop</th><th class="num">Cartons</th><th>Status</th><th>Created</th><th>Shipped</th><th>Tracking</th></tr></thead><tbody>${d.rows.map(r => `<tr class="click" data-in="${r.id}"><td><b>${esc(r.shipment_ref)}</b></td><td>${esc(r.shop || '')}</td><td class="num">${r.cartons}</td><td><span class="chip ${chip[r.status] || 'plain'}">${esc(r.status)}</span></td><td>${esc(r.d_created || '')}</td><td>${esc(r.d_shipped || '')}</td><td>${esc(r.tracking_no || '')}</td></tr>`).join('')}</tbody></table>
+      ${d.rows.length ? '' : `<div class="empty">${ic('inbox')}<div>No inbound shipment yet.</div></div>`}</div></div>`;
+    $$('[data-in]').forEach(t => t.onclick = () => go('#/inbound/' + t.dataset.in));
+    if ($('#inNew')) $('#inNew').onclick = () => {
+      const opt = (rows, blank) => (blank ? `<option value="">${blank}</option>` : '') + rows.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
+      const m = modal('New inbound shipment', 'One line per carton: SKU:qty (several SKUs = a mixed carton) | weight kg | L×W×H cm. Example: ABC-1:24 | 12 | 40x30x30',
+        `<div class="form"><label>Shop<select id="inShop">${opt(d.shops)}</select></label><label>Ships from<select id="inFrom">${opt(d.locations.filter(l => l.kind !== 'TRANSIT'))}</select></label>
+         <label>Goes to (centre)<select id="inDest">${opt(d.locations.filter(l => l.kind !== 'WAREHOUSE'), 'In transit (no centre location yet)')}</select></label><label>Shipment id (optional – the marketplace's id)<input id="inRef"></label>
+         <label>Cartons<textarea id="inCartons" rows="5" placeholder="ABC-1:24 | 12 | 40x30x30&#10;ABC-1:10, XYZ-2:6 | 9.5 | 40x30x20"></textarea></label><div class="small" id="inErr" style="color:#c0392b"></div></div>`,
+        '<button class="btn" id="inNo">Cancel</button><button class="btn primary" id="inOk">Save</button>', false);
+      $('#inNo', m.ov).onclick = m.close;
+      $('#inOk', m.ov).onclick = async () => {
+        const cartons = $('#inCartons', m.ov).value.split('\n').map(x => x.trim()).filter(Boolean).map(l => { const [it, kg, dim] = l.split('|').map(x => (x || '').trim()); const [L, W, H] = (dim || '').toLowerCase().split(/[x×*]/).map(Number);
+          return { items: (it || '').split(',').map(x => x.trim()).filter(Boolean).map(x => { const i = x.lastIndexOf(':'); return { sku: i > 0 ? x.slice(0, i).trim() : x, qty: i > 0 ? +x.slice(i + 1) : 1 }; }), weight_kg: +kg || 0, length_cm: L || 0, width_cm: W || 0, height_cm: H || 0 }; });
+        try { const r = await api('inbound', { method: 'POST', body: { shop: +$('#inShop', m.ov).value, from_location: +$('#inFrom', m.ov).value, dest_location: +$('#inDest', m.ov).value || null, shipment_ref: $('#inRef', m.ov).value, cartons } });
+          toast(r.message); m.close(); go('#/inbound/' + r.id); }
+        catch (e) { $('#inErr', m.ov).textContent = e.errors ? Object.values(e.errors).flat().join(' · ') : e.message; }
+      };
+    };
+  }
+  async function pageInboundOne(id) {
+    busy(true); let d; try { d = await api('inbound/' + id); } finally { busy(false); }
+    const s = d.shipment, act = async (a, body) => { try { const r = await api(`inbound/${id}/${a}`, { method: 'POST', body: body || {} }); toast(r.message); return r; } catch (e) { toast(e.message, 'err'); return null; } };
+    const left = d.lines.filter(l => l.line_status === 'OPEN');
+    $('#main').innerHTML = `<div class="page-head"><div><h1>${esc(s.ref)} <span class="chip plain">${esc(s.status)}</span></h1><div class="sub">${esc(s.shop)} · from ${esc(s.from || '')} → ${esc(s.dest || '')}${s.tracking ? ' · tracking ' + esc(s.tracking) : ''}</div></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn ghost" data-pr="FBA_PACKLIST">Picking & packing list</button><button class="btn ghost" data-pr="FBA_ITEM">Item labels</button><button class="btn ghost" data-pr="FBA_CARTON">Carton labels</button></div></div>
+      ${d.can_change && s.status === 'DRAFT' ? '<div class="card"><div class="card-b"><button class="btn primary" id="inRes">Reserve and build the pick task</button> <span class="small muted">Takes the units from free stock; nothing is reserved when a SKU is short.</span></div></div>' : ''}
+      ${d.can_change && s.status === 'PICKING' ? `<div class="card" id="inScan"><div class="card-h"><h3>Pick into cartons</h3><span class="small muted">${left.reduce((a, l) => a + (+l.qty - +l.qty_done), 0)} unit(s) to go</span></div><div class="card-b" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+        <label>1. Carton label<input id="scC" placeholder="${esc(s.ref)}-C01" autofocus></label><label>2. Item (SKU or item code)<input id="scI"></label><label>3. Qty<input id="scQ" type="number" min="1" value="1" style="width:90px"></label><button class="btn primary" id="scOk">Into carton</button></div></div>` : ''}
+      ${d.can_change && s.status === 'PACKED' ? '<div class="card"><div class="card-b" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end"><label>Tracking no<input id="shT"></label><button class="btn primary" id="shOk">Shipped</button><span class="small muted">The units move to In transit with their owners.</span></div></div>' : ''}
+      ${d.can_change && s.status === 'SHIPPED' ? `<div class="card"><div class="card-h"><h3>Received at the centre</h3></div><div class="card-b" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">${[...new Map(d.cartons.flatMap(c => c.items).map(i => [i.product, i])).values()].map(i => `<label>${esc(i.sku)} (sent ${d.cartons.flatMap(c => c.items).filter(x => x.product === i.product).reduce((a, x) => a + +x.qty, 0)})<input type="number" min="0" data-rcv="${i.product}" value="${d.cartons.flatMap(c => c.items).filter(x => x.product === i.product).reduce((a, x) => a + +x.qty, 0)}" style="width:90px"></label>`).join('')}<button class="btn primary" id="rcOk">Confirm</button></div></div>` : ''}
+      <div class="card"><div class="card-h"><h3>Cartons</h3></div><div class="tbl-wrap"><table class="t" id="inCt"><thead><tr><th>#</th><th>Label code</th><th>Kind</th><th>Items</th><th class="num">Units</th><th class="num">kg</th><th>Size</th><th>Status</th></tr></thead><tbody>${d.cartons.map(c => `<tr><td>${c.no}</td><td><b>${esc(c.code)}</b></td><td>${esc(c.kind)}</td><td>${c.items.map(i => esc(i.sku) + ' × ' + i.qty).join(', ')}</td><td class="num">${c.units}</td><td class="num">${c.kg}</td><td>${esc(c.dims)}</td><td>${esc(c.label_status || '')}</td></tr>`).join('')}</tbody></table></div></div>
+      ${d.lines.length ? `<div class="card"><div class="card-h"><h3>Pick task ${esc(d.task.task_code)}</h3><span class="chip plain">${esc(d.task.status)}</span></div><div class="tbl-wrap"><table class="t" id="inLines"><thead><tr><th>#</th><th>Carton</th><th>Bin</th><th>SKU</th><th class="num">Qty</th><th class="num">Done</th><th>Status</th></tr></thead><tbody>${d.lines.map(l => `<tr><td>${l.line_no}</td><td>${l.carton_no}</td><td>${esc(l.bin || '')}</td><td>${esc(l.sku)}</td><td class="num">${l.qty}</td><td class="num">${l.qty_done}</td><td>${esc(l.line_status)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
+    $$('[data-pr]').forEach(b => b.onclick = () => printNow(b.dataset.pr, [id]));
+    if ($('#inRes')) $('#inRes').onclick = async () => { if (await act('reserve')) pageInboundOne(id); };
+    if ($('#scOk')) { const go1 = async () => { const r = await act('pick', { carton: $('#scC').value, item: $('#scI').value, qty: +$('#scQ').value }); if (r) { if (r.all_done || r.left_in_carton === 0) return pageInboundOne(id); $('#scI').value = ''; $('#scQ').value = 1; $('#scI').focus(); } };
+      $('#scOk').onclick = go1; $('#scC').onkeydown = e => { if (e.key === 'Enter') $('#scI').focus(); }; $('#scI').onkeydown = e => { if (e.key === 'Enter') $('#scQ').focus(); }; $('#scQ').onkeydown = e => { if (e.key === 'Enter') go1(); }; }
+    if ($('#shOk')) $('#shOk').onclick = async () => { if (await act('ship', { tracking: $('#shT').value })) pageInboundOne(id); };
+    if ($('#rcOk')) $('#rcOk').onclick = async () => { const received = {}; $$('[data-rcv]').forEach(i => received[i.dataset.rcv] = +i.value); if (await act('receive', { received })) pageInboundOne(id); };
   }
   // ---------- visibility per marketplace × shop (R-D-20) ----------
   async function pageVisibility(id) {

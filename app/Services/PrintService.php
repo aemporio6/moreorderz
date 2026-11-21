@@ -18,8 +18,8 @@ use Picqer\Barcode\BarcodeGeneratorPNG;
  */
 class PrintService
 {
-    public const KINDS = ['PACKING_SLIP' => 'PARCEL', 'PICK_SHEET' => 'PICK_TASK', 'MANIFEST' => 'HANDOVER', 'LOCATION' => 'LOCATION', 'PO' => 'PO', 'CARTON_MARK' => 'CARTON', 'TEST' => 'PRINTER'];
-    public const KIND_NAMES = ['PACKING_SLIP' => 'Packing slip', 'PICK_SHEET' => 'Pick sheet', 'MANIFEST' => 'Handover sheet', 'LOCATION' => 'Bin labels', 'PO' => 'Purchase order', 'CARTON_MARK' => 'Carton marks', 'TEST' => 'Test page'];
+    public const KINDS = ['PACKING_SLIP' => 'PARCEL', 'PICK_SHEET' => 'PICK_TASK', 'MANIFEST' => 'HANDOVER', 'LOCATION' => 'LOCATION', 'PO' => 'PO', 'CARTON_MARK' => 'CARTON', 'FBA_CARTON' => 'FBA_SHIPMENT', 'FBA_ITEM' => 'FBA_SHIPMENT', 'FBA_PACKLIST' => 'FBA_SHIPMENT', 'TEST' => 'PRINTER'];
+    public const KIND_NAMES = ['PACKING_SLIP' => 'Packing slip', 'PICK_SHEET' => 'Pick sheet', 'MANIFEST' => 'Handover sheet', 'LOCATION' => 'Bin labels', 'PO' => 'Purchase order', 'CARTON_MARK' => 'Carton marks', 'FBA_CARTON' => 'Inbound carton labels', 'FBA_ITEM' => 'Marketplace item labels', 'FBA_PACKLIST' => 'Inbound picking & packing list', 'TEST' => 'Test page'];
     public const REASONS = ['DAMAGED_LABEL' => 'Label damaged', 'PRINTER_JAM' => 'Printer jam', 'WRONG_PRINTER' => 'Wrong printer', 'CARRIER_CHANGED' => 'Carrier changed',
         'ADDRESS_CHANGED' => 'Address changed', 'LOCATION_CHANGED' => 'Location changed', 'VOIDED_REPLACED' => 'Voided and replaced', 'LOST' => 'Lost', 'OTHER' => 'Other'];
     private const SCOPES = ['USER' => 1, 'WORKSTATION' => 2, 'LOCATION' => 3, 'COMPANY' => 4];
@@ -45,6 +45,9 @@ class PrintService
             ['LOC_ROLL', 'Bin label on a roll, one per label', 'LOCATION', 'FLOW', 50, 25, null],
             ['TEST_PAGE', 'Printer test page (ruler, outline, barcodes)', 'TEST', 'FLOW', 40, 25, null],
             ['CARTON_MARK_FLOW', 'Carton / shipping mark, one per carton', 'CARTON_MARK', 'FLOW', 96, 136, null],
+            ['FBA_CARTON_FLOW', 'Inbound carton label (FBA / 3PL), one per carton', 'FBA_CARTON', 'FLOW', 96, 136, null],
+            ['FBA_ITEM_FLOW', 'Marketplace item label, one per unit', 'FBA_ITEM', 'FLOW', 50, 25, null],
+            ['FBA_PACKLIST_A4', 'Inbound picking & packing list A4', 'FBA_PACKLIST', 'A4', 210, 297, null],
         ];
         foreach ($tpl as [$code, $name, $kind, $format, $w, $h, $layout]) {
             if (DB::table('label_templates')->where('code', $code)->exists()) continue;
@@ -61,7 +64,7 @@ class PrintService
             }
         }
         // a kind added later (carton marks) takes the packing-slip route of the setup when it has none
-        foreach (['CARTON_MARK' => 'PACKING_SLIP'] as $kind => $like) if (! DB::table('print_routes')->where('job_kind', $kind)->exists() && ($r = DB::table('print_routes')->where('job_kind', $like)->where('fk_id_ent', 0)->first())) {
+        foreach (['CARTON_MARK' => 'PACKING_SLIP', 'FBA_CARTON' => 'PACKING_SLIP', 'FBA_ITEM' => 'PACKING_SLIP', 'FBA_PACKLIST' => 'PICK_SHEET'] as $kind => $like) if (! DB::table('print_routes')->where('job_kind', $kind)->exists() && ($r = DB::table('print_routes')->where('job_kind', $like)->where('fk_id_ent', 0)->first())) {
             $row = (array) $r; unset($row['id']); $row['job_kind'] = $kind; DB::table('print_routes')->insert($row); }
     }
 
@@ -377,6 +380,9 @@ class PrintService
             'MANIFEST' => array_map(fn ($id) => self::pManifest($ent, $id), $ids),
             'PO' => array_map(fn ($id) => self::pPo($ent, $id), $ids),
             'CARTON_MARK' => array_merge(...array_map(fn ($id) => self::pCartonMarks($ent, $id), $ids)),
+            'FBA_CARTON' => array_merge(...array_map(fn ($id) => self::pFbaCartons($ent, $id), $ids)),
+            'FBA_ITEM' => array_merge(...array_map(fn ($id) => self::pFbaItems($ent, $id, $w), $ids)),
+            'FBA_PACKLIST' => array_map(fn ($id) => self::pFbaPackList($ent, $id), $ids),
             'LOCATION' => self::pBins($ent, $ids, $tpl, $w, $h, $copies, $x['start_cell']),
         };
         if ($kind !== 'LOCATION' && $copies > 1) { $one = $pages; for ($c = 1; $c < $copies; $c++) $pages = array_merge($pages, $one); }
@@ -403,6 +409,35 @@ class PrintService
             . '<table class="t"><tr><td>Units</td><td class="r big">' . $m['units'] . '</td></tr><tr><td>Net weight</td><td class="r">' . number_format($m['net'], 2) . ' kg</td></tr><tr><td>Gross weight</td><td class="r">' . number_format($m['gross'], 2) . ' kg</td></tr>'
             . '<tr><td>Size</td><td class="r">' . self::e($m['dims']) . '</td></tr><tr><td>CBM</td><td class="r">' . number_format($m['cbm'], 4) . '</td></tr>' . ($m['hs'] ? '<tr><td>HS code</td><td class="r">' . self::e($m['hs']) . '</td></tr>' : '') . '</table>'
             . ($m['made_in'] ? '<div class="big" style="margin-top:3mm">MADE IN ' . self::e(mb_strtoupper($m['made_in'])) . '</div>' : '') . '<div style="margin-top:3mm"><img src="' . self::barcode(($m['po'] ?: 'CTN') . '-' . $m['sku'] . '-' . $m['n']) . '" style="width:80mm;height:12mm"></div></div>', CartonCalc::marks($ent, $id));
+    }
+
+    /** Inbound carton labels (R-H-49, M146): carton x / N, FC, shipment id, shop, SKU + item code + qty, kg, size, scan code. */
+    private static function pFbaCartons(int $ent, int $id): array
+    {
+        return array_map(fn ($c) => '<div class="in"><div class="mut">' . self::e($c['shop']) . '</div><h1 style="font-size:16pt">' . self::e($c['ref']) . '</h1>'
+            . '<div>Ship to: <b>' . self::e($c['fc']) . '</b></div><div style="font-size:24pt;font-weight:bold;margin:2mm 0">CARTON ' . $c['n'] . ' / ' . $c['of'] . '</div>'
+            . '<table class="t"><tr><th>SKU</th><th>Goods id</th><th class="r">Qty</th></tr>' . implode('', array_map(fn ($i) => '<tr><td>' . self::e($i['sku']) . '</td><td>' . self::e($i['goods']) . '</td><td class="r big">' . $i['qty'] . '</td></tr>', $c['items']))
+            . '<tr><td colspan="2">' . ($c['kind'] === 'MIXED' ? 'Mixed SKUs' : 'Single SKU') . ' · units</td><td class="r big">' . $c['units'] . '</td></tr><tr><td colspan="2">Weight</td><td class="r">' . number_format($c['kg'], 2) . ' kg</td></tr><tr><td colspan="2">Size</td><td class="r">' . self::e($c['dims']) . '</td></tr></table>'
+            . '<div style="margin-top:3mm"><img src="' . self::barcode($c['code']) . '" style="width:80mm;height:14mm"><div class="c">' . self::e($c['code']) . '</div></div></div>', InboundShipments::cartonLabels($ent, $id));
+    }
+
+    /** Marketplace item labels (FNSKU-type): one per unit. */
+    private static function pFbaItems(int $ent, int $id, float $w): array
+    {
+        return array_map(fn ($l) => '<div style="padding:1.5mm"><img src="' . self::barcode($l['code'], 40, 1) . '" style="width:' . max(30, $w - 4) . 'mm;height:9mm"><div class="big" style="font-size:7pt">' . self::e($l['code']) . '</div><div style="font-size:6pt">' . self::e($l['name']) . '</div><div style="font-size:6pt">' . self::e($l['sku']) . '</div></div>', InboundShipments::itemLabels($ent, $id));
+    }
+
+    /** Picking & packing list of an inbound shipment: same rows as the labels. */
+    private static function pFbaPackList(int $ent, int $id): string
+    {
+        $p = InboundShipments::page($ent, $id); $s = $p['shipment'];
+        $o = '<div class="in">' . self::head($ent, 'Inbound picking & packing list', $s['ref']) . '<div class="mut" style="margin-top:2mm">Shop: ' . self::e($s['shop']) . ' · From: ' . self::e($s['from']) . ' · To: ' . self::e($s['dest']) . '</div>'
+            . '<table class="t"><tr><th>Carton</th><th>Bin</th><th>SKU</th><th class="r">Qty</th><th class="c">✓</th></tr>';
+        foreach ($p['lines'] as $l) $o .= '<tr><td class="big">' . (int) $l['carton_no'] . '</td><td>' . self::e($l['bin']) . '</td><td>' . self::e($l['sku']) . '</td><td class="r big">' . (int) $l['qty'] . '</td><td class="c"><span class="box"></span></td></tr>';
+        if (! $p['lines']) foreach ($p['cartons'] as $c) foreach ($c['items'] as $i) $o .= '<tr><td class="big">' . $c['no'] . '</td><td>—</td><td>' . self::e($i['sku']) . '</td><td class="r big">' . (int) $i['qty'] . '</td><td class="c"><span class="box"></span></td></tr>';
+        $o .= '</table><table class="t"><tr><th>Carton</th><th>Code</th><th class="r">Units</th><th class="r">kg</th><th>Size</th></tr>';
+        foreach ($p['cartons'] as $c) $o .= '<tr><td>' . $c['no'] . '</td><td>' . self::e($c['code']) . '</td><td class="r">' . $c['units'] . '</td><td class="r">' . number_format($c['kg'], 2) . '</td><td>' . self::e($c['dims']) . '</td></tr>';
+        return $o . '</table></div>';
     }
 
     private static function pTest(float $w, float $h, array $x): string

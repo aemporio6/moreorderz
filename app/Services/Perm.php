@@ -158,6 +158,7 @@ class Perm
     public const PRINT_KINDS = [
         'PACKING_SLIP' => ['OWNER', 'MANAGER', 'WAREHOUSE', 'TL'], 'PICK_SHEET' => ['OWNER', 'MANAGER', 'WAREHOUSE', 'TL'], 'MANIFEST' => ['OWNER', 'MANAGER', 'WAREHOUSE', 'TL'],
         'LOCATION' => ['OWNER', 'MANAGER', 'WAREHOUSE'], 'PO' => ['OWNER', 'MANAGER', 'SOURCING', 'FINANCE', 'ACCOUNTANT'], 'CARTON_MARK' => ['OWNER', 'MANAGER', 'SOURCING', 'WAREHOUSE'],
+        'FBA_CARTON' => ['OWNER', 'MANAGER', 'WAREHOUSE'], 'FBA_ITEM' => ['OWNER', 'MANAGER', 'WAREHOUSE'], 'FBA_PACKLIST' => ['OWNER', 'MANAGER', 'WAREHOUSE'],
     ];
 
     public static function catalogue(): array
