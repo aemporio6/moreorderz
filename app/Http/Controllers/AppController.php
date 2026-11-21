@@ -31,7 +31,7 @@ class AppController extends Controller
             'ent' => Context::ent(), 'companies' => $companies, 'menu' => self::menu($va ? $va[0] : $role), 'create' => self::createCatalogue($va ? $va[0] : $role),
             'setup_open' => $role === 'OWNER' && \App\Services\SetupWizard::open((int) Context::ent()),
             'tasks_open' => DB::table('tasks')->where('owner_user_id', $u->id)->whereNotIn('status', ['DONE', 'APPROVED', 'CANCELLED'])->count(),
-            'product_form' => RecordService::formOfTable('t_product_vendors'), 'base_currency' => Settings::get('BASE_CURRENCY', Context::ent(), 'GBP'), 'today' => date('Y-m-d'),
+            'product_form' => RecordService::formOfTable('t_product_vendors'), 'person_forms' => \Illuminate\Support\Facades\DB::table('sys_registry')->where('table_name', 't_account')->distinct()->pluck('form_key')->all(), 'base_currency' => Settings::get('BASE_CURRENCY', Context::ent(), 'GBP'), 'today' => date('Y-m-d'),
         ];
     }
 
@@ -132,6 +132,16 @@ class AppController extends Controller
     {
         Rights::check('VIEW', $key);
         return \App\Services\FormRules::live($key, (string) $r->query('field'), (string) $r->query('value'), (int) $r->query('id') ?: null);
+    }
+
+    /** Job history of a person (R-C-39): newest first, renewal amber within 30 days. */
+    public function jobs(\Illuminate\Http\Request $r, int $id)
+    {
+        Rights::check('VIEW', 't_account_job_history');
+        $rows = \Illuminate\Support\Facades\DB::table('t_account_job_history as j')->leftJoin('cat_marketplaces as m', 'm.id', '=', 'j.fk_id_marketplace')->leftJoin('t_branches as b', 'b.id', '=', 'j.fk_id_branch')->leftJoin('cat_currency as c', 'c.id', '=', 'j.fk_id_currency')
+            ->where('j.fk_id_account', $id)->where('j.f_active', 1)->orderByDesc('j.id')->get(['j.*', 'm.marketplace_short as marketplace', 'b.shop_no', 'b.shop_name', 'c.currency_code']);
+        $soon = date('Y-m-d', strtotime('+30 days'));
+        return ['form' => 't_account_job_history', 'rows' => $rows->map(fn ($j) => (array) $j + ['renewal_soon' => $j->d_contract_renewal_date && $j->d_contract_renewal_date <= $soon && ! $j->d_end_date, 'running' => ! $j->d_end_date])->all()];
     }
 
     public function formCalc(\Illuminate\Http\Request $r, string $key) { Rights::check('VIEW', $key); return \App\Services\FormRules::calc($key, (array) $r->input('values', [])); }

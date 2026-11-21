@@ -48,6 +48,8 @@ class OldImportTest extends TestCase
             // lists the old tool kept under ids the new tool already uses for its own seeded lists (id clash)
             $pdo->exec("CREATE TABLE cat_references (id INT PRIMARY KEY, reference_heading VARCHAR(255), f_active TINYINT, fk_id_ent INT)"); $pdo->exec("INSERT INTO cat_references VALUES (1,'UTILITY',1,1),(2,'Ports of loading',1,0)");
             $pdo->exec("CREATE TABLE reference_items (id INT PRIMARY KEY, fk_reference_id INT, reference_name VARCHAR(255), fk_id_ent INT)"); $pdo->exec("INSERT INTO reference_items VALUES (1,1,'Gas',1),(2,1,'Electricity',1)");
+            $pdo->exec("CREATE TABLE t_account_job_history (id INT PRIMARY KEY, fk_id_account INT, fk_id_marketplace INT, d_job_start_date DATE NULL, share_percentage VARCHAR(20), pound_exchange_rate VARCHAR(50), salary INT)");
+            $pdo->exec("INSERT INTO t_account_job_history VALUES (1,1,1,'2025-01-01','10','0.0023',300),(2,1,1,'2026-01-01','ten percent','n/a',300)");      // old text columns (R-C-39)
             self::$ready = true;
         } catch (\Throwable $e) { self::$why = $e->getMessage(); }
     }
@@ -55,6 +57,9 @@ class OldImportTest extends TestCase
     public function test_master_rows_come_over_once_secrets_never_duplicates_are_merged_and_every_row_is_accounted_for(): void
     {
         $x = OldImport::run('mo_old_test', ['mask' => true]); $r = collect($x['rows'])->keyBy('old_table');
+        $j = $r['t_account_job_history']; $this->assertSame(2, $j['imported']); $this->assertStringContainsString('2 value(s) were text in a number column', $j['note']);      // text → empty and listed (R-C-39)
+        $this->assertSame([['id' => 2, 'column' => 'share_percentage', 'old_value' => 'ten percent'], ['id' => 2, 'column' => 'pound_exchange_rate', 'old_value' => 'n/a']], json_decode($j['review_json'], true));
+        $this->assertSame([10.0, null], [(float) DB::table('t_account_job_history')->where('id', 1)->value('share_percentage'), DB::table('t_account_job_history')->where('id', 2)->value('share_percentage')]);
         $this->assertSame(['COPY', 'COPY', 'COPY', 'LATER', 'RETIRED', 'TOOL'], [$r['cat_currency']['plan'], $r['t_users']['plan'], $r['t_account_banks']['plan'], $r['ebay']['plan'], $r['t_product_vendors_backup']['plan'], $r['sidebar_modules']['plan']]);
         $this->assertArrayNotHasKey('empty_table', $r->all());
         // currency: two new codes come over, the repeated code is merged into the row that was kept and the id map is written
@@ -78,10 +83,10 @@ class OldImportTest extends TestCase
         // every old row is in exactly one bucket
         $t = $x['totals'];
         $this->assertSame($t['old_rows'], $t['imported'] + $t['already_there'] + $t['merged'] + $t['failed'] + $t['later'] + $t['retired'] + $t['tool']);
-        $this->assertSame([12, 1, 1], [$t['to_copy'], $t['retired'], $t['tool']]);   // 3 currencies + 1 user + 1 bank row + 3 products + 2 lists + 2 list items
+        $this->assertSame([14, 1, 1], [$t['to_copy'], $t['retired'], $t['tool']]);   // 3 currencies + 1 user + 1 bank row + 3 products + 2 lists + 2 list items + 2 job history rows
         // again: nothing twice
         $y = OldImport::run('mo_old_test', ['mask' => true])['totals'];
-        $this->assertSame([0, 11, 1, 0], [$y['imported'], $y['already_there'], $y['merged'], $y['failed']]);
+        $this->assertSame([0, 13, 1, 0], [$y['imported'], $y['already_there'], $y['merged'], $y['failed']]);
         $this->assertSame(1, DB::table('cat_currency')->where('currency_code', 'ZZA')->count());
         $this->assertSame(2, DB::table('mo_import_report')->where('old_table', 't_users')->count(), 'each run leaves its report');
     }

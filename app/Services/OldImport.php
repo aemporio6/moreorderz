@@ -60,7 +60,7 @@ class OldImport
         try {
             foreach ($tables as $t) {
                 $n = (int) DB::selectOne('SELECT COUNT(*) AS n FROM ' . $old . '.' . self::ident($t))->n; if ($n === 0) continue;
-                $plan = self::plan($t); $line = ['run_code' => $run, 'old_table' => $t, 'plan' => $plan, 'old_rows' => $n, 'imported' => 0, 'already_there' => 0, 'merged' => 0, 'failed' => 0, 'left_out_columns' => null, 'masked_columns' => null, 'note' => null, 'f_dry' => $dry ? 1 : 0, 'created_at' => now()];
+                $plan = self::plan($t); $line = ['run_code' => $run, 'old_table' => $t, 'plan' => $plan, 'old_rows' => $n, 'review_json' => null, 'imported' => 0, 'already_there' => 0, 'merged' => 0, 'failed' => 0, 'left_out_columns' => null, 'masked_columns' => null, 'note' => null, 'f_dry' => $dry ? 1 : 0, 'created_at' => now()];
                 if ($plan !== 'COPY') $line['note'] = ['TOOL' => 'The new tool has its own menu, rights and module lists.', 'RETIRED' => 'Old backup copy or helper table – not carried over.', 'LATER' => 'Transactions: imported in part 2 through the stock and ledger services.'][$plan];
                 elseif (! isset($newTables[$t])) { $line['plan'] = 'LATER'; $line['note'] = 'No table of this name in the new tool – needs its own mapping.'; }
                 else $line = self::copy($oldDb, $t, $line, $dry, $mask) + $line;
@@ -132,6 +132,9 @@ class OldImport
                     if (isset($dateCols[$c]) && is_string($v) && str_starts_with($v, '0000-00-00')) $row[$c] = $nc[$c]->nu === 'YES' ? null : '1970-01-01';
                     elseif ($v === null && $nc[$c]->nu === 'NO' && $nc[$c]->df === null && ! str_contains((string) $nc[$c]->ex, 'auto_increment')) $row[$c] = self::zero($nc[$c]->ty);
                     elseif (is_string($v) && $nc[$c]->len && mb_strlen($v) > (int) $nc[$c]->len) $row[$c] = mb_substr($v, 0, (int) $nc[$c]->len);
+                    elseif (is_string($v) && trim($v) !== '' && in_array($nc[$c]->ty, ['decimal', 'int', 'bigint', 'smallint', 'tinyint', 'float', 'double'], true) && ! is_numeric(str_replace([',', '%', '£', ' '], '', $v))) {      // text in a number column (old share % / £ rate): left empty and listed for review (R-C-39)
+                        $row[$c] = $nc[$c]->nu === 'YES' ? null : self::zero($nc[$c]->ty); if (! $masked->contains($c) && count($line['review'] ?? []) < 500) $line['review'][] = ['id' => $hasPk ? $row[$pk] : null, 'column' => $c, 'old_value' => mb_substr($v, 0, 60)]; }
+                    elseif (is_string($v) && in_array($nc[$c]->ty, ['decimal', 'float', 'double'], true) && trim($v) !== '' && ! is_numeric($v)) $row[$c] = (float) str_replace([',', '%', '£', ' '], '', $v);
                 }
                 foreach ($masked as $c) $row[$c] = self::mask($row[$c] === null ? null : (string) $row[$c]);
                 if ($hasLegacy && $hasPk) { $row['legacy_table'] = $t; $row['legacy_id'] = $row[$pk]; }
@@ -153,6 +156,7 @@ class OldImport
         if ($line['merged']) $line['note'] = "{$line['merged']} old row(s) repeat a row that is kept (same code); they are merged into it and the old id → kept id is recorded.";
         if (! empty($line['remapped'])) { $line['note'] = trim(($line['note'] ?? '') . " {$line['remapped']} old row(s) had an id the new tool already uses for something else: they got a new id (old id → new id recorded)."); unset($line['remapped']); }
         if ($errors) $line['note'] = ($line['note'] ? $line['note'] . ' ' : '') . mb_substr(count($errors) . ' kind(s) of problem: ' . implode(' | ', array_keys($errors)), 0, 500);
+        if (! empty($line['review'])) { $line['note'] = trim(($line['note'] ?? '') . ' ' . count($line['review']) . ' value(s) were text in a number column and were left empty – see the review list.'); $line['review_json'] = json_encode($line['review']); } unset($line['review']);
         if ($t === 't_users') $line['note'] = trim(($line['note'] ?? '') . ' Passwords are not carried over: every user sets a new one, and the Owner gives each user a role.');
         if ($t === 't_product_vendors') $line['note'] = trim(($line['note'] ?? '') . ' Stock figures are set to 0 here; stock comes in part 2 as opening lots.');
         return $line;

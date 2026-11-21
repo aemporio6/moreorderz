@@ -541,3 +541,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-27 (21 Nov): landed-cost engine R-B_SOURCING-44 BUILT (LandedEngine, per-cycle run, ABSORB / WRITE_OFF with ledger). +6 register lines. 361 tests.
 - 7e-28 (21 Nov): variations R-D-4 BUILT (Variations grid with inheritance, duplicate child). +5 register lines. 363 tests.
 - 7e-29 (21 Nov): carton figures R-B_SOURCING-34 + typed codes / carton CBM R-G_CORE-91 BUILT (CartonCalc, live calc, carton marks). +8 register lines. 367 tests.
+- 7e-30 (21 Nov): job history sub-list R-C-39 BUILT (checks, overlap guard, person card, import review list). +4 register lines. 369 tests.

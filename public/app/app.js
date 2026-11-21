@@ -1292,6 +1292,7 @@
     $('#rDel').onclick = () => bulkRun(key, 'DELETE', [id], null, null, () => pageRecord(key, id));
     $('#rEdit').onclick = () => openForm(key, id, { onSaved: () => pageRecord(key, id) });
     if ($('#rMarks')) $('#rMarks').onclick = () => printNow('CARTON_MARK', [id]);
+    if (tab === 'details' && (S.boot.person_forms || []).includes(key)) jobsCard(id);
     $$('#main [data-tab]').forEach(b => b.onclick = () => { S.recTab = b.dataset.tab; pageRecord(key, id); });
   }
 
@@ -2185,6 +2186,20 @@
     mpPriceCard(pid);
     if (can) $('#prNew').onclick = () => miniForm('New price', 'The price before it ends the day before the start date.', [{ name: 'marketplace', label: 'Marketplace', required: true, options: opt(d.marketplaces, x => [x.id, x.name]) }, { name: 'raw_price', label: 'Raw price', type: 'number', required: true }, { name: 'sale_price', label: 'Sale price', type: 'number', required: true },
       { name: 'from_date', label: 'From', type: 'date', required: true, value: S.boot.today }, { name: 'reason', label: 'Reason', options: opt(d.reasons, x => [x.id, x.name]) }], async v => { const r = await api('prices/' + pid, { method: 'POST', body: v }); pagePrices(pid); return r; });
+  }
+  // ---------- job history of a person (R-C-39): a sub-list, newest first ----------
+  async function jobsCard(pid) {
+    let d; try { d = await api(`people/${pid}/jobs`); } catch (e) { return; }
+    const host = document.createElement('div'); host.className = 'card'; host.style.marginTop = '12px'; $('#main').appendChild(host); const dt = x => x ? x.split('-').reverse().join('-') : '';
+    host.innerHTML = `<div class="card-h"><h3>Job history</h3><button class="btn sm primary" id="jhAdd">${ic('plus')} Add</button></div>${d.rows.length ? `<div class="tbl-wrap"><table class="t"><thead><tr><th>Marketplace</th><th>Shop</th><th>Start Date</th><th>End Date</th><th>Renewal Date</th><th class="num">Share (%)</th><th class="num">£ Rate</th><th class="num">Salary</th><th>Salary Date</th><th>Action</th></tr></thead><tbody>
+      ${d.rows.map(j => `<tr><td>${esc(j.marketplace || '')}</td><td>${esc(j.shop_no ? j.shop_no + ' (' + (j.shop_name || '') + ')' : '—')}</td><td>${dt(j.d_job_start_date)}</td><td>${j.running ? '<span class="chip ok">running</span>' : dt(j.d_end_date)}</td><td style="${j.renewal_soon ? 'color:#b7791f;font-weight:600' : ''}" title="${j.renewal_soon ? 'Renewal within 30 days' : ''}">${dt(j.d_contract_renewal_date)}</td>
+        <td class="num">${j.share_percentage === null ? '<span class="chip warn">No VA share set</span>' : (+j.share_percentage)}</td><td class="num">${j.pound_exchange_rate === null ? '' : (+j.pound_exchange_rate)}</td><td class="num">${j.salary ? money(j.salary) + ' ' + esc(j.currency_code || '') : ''}</td><td>${dt(j.salary_date)}</td>
+        <td style="white-space:nowrap"><button class="btn sm" data-jhe="${j.id}">Edit</button> <button class="btn sm ghost" data-jhd="${j.id}">Delete</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No job history found.</div>'}`;
+    const again = () => { host.remove(); jobsCard(pid); };
+    $('#jhAdd', host).onclick = () => openForm(d.form, null, { preset: { fk_id_account: pid }, onSaved: () => { toast('Data saved successfully'); again(); } });
+    $$('[data-jhe]', host).forEach(b => b.onclick = () => openForm(d.form, +b.dataset.jhe, { onSaved: () => { toast('Data saved successfully'); again(); } }));
+    $$('[data-jhd]', host).forEach(b => b.onclick = () => { const m = modal('Delete job history', '', '<p>Are you sure, you want to delete this job history?</p>', '<button class="btn" id="jdNo">No</button><button class="btn primary" id="jdYes">Yes, delete</button>', false);
+      $('#jdNo', m.ov).onclick = m.close; $('#jdYes', m.ov).onclick = async () => { try { const r = await api('bulk/' + d.form, { method: 'POST', body: { action: 'DELETE', ids: [+b.dataset.jhd], apply: true } }); m.close(); undoToast('Data deleted successfully', r.job, again); again(); } catch (e) { toast(e.message, 'err'); } }; });
   }
   // ---------- variations (R-D-4): children in one grid, inheritance from the parent, one save path ----------
   async function pageVariations(pid) {

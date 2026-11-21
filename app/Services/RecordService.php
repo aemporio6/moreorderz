@@ -148,7 +148,7 @@ class RecordService
             if ($v === '' ) $v = null;
             $data[$col] = is_array($v) ? implode(',', $v) : $v;
         }
-        $errors += FormRules::check($formKey, $data, $old, $id, $errors);      // typed codes, shares, uniqueness of this form (R-F_SETUP-35)
+        $errors = FormRules::check($formKey, $data, $old, $id, $errors) + $errors;      // a form's own message (old texts) wins over the general one      // typed codes, shares, uniqueness of this form (R-F_SETUP-35)
         if ($errors) throw ValidationException::withMessages($errors);
 
         if ($table === 'drp_items') foreach (['ship_address', 'ship_phone'] as $mc) if (isset($data[$mc]) && Vault::isMasked($data[$mc])) unset($data[$mc]);      // a masked value shown to the person is never saved back over the real one

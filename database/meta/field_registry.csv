@@ -425,14 +425,14 @@ acc_settings,Compliance › Settings,module,Setup,1,3,horizon_months,…and ahea
 acc_settings,Compliance › Settings,module,Setup,1,4,reminders_enabled,Reminders enabled,check,,,,,,,all,param,,,,,Yes / No.,,,,,,TOOL,,,,acc_hub
 t_account_job_history,Person › Job history,child,Job,1,1,fk_id_account,Person,select,table:t_account,,Y,,,,all,auto,,,,,,,,t_account_job_history,fk_id_account,,Y,,,,t_account
 t_account_job_history,Person › Job history,child,Job,1,2,fk_id_marketplace,Marketplace,select,table:cat_marketplaces,,Y,Y,,,all,,,,,,,,,t_account_job_history,fk_id_marketplace,cat_marketplace,Y,,,,t_account
-t_account_job_history,Person › Job history,child,Job,1,3,fk_id_branch,Shop,select,table:t_branches,,,,,,all,,,,,,,,,t_account_job_history,fk_id_branch,t_branch,Y,,,,t_account
+t_account_job_history,Person › Job history,child,Job,1,3,fk_id_branch,Shop,select,table:t_branches,,,,,fk_id_marketplace,all,,,,,,Optional; only the shops of the chosen marketplace.,,,t_account_job_history,fk_id_branch,t_branch,Y,,,,t_account
 t_account_job_history,Person › Job history,child,Job,1,4,d_job_start_date,Start date,date,,,Y,Y,,,all,,,,,,,,,t_account_job_history,d_job_start_date,,Y,,,,t_account
 t_account_job_history,Person › Job history,child,Job,1,5,d_end_date,End date,date,,,,,,,all,,,,,,Blank = still running. Must be on or after the start.,,,t_account_job_history,d_end_date,,Y,,,,t_account
 t_account_job_history,Person › Job history,child,Job,1,6,d_contract_renewal_date,Contract renewal date,date,,,,,,,all,,,,,,,,,t_account_job_history,d_contract_renewal_date,,Y,,,,t_account
-t_account_job_history,Person › Job history,child,Job,1,7,share_percentage,Share %,number,,,,,,,all,,,0.5,0,100,"Optional; empty shows the chip ""No VA share set"" (B31).",,,t_account_job_history,share_percentage,,Y,,,,t_account
-t_account_job_history,Person › Job history,child,Job,1,8,pound_exchange_rate,Rate to base currency,number,,,,,,,all,,,0.000001,0,,,,,t_account_job_history,pound_exchange_rate,,Y,,,,t_account
+t_account_job_history,Person › Job history,child,Job,1,7,share_percentage,Share %,number,,,,,,,all,,,0.5,0,100,"Optional, 0–100 in steps of 0.5; empty shows the chip ""No VA share set"" (B31).",,,t_account_job_history,share_percentage,,Y,,,,t_account
+t_account_job_history,Person › Job history,child,Job,1,8,pound_exchange_rate,Rate to base currency,number,,,,,,,all,,,0.000001,0,,"Optional, above 0. Empty = the latest rate of the salary currency; a typed rate is kept (and logged).",,,t_account_job_history,pound_exchange_rate,,Y,,,,t_account
 t_account_job_history,Person › Job history,child,Job,1,9,salary,Salary,money,,,,,,,all,,,,0,,,,,t_account_job_history,salary,,Y,,,,t_account
-t_account_job_history,Person › Job history,child,Job,1,10,fk_id_currency,Salary currency,select,table:cat_currency,,,,,,all,,,,,,,,,t_account_job_history,fk_id_currency,cat_currency,Y,,,,t_account
+t_account_job_history,Person › Job history,child,Job,1,10,fk_id_currency,Salary currency,select,table:cat_currency,,,,,,all,,,,,,Empty = the currency of the person's country (GBP when none).,,,t_account_job_history,fk_id_currency,cat_currency,Y,,,,t_account
 t_account_job_history,Person › Job history,child,Job,1,11,salary_date,Salary date,date,,,,,,,all,,,,,,,,,t_account_job_history,salary_date,,Y,,,,t_account
 t_account_employment,Person › Employment,child,Employment,1,1,fk_id_account,Person,select,table:t_account,,Y,,,,OWNER_HR,auto,,,,,,,,t_account_employment,fk_id_account,,Y,,,,t_account
 t_account_employment,Person › Employment,child,Employment,1,2,job_title,Job title,text,,,,Y,,,OWNER_HR,,,,,,Job title as written in the contract.,,,t_account_employment,job_title,,Y,,,,t_account

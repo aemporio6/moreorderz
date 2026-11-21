@@ -34,6 +34,7 @@ class FormRules
         if ($table === 't_src_cartons') return self::cartons($data, $old);
         if (in_array($table, ['t_src_products', 't_product_vendors'], true)) return self::productCodes($data, $old);
         if ($table === 'cat_ip_burgers') return self::isp($data);
+        if ($table === 't_account_job_history') return self::jobHistory($data, $old, $id);
         if ($formKey !== 'cat_company_house') return [];
         $strict = self::strict($formKey); $e = []; $val = fn (string $c) => array_key_exists($c, $data) ? $data[$c] : ($old[$c] ?? null);
         if (isset($data['company_name']) && is_string($data['company_name']) && $data['company_name'] !== '') $data['company_name'] = mb_strtoupper(mb_substr($data['company_name'], 0, 1)) . mb_substr($data['company_name'], 1);
@@ -62,6 +63,38 @@ class FormRules
         $f = CartonCalc::calc($v, CartonCalc::divisorForRow((int) Context::ent(), $v));
         foreach (['unit_cbm', 'volumetric_weight', 'carton_net_weight', 'carton_gross_weight', 'full_cartons', 'loose_units', 'carton_qty', 'total_units', 'total_net_weight', 'total_gross_weight', 'carton_cbm', 'total_cbm'] as $c) if (Registry::hasColumn('t_src_cartons', $c)) $data[$c] = $f[$c];
         return [];
+    }
+
+    /**
+     * Job history row (R-C-39): marketplace + start date required (old messages, in the old order); shop of that marketplace; end ≥ start; share 0–100 in steps of 0.5;
+     * £ rate > 0 (empty → the latest rate of the salary currency); salary ≥ 0; salary currency defaults to the person's country currency, GBP last; no overlap with another
+     * row of the same person, marketplace and shop ("Overlaps the row from {date}").
+     */
+    private static function jobHistory(array &$data, array $old, ?int $id): array
+    {
+        $e = []; $v = fn (string $c) => array_key_exists($c, $data) ? $data[$c] : ($old[$c] ?? null);
+        if (! $v('fk_id_marketplace')) $e['fk_id_marketplace'] = 'Select Marketplace.';
+        if (! $v('d_job_start_date')) $e['d_job_start_date'] = 'Start Date is required.';
+        if ($e) return $e;
+        $shop = $v('fk_id_branch'); if ($shop && (int) DB::table('t_branches')->where('id', $shop)->value('fk_id_marketplace') !== (int) $v('fk_id_marketplace')) $e['fk_id_branch'] = 'This shop belongs to another marketplace.';
+        $start = (string) $v('d_job_start_date'); $end = $v('d_end_date'); if ($end && $end < $start) $e['d_end_date'] = 'End date must be on or after the start date.';
+        $sh = $v('share_percentage'); if ($sh !== null && $sh !== '') { if (! is_numeric($sh) || (float) $sh < 0 || (float) $sh > 100) $e['share_percentage'] = 'Share % must be a number from 0 to 100.'; elseif (fmod((float) $sh * 2, 1.0) != 0.0) $e['share_percentage'] = 'Share % goes in steps of 0.5 (for example 12.5).'; }
+        if (array_key_exists('salary', $data) && $data['salary'] !== null && $data['salary'] !== '' && (! is_numeric($data['salary']) || (float) $data['salary'] < 0)) $e['salary'] = 'Salary must be an amount of 0 or more.';
+        if (! $v('fk_id_currency') && ($acc = $v('fk_id_account'))) {      // salary currency: the currency of the person's current country, else GBP
+            $cur = DB::table('t_account as a')->join('cat_country as c', 'c.id', '=', 'a.current_nationality')->where('a.id', $acc)->value('c.fk_id_default_currency');
+            $data['fk_id_currency'] = (int) ($cur ?: DB::table('cat_currency')->where('currency_code', 'GBP')->value('id')) ?: null;
+        }
+        $rate = $v('pound_exchange_rate');
+        if ($rate !== null && $rate !== '' && (! is_numeric($rate) || (float) $rate <= 0)) $e['pound_exchange_rate'] = '£ rate must be a number above 0.';
+        elseif (($rate === null || $rate === '') && ($c = $data['fk_id_currency'] ?? $v('fk_id_currency'))) { $code = DB::table('cat_currency')->where('id', $c)->value('currency_code');
+            if ($code && $code !== Fx::base((int) Context::ent())) { try { $r = Fx::rate($code, date('Y-m-d'), (int) Context::ent()); if ($r > 0) $data['pound_exchange_rate'] = round($r, 6); } catch (\Throwable $x) { } } }      // the latest rate; a typed one is kept (and logged by the history)
+        if (! $e && ($acc = $v('fk_id_account'))) {
+            $clash = DB::table('t_account_job_history')->where('fk_id_account', $acc)->where('fk_id_marketplace', $v('fk_id_marketplace'))->where('f_active', 1)->when($id, fn ($q) => $q->where('id', '<>', $id))
+                ->where(fn ($q) => $shop ? $q->where('fk_id_branch', $shop)->orWhereNull('fk_id_branch') : $q)->where(fn ($q) => $q->whereNull('d_end_date')->orWhere('d_end_date', '>=', $start))
+                ->when($end, fn ($q) => $q->where('d_job_start_date', '<=', $end))->orderBy('d_job_start_date')->first(['d_job_start_date']);
+            if ($clash) $e['d_job_start_date'] = 'Overlaps the row from ' . date('d-m-Y', strtotime($clash->d_job_start_date)) . '.';
+        }
+        return $e;
     }
 
     public static function typedStrict(): bool { return Choices::get('TYPED_CODE_CHECKS', Context::ent()) !== 'OLD'; }
