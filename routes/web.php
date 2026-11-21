@@ -38,6 +38,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('form/{key}/calc', [AppController::class, 'formCalc']);
         Route::get('people/{id}/jobs', [AppController::class, 'jobs'])->whereNumber('id');
         Route::get('people/{id}/security-questions', [AppController::class, 'securityHealth'])->whereNumber('id');
+        Route::get('people/{id}/header', [AppController::class, 'personHeader'])->whereNumber('id');
         Route::get('people/{id}/shops', [AppController::class, 'personShops'])->whereNumber('id');
         Route::post('people/{id}/shops/{aid?}', [AppController::class, 'personShopSave'])->whereNumber('id')->whereNumber('aid');
         Route::post('people/{id}/shops/{aid}/delete', [AppController::class, 'personShopRemove'])->whereNumber('id')->whereNumber('aid');

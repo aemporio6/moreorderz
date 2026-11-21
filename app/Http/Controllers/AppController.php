@@ -138,6 +138,9 @@ class AppController extends Controller
     public function securityHealth(\Illuminate\Http\Request $r, int $id) { Rights::check('VIEW', 't_account'); return ['rows' => \App\Services\SecurityQuestions::health($id)]; }
 
     /** Shop assignments of a person (R-C-41). */
+    /** Person header: count chips and health (R-C-18). */
+    public function personHeader(\Illuminate\Http\Request $r, int $id) { $f = (string) RecordService::formOfTable('t_account'); Rights::check('VIEW', $f); RecordService::get($f, $id); return \App\Services\PersonHeader::for($id); }
+
     public function personShops(\Illuminate\Http\Request $r, int $id)
     {
         Rights::check('VIEW', 't_account_branch');

@@ -132,4 +132,5 @@ How to work each step: build → test → change the verdict lines in `audit/ver
 | 7e-73 | R-G_CORE-96 inbound carton file import (row per carton × SKU or Box-column pack list, INBOUND_CARTONS_IMPORTED) completes printers / labels / inbound cartons → MR-0363, MR-0571, MR-0598 BUILT | done | 593 / 1,433 (41%) | 439 tests |
 | 7e-74 | R-G_CORE-75 temp file retention (TempCleanup, nightly mo:cleanup-temp 02:30 company time, settings, Health line; no clean-up on page actions) → MR-0504, MR-1186, MR-1218 BUILT | done | 596 / 1,433 (42%) | 441 tests |
 | 7e-75 | R-D-1 product family coding + Add defaults (ProductFamily, registry default rules, 0.00 price rows, checks) → MR-0456, MR-0918, MR-0956 BUILT | done | 599 / 1,433 (42%) | 442 tests |
-| 7e-76 | NEXT → recount; 3-line R-G_CORE-72, R-C-18, R-B_SOURCING-21, R-H-19, R-A_SALES-87, R-FIN-22, R-FIN-47 …; rest of Sourcing 39 / 28 | todo | | |
+| 7e-76 | R-C-18 person header (PersonHeader: 16 count chips, health per chip and dot from the Account kit dates) → MR-0831, MR-0859, MR-0865 BUILT | done | 602 / 1,433 (42%) | 443 tests |
+| 7e-77 | NEXT → recount; 3-line R-G_CORE-72, R-B_SOURCING-21, R-C-10, R-H-19, R-A_SALES-87, R-FIN-22, R-FIN-47 …; rest of Sourcing 39 / 28 | todo | | |

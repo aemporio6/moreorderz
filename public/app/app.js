@@ -1309,9 +1309,9 @@
       : `<div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>When</th><th>Who</th><th>What</th><th>Change</th></tr></thead><tbody>${d.history.map(h => `<tr><td>${esc(h.at)}</td><td>${esc(h.by)}</td><td>${esc({ INSERT: 'Created', UPDATE: 'Changed', EXPORT: 'Exported' }[h.action] || h.action)}</td><td>${h.changes ? Object.entries(h.changes).map(([k, v]) => `<div><b>${esc(k)}</b>: ${esc(v[0] ?? '—')} → ${esc(v[1] ?? '—')}</div>`).join('') : ''}${h.reason ? `<div class="small muted">${esc(h.reason)}</div>` : ''}</td></tr>`).join('')}</tbody></table></div></div>`;
     $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/list/${key}">${esc(d.form_title)}</a> ›</div><h1>${esc(d.title)}</h1></div>
       <div class="actions">${key === S.boot.product_form ? `<a class="btn" href="#/stock/product/${id}">Stock</a><a class="btn" href="#/prices/${id}">Prices</a><a class="btn" href="#/variations/${id}">Variations</a>` : ''}${/^t_src_cartons/.test(key) ? `<button class="btn" id="rMarks" title="One shipping mark per carton: PO, SKU, carton n of N, weights, CBM">${ic('file')} Carton marks</button>` : ''}<button class="btn" id="rDel" title="Switch this record off. Refused when something still uses it. Can be undone.">Delete</button><button class="btn primary" id="rEdit">${ic('wand')} Edit</button></div></div>
-      <div id="rGuide"></div>
+      <div id="pHeader"></div><div id="rGuide"></div>
       <div class="seg" style="margin-bottom:14px">${tabs.map(([k, l]) => `<button type="button" class="${k === tab ? 'on' : ''}" data-tab="${k}">${esc(l)}</button>`).join('')}</div>${body}`;
-    guideCard(key, id);
+    guideCard(key, id); if ((S.boot.person_forms || []).includes(key)) personHeader(id);
     $('#rDel').onclick = () => bulkRun(key, 'DELETE', [id], null, null, () => pageRecord(key, id));
     $('#rEdit').onclick = () => openForm(key, id, { onSaved: () => pageRecord(key, id) });
     if ($('#rMarks')) $('#rMarks').onclick = () => printNow('CARTON_MARK', [id]);
@@ -2615,6 +2615,15 @@
   // ---------- job history of a person (R-C-39): a sub-list, newest first ----------
   // ---------- security questions per kit item (R-C-22): "Questions set n/6" ----------
   // ---------- shop assignment = the person's shop scope (R-C-41) ----------
+  // person header: count chips with health, roles, kind (R-C-18)
+  async function personHeader(pid) {
+    let h; try { h = await api(`people/${pid}/header`); } catch (e) { return; }
+    const box = $('#pHeader'); if (!box) return; const col = { red: '#dc3545', amber: '#ffc107', grey: '#adb5bd' };
+    box.innerHTML = `<div class="card" style="position:sticky;top:0;z-index:5;margin-bottom:12px"><div class="card-b" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <span title="${esc((h.health_why || []).join(' · ') || 'Nothing due')}" data-health="${esc(h.health || 'ok')}" style="width:12px;height:12px;border-radius:50%;display:inline-block;background:${col[h.health] || '#28a745'}"></span>
+      <b>${esc(h.code || '')}</b> ${esc(h.name)} ${h.kind ? `<span class="chip plain">${esc(h.kind)}</span>` : ''}${(h.roles || []).map(r => `<span class="chip">${esc(r)}</span>`).join(' ')}
+      <span style="flex-basis:100%"></span>${h.chips.map(c => `<a class="chip ${c.health === 'red' ? 'err' : c.health === 'amber' ? 'warn' : 'plain'}" data-chip="${c.key}" ${c.url ? `href="${esc(c.url)}"` : ''} title="${esc(c.note || '')}" style="${c.health === 'grey' ? 'border:1px dashed #adb5bd' : ''}">${esc(c.label)} ${c.count}</a>`).join(' ')}</div></div>`;
+  }
   async function shopsCard(pid) {
     let d; try { d = await api(`people/${pid}/shops`); } catch (e) { return; }
     const host = document.createElement('div'); host.className = 'card'; host.style.marginTop = '12px'; $('#main').appendChild(host);
