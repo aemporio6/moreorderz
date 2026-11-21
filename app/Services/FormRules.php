@@ -31,7 +31,8 @@ class FormRules
     public static function check(string $formKey, array &$data, array $old, ?int $id, array $already = []): array
     {
         if (Registry::table($formKey) === 't_account' && ($old['record_status'] ?? null) === 'DRAFT') $data['record_status'] = 'ACTIVE';      // the final Save of a draft person (R-C-20 / R-C-9)
-        return OwnItems::check($formKey, $data, $old, $id) + self::checkForm($formKey, $data, $old, $id, $already);      // R-C-20: an own item must be the person's own
+        $code = Registry::table($formKey) === 't_account' ? AccountCode::check($formKey, $data, $old, $id) : [];      // R-C-4 one account-code rule
+        return $code + OwnItems::check($formKey, $data, $old, $id) + self::checkForm($formKey, $data, $old, $id, $already);      // R-C-20: an own item must be the person's own
     }
 
     private static function checkForm(string $formKey, array &$data, array $old, ?int $id, array $already = []): array
@@ -197,12 +198,13 @@ class FormRules
     }
 
     /** Fields checked live while the person types. */
-    public static function liveFields(string $formKey): array { $t = Registry::table($formKey); return $formKey === 'cat_company_house' ? array_keys(self::COMPANY) : (in_array($t, ['t_src_products', 't_product_vendors'], true) ? ['hs_code'] : ($t === 'cat_ip_burgers' ? ['isp_code'] : ($t === 't_src_cycles' ? ['order_ref'] : []))); }
+    public static function liveFields(string $formKey): array { $t = Registry::table($formKey); if ($t === 't_account') return ['account_code']; return $formKey === 'cat_company_house' ? array_keys(self::COMPANY) : (in_array($t, ['t_src_products', 't_product_vendors'], true) ? ['hs_code'] : ($t === 'cat_ip_burgers' ? ['isp_code'] : ($t === 't_src_cycles' ? ['order_ref'] : []))); }
 
     /** Live check while typing (the old screen's message). */
     public static function live(string $formKey, string $field, string $value, ?int $id): array
     {
         if (in_array($field, ['hs_code', 'isp_code'], true)) { $d = [$field => $value]; $e = $field === 'hs_code' ? self::productCodes($d, []) : self::isp($d); return ['ok' => ! $e, 'message' => $e[$field] ?? null, 'value' => $d[$field] ?? $value]; }
+        if ($field === 'account_code' && Registry::table($formKey) === 't_account') { $d = ['account_code' => $value]; $e = AccountCode::check($formKey, $d, [], $id); return ['ok' => ! $e, 'message' => $e['account_code'] ?? null, 'value' => $d['account_code'] ?? $value]; }      // R-C-4 in the browser
         if ($field === 'order_ref' && Registry::table($formKey) === 't_src_cycles') return SrcDuplicate::live((int) Context::ent(), null, $value, $id) + ['value' => SrcDuplicate::clean($value)];
         if ($formKey !== 'cat_company_house') return ['ok' => true];
         if ($field === 'iso_code' && self::strict($formKey)) { $taken = trim($value) !== '' && self::isoTaken($value, $id); return ['ok' => ! $taken, 'message' => $taken ? 'This ISO code already exists. Please add another' : null]; }

@@ -180,6 +180,7 @@ class Registry
             'session.company' => $ctx['ent'] ?? null,
             'session.user' => $ctx['user'] ?? null,
             'setting' => Settings::get($a, $ctx['ent'] ?? null),
+            'rule' => $a === 'R-C-4' ? AccountCode::suggest((int) ($ctx['ent'] ?? Context::ent()), in_array($f['form_key'] ?? '', AccountCode::EXTERNAL_FORMS, true)) : null,      // account code suggestion
             default => null,   // rule: / calc: / linked: / history: / numbering: are filled by the module engines
         };
     }
