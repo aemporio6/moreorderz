@@ -143,6 +143,66 @@ class SourcingReports
         return ['from' => $from, 'to' => $to, 'base' => Fx::base($ent), 'rows' => $rows, 'unassigned_grn' => array_values($unassigned)];
     }
 
+    /** Locations that are not stock on hand. */
+    private const NOT_ON_HAND = ['SHIPPED', 'WRITTEN_OFF', 'MISSING', 'TRANSIT'];
+
+    /**
+     * R-F_SETUP-5: block 1 physical stock from the stock ledger (today = lot balances; an earlier date replays the movements up to that day),
+     * Company → Country → Location → SKU with qty, value at lot cost, lots and cost-source chips, subtotals per country and location; block 2 channel allocation.
+     */
+    public static function inventory(int $ent, ?string $asOf = null): array
+    {
+        $today = date('Y-m-d'); $asOf = $asOf && $asOf < $today ? $asOf : $today;
+        $q = $asOf === $today
+            ? DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->where('l.company_id', $ent)->where('b.qty', '<>', 0)->select('b.fk_id_lot as lot', 'b.fk_id_location as loc', 'b.qty')
+            : DB::table('t_stock_movements as m')->join('fin_lots as l', 'l.id', '=', 'm.fk_id_lot')->where('m.fk_id_ent', $ent)->where('m.created_at', '<=', $asOf . ' 23:59:59')->groupBy('m.fk_id_lot', 'm.fk_id_location')->havingRaw('SUM(m.qty_change) <> 0')->selectRaw('m.fk_id_lot as lot, m.fk_id_location as loc, SUM(m.qty_change) as qty');
+        $bal = $q->get();
+        $lots = DB::table('fin_lots')->whereIn('id', $bal->pluck('lot')->unique()->all() ?: [0])->get(['id', 'fk_id_product', 'unit_cost_gbp', 'cost_source'])->keyBy('id');
+        $locs = DB::table('cat_inventory_locations as c')->leftJoin('cat_country as k', 'k.id', '=', 'c.fk_id_country')->whereIn('c.id', $bal->pluck('loc')->unique()->all() ?: [0])->get(['c.id', 'c.kind', 'k.country_name'])->keyBy('id');
+        $prods = DB::table('t_product_vendors')->whereIn('id', $lots->pluck('fk_id_product')->unique()->all() ?: [0])->get(['id', 'SKU_VENDOR', 'product_name_vendor'])->keyBy('id');
+        $company = DB::table('t_enterprise')->where('id', $ent)->value('ent_name'); $rows = [];
+        foreach ($bal as $b) {
+            $loc = $locs[$b->loc] ?? null; if (! $loc || in_array($loc->kind, self::NOT_ON_HAND, true)) continue;
+            $lot = $lots[$b->lot] ?? null; if (! $lot) continue;
+            $k = $b->loc . '|' . $lot->fk_id_product;
+            $rows[$k] ??= ['company' => $company, 'country' => $loc->country_name ?: '—', 'location' => GrnPrint::locName((int) $b->loc), 'location_id' => (int) $b->loc, 'sku' => $prods[$lot->fk_id_product]->SKU_VENDOR ?? '', 'product' => $prods[$lot->fk_id_product]->product_name_vendor ?? '', 'qty' => 0.0, 'value' => 0.0, 'lots' => [], 'cost_sources' => []];
+            $rows[$k]['qty'] += (float) $b->qty; $rows[$k]['value'] += (float) $b->qty * (float) $lot->unit_cost_gbp; $rows[$k]['lots'][$lot->id] = 1;
+            $cs = $lot->cost_source ?: ((float) $lot->unit_cost_gbp > 0 ? 'LOT' : 'NO COST'); $rows[$k]['cost_sources'][$cs] = 1;
+        }
+        $rows = array_values(array_map(fn ($r) => ['value' => round($r['value'], 2), 'lots' => count($r['lots']), 'cost_sources' => array_keys($r['cost_sources'])] + $r, $rows));
+        usort($rows, fn ($a, $b) => [$a['country'], $a['location'], $a['sku']] <=> [$b['country'], $b['location'], $b['sku']]);
+        $sub = fn ($key) => collect($rows)->groupBy($key)->map(fn ($g) => ['qty' => $g->sum('qty'), 'value' => round($g->sum('value'), 2)])->all();
+        $alloc = DB::table('t_src_platform_alloc as a')->leftJoin('cat_country as k', 'k.id', '=', 'a.fk_id_country')->leftJoin('cat_marketplaces as m', 'm.id', '=', 'a.fk_id_marketplace')->where('a.fk_id_ent', $ent)->where('a.f_active', 1)
+            ->groupBy('k.country_name', 'm.marketplace_descr', 'a.seller_account', 'a.sku', 'a.status')->orderBy('k.country_name')->orderBy('m.marketplace_descr')->orderBy('a.seller_account')->orderBy('a.sku')
+            ->selectRaw('k.country_name as country, m.marketplace_descr as marketplace, a.seller_account as seller, a.sku, a.status, SUM(a.allocated_qty) as qty')->get()->map(fn ($r) => ['country' => $r->country ?: '—', 'marketplace' => $r->marketplace, 'seller' => $r->seller, 'sku' => $r->sku, 'qty' => (float) $r->qty, 'status' => $r->status])->all();
+        return ['as_of' => $asOf, 'base' => Fx::base($ent), 'physical' => $rows, 'by_country' => $sub('country'), 'by_location' => $sub('location'), 'total' => ['qty' => array_sum(array_column($rows, 'qty')), 'value' => round(array_sum(array_column($rows, 'value')), 2)], 'allocation' => $alloc,
+            'note' => 'Stock on hand from the stock ledger at lot cost; shipped, written-off, missing and in-transit units are not on hand.'];
+    }
+
+    /** R-F_SETUP-8: investor report – detail per investment and summary per investor (the statement uses the same figures). $only = an investor sees only his own row. */
+    public static function investors(int $ent, ?int $only = null): array
+    {
+        $inv = DB::table('t_src_investments as i')->leftJoin('t_account as a', 'a.id', '=', 'i.fk_id_investor')->leftJoin('t_src_cycles as c', 'c.id', '=', 'i.fk_id_cycle')->leftJoin('t_src_po as p', 'p.id', '=', 'i.fk_id_po')
+            ->where('i.fk_id_ent', $ent)->where('i.f_active', 1)->whereNotNull('i.fk_id_investor')->when($only, fn ($q) => $q->where('i.fk_id_investor', $only))
+            ->get(['i.id', 'i.fk_id_investor', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as investor"), 'c.id as cycle_id', 'c.cycle_code', 'p.po_number', 'i.invest_amount', 'i.fk_id_currency', 'i.base_amount', 'i.share_pct', 'i.invest_date', 'i.status']);
+        $detail = $inv->map(function ($r) use ($ent) {
+            $cur = $r->fk_id_currency ? Fx::code($r->fk_id_currency, $ent) : Fx::base($ent);
+            $base = (float) $r->base_amount > 0 ? (float) $r->base_amount : Fx::toBase((float) $r->invest_amount, $cur, (string) ($r->invest_date ?: date('Y-m-d')), $ent);
+            return ['id' => (int) $r->id, 'investor_id' => (int) $r->fk_id_investor, 'investor' => $r->investor ?: '#' . $r->fk_id_investor, 'cycle' => $r->cycle_code, 'cycle_id' => $r->cycle_id ? (int) $r->cycle_id : null, 'po' => $r->po_number,
+                'amount' => round((float) $r->invest_amount, 2), 'currency' => $cur, 'base' => round($base, 2), 'share_pct' => $r->share_pct !== null ? (float) $r->share_pct : null, 'date' => $r->invest_date, 'status' => $r->status];
+        })->sort(fn ($a, $b) => [mb_strtolower($a['investor']), -($a['cycle_id'] ?? 0)] <=> [mb_strtolower($b['investor']), -($b['cycle_id'] ?? 0)])->values()->all();
+        $summary = [];
+        foreach (collect($detail)->groupBy('investor_id') as $id => $g) {
+            $invested = round($g->sum('base'), 2); $w = $g->filter(fn ($x) => $x['share_pct'] !== null);
+            $goods = round((float) DB::table('fin_lots')->where('company_id', $ent)->where('fk_id_owner', $id)->where('qty_left', '>', 0)->sum(DB::raw('qty_left * unit_cost_gbp')), 2);
+            $returns = round((float) DB::table('t_inv_period_investors as x')->join('t_inv_periods as p', 'p.id', '=', 'x.fk_id_period')->where('p.fk_id_ent', $ent)->where('p.status', 'CONFIRMED')->where('x.fk_id_investor_account', $id)->sum('x.share_amount'), 2);
+            $out = round((float) DB::table('fin_withdrawals')->where('company_id', $ent)->where('investor_id', $id)->whereIn('status', ['APPROVED', 'PAID'])->sum('amount'), 2);
+            $summary[] = ['investor_id' => (int) $id, 'investor' => $g->first()['investor'], 'invested' => $invested, 'share_pct' => $w->sum('base') > 0 ? round($w->sum(fn ($x) => $x['share_pct'] * $x['base']) / $w->sum('base'), 2) : null,
+                'goods_in_hand' => $goods, 'returns' => $returns, 'withdrawals' => $out, 'balance' => round($invested + $returns - $out, 2)];
+        }
+        return ['base' => Fx::base($ent), 'summary' => $summary, 'detail' => $detail, 'total_label' => 'TOTAL INVESTED', 'total_base' => round(array_sum(array_column($detail, 'base')), 2)];
+    }
+
     /** R-F_SETUP-9 */
     public static function poPosition(int $ent, int $poId): array
     {

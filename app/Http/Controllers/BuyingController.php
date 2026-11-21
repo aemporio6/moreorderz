@@ -124,6 +124,15 @@ class BuyingController extends Controller
     public function repTransit(Request $r) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\SourcingReports::inTransit((int) Context::ent())); }
     public function repSuppliers(Request $r) { $this->can($r, 'buying.SEE'); return $this->run(function () use ($r) { $x = \App\Services\SourcingReports::supplierPerf((int) Context::ent(), (string) ($r->query('from') ?: date('Y-01-01')), (string) ($r->query('to') ?: date('Y-m-d')));
         if (! \App\Services\Perm::has($r->user(), 'buying.MONEY')) foreach ($x['rows'] as &$row) $row['value'] = null; return $x; }); }
+    public function repInventory(Request $r) { $this->can($r, 'buying.SEE'); return $this->run(function () use ($r) { $x = \App\Services\SourcingReports::inventory((int) Context::ent(), $r->query('as_of') ?: null);
+        if (! \App\Services\Perm::has($r->user(), 'buying.MONEY')) { foreach ($x['physical'] as &$row) $row['value'] = null; $x['total']['value'] = null; foreach (['by_country', 'by_location'] as $k) foreach ($x[$k] as &$v) $v['value'] = null; } return $x; }); }
+    /** R-F_SETUP-8: OWNER / PARTNER (and buying money) see every investor; an INVESTOR sees only his own row. */
+    public function repInvestors(Request $r)
+    {
+        $role = (string) Context::role(); $u = $r->user();
+        if ($role === 'INVESTOR') return $this->run(fn () => \App\Services\SourcingReports::investors((int) Context::ent(), (int) ($u->fk_id_account ?: -1)));
+        $this->can($r, 'buying.MONEY'); return $this->run(fn () => \App\Services\SourcingReports::investors((int) Context::ent()));
+    }
     public function repOutstanding(Request $r) { $this->can($r, 'buying.MONEY'); return $this->run(fn () => \App\Services\SourcingReports::outstanding((int) Context::ent(), $r->only(['supplier', 'cycle', 'ageing', 'currency']))); }
     public function poPosition(Request $r, int $id) { $this->can($r, 'buying.MONEY'); return $this->run(fn () => \App\Services\SourcingReports::poPosition((int) Context::ent(), $id)); }
     public function linkTerm(Request $r, int $id) { $this->can($r, 'buying.PAY'); return $this->run(fn () => \App\Services\SourcingReports::linkPayment((int) Context::ent(), $id, (int) $r->input('term'))); }

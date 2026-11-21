@@ -118,4 +118,52 @@ class SourcingReportsTest extends TestCase
         $r = collect($x['rows'])->firstWhere('supplier', 'Score Co');
         $this->assertEquals([1, 9000, 10, 2, 2.0, 100, 24, 30, 1], [$r['pos'], $r['value'], $r['missing'], $r['damaged'], $r['defect_pct'], $r['on_time_pct'], $r['lead_actual'], $r['lead_promised'], $r['claims']], 'not 18,000 / 60 as the old join; defect % weighted 8 / 400');
     }
+
+    public function test_inventory_rule_example_and_as_of_date(): void
+    {
+        $this->actingAs($this->owner);
+        $uk = DB::table('cat_country')->where('country_name', 'United Kingdom')->value('id') ?: $this->f('cat_country', ['country_name' => 'United Kingdom', 'iso_code' => 'GB', 'country_code' => 44]);
+        $wh = $this->f('cat_inventory_locations', ['location_name' => 'UK-WH1', 'kind' => 'WAREHOUSE', 'fk_id_country' => $uk]);
+        $tr = $this->f('cat_inventory_locations', ['location_name' => 'On the way', 'kind' => 'TRANSIT']);
+        $p = $this->f('t_product_vendors', ['SKU_VENDOR' => 'INV-A-' . uniqid(), 'product_name_vendor' => 'Item A']);
+        $l1 = $this->f('fin_lots', ['company_id' => 1, 'fk_id_product' => $p, 'qty' => 300, 'qty_left' => 300, 'unit_cost_gbp' => 4, 'received_date' => '2026-10-01', 'lot_code' => 'L-A1']);
+        $l2 = $this->f('fin_lots', ['company_id' => 1, 'fk_id_product' => $p, 'qty' => 250, 'qty_left' => 250, 'unit_cost_gbp' => 5, 'received_date' => '2026-11-01', 'lot_code' => 'L-A2']);
+        DB::table('fin_lot_balances')->insert([['fk_id_lot' => $l1, 'fk_id_location' => $wh, 'qty' => 300], ['fk_id_lot' => $l2, 'fk_id_location' => $wh, 'qty' => 200], ['fk_id_lot' => $l2, 'fk_id_location' => $tr, 'qty' => 50]]);
+        $x = $this->getJson('/api/src-report/inventory')->assertOk()->json();
+        $r = collect($x['physical'])->firstWhere('location_id', $wh);
+        $this->assertEquals([500, 2200, 2, 'United Kingdom', 'UK-WH1'], [$r['qty'], $r['value'], $r['lots'], $r['country'], $r['location']], 'one row, in-transit units are not on hand');
+        $this->assertNull(collect($x['physical'])->firstWhere('location_id', $tr));
+        $this->assertEquals(500, $x['by_location']['UK-WH1']['qty']);
+        // as of a past date: the movements up to that day
+        DB::table('t_stock_movements')->insert([['fk_id_ent' => 1, 'fk_id_product' => $p, 'movement_type' => 'purchase_in', 'qty_change' => 300, 'stock_after' => 300, 'fk_id_location' => $wh, 'fk_id_lot' => $l1, 'created_at' => '2026-10-01 10:00:00'],
+            ['fk_id_ent' => 1, 'fk_id_product' => $p, 'movement_type' => 'purchase_in', 'qty_change' => 250, 'stock_after' => 550, 'fk_id_location' => $wh, 'fk_id_lot' => $l2, 'created_at' => '2026-11-01 10:00:00']]);
+        $old = collect(SourcingReports::inventory(1, '2026-10-15')['physical'])->firstWhere('location_id', $wh);
+        $this->assertEquals([300, 1200], [$old['qty'], $old['value']]);
+        $cy = $this->cycle(); $mp = $this->f('cat_marketplaces', ['marketplace_short' => 'AZ' . substr(uniqid(), -3), 'marketplace_descr' => 'Amazon UK']);
+        $this->f('t_src_platform_alloc', ['fk_id_cycle' => $cy, 'fk_id_country' => $uk, 'fk_id_marketplace' => $mp, 'seller_account' => 'Seller 1', 'sku' => 'INV-A', 'allocated_qty' => 120, 'status' => 'PLANNED']);
+        $this->f('t_src_platform_alloc', ['fk_id_cycle' => $cy, 'fk_id_country' => $uk, 'fk_id_marketplace' => $mp, 'seller_account' => 'Seller 1', 'sku' => 'INV-A', 'allocated_qty' => 80, 'status' => 'PLANNED']);
+        $a = collect(SourcingReports::inventory(1)['allocation'])->firstWhere('marketplace', 'Amazon UK');
+        $this->assertEquals(['United Kingdom', 'Seller 1', 200, 'PLANNED'], [$a['country'], $a['seller'], $a['qty'], $a['status']]);
+    }
+
+    public function test_investor_report_rule_example_and_own_row_only(): void
+    {
+        $this->actingAs($this->owner);
+        $a = $this->f('t_account', ['account_code' => 'INVA' . substr(uniqid(), -4), 'first_name' => 'Anna', 'sur_name' => 'Investor']);
+        $b = $this->f('t_account', ['account_code' => 'INVB' . substr(uniqid(), -4), 'first_name' => 'Bob', 'sur_name' => 'Investor']);
+        $gbp = DB::table('cat_currency')->where('currency_code', 'GBP')->value('id') ?: $this->f('cat_currency', ['currency_code' => 'GBP', 'currency_name' => 'Pound']);
+        $cy = $this->cycle();
+        $this->f('t_src_investments', ['fk_id_cycle' => $cy, 'fk_id_investor' => $a, 'invest_code' => 'IV-1', 'invest_amount' => 5000, 'fk_id_currency' => $gbp, 'share_pct' => 50, 'invest_date' => '2026-10-01', 'status' => 'RECEIVED']);
+        $this->f('t_src_investments', ['fk_id_cycle' => $cy, 'fk_id_investor' => $a, 'invest_code' => 'IV-2', 'invest_amount' => 3000, 'fk_id_currency' => $gbp, 'share_pct' => 30, 'invest_date' => '2026-10-05', 'status' => 'RECEIVED']);
+        $this->f('t_src_investments', ['fk_id_cycle' => $cy, 'fk_id_investor' => $b, 'invest_code' => 'IV-3', 'invest_amount' => 1000, 'fk_id_currency' => $gbp, 'invest_date' => '2026-10-05', 'status' => 'RECEIVED']);
+        $per = $this->f('t_inv_periods', ['fk_id_ent' => 1, 'status' => 'CONFIRMED', 'd_from' => '2026-10-01', 'd_to' => '2026-10-31']);
+        $this->f('t_inv_period_investors', ['fk_id_period' => $per, 'fk_id_investor_account' => $a, 'share_amount' => 900]);
+        DB::table('fin_withdrawals')->insert(RecordService::fillNotNull('fin_withdrawals', ['investor_id' => $a, 'company_id' => 1, 'amount' => 400, 'currency' => 'GBP', 'status' => 'APPROVED', 'requested_at' => now()]));
+        $x = $this->getJson('/api/src-report/investors')->assertOk()->json();
+        $s = collect($x['summary'])->firstWhere('investor_id', $a);
+        $this->assertEquals([8000, 900, 400, 8500, 42.5], [$s['invested'], $s['returns'], $s['withdrawals'], $s['balance'], $s['share_pct']]);
+        $this->assertEquals(9000, $x['total_base']); $this->assertSame('TOTAL INVESTED', $x['total_label']);
+        $this->assertSame(['Anna Investor', 'Anna Investor', 'Bob Investor'], array_column($x['detail'], 'investor'), 'investor A-Z');
+        $this->assertSame([$a], array_column(SourcingReports::investors(1, $a)['summary'], 'investor_id'), 'an investor sees only his own row');
+    }
 }

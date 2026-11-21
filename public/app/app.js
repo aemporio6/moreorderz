@@ -192,6 +192,8 @@
       if ((mt = r.match(/^#\/src-landed\/(\d+)/))) return await pageSrcLanded(+mt[1]);
       if (r.startsWith('#/src-outstanding')) return await pageSrcOutstanding();
       if (r.startsWith('#/src-transit')) return await pageSrcTransit();
+      if (r.startsWith('#/src-inventory')) return await pageSrcInventory((r.match(/as_of=([\d-]+)/) || [])[1]);
+      if (r.startsWith('#/src-investors')) return await pageSrcInvestors(r.includes('view=detail'));
       if (r.startsWith('#/src-suppliers')) return await pageSrcSuppliers({ from: (r.match(/from=([\d-]+)/) || [])[1], to: (r.match(/to=([\d-]+)/) || [])[1] });
       if (r.startsWith('#/sourcing-reports')) return await pageSrcReports(+((r.match(/cycle=(\d+)/) || [])[1] || 0), +((r.match(/po=(\d+)/) || [])[1] || 0));
       if (r.startsWith('#/direct-po')) return await pageDirectPo(null, null);
@@ -3191,7 +3193,7 @@
       <div class="card"><div class="card-h"><h3>Per cycle</h3></div><div class="card-b"><div class="fld" style="max-width:420px;position:relative"><label><span>Sourcing cycle</span></label><input id="srCyc" placeholder="Type a cycle code, product or SKU" autocomplete="off"><div id="srCycL" class="mo-dd-list"></div></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn" data-rc="journey">Cycle Journey</button><button class="btn" data-rc="landed">Landed Cost</button><button class="btn" data-rc="summary">Cycle Summary PDF</button></div><div class="errtext" id="srCycMsg"></div></div></div>
       <div class="card" style="margin-top:12px"><div class="card-h"><h3>Global</h3></div><div class="card-b" style="display:flex;gap:8px;flex-wrap:wrap">
-        <a class="btn" href="#/src-outstanding">Outstanding Supplier Payments</a><a class="btn" href="#/reports/stock_location">Inventory by Country / Warehouse / Platform</a><a class="btn" href="#/src-transit">In-Transit</a><a class="btn" href="#/src-suppliers">Supplier Performance</a><a class="btn" href="#/reports/partners">Investor Report</a></div></div>
+        <a class="btn" href="#/src-outstanding">Outstanding Supplier Payments</a><a class="btn" href="#/src-inventory">Inventory by Country / Warehouse / Platform</a><a class="btn" href="#/src-transit">In-Transit</a><a class="btn" href="#/src-suppliers">Supplier Performance</a><a class="btn" href="#/src-investors">Investor Report</a></div></div>
       <div class="card" style="margin-top:12px"><div class="card-h"><h3>Per PO</h3></div><div class="card-b"><div class="fld" style="max-width:420px;position:relative"><label><span>Purchase order</span></label><input id="srPo" placeholder="Type a PO number or code" autocomplete="off"><div id="srPoL" class="mo-dd-list"></div></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn" data-rp="pay">PO Payment Position</button><button class="btn" data-rp="docs">PO Documents</button><button class="btn" data-rp="pdf">PO PDF</button></div><div class="errtext" id="srPoMsg"></div></div></div>`;
     const picker = (inp, list, url, pick) => { let tm; const load = async () => { const r = await api(url() + encodeURIComponent(inp.value.trim()));
@@ -3387,6 +3389,33 @@
       ${d.shipments.map(r => `<tr${red(r)}><td>${esc(r.shipment)}</td><td>${r.po_id ? `<a href="#/po/${r.po_id}">${esc(r.po || '')}</a>` : ''}</td><td>${r.cycle_id ? `<a href="#/cycle/${r.cycle_id}">${esc(r.cycle)}</a>` : ''}</td><td>${esc(r.mode || '')}</td><td>${esc(r.forwarder || '')}</td><td>${esc(r.destination || '')}</td><td class="num">${n(r.units)}</td><td>${esc(r.etd || '')}</td><td>${esc(r.eta || '—')}</td><td class="num">${r.days_late || ''}</td><td>${esc(r.status || '')}</td></tr>`).join('')}</tbody></table>${d.shipments.length ? '' : '<div class="empty">Nothing on the way.</div>'}</div></div>
       <div class="card" style="margin-top:12px"><div class="card-h"><h3>Transfers in transit</h3><span class="small muted">${n(d.units_transfers)} units</span></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Transfer</th><th>Cycle</th><th class="num">Qty in transit</th><th>Transfer date</th><th>Expected arrival</th><th class="num">Days late</th><th>Status</th></tr></thead><tbody>
       ${d.transfers.map(r => `<tr${red(r)}><td>${esc(r.transfer)}</td><td>${esc(r.cycle || '')}</td><td class="num">${n(r.qty)}</td><td>${esc(r.transfer_date || '')}</td><td>${esc(r.expected || '—')}</td><td class="num">${r.days_late || ''}</td><td>${esc(r.status || '')}</td></tr>`).join('')}</tbody></table>${d.transfers.length ? '' : '<div class="empty">No transfer on the way.</div>'}</div></div>`;
+  }
+  // R-F_SETUP-5: inventory – physical stock (country › location › SKU, as-of date) and channel allocation
+  async function pageSrcInventory(asOf) {
+    busy(true); let d; try { d = await api('src-report/inventory' + (asOf ? '?as_of=' + asOf : '')); } catch (e) { busy(false); return toast(e.message, 'err'); } busy(false);
+    const n = v => (+v).toLocaleString(), m = v => v === null ? '•••' : money(v); let rows = '', lastC = null, lastL = null;
+    const sub = (label, x) => `<tr><td colspan="5" class="small muted" style="text-align:right">${esc(label)}</td><td class="num"><b>${n(x.qty)}</b></td><td class="num"><b>${m(x.value)}</b></td><td colspan="2"></td></tr>`;
+    d.physical.forEach((r, i) => { const nx = d.physical[i + 1];
+      rows += `<tr><td>${esc(r.company || '')}</td><td>${esc(r.country)}</td><td>${esc(r.location || '')}</td><td>${esc(r.sku)}</td><td>${esc(r.product)}</td><td class="num">${n(r.qty)}</td><td class="num">${m(r.value)}</td><td class="num">${r.lots}</td><td>${r.cost_sources.map(c => `<span class="chip ${c === 'NO COST' ? 'warn' : 'plain'}">${esc(c)}</span>`).join(' ')}</td></tr>`;
+      if (!nx || nx.location !== r.location || nx.country !== r.country) rows += sub('Subtotal ' + (r.location || ''), d.by_location[r.location]);
+      if (!nx || nx.country !== r.country) rows += sub('Subtotal ' + r.country, d.by_country[r.country]); });
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/sourcing-reports">Sourcing reports</a> ›</div><h1>Inventory by country / warehouse / platform</h1><div class="sub">${esc(d.note)}</div></div></div>
+      <div class="card"><div class="card-b" style="display:flex;gap:8px;align-items:end"><div class="fld"><label><span>As of date</span></label><input type="date" id="ivD" value="${esc(d.as_of)}"></div><button class="btn sm" id="ivGo">Show</button></div></div>
+      <div class="card" style="margin-top:12px"><div class="card-h"><h3>Physical stock</h3></div><div class="tbl-wrap"><table class="t" id="ivP"><thead><tr><th>Company</th><th>Country</th><th>Location</th><th>SKU</th><th>Product</th><th class="num">Qty</th><th class="num">Value (${esc(d.base)})</th><th class="num">Lots</th><th>Cost source</th></tr></thead><tbody>${rows}
+        <tr><td colspan="5"><b>Total</b></td><td class="num"><b>${n(d.total.qty)}</b></td><td class="num"><b>${m(d.total.value)}</b></td><td colspan="2"></td></tr></tbody></table>${d.physical.length ? '' : '<div class="empty">No stock on hand.</div>'}</div></div>
+      <div class="card" style="margin-top:12px"><div class="card-h"><h3>Channel allocation</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Country</th><th>Marketplace</th><th>Seller account</th><th>SKU</th><th class="num">Qty</th><th>Status</th></tr></thead><tbody>${d.allocation.map(a => `<tr><td>${esc(a.country)}</td><td>${esc(a.marketplace || '')}</td><td>${esc(a.seller || '')}</td><td>${esc(a.sku || '')}</td><td class="num">${n(a.qty)}</td><td>${esc(a.status || '')}</td></tr>`).join('')}</tbody></table>${d.allocation.length ? '' : '<div class="empty">No platform allocation.</div>'}</div></div>`;
+    $('#ivGo').onclick = () => go('#/src-inventory?as_of=' + $('#ivD').value);
+  }
+  // R-F_SETUP-8: investor report – summary (default) or detail per investment
+  async function pageSrcInvestors(detail) {
+    busy(true); let d; try { d = await api('src-report/investors'); } catch (e) { busy(false); return toast(e.message, 'err'); } busy(false);
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/sourcing-reports">Sourcing reports</a> ›</div><h1>Investor report</h1><div class="sub">All amounts in ${esc(d.base)}. The investor statement uses the same figures.</div></div>
+      <div class="actions"><div class="seg"><button class="${detail ? '' : 'on'}" id="ivSum">Summary</button><button class="${detail ? 'on' : ''}" id="ivDet">Detail</button></div></div></div>
+      <div class="card"><div class="tbl-wrap">${detail ? `<table class="t" id="ivT"><thead><tr><th>Investor</th><th>Cycle</th><th>PO</th><th class="num">Amount</th><th class="num">Amount (${esc(d.base)})</th><th class="num">Share %</th><th>Date</th><th>Status</th></tr></thead><tbody>${d.detail.map(r => `<tr><td>${esc(r.investor)}</td><td>${r.cycle_id ? `<a href="#/cycle/${r.cycle_id}">${esc(r.cycle)}</a>` : ''}</td><td>${esc(r.po || '')}</td><td class="num">${money(r.amount)} ${esc(r.currency)}</td><td class="num">${money(r.base)}</td><td class="num">${r.share_pct ?? ''}</td><td>${esc(r.date || '')}</td><td>${esc(r.status || '')}</td></tr>`).join('')}
+        <tr><td colspan="4"><b>${esc(d.total_label)}</b></td><td class="num"><b>${money(d.total_base)}</b></td><td colspan="3"></td></tr></tbody></table>`
+        : `<table class="t" id="ivT"><thead><tr><th>Investor</th><th class="num">Invested</th><th class="num">Share %</th><th class="num">Goods in hand at cost</th><th class="num">Returns confirmed</th><th class="num">Withdrawals</th><th class="num">Balance</th></tr></thead><tbody>${d.summary.map(r => `<tr><td>${esc(r.investor)}</td><td class="num">${money(r.invested)}</td><td class="num">${r.share_pct ?? ''}</td><td class="num">${money(r.goods_in_hand)}</td><td class="num">${money(r.returns)}</td><td class="num">${money(r.withdrawals)}</td><td class="num"><b>${money(r.balance)}</b></td></tr>`).join('')}</tbody></table>`}
+        ${d.detail.length ? '' : '<div class="empty">No investment yet.</div>'}</div></div>`;
+    $('#ivSum').onclick = () => go('#/src-investors'); $('#ivDet').onclick = () => go('#/src-investors?view=detail');
   }
   // R-F_SETUP-7: supplier scorecard
   async function pageSrcSuppliers(f = {}) {
