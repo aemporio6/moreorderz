@@ -146,6 +146,17 @@ class OrdersController extends Controller
             'layout' => ['code' => $L->code, 'name' => $L->name, 'note' => $L->note, 'headers' => array_column($cols, 0), 'fields' => array_column($cols, 1), 'from_profile' => $profileLayout === $L->code], 'layouts' => $layouts->map(fn ($x) => ['code' => $x->code, 'name' => $x->name])];
     }
 
+    /** Tracking due back now, per shop, by its profile's moment and route (R-H-33). */
+    public function trackingDue(Request $r) { \App\Services\Perm::need($r->user(), 'orders.trackingUpload'); return ['shops' => \App\Services\TrackingPush::board((int) \App\Services\Context::ent())]; }
+
+    /** The profile's tracking file of one shop; the parcels in it are marked as sent back. */
+    public function trackingDueExport(Request $r, int $shop)
+    {
+        \App\Services\Perm::need($r->user(), 'orders.trackingUpload');
+        try { $x = \App\Services\TrackingPush::export((int) \App\Services\Context::ent(), $shop); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+        return response()->streamDownload(function () use ($x) { $o = fopen('php://output', 'w'); fputcsv($o, $x['headers'], $x['delimiter']); foreach ($x['rows'] as $row) fputcsv($o, $row, $x['delimiter']); fclose($o); }, $x['file'], ['Content-Type' => 'text/csv', 'X-Upload-Ref' => $x['ref']]);
+    }
+
     /** Add or change a tracking-upload layout: one line per column, "Header = field". Owner / Manager. */
     public function saveTrackingLayout(Request $r)
     {

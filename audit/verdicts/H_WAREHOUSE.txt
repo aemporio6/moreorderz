@@ -30,7 +30,7 @@
 30|F|form:carrier_service_rule|form only
 31|P|function buyLabels|labels bought through the carrier connection / label PDF import; not tested on a real account
 32|P|function reprint|reprint with reason; void / address change not built
-33|P|tracking-upload|ready to dispatch + tracking upload file
+33|B|class TrackingPush|Ready = packed, labelled (or untracked), not voided, units in DISPATCH; tracking goes back by the shop's marketplace profile: API when the profile's connection is CONNECTED, else the profile's tracking-upload CSV layout – never API-only (a profile whose API is not connected shows the note and the CSV carries it); tracking_upload_when per profile ON_LABEL (at label time) / ON_HANDOVER (default, nothing for parcels still on the desk); "Due to go back now" per shop on the tracking-upload screen, the download marks the parcels as sent (via CSV, file reference) so each goes back once; LBL_TRACKING_UPLOAD per shop and day past the profile's cut-off; WH_NOT_HANDED_OVER per Ready parcel past its carrier's collection cut-off (every 15 minutes and at night, auto-close). Rule test passes (eBay-like profile without API → the 3 handed-over parcels in its layout; TikTok-like ON_LABEL → due at label time); clicked in a browser. The marketplace API push itself comes with the Phase 10 connectors
 34|B|function openHandover|handover session per carrier with scan results
 35|B|function closeHandover|close = ship; unscanned parcels stay ready
 36|P|function closeHandover|exceptions task at close; lost parcels / carrier claims not built

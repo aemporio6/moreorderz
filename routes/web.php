@@ -388,6 +388,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('orders/import', [OrdersController::class, 'importFile']);
         Route::get('labels', [OrdersController::class, 'labels']);
         Route::get('tracking-upload', [OrdersController::class, 'trackingUpload']);
+        Route::get('tracking-due', [OrdersController::class, 'trackingDue']);
+        Route::get('tracking-due/{shop}/export', [OrdersController::class, 'trackingDueExport'])->whereNumber('shop');
         Route::post('tracking-layouts', [OrdersController::class, 'saveTrackingLayout']);
         Route::get('import-history', [AdminController::class, 'importHistory']);
         Route::get('merges', [AdminController::class, 'merges']);
