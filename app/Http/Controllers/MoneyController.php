@@ -57,8 +57,8 @@ class MoneyController extends Controller
     public function profit(Request $r)
     {
         $this->can($r, 'money.SEE');
-        $d = $r->validate(['by' => 'nullable|in:shop,product,month', 'from' => 'nullable|date', 'to' => 'nullable|date']);
-        return \App\Services\ProfitService::view((int) Context::ent(), $d['by'] ?? 'shop', $d['from'] ?? date('Y-m-01', strtotime('-2 month')), $d['to'] ?? date('Y-m-d'));
+        $d = $r->validate(['by' => 'nullable|in:' . implode(',', array_keys(\App\Services\ProfitService::VIEWS)), 'from' => 'nullable|date', 'to' => 'nullable|date', 'shop' => 'nullable|integer']);
+        return \App\Services\ProfitService::view((int) Context::ent(), $d['by'] ?? 'shop', $d['from'] ?? date('Y-m-01', strtotime('-2 month')), $d['to'] ?? date('Y-m-d'), ! empty($d['shop']) ? (int) $d['shop'] : null);
     }
 
     // ---- refund proposals ----

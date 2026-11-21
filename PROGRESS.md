@@ -562,3 +562,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-48 (21 Nov): task owner order + priority R-G_CORE-94 BUILT (TaskOwner, absence cover, why-owner on Tasks). +3 register lines (513). 402 tests.
 - 7e-49 (21 Nov): marketplace field builder R-A_SALES-67 BUILT (#/mp-fields, #/mp-values/{id}). +3 register lines (516). 403 tests.
 - 7e-50 (21 Nov): WhatsApp inbound commands R-G_CORE-52 + task state table R-G_CORE-1 + Done gate R-G_CORE-5 + rework R-G_CORE-9 BUILT. +7 register lines (523). 406 tests.
+- 7e-51 (21 Nov): profit seen every way R-FIN-74 BUILT (lot / batch / investor / share views, equal totals, Profit by on close screen). +4 register lines (527). 407 tests.

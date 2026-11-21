@@ -60,7 +60,7 @@ FIN-70|P|function split|bank layouts, auto-match, split lines; M6 invoice match,
 FIN-71|P|class OldImport|opening lots + history import; cut-over date rules / go-live gate not built
 FIN-72|F|form:payment_provider_profile|form only
 FIN-73|P|function categorise|category codes exist; re-coding of old lines / withdrawal bank + date not built
-FIN-74|P|class ProfitService|profit by shop / product / month, totals equal the books; by lot / batch / investor views not built
+FIN-74|B|function lotsOf|Profit by Lot / Batch (PO) / Investor (lot owner) / Shop / SKU / Month / Partner-VA share, all cut from the same confirmed lines, lot costs and fees (an order's fees follow its sales), equal grand totals, view never saves; dropdown on Profit views and on the month-close screen; one route per shop-month (route table + ONE_PROFIT_ROUTE) (ProfitViewsTest)
 FIN-75|B|function stack|stacking rule per agreement – spec example 460 / 400 / 450 / 500 passes
 INV-1|M||settle a sales month (old invoicing) not built – the waterfall on the locked month is used instead
 INV-2|M||investor lines + hidden margin not built
