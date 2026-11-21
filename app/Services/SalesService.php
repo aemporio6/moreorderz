@@ -179,10 +179,62 @@ class SalesService
             }
             $revenue = round($revenue, 2);
             if ($revenue > 0) Ledger::post($ent, $postDate, 'SALE_CONFIRM', $branchId, [['account' => '1100', 'debit' => $revenue, 'ref_id' => $branchId], ['account' => '4000', 'credit' => $revenue, 'ref_id' => $branchId]], ['memo' => "Sales {$shop->shop_name} $month"]);
+            // the import batches of this shop + month leave the Pending list once none of their lines is open
+            [$yy, $mm] = array_map('intval', explode('-', $month));
+            foreach (DB::table('t_sale_imports')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->where('period_year', $yy)->where('period_month', $mm)->where('status', '<>', 'Confirmed')->get() as $b) {
+                $open = DB::table('t_sales')->where('fk_id_import', $b->id)->where('status', 'Pending')->where(fn ($w) => $w->whereNull('f_locked')->orWhere('f_locked', 0))->exists();
+                DB::table('t_sale_imports')->where('id', $b->id)->update(['status' => $open ? 'Partially Confirmed' : 'Confirmed', 'confirmed_at' => now(), 'confirmed_by' => Context::userId(), 'confirmed_by_name' => (string) (DB::table('t_users')->where('id', Context::userId())->value('display_name') ?? ''), 'updated_at' => now()]);
+            }
             Audit::log('t_branches', $branchId, 'LOCK', ['month' => $month, 'lines' => $n, 'units' => $units, 'sales' => $revenue, 'cost' => round($cogs, 2)], 'Sales Month Confirm', $ent);
             TaskEngine::close('WH_UNSHIPPED_LINES', [$branchId . '-' . $month], 'Confirmed');
             EventBus::fire('SALE_MONTH_CONFIRMED', 't_branches', $branchId, ['month' => $month, 'lines' => $n, 'units' => $units, 'sales' => $revenue, 'cost' => round($cogs, 2)], $ent);
             return ['lines' => $n, 'units' => $units, 'sales' => $revenue, 'cost' => round($cogs, 2), 'profit_before_fees' => round($revenue - $cogs, 2), 'backfilled' => $backfilled];
+        });
+    }
+
+    /** What an unlock of a confirmed shop + month would undo (for the question on the screen). */
+    public static function unlockInfo(int $branchId, string $month): array
+    {
+        $ent = (int) Context::ent(); $q = DB::table('t_sales')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->whereRaw("DATE_FORMAT(d_order,'%Y-%m') = ?", [$month])->where('f_locked', 1)->where('sale_source', '<>', 'history');
+        $closed = Ledger::periodLocked($ent, $month) || ((CloseService::run($ent, $branchId, $month)->status ?? '') === 'LOCKED');
+        return ['month' => $month, 'month_name' => date('F Y', strtotime($month . '-01')), 'lines' => (clone $q)->count(), 'deducted' => (clone $q)->where('f_stock_deducted', 1)->count(), 'units' => (int) (clone $q)->where('f_stock_deducted', 1)->sum('qty'), 'closed' => $closed,
+            'text' => $closed ? 'This month is closed in Month Close, so it can no longer be unlocked. Corrections go into the next open month.' : null];
+    }
+
+    /**
+     * Owner unlock of a confirmed shop + month (R-A_SALES-34): needs a reason, keeps a version of every line, puts the units back where Confirm took them
+     * (the shipped place of their own lot, cost of sale reversed), reverses the revenue journal, and the lines are Pending again. Refused when the month is closed.
+     */
+    public static function unlockMonth(int $branchId, string $month, string $reason, ?object $u): array
+    {
+        Perm::need($u, 'orders.saleUnlock'); $reason = trim($reason); $ent = (int) Context::ent();
+        if (! preg_match('/^\d{4}-\d{2}$/', $month)) throw new \InvalidArgumentException('Choose the month.');
+        if (mb_strlen($reason) < 3) throw new \InvalidArgumentException('Write the reason for the unlock.');
+        $shop = DB::table('t_branches')->where('id', $branchId)->where('fk_id_ent', $ent)->first() ?? throw new \InvalidArgumentException('Shop not found.');
+        $info = self::unlockInfo($branchId, $month);
+        if ($info['closed']) throw new \InvalidArgumentException($info['text']);
+        if (! $info['lines']) throw new \InvalidArgumentException('Nothing of this month is confirmed.');
+        return DB::transaction(function () use ($ent, $branchId, $month, $reason, $u, $shop) {
+            $shipped = StockService::systemLocation($ent, 'SHIPPED'); $n = 0; $units = 0; $cost = 0.0; $key = uniqid('u'); $who = $u ? ($u->display_name ?: $u->login_id) : 'system';
+            foreach (DB::table('t_sales')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->whereRaw("DATE_FORMAT(d_order,'%Y-%m') = ?", [$month])->where('f_locked', 1)->where('sale_source', '<>', 'history')->lockForUpdate()->get() as $s) {
+                DB::table('imp_batch_effects')->insert(['fk_id_batch' => (int) $s->fk_id_import, 'table_name' => 't_sales', 'record_id' => $s->id, 'effect' => 'UPDATE', 'before_json' => json_encode((array) $s)]);      // the version before the unlock
+                $upd = ['f_locked' => 0, 'd_confirmed' => null, 'confirmed_by' => null, 'updated_at' => now()];
+                if ((int) $s->f_stock_deducted) {
+                    $out = (int) DB::table('fin_lot_consumption')->where('fk_id_sale', $s->id)->sum('qty');      // consumed minus what already came back
+                    if ($out > 0) { $r = StockService::returnIn($ent, (int) $s->id, $out, 'SELLABLE', $shipped); $units += $out; $cost += (float) $r['cost_back']; }
+                    $upd += ['f_stock_deducted' => 0, 'wh_status' => 'SHIPPED'];
+                }
+                if ($s->status === 'Confirmed') $upd['status'] = 'Pending';
+                DB::table('t_sales')->where('id', $s->id)->update($upd); $n++;
+                DB::table('t_sale_change_log')->insert(['fk_id_sale' => $s->id, 'save_key' => $key, 'action' => 'Unlock', 'field_name' => 'status', 'field_label' => 'Status', 'old_value' => $s->status . ' (locked)', 'new_value' => ($upd['status'] ?? $s->status) . ' – unlocked: ' . mb_substr($reason, 0, 180), 'fk_id_user' => $u->id ?? null, 'changed_by' => $who, 'changed_at' => now()]);
+            }
+            // the revenue journal(s) of this shop + month are reversed
+            foreach (DB::table('gl_journals')->where('fk_id_ent', $ent)->where('source_type', 'SALE_CONFIRM')->where('source_id', $branchId)->where('memo', "Sales {$shop->shop_name} $month")->whereNull('reversed_by_id')->whereNull('reverses_id')->pluck('id') as $j) Ledger::reverse((int) $j, null, "Unlock of sales {$shop->shop_name} $month: " . mb_substr($reason, 0, 120));
+            [$yy, $mm] = array_map('intval', explode('-', $month));
+            DB::table('t_sale_imports')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->where('period_year', $yy)->where('period_month', $mm)->update(['status' => 'Pending', 'confirmed_at' => null, 'confirmed_by' => null, 'confirmed_by_name' => '', 'updated_at' => now()]);
+            Audit::log('t_branches', $branchId, 'UNLOCK', ['month' => $month, 'lines' => $n, 'units_back' => $units, 'cost_back' => round($cost, 2)], $reason, $ent);
+            EventBus::fire('SALE_MONTH_UNCONFIRMED', 't_branches', $branchId, ['month' => $month, 'lines' => $n, 'units' => $units, 'reason' => $reason], $ent);
+            return ['message' => "Unlocked: $n line(s) of " . date('F Y', strtotime($month . '-01')) . ' are Pending again' . ($units ? ", $units unit(s) are back in stock." : '.'), 'lines' => $n, 'units' => $units, 'cost_back' => round($cost, 2)];
         });
     }
 

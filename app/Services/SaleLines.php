@@ -377,10 +377,27 @@ class SaleLines
         if (! empty($f['visibility']) && in_array($f['visibility'], ['POOL', 'PRIVATE'], true)) $q->where('s.visibility_mode', $f['visibility']);
         if (! empty($f['company'])) { $c = (int) $f['company']; $q->where(fn ($w) => $w->where('s.fk_id_company', $c)->orWhere(fn ($x) => $x->where(fn ($y) => $y->whereNull('s.fk_id_company')->orWhere('s.fk_id_company', 0))->whereIn('s.fk_id_branch', DB::table('t_branches')->where('fk_id_company', $c)->select('id')))); }
         if (! empty($f['vendor'])) $q->where('s.fk_id_vendor', (int) $f['vendor']);
+        if (! empty($f['investor'])) { $inv = (int) $f['investor']; $pids = DB::table('t_product_investors')->where('fk_id_account', $inv)->select('fk_id_product');      // the product's investor, or its parent's
+            $q->where(fn ($w) => $w->whereIn('s.fk_product_id', $pids)->orWhereIn('s.fk_product_id', DB::table('t_product_vendors')->whereIn('f_id_parent', DB::table('t_product_investors')->where('fk_id_account', $inv)->select('fk_id_product'))->select('id'))); }
+        if (! empty($f['ds_platform'])) $q->whereIn('s.fk_drp_item', DB::table('drp_items')->where('fk_platform', (int) $f['ds_platform'])->select('id'));
         if (! empty($f['carrier'])) { [$k, $v] = array_pad(explode(':', (string) $f['carrier'], 2), 2, '');
             if ($k === 'svc') $q->where('s.fk_id_car_pkg_svc', (int) $v); elseif ($k === 'car') $q->whereIn('s.fk_id_car_pkg_svc', DB::table('t_carrier_pkg_svc')->where('fk_id_carrier', (int) $v)->select('id')); }
         if (($t = trim((string) ($f['q'] ?? ''))) !== '') { $like = '%' . addcslashes($t, '%_\\') . '%'; $q->where(fn ($w) => $w->where('s.order_no', 'like', $like)->orWhere('s.sku', 'like', $like)->orWhere('s.cust_name', 'like', $like)->orWhere('s.product_info', 'like', $like)); }
         return $q;
+    }
+
+    /** What the filter controls offer (R-A_SALES-42): batches of the shop, vendors, investors, companies, drop-ship platforms, carriers with their services. */
+    public static function filterLists(array $f, ?object $u): array
+    {
+        $ent = (int) Context::ent(); $name = "TRIM(CONCAT_WS(' ', a.first_name, a.sur_name))";
+        $batches = Perm::mine(DB::table('t_sale_imports as i'), 'i.fk_id_branch')->join('t_branches as b', 'b.id', '=', 'i.fk_id_branch')->where('i.fk_id_ent', $ent)->when(! empty($f['marketplace']), fn ($q) => $q->where('i.fk_id_marketplace', (int) $f['marketplace']))->when(! empty($f['shop']), fn ($q) => $q->where('i.fk_id_branch', (int) $f['shop']))
+            ->orderByDesc('i.period_year')->orderByDesc('i.period_month')->limit(60)->get(['i.id', 'b.shop_no', 'i.period_month', 'i.period_year', 'i.status'])->map(fn ($b) => ['id' => $b->id, 'name' => $b->shop_no . ' - ' . SalesImport::monthName((int) $b->period_month, (int) $b->period_year) . ($b->status === 'Pending' ? '' : ' (' . $b->status . ')')])->all();
+        $carriers = []; foreach (DB::table('t_carrier_pkg_svc as v')->join('t_carriers as c', 'c.id', '=', 'v.fk_id_carrier')->whereIn('c.fk_id_ent', [0, $ent])->orderBy('c.carrier_name')->orderBy('v.pkg_svc_name')->get(['v.id', 'v.pkg_svc_name', 'c.id as cid', 'c.carrier_name']) as $v) { $carriers[$v->cid] ??= ['id' => 'car:' . $v->cid, 'name' => $v->carrier_name, 'services' => []]; $carriers[$v->cid]['services'][] = ['id' => 'svc:' . $v->id, 'name' => $v->pkg_svc_name]; }
+        return ['batches' => $batches, 'carriers' => array_values($carriers), 'visibility' => [['id' => 'POOL', 'name' => 'Central (Pool)'], ['id' => 'PRIVATE', 'name' => 'Private']],
+            'vendors' => DB::table('t_account as a')->whereIn('a.id', DB::table('t_sales')->where('fk_id_ent', $ent)->whereNotNull('fk_id_vendor')->where('fk_id_vendor', '>', 0)->distinct()->select('fk_id_vendor'))->orderByRaw($name)->limit(300)->get(['a.id', DB::raw("$name as name")])->all(),
+            'investors' => DB::table('t_account as a')->whereIn('a.id', DB::table('t_product_investors')->distinct()->select('fk_id_account'))->where('a.fk_id_ent', $ent)->orderByRaw($name)->limit(300)->get(['a.id', DB::raw("$name as name")])->all(),
+            'companies' => DB::table('t_enterprise')->whereIn('id', DB::table('t_branches')->where('fk_id_ent', $ent)->whereNotNull('fk_id_company')->distinct()->select('fk_id_company'))->orWhere('id', $ent)->orderBy('ent_name')->get(['id', 'ent_name as name'])->all(),
+            'ds_platforms' => DB::table('drp_platforms')->orderBy('platform_name')->get(['id', DB::raw("CONCAT(platform_name, IF(f_active = 1, '', ' (inactive)')) as name")])->all()];
     }
 
     public static function list(array $f, ?object $u): array
@@ -394,29 +411,33 @@ class SaleLines
         if (empty($f['marketplace']) && empty($f['batch'])) return $base + ['need' => 'Select a Marketplace (and a Shop, or all shops) to show the sales.', 'rows' => [], 'total' => 0];
         if (empty($f['batch']) && empty($f['from']) && empty($f['to'])) { $f['from'] = date('Y-m-01'); $f['to'] = date('Y-m-t'); }
         $per = (int) ($f['per_page'] ?? 50); if (! in_array($per, self::PAGE_SIZES, true)) $per = 50; $page = max(1, (int) ($f['page'] ?? 1));
+        if (! empty($f['_limit'])) { $per = (int) $f['_limit']; $page = 1; }      // the export takes the whole filtered list
         $q = self::filtered($f, $u); $total = (clone $q)->count();
-        $t = (clone $q)->selectRaw("COALESCE(SUM(s.qty),0) qty, COALESCE(SUM(s.total_amount),0) sale, COALESCE(SUM(s.buy_amount),0) buy, COALESCE(SUM(s.profit),0) profit, COALESCE(SUM(CASE WHEN s.profit < 0 THEN s.profit ELSE 0 END),0) loss")->first();
+        $strip = SaleView::strip($q, (bool) $base['rights']['see_cost']);
         // counts for the presets, under the same scope but without the "show" / type choice
         $g = $f; unset($g['show'], $g['type'], $g['status']); $cq = self::filtered($g, $u);
         $counts = (array) (clone $cq)->selectRaw("SUM(s.profit < 0) loss, SUM(s.f_out_of_period = 1) `out`, SUM(s.cost_source IN ('current','product')) nocost, SUM(s.sale_source = 'unmatched') nm, SUM(s.sale_source = 'ds') ds, SUM(s.status = 'Refunded') refunded")->first();
         $rows = $q->leftJoin('t_branches as b', 'b.id', '=', 's.fk_id_branch')->leftJoin('t_carrier_pkg_svc as cv', 'cv.id', '=', 's.fk_id_car_pkg_svc')->leftJoin('t_carriers as cc', 'cc.id', '=', 'cv.fk_id_carrier')->leftJoin('t_packings as pk', 'pk.id', '=', 's.fk_id_packing')->leftJoin('t_enterprise as co', 'co.id', '=', DB::raw('COALESCE(NULLIF(s.fk_id_company,0), b.fk_id_company, s.fk_id_ent)'))
             ->orderByDesc('s.d_order')->orderByDesc('s.id')->offset(($page - 1) * $per)->limit($per)
             ->get(['s.id', 's.fk_id_branch', 's.fk_id_import', 's.order_no', 's.d_order', 's.cust_name', 's.cust_contacts', 's.sku', 's.product_info', 's.qty', 's.sale_rate', 's.total_amount', 's.raw_price', 's.carrier_rate', 's.packing_rate', 's.buy_rate', 's.buy_amount', 's.profit', 's.d_buy', 's.product_url',
-                's.cost_source', 's.f_out_of_period', 's.status', 's.f_locked', 's.f_edited', 's.refund_loss_nature', 's.refund_loss_amount', 's.refund_reason', 's.visibility_mode', 's.sale_source', 's.fk_drp_item', 's.ds_match_count', 's.ds_note', 's.fk_product_id', 's.fk_id_car_pkg_svc', 's.fk_id_packing', 's.fulfilment_channel',
+                's.cost_source', 's.f_out_of_period', 's.status', 's.f_locked', 's.f_edited', 's.refund_loss_nature', 's.refund_loss_amount', 's.refund_reason', 's.visibility_mode', 's.sale_source', 's.fk_drp_item', 's.ds_match_count', 's.ds_note', 's.fk_product_id', 's.fk_id_car_pkg_svc', 's.fk_id_packing', 's.fulfilment_channel', 's.raw_csv', 's.fk_id_marketplace',
                 'b.shop_no', 'b.shop_name', DB::raw("CONCAT(cc.carrier_name, '-', cv.pkg_svc_name) as carrier_name"), 'pk.packing_name', 'co.ent_name as company']);
         $money = $base['rights']['see_cost'];
-        $out = $rows->map(function ($s) use ($u, $money) {
+        $invs = []; foreach (DB::table('t_product_investors as pi')->join('t_account as a', 'a.id', '=', 'pi.fk_id_account')->whereIn('pi.fk_id_product', $rows->pluck('fk_product_id')->filter()->unique())->get(['pi.fk_id_product', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as n")]) as $i) $invs[$i->fk_id_product][] = $i->n;
+        $plats = $rows->pluck('fk_drp_item')->filter()->isEmpty() ? [] : DB::table('drp_items as d')->leftJoin('drp_platforms as p', 'p.id', '=', 'd.fk_platform')->whereIn('d.id', $rows->pluck('fk_drp_item')->filter()->unique())->pluck('p.platform_name', 'd.id')->all();
+        $out = $rows->map(function ($s) use ($u, $money, $invs, $plats) {
             $kind = self::kind($s); $a = self::actions($s, $u);
             $row = ['id' => $s->id, 'order_no' => $s->order_no, 'd_order' => $s->d_order, 'cust_name' => $s->cust_name, 'cust_contacts' => $s->cust_contacts, 'sku' => $kind === 'DS' && preg_match('/^(NOSKU|DS-\d+)/', (string) $s->sku) ? '-' : $s->sku, 'product_info' => $s->product_info, 'qty' => (int) $s->qty,
                 'sale_rate' => (float) $s->sale_rate, 'total_amount' => (float) $s->total_amount, 'status' => $s->status, 'confirmed' => self::confirmed($s), 'kind' => $kind, 'edited' => (bool) $s->f_edited, 'out_of_period' => (bool) $s->f_out_of_period, 'shop' => trim($s->shop_no . ' ' . $s->shop_name), 'shop_no' => $s->shop_no, 'fk_id_branch' => $s->fk_id_branch,
                 'visibility' => $kind === 'DS' ? 'Drop shipping' : ($kind === 'NM' ? 'Not matched' : ($s->visibility_mode === 'POOL' ? 'Pool' : ($s->visibility_mode === 'PRIVATE' ? 'Private' : 'Not set'))), 'company' => $s->company, 'nm_note' => $kind === 'NM' ? $s->ds_note : null, 'product_id' => (int) $s->fk_product_id ?: null, 'ds_item' => (int) $s->fk_drp_item ?: null,
                 'refund' => $s->status === 'Refunded' ? ['nature' => self::NATURES[$s->refund_loss_nature] ?? $s->refund_loss_nature, 'loss' => (float) $s->refund_loss_amount, 'reason' => $s->refund_reason] : null,
-                'actions' => array_map(fn ($x) => ['ok' => (bool) $x[0], 'why' => $x[0] ? null : $x[1]], $a), 'month' => substr((string) $s->d_order, 0, 7)];
+                'actions' => array_map(fn ($x) => ['ok' => (bool) $x[0], 'why' => $x[0] ? null : $x[1]], $a), 'month' => substr((string) $s->d_order, 0, 7),
+                'investor' => $kind === 'OWN' ? (implode(', ', $invs[$s->fk_product_id] ?? []) ?: 'None') : ($kind === 'DS' ? 'Drop shipping' : 'None'), 'ds_platform' => $plats[$s->fk_drp_item] ?? null, 'xc' => SaleView::extraValues($s->raw_csv, (int) $s->fk_id_marketplace)];
             if ($money) $row += ['raw_price' => $kind === 'OWN' ? (float) $s->raw_price : 0.0, 'carrier_rate' => $kind === 'OWN' ? (float) $s->carrier_rate : 0.0, 'packing_rate' => $kind === 'OWN' ? (float) $s->packing_rate : 0.0, 'buy_rate' => $kind === 'DS' ? 0.0 : (float) $s->buy_rate, 'buy_amount' => (float) $s->buy_amount, 'profit' => (float) $s->profit,
                 'carrier_name' => $s->carrier_name, 'packing_name' => $s->packing_name, 'cost_source' => $s->cost_source, 'cost_tag' => self::SOURCE_TAGS[$s->cost_source] ?? null, 'd_buy' => $s->d_buy, 'product_url' => $s->product_url, 'loss' => (float) $s->profit < 0];
             return $row;
         })->all();
         return $base + ['rows' => $out, 'total' => $total, 'page' => $page, 'per_page' => $per, 'pages' => max(1, (int) ceil($total / $per)), 'filter' => $f, 'counts' => array_map('intval', $counts),
-            'totals' => ['qty' => (int) $t->qty, 'sale' => round((float) $t->sale, 2)] + ($money ? ['buy' => round((float) $t->buy, 2), 'profit' => round((float) $t->profit, 2), 'loss' => round((float) $t->loss, 2)] : [])];
+            'totals' => $strip, 'columns' => SaleView::columns($u), 'lists' => self::filterLists($f, $u)];
     }
 }

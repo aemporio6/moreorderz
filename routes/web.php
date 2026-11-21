@@ -251,6 +251,13 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('print-routes', [PrintController::class, 'route']);
         Route::get('orders', [OrdersController::class, 'board']);
         Route::get('sales', [OrdersController::class, 'saleLines']);
+        Route::post('sales/view-columns', [OrdersController::class, 'saleViewColumns']);
+        Route::get('sales/extra/{mp}', [OrdersController::class, 'saleExtra'])->whereNumber('mp');
+        Route::post('sales/extra/{mp}', [OrdersController::class, 'saleExtraSave'])->whereNumber('mp');
+        Route::get('sales/export/check', [OrdersController::class, 'saleExportCheck']);
+        Route::get('sales/export', [OrdersController::class, 'saleExport']);
+        Route::get('sales/unlock', [OrdersController::class, 'saleUnlockInfo']);
+        Route::post('sales/unlock', [OrdersController::class, 'saleUnlock']);
         Route::get('sales/import', [OrdersController::class, 'saleImportHome']);
         Route::get('sales/import/name', [OrdersController::class, 'saleImportName']);
         Route::post('sales/import', [OrdersController::class, 'saleImportRun']);

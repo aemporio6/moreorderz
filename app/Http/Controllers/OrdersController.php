@@ -279,7 +279,7 @@ class OrdersController extends Controller
     public function saleLines(Request $r)
     {
         $this->can($r, 'orders.SEE');
-        $f = $r->only(['marketplace', 'shop', 'batch', 'status', 'type', 'show', 'visibility', 'company', 'vendor', 'carrier', 'from', 'to', 'q', 'page', 'per_page']);
+        $f = $this->saleFilters($r);
         foreach (['from', 'to'] as $k) if (! empty($f[$k]) && ! preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $f[$k])) unset($f[$k]);
         // the last marketplace, shop and dates are remembered for the person on the server (every device); the one-batch view never overwrites them
         if (empty($f['batch']) && ! empty($f['marketplace']) && $r->boolean('remember', true)) \App\Services\ListExports::savePrefs($r->user(), 'sales_listing', ['scope' => array_intersect_key($f, array_flip(['marketplace', 'shop', 'from', 'to']))]);
@@ -331,4 +331,25 @@ class OrdersController extends Controller
     public function saleColumns(Request $r, int $mp) { $this->can($r, 'orders.saleImport'); $set = strtoupper((string) $r->query('set', 'SALE')); abort_unless(isset(\App\Services\SalesImport::SETS[$set]), 404);
         return ['set' => $set, 'fields' => \App\Services\SalesImport::SETS[$set][2], 'required' => $set === 'MATCH' ? [] : \App\Services\SalesImport::REQUIRED, 'columns' => array_map(fn ($a) => implode(',', $a), \App\Services\SalesImport::columns($mp, $set)), 'can_save' => \App\Services\Perm::has($r->user(), 'orders.saleColumns')]; }
     public function saleColumnsSave(Request $r, int $mp) { return $this->run(function () use ($r, $mp) { $this->can($r, 'orders.saleColumns'); return ['message' => 'Columns saved.', 'columns' => \App\Services\SalesImport::saveColumns($mp, strtoupper((string) $r->input('set', 'SALE')), (array) $r->input('columns', []))]; }); }
+
+    private function saleFilters(Request $r): array
+    {
+        $f = $r->only(['marketplace', 'shop', 'batch', 'status', 'type', 'show', 'visibility', 'company', 'vendor', 'investor', 'ds_platform', 'carrier', 'from', 'to', 'q', 'page', 'per_page']);
+        foreach (['from', 'to'] as $k) if (! empty($f[$k]) && ! preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $f[$k])) unset($f[$k]);
+        return $f;
+    }
+    // ---------- the sales list as a view: columns per person, extra marketplace columns, export, Owner unlock (R-A_SALES-34, 44, 45, 46) ----------
+    public function saleViewColumns(Request $r) { $this->can($r, 'orders.SEE'); return \App\Services\SaleView::saveHidden($r->user(), (array) $r->input('hidden', [])) + ['columns' => \App\Services\SaleView::columns($r->user())]; }
+    public function saleExtra(Request $r, int $mp) { $this->can($r, 'orders.saleImport'); return ['rows' => \App\Services\SaleView::extraSetup($mp), 'can_save' => \App\Services\Perm::has($r->user(), 'orders.saleColumns')]; }
+    public function saleExtraSave(Request $r, int $mp) { return $this->run(function () use ($r, $mp) { $this->can($r, 'orders.saleColumns'); return ['message' => 'Extra columns saved.', 'rows' => \App\Services\SaleView::saveExtra($mp, (array) $r->input('rows', []))]; }); }
+    public function saleExportCheck(Request $r) { return $this->run(function () use ($r) { $this->can($r, 'orders.saleExport'); return \App\Services\SaleView::exportCheck($this->saleFilters($r), strtolower((string) $r->query('format', 'pdf')), $r->user()); }); }
+    public function saleExport(Request $r)
+    {
+        return $this->run(function () use ($r) {
+            $this->can($r, 'orders.saleExport'); $x = \App\Services\SaleView::export($this->saleFilters($r), strtolower((string) $r->query('format', 'pdf')), $r->user());
+            return response($x['body'], 200, ['Content-Type' => $x['type'], 'Content-Disposition' => 'attachment; filename="' . $x['name'] . '"']);
+        });
+    }
+    public function saleUnlockInfo(Request $r) { $this->can($r, 'orders.saleUnlock'); return Sales::unlockInfo((int) $r->query('shop'), (string) $r->query('month')); }
+    public function saleUnlock(Request $r) { return $this->run(fn () => Sales::unlockMonth((int) $r->input('shop'), (string) $r->input('month'), (string) $r->input('reason'), $r->user())); }
 }

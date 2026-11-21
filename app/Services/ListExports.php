@@ -129,6 +129,7 @@ class ListExports
         if (isset($d['cols'])) $clean['cols'] = array_values(array_filter(array_map('strval', (array) $d['cols']), fn ($c) => preg_match('/^[A-Za-z0-9_]{1,64}$/', $c)));
         if (isset($d['widths'])) foreach ((array) $d['widths'] as $c => $w) if (preg_match('/^[A-Za-z0-9_]{1,64}$/', (string) $c) && (int) $w >= 40 && (int) $w <= 1200) $clean['widths'][$c] = (int) $w;
         if (isset($d['per'])) $clean['per'] = in_array((int) $d['per'], [25, 50, 100, 250], true) ? (int) $d['per'] : 100;
+        if (isset($d['hidden'])) $clean['hidden'] = array_values(array_filter(array_map('strval', (array) $d['hidden']), fn ($c) => preg_match('/^[a-z0-9_]{1,40}$/', $c)));
         if (isset($d['density'])) $clean['density'] = $d['density'] === 'compact' ? 'compact' : 'comfortable';
         // a remembered scope (marketplace, shop, dates): only digits and ISO dates are kept
         if (isset($d['scope']) && is_array($d['scope'])) { $sc = []; foreach ($d['scope'] as $k => $v) if (preg_match('/^[a-z_]{1,20}$/', (string) $k) && is_scalar($v) && preg_match('/^(\d{1,10}|\d{4}-\d{2}-\d{2})$/', (string) $v)) $sc[$k] = (string) $v; $clean['scope'] = $sc; }

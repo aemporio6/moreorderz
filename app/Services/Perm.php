@@ -157,6 +157,8 @@ class Perm
         $c['orders.saleRefund'] = ['Refund a sale line with the nature of the loss', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
         $c['orders.saleDelete'] = ['Delete a sale line (to the recycle bin)', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
         $c['orders.saleDeleteMonth'] = ['Delete a whole month of sales of a shop', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL']];
+        $c['orders.saleExport'] = ['Export the sales list (PDF, Word, Excel, CSV)', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'FINANCE']];
+        $c['orders.saleUnlock'] = ['Unlock a confirmed month of sales (with a reason)', 'Orders and dispatch', ['OWNER']];
         $c['orders.saleImport'] = ['Import the monthly sales file of a shop', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
         $c['orders.saleColumns'] = ['Set the Sale Columns of a marketplace (which CSV column is which field)', 'Orders and dispatch', ['OWNER', 'MANAGER']];
         return self::$cat = $c;
@@ -301,11 +303,11 @@ class Perm
     }
 
     /** Rights that stay with the Owner for ever – nobody can hand out the key to the rights themselves. */
-    public const OWNER_ONLY = ['admin.permissions'];
+    public const OWNER_ONLY = ['admin.permissions', 'orders.saleUnlock'];
 
     public static function known(string $code): bool
     {
-        if (in_array($code, self::OWNER_ONLY, true)) throw new \InvalidArgumentException('Changing roles and rights stays with the Owner. It cannot be given to a role or a person.');
+        if (in_array($code, self::OWNER_ONLY, true)) throw new \InvalidArgumentException($code === 'admin.permissions' ? 'Changing roles and rights stays with the Owner. It cannot be given to a role or a person.' : 'This right stays with the Owner. It cannot be given to a role or a person.');
         if (isset(self::catalogue()[$code])) return true;
         if (preg_match('/^form:([^:]+):(\w+)$/', $code, $m)) return Registry::exists($m[1]) && isset(self::ACTIONS[$m[2]]);
         return str_starts_with($code, 'menu:') && DB::table('sidebar_modules')->where('module_key', substr($code, 5))->exists();
