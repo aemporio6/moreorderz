@@ -405,6 +405,8 @@ class StockService
         if ($have < $qty) {
             $sku = DB::table('t_product_vendors')->where('id', $productId)->value('SKU_VENDOR');
             $loc = DB::table('cat_inventory_locations')->where('id', $locId)->value('location_name');
+            $locEnt = (int) DB::table('cat_inventory_locations')->where('id', $locId)->value('fk_id_ent');
+            if (DB::table('cat_inventory_locations')->where('id', $locId)->value('kind') === 'BIN') CountTriggers::negativeAttempt($locEnt, $locId, $productId);      // R-H-47 (3): a negative attempt puts the bin on the count list
             throw new \RuntimeException("Not enough stock of $sku at $loc: need $qty, have $have.");
         }
         $out = []; $left = $qty;

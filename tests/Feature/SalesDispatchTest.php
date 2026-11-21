@@ -133,7 +133,7 @@ class SalesDispatchTest extends TestCase
         $task = Dispatch::buildPickList(1);
         $line = DB::table('wh_pick_task_lines')->where('fk_id_pick_task', $task)->first();
         $r = Dispatch::pick($line->id, 3);
-        $this->assertSame(['picked' => 3, 'short' => 1, 'reservation' => 'OPEN'], $r);
+        $this->assertSame(['picked' => 3, 'short' => 1, 'reservation' => 'OPEN', 'ask_empty' => null], $r);
         $this->assertTrue(TaskEngine::isOpen('WH_SHORT_PICK', [$this->binA, 'BOWL-01']));
         $task2 = Dispatch::buildPickList(1);
         $l2 = DB::table('wh_pick_task_lines')->where('fk_id_pick_task', $task2)->first();

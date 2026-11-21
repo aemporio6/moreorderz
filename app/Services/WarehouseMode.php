@@ -85,6 +85,11 @@ class WarehouseMode
         [, $grn, $product] = array_pad(explode(':', (string) $t->dedupe_key), 3, 0); $rec = StockService::systemLocation($ent, 'RECEIVING');
         $have = (int) DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->where('b.fk_id_location', $rec)->where('l.fk_id_product', (int) $product)->sum('b.qty');
         $qty = $qty ?: $have; if ($qty <= 0 || $qty > $have) throw new \InvalidArgumentException("Only $have unit(s) wait in RECEIVING.");
+        $max = DB::table('t_product_locations')->where('fk_id_location', $bin)->where('fk_id_product', (int) $product)->value('max_qty');
+        if ($max !== null && CountTriggers::inBin((int) $product, $bin) + $qty > (int) $max) {      // R-H-47 (4): putaway refused for no room → the bin is counted
+            CountTriggers::trigger($ent, $bin, (int) $product, 'PUTAWAY_NO_ROOM');
+            throw new \InvalidArgumentException('No room: the bin takes at most ' . (int) $max . ' and holds ' . CountTriggers::inBin((int) $product, $bin) . '. Choose another bin – this bin is put on the count list.');
+        }
         StockService::transfer($ent, (int) $product, $qty, $rec, $bin, 'Putaway of GRN #' . $grn);
         if ($qty === $have) TaskEngine::close('WH_PUTAWAY_WAITING', [(int) $grn, (int) $product], 'Put away');
         return ['message' => "$qty unit(s) put away." . ($qty < $have ? ' ' . ($have - $qty) . ' still in RECEIVING.' : '')];

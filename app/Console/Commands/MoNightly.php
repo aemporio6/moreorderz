@@ -24,7 +24,8 @@ class MoNightly extends Command
             \App\Services\DueEngine::run((int) $ent);
             \App\Services\CountService::missingTasks((int) $ent);
             \App\Services\TrackingPush::tasks((int) $ent);
-            \App\Services\LostParcels::sweep((int) $ent);      // parcels not delivered after the carrier's claim days (R-H-36)      // tracking upload / handover cut-offs (R-H-33), also every 15 minutes      // units missing too long (R-H-46)      // every stored renewal / expiry / payment date reminds (R-C-46)
+            \App\Services\LostParcels::sweep((int) $ent);
+            \App\Services\CountTriggers::schedule((int) $ent);      // ABC cycle-count list of the day (R-H-47)      // parcels not delivered after the carrier's claim days (R-H-36)      // tracking upload / handover cut-offs (R-H-33), also every 15 minutes      // units missing too long (R-H-46)      // every stored renewal / expiry / payment date reminds (R-C-46)
             \App\Services\MoneyService::unmatchedTasks((int) $ent);
             \App\Services\MoneyService::staleTasks((int) $ent);
             \App\Services\CloseService::openTasks((int) $ent);

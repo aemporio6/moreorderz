@@ -110,6 +110,7 @@ class CountService
             DB::table('t_stock_counts')->where('id', $countId)->update(['status' => 'POSTED']);
             DB::table('t_stock_count_lines')->where('fk_id_count', $countId)->update(['line_status' => 'POSTED']);
             EventBus::fire('STOCK_COUNT_POSTED', 't_stock_counts', $countId, ['lines' => $n, 'value' => round($value, 2)], $ent);
+            TaskEngine::close('WH_COUNT_DUE', [$countId], 'Count posted');
             return ['lines_posted' => $n, 'value' => round($value, 2)];
         });
     }
@@ -153,6 +154,7 @@ class CountService
     {
         self::get($countId, ['OPEN', 'SUBMITTED', 'APPROVED']);
         DB::table('t_stock_counts')->where('id', $countId)->update(['status' => 'CANCELLED']);
+        TaskEngine::close('WH_COUNT_DUE', [$countId], 'Count cancelled');
     }
 
     public static function differences(int $countId): array

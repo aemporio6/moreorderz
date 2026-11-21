@@ -217,6 +217,15 @@ class OrdersController extends Controller
         return $this->run(fn () => Dispatch::pick($lineId, $d['qty'] ?? null) + ['message' => 'Picked']);
     }
 
+    /** "Is <bin> empty?" after a pick took the last unit (R-H-47). */
+    public function pickEmpty(Request $r)
+    {
+        $this->can($r, 'orders.WAREHOUSE');
+        $d = $r->validate(['bin' => 'required|integer', 'product' => 'required|integer', 'empty' => 'required|boolean']);
+        abort_unless(DB::table('cat_inventory_locations')->where('id', $d['bin'])->where('fk_id_ent', Context::ent())->exists(), 404);
+        return $this->run(fn () => \App\Services\CountTriggers::emptyAnswer((int) Context::ent(), (int) $d['bin'], (int) $d['product'], (bool) $d['empty']));
+    }
+
     // ---- pack ----
     public function pack(Request $r)
     {

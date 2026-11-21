@@ -132,9 +132,12 @@ class DispatchService
                 $sku = DB::table('t_product_vendors')->where('id', $l->fk_id_product)->value('SKU_VENDOR'); $bin = DB::table('cat_inventory_locations')->where('id', $l->fk_id_from_location)->value('location_name');
                 TaskEngine::open('WH_SHORT_PICK', [$l->fk_id_from_location, $sku], "Short pick at $bin: $short × $sku missing – count the bin", ['ent' => $ent, 'module' => 'cat_inventory_locations', 'record_id' => $l->fk_id_from_location]);
                 EventBus::fire('SHORT_PICK', 'wh_pick_task_lines', $lineId, ['short' => $short, 'bin' => $l->fk_id_from_location], $ent);
+                CountTriggers::trigger($ent, (int) $l->fk_id_from_location, (int) $l->fk_id_product, 'SHORT_PICK');      // R-H-47 (1)
             }
+            $ask = $qty > 0 && Settings::get('WH_COUNT_ON_ZERO', $ent, 'Y') === 'Y' && CountTriggers::inBin((int) $l->fk_id_product, (int) $l->fk_id_from_location) === 0      // R-H-47 (2): the pick emptied the bin
+                ? ['bin' => (int) $l->fk_id_from_location, 'name' => DB::table('cat_inventory_locations')->where('id', $l->fk_id_from_location)->value('location_name'), 'product' => (int) $l->fk_id_product] : null;
             EventBus::fire('PICK_CONFIRMED', 'wh_pick_task_lines', $lineId, ['qty' => $qty], $ent);
-            return ['picked' => $qty, 'short' => $short, 'reservation' => $new];
+            return ['picked' => $qty, 'short' => $short, 'reservation' => $new, 'ask_empty' => $ask];
         });
     }
 

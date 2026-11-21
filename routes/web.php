@@ -443,6 +443,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('pick-lists', [OrdersController::class, 'buildPick']);
         Route::get('pick-lists/{id}', [OrdersController::class, 'pickList'])->whereNumber('id');
         Route::post('pick-lines/{lineId}', [OrdersController::class, 'pick'])->whereNumber('lineId');
+        Route::post('pick-empty', [OrdersController::class, 'pickEmpty']);
         Route::post('pack', [OrdersController::class, 'pack']);
         Route::get('lost-parcels', [OrdersController::class, 'lostParcels']);
         Route::post('lost-parcels/{id}/{act}', [OrdersController::class, 'lostParcelAct'])->whereNumber('id')->where('act', 'open|claim|settle|resend');
