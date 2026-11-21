@@ -21,6 +21,7 @@ class OldImportTest extends TestCase
 
     protected function beforeTransaction(): void
     {
+        if (self::$ready && $this->name() === 'test_gen2_money_values_are_kept_and_the_compare_report_explains_each_difference') { self::gen2Fixture(); return; }
         if (self::$ready || self::$why) return;
         try {   // a second connection, so the test's own transaction is not touched by CREATE TABLE
             $c = config('database.connections.' . config('database.default'));
@@ -51,7 +52,22 @@ class OldImportTest extends TestCase
             $pdo->exec("CREATE TABLE t_account_job_history (id INT PRIMARY KEY, fk_id_account INT, fk_id_marketplace INT, d_job_start_date DATE NULL, share_percentage VARCHAR(20), pound_exchange_rate VARCHAR(50), salary INT)");
             $pdo->exec("INSERT INTO t_account_job_history VALUES (1,1,1,'2025-01-01','10','0.0023',300),(2,1,1,'2026-01-01','ten percent','n/a',300)");      // old text columns (R-C-39)
             self::$ready = true;
+            if ($this->name() === 'test_gen2_money_values_are_kept_and_the_compare_report_explains_each_difference') self::gen2Fixture();
         } catch (\Throwable $e) { self::$why = $e->getMessage(); }
+    }
+
+    /** Gen-2 rows for the R-A_SALES-52 test – made before its transaction starts (a table changed inside an open transaction cannot be read). */
+    private static function gen2Fixture(): void
+    {
+        $c = config('database.connections.' . config('database.default'));
+        $pdo = new \PDO("mysql:host={$c['host']};port={$c['port']};dbname=mo_old_test", $c['username'], $c['password'], [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
+        $pdo->exec('ALTER TABLE t_sale_orders_new ADD price_single_raw DECIMAL(10,2) NULL, ADD loss_nature VARCHAR(40) NULL');
+        $pdo->exec("INSERT INTO t_sale_orders_new (id, fk_id_vendor_inventory, fk_id_branch, ebay_order_no, d_ebay_order, cust_name, cust_phone, cust_address, product_info, qty_ordered, sale_rate, c_grand_total, pur_rate, pur_amount, d_purchase, sku_ebay, product_profit, product_loss, sale_order_status, refunded_at, refunded_reason, price_single_raw, loss_nature) VALUES
+            (101,0,9501,'G-1','2025-06-01 10:00:00','X','','','Lamp',1,10,10,8.25,6,'2025-06-01','SKU-G',1.75,0,'Success',NULL,NULL,6,NULL),
+            (102,0,9501,'G-2','2025-06-02 10:00:00','X','','','Lamp',1,0,0,8.25,6,'2025-06-02','SKU-G',0,-8.25,'Loss_Sale',NULL,NULL,6,NULL),
+            (103,0,9501,'G-3','2025-06-03 10:00:00','X','','','Lamp',1,0,0,8.25,6,'2025-06-03','SKU-G',-10,0,'Refunded','2025-06-05 10:00:00','Broken',6,'damaged_lost')");
+        $pdo->exec('CREATE TABLE t_product_sale_change_log (id BIGINT PRIMARY KEY, fk_user_id INT, changed_by VARCHAR(255), changed_fields LONGTEXT, fk_product_id INT, product_profit DECIMAL(10,2), created_at TIMESTAMP NULL)');
+        $pdo->exec("INSERT INTO t_product_sale_change_log VALUES (1, 9001, 'TL - Made Up', '{\"carrier\":{\"old\":\"1.50\",\"new\":\"2.00\"}}', 9701, 1.75, '2025-06-01 11:00:00')");
     }
 
     public function test_master_rows_come_over_once_secrets_never_duplicates_are_merged_and_every_row_is_accounted_for(): void
@@ -185,16 +201,8 @@ class OldImportTest extends TestCase
     /** R-A_SALES-52: Gen-2 values copied unchanged, status mapping, SAL_ZERO history, change log into history, compare report per shop / month. */
     public function test_gen2_money_values_are_kept_and_the_compare_report_explains_each_difference(): void
     {
-        $c = config('database.connections.' . config('database.default'));
-        $pdo = new \PDO("mysql:host={$c['host']};port={$c['port']};dbname=mo_old_test", $c['username'], $c['password'], [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
-        $pdo->exec('ALTER TABLE t_sale_orders_new ADD price_single_raw DECIMAL(10,2) NULL, ADD loss_nature VARCHAR(40) NULL');
-        $pdo->exec("INSERT INTO t_sale_orders_new (id, fk_id_vendor_inventory, fk_id_branch, ebay_order_no, d_ebay_order, cust_name, cust_phone, cust_address, product_info, qty_ordered, sale_rate, c_grand_total, pur_rate, pur_amount, d_purchase, sku_ebay, product_profit, product_loss, sale_order_status, refunded_at, refunded_reason, price_single_raw, loss_nature) VALUES
-            (101,0,9501,'G-1','2025-06-01 10:00:00','X','','','Lamp',1,10,10,8.25,6,'2025-06-01','SKU-G',1.75,0,'Success',NULL,NULL,6,NULL),
-            (102,0,9501,'G-2','2025-06-02 10:00:00','X','','','Lamp',1,0,0,8.25,6,'2025-06-02','SKU-G',0,-8.25,'Loss_Sale',NULL,NULL,6,NULL),
-            (103,0,9501,'G-3','2025-06-03 10:00:00','X','','','Lamp',1,0,0,8.25,6,'2025-06-03','SKU-G',-10,0,'Refunded','2025-06-05 10:00:00','Broken',6,'damaged_lost')");
-        $pdo->exec('CREATE TABLE t_product_sale_change_log (id BIGINT PRIMARY KEY, fk_user_id INT, changed_by VARCHAR(255), changed_fields LONGTEXT, fk_product_id INT, product_profit DECIMAL(10,2), created_at TIMESTAMP NULL)');
-        $pdo->exec("INSERT INTO t_product_sale_change_log VALUES (1, 9001, 'TL - Made Up', '{\"carrier\":{\"old\":\"1.50\",\"new\":\"2.00\"}}', 9701, 1.75, '2025-06-01 11:00:00')");
-        try {
+        // no clean-up: the old test database is made again at the start of every run (and a DROP here would wait on this test's own open transaction)
+        {
             DB::table('t_branches')->insert(\App\Services\RecordService::fillNotNull('t_branches', ['id' => 9501, 'fk_id_ent' => 1, 'fk_id_marketplace' => 1, 'shop_no' => 'OS1', 'iso_branch' => 'OS1', 'shop_name' => 'Old Shop', 'f_active' => 1]));
             OldImport::run('mo_old_test', ['mask' => true]);
             OldImport::transactions('mo_old_test', ['mask' => true]);
@@ -214,8 +222,6 @@ class OldImportTest extends TestCase
             $this->assertSame([1, 2.25], [$r['explained']['qty = 1 postage']['lines'], $r['explained']['qty = 1 postage']['amount']], 'G-1: the qty-1 purchase left carrier + packing out (8.25 against 6.00)');
             $this->assertSame([1, 1, 0], [$r['explained']['loss line']['lines'], $r['explained']['refund']['lines'], $r['explained']['not explained']['lines']]);
             $this->actingAs($this->owner)->getJson('/api/legacy-compare?month=2025-06')->assertOk()->assertJsonPath('rows.0.lines', 3);
-        } finally {
-            $pdo->exec('DELETE FROM t_sale_orders_new WHERE id IN (101,102,103)'); $pdo->exec('ALTER TABLE t_sale_orders_new DROP COLUMN price_single_raw, DROP COLUMN loss_nature'); $pdo->exec('DROP TABLE IF EXISTS t_product_sale_change_log');
         }
     }
 }

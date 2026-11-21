@@ -16,8 +16,8 @@ Every line of MASTER_REGISTER_v1.7 (1,547 lines) checked against the code. BUILT
 | Labels/Printing | 44 | 19 | 14 | 6 | 5 | 0 | 2 | 43 % |
 | Security | 28 | 12 | 12 | 1 | 3 | 0 | 8 | 43 % |
 | Reports | 25 | 6 | 7 | 0 | 12 | 0 | 3 | 24 % |
-| Migration | 9 | 0 | 7 | 0 | 2 | 0 | 8 | 0 % |
-| **All** | **1433** | **472** | **502** | **193** | **266** | **0** | **114** | **33 %** |
+| Migration | 9 | 4 | 3 | 0 | 2 | 0 | 8 | 44 % |
+| **All** | **1433** | **476** | **498** | **193** | **266** | **0** | **114** | **33 %** |
 
 FORM ONLY = the form and its list exist and save (with rights and history), but the rule's own logic is not built.
 PARTIAL = part of the rule works; the note in `audit/REGISTER_AUDIT.csv` says what is missing.

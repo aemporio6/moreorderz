@@ -95,4 +95,5 @@ How to work each step: build → test → change the verdict lines in `audit/ver
 | 7e-36 | PO line types PRODUCT / FEE / COST / SAMPLE R-B_SOURCING-6 BUILT (PoLines: FRT cost rows into landed by value, sample rows, product-only shipping, PO page add line) | done | 464/1433 | 383 tests |
 | 7e-37 | Pack verification, weight, box, packing materials R-H-29 BUILT (PackService: scans, Short, split parcel, box suggestion, needs_weight preset, packing stock) | done | 468/1433 | 386 tests |
 | 7e-38 | 3PL fees per marketplace R-D-23 BUILT (ThreePlTariff: company tariff defaults, per order / per unit, PRD_FEE_MISSING nightly, tariff screen on prices) | done | 472/1433 | 387 tests |
-| 7e-39 | NEXT → recount (4-line closers: R-C-21, R-G_CORE-68, R-A_SALES-52, R-D-35, R-H-8, R-H-1, R-C-40); then 3-line closers; rest of Sourcing 39 / 28 | todo | | |
+| 7e-39 | Gen-2 money values kept + compare report R-A_SALES-52 BUILT (legacy columns, status map, SAL_ZERO + change log history, Old profit compare screen) | done | see result | 388 tests |
+| 7e-40 | NEXT → recount (4-line closers: R-C-21, R-G_CORE-68, R-D-35, R-H-8, R-H-1, R-C-40); then 3-line closers; rest of Sourcing 39 / 28 | todo | | |
