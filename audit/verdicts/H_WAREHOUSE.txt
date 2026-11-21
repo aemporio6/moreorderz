@@ -54,7 +54,7 @@
 54|B|function selfCheck|nightly reconciliation: products = lots = ledger
 55|M||anomaly alerts not built
 56|B|function auto|print queue, auto-print, printers per job kind
-57|F|form:warehouse_settings|form only
+57|B|class WarehouseSettings|Settings › Warehouse (#/settings/warehouse, Owner): 14 tabs with every switch of the rule table, default and help, typed checks (Y/N, lists, ranges, bin-code tokens, weekend days, A % + B % ≤ 100), company level, history per change, existing data untouched; links to channel / carrier profiles, bank holidays, printers and rights; shared engine TypedSettings; WarehouseSettingsTest
 58|P|class Rights|Warehouse role limits (no money, no sales); rights per action partly
 59|P|class ReportService|3 warehouse reports; the full list not built
 60|M||edge-case register not tested line by line

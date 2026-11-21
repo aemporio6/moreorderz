@@ -165,6 +165,7 @@
       if (r === '#/inbound') return await pageInbound();
       if (r === '#/stock-alerts') return await pageStockAlerts();
       if (r === '#/settings/sourcing') return await pageSourcingSettings();
+      if (r === '#/settings/warehouse') return await pageWarehouseSettings();
       if (/^#\/inbound\/\d+$/.test(r)) return await pageInboundOne(+r.split('/')[2]);
       if (r === '#/lost-parcels') return await pageLostParcels();
       if (r.startsWith('#/mp-fields')) return await pageMpFields(+((r.match(/mp=(\d+)/) || [])[1] || 0));
@@ -1396,6 +1397,26 @@
         <td class="num"><input type="number" min="1" max="${r.qty}" value="${r.qty}" data-paq="${r.task}" style="width:80px"></td><td><button class="btn sm primary" data-pa="${r.task}">Put away</button></td></tr>`).join('')}</tbody></table>
       ${d.rows.length ? '' : `<div class="empty">${ic('check')}<div>Nothing waits in RECEIVING.</div></div>`}</div></div>`;
     $$('[data-pa]').forEach(b => b.onclick = async () => { const t = b.dataset.pa; try { toast((await api(`putaway/${t}`, { method: 'POST', body: { bin: +$(`[data-pab="${t}"]`).value, qty: +$(`[data-paq="${t}"]`).value } })).message); pagePutaway(); } catch (e) { toast(e.message, 'err'); } });
+  }
+  // ---------- Settings › Warehouse (R-H-57): tabs, every switch with default and help, history ----------
+  let WS_TAB = 0;
+  async function pageWarehouseSettings() {
+    busy(true); let d; try { d = await api('settings/warehouse'); } finally { busy(false); }
+    const input = r => r.type === 'yn' ? `<select data-sv="${r.key}"><option value="Y" ${r.value === 'Y' ? 'selected' : ''}>Yes</option><option value="N" ${r.value === 'N' ? 'selected' : ''}>No</option></select>`
+      : r.options ? `<select data-sv="${r.key}">${r.options.map(o => `<option value="${esc(o.value)}" ${String(o.value) === String(r.value) ? 'selected' : ''}>${esc(o.label)}</option>`).join('')}</select>`
+      : ['int', 'decimal', 'pct'].includes(r.type) ? `<input data-sv="${r.key}" type="number" step="${r.type === 'int' ? '1' : '0.01'}" ${r.min !== null ? `min="${r.min}"` : ''} ${r.max !== null ? `max="${r.max}"` : ''} value="${esc(r.value)}" placeholder="${r.optional ? 'empty = none' : ''}" style="width:120px">${r.type === 'pct' ? ' %' : ''}`
+      : `<input data-sv="${r.key}" value="${esc(r.value)}" style="min-width:200px">`;
+    const yn = v => v === 'Y' ? 'Yes' : v === 'N' ? 'No' : v;
+    const tab = d.tabs[WS_TAB] || d.tabs[0];
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Warehouse settings</h1><div class="sub">Company level. Changing a setting never changes data already saved; every change is in the history. Roles and rights are on the rights screen.</div></div></div>
+      <div class="seg" id="wsTabs" style="flex-wrap:wrap;margin-bottom:10px">${d.tabs.map((t, i) => `<button type="button" data-wt="${i}" class="${i === WS_TAB ? 'on' : ''}">${esc(t.name)}</button>`).join('')}</div>
+      <div class="card"><div class="tbl-wrap"><table class="t" id="wsList"><thead><tr><th>Setting</th><th>Value</th><th>Default</th><th></th></tr></thead><tbody>${tab.rows.map(r => `<tr data-sk="${r.key}"><td><b>${esc(r.label)}</b><div class="small muted">${r.help ? esc(r.help) + ' ' : ''}<code>${esc(r.key)}</code></div></td><td>${input(r)}<div class="small" data-se style="color:var(--err)"></div></td><td class="small muted">${esc(r.type === 'yn' ? yn(r.default) : (r.default || '—'))}</td><td><button class="btn sm primary" data-ss="${r.key}">Save</button></td></tr>`).join('')}</tbody></table></div></div>
+      <div class="card" style="margin-top:12px"><div class="card-h"><h3>Kept on their own pages</h3></div><div class="card-b" style="display:flex;gap:8px;flex-wrap:wrap">${d.profiles.map(x => `<a class="btn ghost sm" href="${esc(x.url)}">${esc(x.label)}</a>`).join('')}</div></div>
+      <div class="card" style="margin-top:12px"><div class="card-h"><h3>History</h3></div><div class="tbl-wrap"><table class="t" id="wsHist"><thead><tr><th>When</th><th>Setting</th><th>From</th><th>To</th><th>By</th></tr></thead><tbody>${d.history.map(h => `<tr><td class="small">${esc(h.at)}</td><td>${esc(h.key)}</td><td>${esc(h.from ?? '')}</td><td><b>${esc(h.to ?? '')}</b></td><td>${esc(h.by || '')}</td></tr>`).join('')}</tbody></table>${d.history.length ? '' : '<div class="empty">No change yet.</div>'}</div></div>`;
+    $$('[data-wt]').forEach(b => b.onclick = () => { WS_TAB = +b.dataset.wt; pageWarehouseSettings(); });
+    $$('[data-ss]').forEach(b => b.onclick = async () => { const tr = b.closest('tr'), k = b.dataset.ss; $('[data-se]', tr).textContent = '';
+      try { const r = await api('settings/warehouse', { method: 'POST', body: { key: k, value: $(`[data-sv="${k}"]`, tr).value } }); toast(r.message); if (r.message !== 'No change.') pageWarehouseSettings(); }
+      catch (e) { $('[data-se]', tr).textContent = e.errors ? Object.values(e.errors).flat().join(' · ') : e.message; } });
   }
   // ---------- Settings › Sourcing (R-B_SOURCING-51): typed, company level, with history ----------
   async function pageSourcingSettings() {

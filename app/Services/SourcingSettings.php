@@ -63,44 +63,15 @@ class SourcingSettings
     /** History of the sourcing settings: who, when, old → new. */
     public static function history(int $ent, ?string $key = null, int $limit = 50): array
     {
-        $keys = $key ? [$key] : array_keys(self::defs());
-        return DB::table('sys_audit_log as a')->leftJoin('t_users as u', 'u.id', '=', 'a.user_id')->where('a.table_name', 'sys_settings')->where('a.reason', 'SOURCING_SETTING')
-            ->where(fn ($w) => $w->whereNull('a.fk_id_ent')->orWhere('a.fk_id_ent', $ent))->orderByDesc('a.id')->limit(500)->get(['a.id', 'a.changes_json', 'a.created_at', 'u.display_name'])
-            ->map(function ($r) { $c = json_decode((string) $r->changes_json, true) ?: []; return ['key' => $c['key'] ?? null, 'from' => $c['from'] ?? null, 'to' => $c['to'] ?? null, 'by' => $r->display_name, 'at' => (string) $r->created_at]; })
-            ->filter(fn ($r) => in_array($r['key'], $keys, true))->take($limit)->values()->all();
+        return TypedSettings::history($ent, $key ? [$key] : array_keys(self::defs()), 'SOURCING_SETTING', $limit);
     }
 
     /** Check and save one setting at company level. */
     public static function save(int $ent, string $key, $value): array
     {
-        $defs = self::defs(); $d = $defs[$key] ?? throw new \InvalidArgumentException('Unknown sourcing setting.');
-        $v = trim((string) $value); $x = $d[4] ?? [];
-        $err = match (true) {
-            $v === '' && ! empty($x['optional']) => null,
-            $d[1] === 'currency' => DB::table('cat_currency')->where('f_active', 1)->where('currency_code', strtoupper($v))->exists() ? null : 'Choose an active currency',
-            $d[1] === 'int' => preg_match('/^-?\d+$/', $v) && (int) $v >= ($x['min'] ?? PHP_INT_MIN) && (int) $v <= ($x['max'] ?? PHP_INT_MAX) ? null : 'Enter a whole number from ' . ($x['min'] ?? 0) . ' to ' . ($x['max'] ?? '…'),
-            $d[1] === 'decimal' => is_numeric($v) && (float) $v >= ($x['min'] ?? 0) && (float) $v <= ($x['max'] ?? PHP_FLOAT_MAX) ? null : 'Enter a number from ' . ($x['min'] ?? 0) . ' to ' . ($x['max'] ?? '…'),
-            $d[1] === 'pct' => is_numeric($v) && (float) $v >= 0 && (float) $v <= 100 ? null : 'Enter a percentage from 0 to 100',
-            $d[1] === 'choice' => isset(Choices::LIST[$key][3][strtoupper($v)]) ? null : 'Choose one of the options shown',
-            $d[1] === 'role' => $v === '' || $v === '0' || DB::table('cat_account_types')->where('f_active', 1)->where('role_code', $v)->exists() ? null : 'Choose a role of the roles master',
-            $d[1] === 'people' => self::people($ent, $v) === null ? 'Choose active people only' : null,
-            default => 'Unknown type',
-        };
+        $d = self::defs()[$key] ?? throw new \InvalidArgumentException('Unknown sourcing setting.');
+        [$err, $v] = TypedSettings::check($ent, $key, $d, $value);
         if ($err) throw new ValidationErrors(['value' => $err]);
-        if ($d[1] === 'currency' || $d[1] === 'choice') $v = strtoupper($v);
-        if ($d[1] === 'people') $v = implode(',', self::people($ent, $v));
-        $old = self::value($key, $ent, $d);
-        if ((string) $old === $v) return ['message' => 'No change.', 'value' => $v];
-        Settings::set($key, $v, $ent, Context::userId());
-        Audit::log('sys_settings', null, 'UPDATE', ['key' => $key, 'from' => $old, 'to' => $v], 'SOURCING_SETTING', $ent);
-        return ['message' => $d[0] . ' saved.', 'value' => $v];
-    }
-
-    /** "1, 4,9" → [1, 4, 9] when every id is an active person of the company; null when one is not. */
-    private static function people(int $ent, string $v): ?array
-    {
-        $ids = array_values(array_unique(array_map('intval', array_filter(preg_split('/[\s,;]+/', $v), fn ($x) => $x !== ''))));
-        if (! $ids) return [];
-        return DB::table('t_account')->where('fk_id_ent', $ent)->where('f_active', 1)->whereIn('id', $ids)->count() === count($ids) ? $ids : null;
+        return TypedSettings::store($ent, $key, $d[0], (string) self::value($key, $ent, $d), $v, 'SOURCING_SETTING');
     }
 }
