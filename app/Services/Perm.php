@@ -91,6 +91,8 @@ class Perm
         'orders.saveTrackingLayout' => 'Save a tracking file layout',
         'orders.trackingUpload' => 'Upload tracking numbers',
         'partners.EDIT' => 'Add and change partners',
+        'products.marketplaceFields' => 'Build the listing fields per marketplace',
+        'products.marketplaceValues' => 'Fill the marketplace fields of a product',
         'partners.MONEY' => 'See partner money',
         'partners.SEE' => 'See partners',
         'partners.show_may' => 'See any partner (not only himself)',

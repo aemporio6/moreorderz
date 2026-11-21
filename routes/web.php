@@ -151,6 +151,13 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('ledger', [AdminController::class, 'ledger']);
         Route::get('stock/on-hand', [StockController::class, 'onHand']);
         Route::get('products', [StockController::class, 'products']);
+        Route::get('mp-fields', [\App\Http\Controllers\MarketplaceFieldController::class, 'index']);
+        Route::get('mp-fields/name', [\App\Http\Controllers\MarketplaceFieldController::class, 'name']);
+        Route::post('mp-fields', [\App\Http\Controllers\MarketplaceFieldController::class, 'save']);
+        Route::post('mp-fields/{id}', [\App\Http\Controllers\MarketplaceFieldController::class, 'save'])->whereNumber('id');
+        Route::post('mp-fields/{id}/delete', [\App\Http\Controllers\MarketplaceFieldController::class, 'delete'])->whereNumber('id');
+        Route::get('products/{id}/mp-fields', [\App\Http\Controllers\MarketplaceFieldController::class, 'product'])->whereNumber('id');
+        Route::post('products/{id}/mp-fields/{mp}', [\App\Http\Controllers\MarketplaceFieldController::class, 'saveProduct'])->whereNumber('id')->whereNumber('mp');
         Route::get('not-listed', [StockController::class, 'notListed']);
         Route::post('not-listed/tasks', [StockController::class, 'notListedTasks']);
         Route::post('products/view', [StockController::class, 'productsView']);

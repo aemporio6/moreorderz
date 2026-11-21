@@ -560,3 +560,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-46 (21 Nov): products not listed per shop R-D-58 BUILT. +3 register lines. 400 tests.
 - 7e-47 (21 Nov): My Partner Account R-FIN-19 BUILT (page #/my-account, Owner view-as read-only + audited, Reinvest, message switches). +3 register lines (510). 401 tests.
 - 7e-48 (21 Nov): task owner order + priority R-G_CORE-94 BUILT (TaskOwner, absence cover, why-owner on Tasks). +3 register lines (513). 402 tests.
+- 7e-49 (21 Nov): marketplace field builder R-A_SALES-67 BUILT (#/mp-fields, #/mp-values/{id}). +3 register lines (516). 403 tests.

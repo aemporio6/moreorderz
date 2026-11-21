@@ -157,6 +157,8 @@
       if (r.startsWith('#/variations/')) return await pageVariations(+r.split('/')[2]);
       if (r.startsWith('#/due')) return await pageDue();
       if (r === '#/products' || r.startsWith('#/products?')) return await pageProducts();
+      if (r.startsWith('#/mp-fields')) return await pageMpFields(+((r.match(/mp=(\d+)/) || [])[1] || 0));
+      if ((mt = r.match(/^#\/mp-values\/(\d+)/))) return await pageMpValues(+mt[1], +((r.match(/tab=(\d+)/) || [])[1] || 0));
       if (r.startsWith('#/my-account')) return await pageMyAccount(Object.fromEntries(new URLSearchParams(r.split('?')[1] || '')));
       if (r.startsWith('#/not-listed')) return await pageNotListed(Object.fromEntries(new URLSearchParams(r.split('?')[1] || '')));
       if (r.startsWith('#/alerts')) return await pageAlerts();
@@ -1332,6 +1334,57 @@
   function dupLive(supEl, refEl, outEl, cycle) { let t; const run = () => { clearTimeout(t); t = setTimeout(async () => { const sup = supEl ? +supEl.value : 0, ref = refEl.value.trim(); outEl.textContent = ''; if ((supEl && !sup) || !ref) return;
       try { const r = await api('buying/duplicate-check?' + new URLSearchParams({ supplier: sup || '', ref, cycle: cycle || '' })); if (!r.ok) outEl.innerHTML = `${esc(r.message)} · <a href="#/cycle/${r.existing.id}">open</a>`; } catch (x) { } }, 400); };
     refEl.addEventListener('input', run); supEl && supEl.addEventListener('change', run); }
+  // ---------- marketplace field builder (R-A_SALES-67) ----------
+  async function pageMpFields(mp) {
+    busy(true); let d; try { d = await api('mp-fields' + (mp ? '?mp=' + mp : '')); } finally { busy(false); }
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Marketplace fields</h1><div class="sub">Extra listing fields per marketplace. The field name is made from the label once and never changes; removing a field keeps the product values.</div></div>
+      <div class="actions"><select id="mfMp">${d.marketplaces.map(m => `<option value="${m.id}" ${m.id === d.mp ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select>${d.can_edit ? `<button class="btn primary" id="mfAdd">${ic('plus')} Add field</button>` : ''}</div></div>
+      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th class="num">Sort</th><th>Label</th><th>Field name</th><th>Type</th><th>Required</th><th class="num">Products with a value</th><th></th></tr></thead><tbody>
+      ${d.fields.map(f => `<tr><td class="num">${f.sort}</td><td><b>${esc(f.label)}</b>${f.options.length ? `<div class="small muted">${esc(f.options.join(' · '))}</div>` : ''}</td><td><code>${esc(f.name)}</code></td><td>${esc(d.types[f.type] || f.type)}</td><td>${f.required ? '<span class="chip warn">Required</span>' : ''}</td><td class="num">${f.values}</td>
+        <td style="white-space:nowrap">${d.can_edit ? `<button class="btn sm" data-mfe="${f.id}">Edit</button> <button class="btn sm ghost" data-mfd="${f.id}">Remove</button>` : ''}</td></tr>`).join('')}</tbody></table>
+      ${d.fields.length ? '' : `<div class="empty">${ic('check')}<div>No fields for this marketplace yet.</div></div>`}</div></div>`;
+    $('#mfMp').onchange = e => go('#/mp-fields?mp=' + e.target.value);
+    const form = f => {
+      const m = modal(f ? 'Edit field' : 'Add field', f ? 'The field name stays ' + f.name + '.' : 'The field name is made from the label.', `<div class="grid2" style="display:grid;gap:10px">
+        <label>Field label *<input id="mfL" maxlength="150" value="${esc(f ? f.label : '')}"></label><div class="small">Field name: <code id="mfN">${esc(f ? f.name : '')}</code></div>
+        <label>Type<select id="mfT">${Object.entries(d.types).map(([k, v]) => `<option value="${k}" ${f && f.type === k ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></label>
+        <label id="mfOw">Options (one per line or comma-separated)<textarea id="mfO" rows="4">${esc(f ? f.options.join('\n') : '')}</textarea></label>
+        <label><input type="checkbox" id="mfR" ${f && f.required ? 'checked' : ''}> Required</label><label>Sort<input type="number" id="mfS" step="1" value="${f ? f.sort : d.fields.length + 1}"></label>
+        <div class="small" id="mfE" style="color:var(--err)"></div></div>`, `<button class="btn primary" id="mfSave">Save</button>`, false);
+      const ow = () => $('#mfOw', m.ov).style.display = $('#mfT', m.ov).value === 'select' ? '' : 'none'; ow(); $('#mfT', m.ov).onchange = ow;
+      let t; if (!f) $('#mfL', m.ov).oninput = () => { clearTimeout(t); t = setTimeout(async () => { try { $('#mfN', m.ov).textContent = (await api('mp-fields/name?' + new URLSearchParams({ mp: d.mp, label: $('#mfL', m.ov).value }))).name; } catch (x) { } }, 250); };
+      $('#mfSave', m.ov).onclick = async () => { try { const r = await api('mp-fields' + (f ? '/' + f.id : ''), { method: 'POST', body: { fk_id_marketplace: d.mp, field_label: $('#mfL', m.ov).value, field_type: $('#mfT', m.ov).value, field_options: $('#mfO', m.ov).value, f_required: $('#mfR', m.ov).checked ? 1 : 0, sort_order: +$('#mfS', m.ov).value } });
+        toast(r.message); m.close(); pageMpFields(d.mp); } catch (e) { $('#mfE', m.ov).textContent = Object.values(e.errors || {}).flat().join(' · ') || e.message; } };
+    };
+    if ($('#mfAdd')) $('#mfAdd').onclick = () => form(null);
+    $$('[data-mfe]').forEach(b => b.onclick = () => form(d.fields.find(x => x.id === +b.dataset.mfe)));
+    $$('[data-mfd]').forEach(b => b.onclick = async () => { try { toast((await api(`mp-fields/${b.dataset.mfd}/delete`, { method: 'POST', body: {} })).message); pageMpFields(d.mp); } catch (e) { toast(e.message, 'err'); } });
+  }
+  async function pageMpValues(id, tab) {
+    busy(true); let d; try { d = await api(`products/${id}/mp-fields`); } finally { busy(false); }
+    const cur = d.tabs.find(t => t.id === tab) || d.tabs[0];
+    const input = f => { const v = f.value ?? '', n = `data-mv="${f.id}"`, ro = d.can_edit ? '' : 'disabled';
+      switch (f.type) {
+        case 'textarea': return `<textarea ${n} rows="3" ${ro}>${esc(v)}</textarea>`;
+        case 'number': return `<input type="number" step="1" ${n} value="${esc(v)}" ${ro}>`;
+        case 'decimal': return `<input type="number" step="0.01" ${n} value="${esc(v)}" ${ro}>`;
+        case 'date': return `<input type="date" ${n} value="${esc(v)}" ${ro}>`;
+        case 'select': return `<select ${n} ${ro}><option value=""></option>${f.options.map(o => `<option ${o === v ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+        case 'checkbox': return `<select ${n} ${ro}><option value="0">No</option><option value="1" ${v === '1' ? 'selected' : ''}>Yes</option></select>`;
+        case 'url': return `<span style="display:flex;gap:6px"><input type="url" ${n} value="${esc(v)}" ${ro} style="flex:1">${v ? `<a class="btn sm" href="${esc(v)}" target="_blank" rel="noopener">Open</a>` : ''}</span>`;
+        case 'file': return `<span><input type="file" data-mf="${f.id}" ${ro}> ${v ? `<span class="small muted">Current: ${esc(v.split('/').pop())} (kept when no file is chosen)</span>` : ''}</span>`;
+        default: return `<input ${n} value="${esc(v)}" ${ro}>`; } };
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Marketplace fields · ${esc(d.product ? d.product.sku : '#' + id)}</h1><div class="sub">${esc(d.product ? d.product.name : '')} · saved per tab</div></div>
+      <div class="actions"><a class="btn" href="#/stock/product/${id}">Back to product</a><a class="btn" href="#/mp-fields${cur ? '?mp=' + cur.id : ''}">Field builder</a></div></div>
+      ${d.tabs.length ? `<div class="seg" style="margin-bottom:10px">${d.tabs.map(t => `<button type="button" class="${t.id === cur.id ? 'on' : ''}" data-mvt="${t.id}">${esc(t.name)}</button>`).join('')}</div>
+      <div class="card"><div style="display:grid;gap:12px;max-width:720px">${cur.fields.map(f => `<label><b>${esc(f.label)}</b>${f.required ? ' *' : ''} <span class="small muted">${esc(f.name)}</span>${input(f)}<span class="small" style="color:var(--err)" data-mve="${f.id}"></span></label>`).join('')}</div>
+        ${d.can_edit ? `<div style="margin-top:12px"><button class="btn primary" id="mvSave">Save ${esc(cur.name)}</button></div>` : ''}</div>` : `<div class="card"><div class="empty">${ic('check')}<div>No marketplace has extra fields yet. Add them in the field builder.</div></div></div>`}`;
+    $$('[data-mvt]').forEach(b => b.onclick = () => go(`#/mp-values/${id}?tab=${b.dataset.mvt}`));
+    if ($('#mvSave')) $('#mvSave').onclick = async () => {
+      const fields = {}; $$('[data-mv]').forEach(x => fields[`values[${x.dataset.mv}]`] = x.value); $$('[data-mf]').forEach(x => { if (x.files[0]) fields[`files[${x.dataset.mf}]`] = x.files[0]; });
+      $$('[data-mve]').forEach(x => x.textContent = '');
+      try { toast((await upload(`products/${id}/mp-fields/${cur.id}`, fields)).message); pageMpValues(id, cur.id); } catch (e) { Object.entries(e.errors || {}).forEach(([k, m]) => { const el = $(`[data-mve="${k}"]`); if (el) el.textContent = [].concat(m).join(' '); }); toast(e.message, 'err'); } };
+  }
   // ---------- My Partner Account (R-FIN-19) ----------
   async function pageMyAccount(f = {}) {
     busy(true); let d; try { d = await api('my-account?' + new URLSearchParams(Object.entries(f).filter(([, v]) => v))); } catch (e) { busy(false); toast(e.message, 'err'); return; } finally { busy(false); }
@@ -2277,7 +2330,7 @@
     busy(true); let d, o; try { d = await api('stock/product/' + id); o = (await api('stock/on-hand')).rows.find(r => r.id === id) || {}; } finally { busy(false); }
     const cost = d.rows.length && d.rows[0].unit_cost_gbp !== undefined;
     $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/stock">Stock on hand</a> ›</div><h1>${esc(o.sku || 'Product ' + id)}</h1><div class="sub">${esc(o.name || '')}</div></div>
-      <div class="actions"><a class="btn" href="#/rec/${esc(S.boot.product_form)}/${id}">Product record</a><a class="btn" href="#/stock/ledger?product=${id}">Ledger of this product</a><button class="btn" data-sa="transfer">${ic('truck')} Move</button><button class="btn" data-sa="adjust">${ic('wand')} Adjust</button></div></div>
+      <div class="actions"><a class="btn" href="#/rec/${esc(S.boot.product_form)}/${id}">Product record</a><a class="btn" href="#/stock/ledger?product=${id}">Ledger of this product</a><a class="btn" href="#/mp-values/${id}">Marketplace fields</a><button class="btn" data-sa="transfer">${ic('truck')} Move</button><button class="btn" data-sa="adjust">${ic('wand')} Adjust</button></div></div>
       <div class="kpis"><div class="card kpi"><div class="bar"></div><div class="lbl">Units in stock</div><div class="val">${d.units}</div></div><div class="card kpi"><div class="bar"></div><div class="lbl">Can be sold</div><div class="val">${d.available}</div><div class="foot">sellable places, minus reserved</div></div></div>
       <div class="card" style="margin-top:14px"><div class="card-h"><h3>Where the units are · oldest lot first (sold first)</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Location</th><th>Lot</th><th>Received</th><th>Owner</th><th>Pool / private</th>${cost ? '<th class="num">Cost</th>' : ''}<th class="num">Units</th></tr></thead>
       <tbody>${d.rows.map(r => `<tr><td>${esc(r.location)}${r.kind ? ` <span class="small muted">${esc(r.kind.toLowerCase().replace(/_/g, ' '))}</span>` : ''}</td><td>${esc(r.lot_code)}</td><td>${esc(r.received_date)}</td><td>${esc(r.owner || 'Company')}</td><td>${esc(r.visibility || '')}</td>${cost ? `<td class="num">${(+r.unit_cost_gbp).toFixed(4)}${r.landed_status === 'PROVISIONAL' ? ' <span class="chip warn plain" title="Landed cost is not final yet">prov.</span>' : ''}</td>` : ''}<td class="num">${r.qty}</td></tr>`).join('')}</tbody></table>${d.rows.length ? '' : '<div class="empty">No units in stock.</div>'}</div></div>`;
