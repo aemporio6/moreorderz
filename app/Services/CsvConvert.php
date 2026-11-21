@@ -26,7 +26,7 @@ class CsvConvert
     {
         Perm::need($u, 'orders.csvConvert'); if (strtolower(pathinfo($name, PATHINFO_EXTENSION)) !== 'csv') throw new \InvalidArgumentException('The file must be a .csv file.');
         $csv = DsUpload::read($path); if (! $csv['rows']) throw new \InvalidArgumentException('The file has a header row but no rows.');
-        foreach (glob(self::dir() . '/*') ?: [] as $old) if (filemtime($old) < time() - 86400) @unlink($old);
+        // old held files are removed by the nightly job mo:cleanup-temp (R-G_CORE-75), never on a page action
         $token = $u->id . '_' . date('YmdHis') . '_' . bin2hex(random_bytes(4)); copy($path, self::dir() . "/$token.csv"); file_put_contents(self::dir() . "/$token.json", json_encode(['user' => $u->id, 'ent' => Context::ent(), 'name' => $name]));
         $samples = []; foreach ($csv['headers'] as $i => $h) { $samples[] = ['letter' => self::letter($i), 'header' => $h, 'sample' => mb_substr((string) ($csv['rows'][0][1][$h] ?? ''), 0, 60)]; }
         return ['token' => $token, 'file' => $name, 'rows' => count($csv['rows']), 'headers' => $csv['headers'], 'samples' => $samples, 'formats' => self::formats($u), 'columns' => self::COLUMNS, 'updatable' => array_map(fn ($x) => $x[0], self::UPDATABLE),
@@ -37,7 +37,7 @@ class CsvConvert
 
     private static function held(string $token, ?object $u): array
     {
-        if (! preg_match('/^\d+_\d{14}_[0-9a-f]{8}$/', $token) || ! is_file(self::dir() . "/$token.json")) throw new \InvalidArgumentException('The uploaded file is no longer held (files are kept for 24 hours). Upload it again.');
+        if (! preg_match('/^\d+_\d{14}_[0-9a-f]{8}$/', $token) || ! is_file(self::dir() . "/$token.json")) throw new \InvalidArgumentException('The uploaded file is no longer held (held files are removed by the nightly clean-up). Upload it again.');
         $meta = json_decode((string) file_get_contents(self::dir() . "/$token.json"), true); if ((int) $meta['user'] !== (int) ($u->id ?? 0) || (int) $meta['ent'] !== (int) Context::ent()) throw new \InvalidArgumentException('This uploaded file belongs to another person.');
         return $meta + ['csv' => DsUpload::read(self::dir() . "/$token.csv")];
     }

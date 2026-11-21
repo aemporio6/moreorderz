@@ -154,7 +154,7 @@ class DsUpload
         self::shopOf($d, $u); self::sizeCheck($name, $size); $csv = self::read($path);
         if (count($csv['rows']) > self::maxRows()) throw new \InvalidArgumentException('The file has ' . count($csv['rows']) . ' rows; at most ' . self::maxRows() . ' rows can be uploaded at once. Split it and upload the parts.');
         if (! $csv['rows']) throw new \InvalidArgumentException('The file has a header row but no order rows.');
-        foreach (glob(self::dir() . '/*') ?: [] as $old) if (filemtime($old) < time() - 86400) @unlink($old);      // held files are removed after 24 hours
+        // held files are removed by the nightly job mo:cleanup-temp (R-G_CORE-75), never on a page action
         $token = bin2hex(random_bytes(16)); copy($path, self::dir() . "/$token.csv");
         file_put_contents(self::dir() . "/$token.json", json_encode(['user' => $u->id, 'ent' => Context::ent(), 'name' => $name, 'at' => time()] + array_intersect_key($d, array_flip(['marketplace', 'shop', 'month', 'year', 'platform', 'mode']))));
         $samples = []; foreach ($csv['headers'] as $h) { $samples[$h] = ''; foreach ($csv['rows'] as [, $r]) if (($r[$h] ?? '') !== '') { $samples[$h] = mb_substr($r[$h], 0, 60); break; } }
@@ -164,7 +164,7 @@ class DsUpload
 
     private static function held(string $token, ?object $u): array
     {
-        if (! preg_match('/^[0-9a-f]{32}$/', $token) || ! is_file(self::dir() . "/$token.json")) throw new \InvalidArgumentException('The uploaded file is no longer held (files are kept for 24 hours). Upload it again.');
+        if (! preg_match('/^[0-9a-f]{32}$/', $token) || ! is_file(self::dir() . "/$token.json")) throw new \InvalidArgumentException('The uploaded file is no longer held (held files are removed by the nightly clean-up). Upload it again.');
         $meta = json_decode((string) file_get_contents(self::dir() . "/$token.json"), true);
         if ((int) $meta['user'] !== (int) ($u->id ?? 0) || (int) $meta['ent'] !== (int) Context::ent()) throw new \InvalidArgumentException('This uploaded file belongs to another person.');
         return $meta;

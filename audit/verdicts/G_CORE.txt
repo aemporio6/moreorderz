@@ -72,7 +72,7 @@
 72|P|class PrintService|PDF print service at exact size; DOCX export not built
 73|M||"Update a field" import mode not built
 74|M||product bulk upload not built
-75|M||temp file retention job not built
+75|B|class TempCleanup|nightly mo:cleanup-temp at 02:30 company time (COMPANY_TIMEZONE): held uploads (ds_tmp) older than retention_import_upload_days = 1, generator files (csv_convert) older than retention_generator_days = 0, old temp rows; saved mappings / batches kept; the clean-up on page actions removed; each run logged (sys_job_runs TEMP_CLEANUP) and shown on System › Health; TempCleanupTest
 76|F|form:t_branch|form only; owner cascade not built
 77|P|tracking-upload|tracking upload per marketplace layout
 78|P|class PriceService|expected price from the period on the order date
