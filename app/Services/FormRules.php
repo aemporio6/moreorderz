@@ -45,6 +45,7 @@ class FormRules
         if ($table === 't_src_cycles' || $table === 't_src_po') return self::srcDuplicate($table, $data, $old, $id);
         if ($table === 't_src_po_lines') return self::poLine($data, $old);
         if ($table === 't_product_marketplace_shipping') return self::mpFees($data, $old);
+        if ($table === 't_account_branches') return ShopAssignments::check($data, $old, $id);      // R-C-41
         if ($table === 'cat_marketplace_fields') return MarketplaceFields::prepare($data, $old, $id);      // R-A_SALES-67: slug name fixed after the first save, options → JSON
         if (isset(SecurityQuestions::KIT[$table]) && ($e = SecurityQuestions::check($table, $data, $old))) return $e;      // R-C-22
         if ($formKey !== 'cat_company_house') return [];

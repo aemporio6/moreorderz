@@ -137,6 +137,23 @@ class AppController extends Controller
     /** Job history of a person (R-C-39): newest first, renewal amber within 30 days. */
     public function securityHealth(\Illuminate\Http\Request $r, int $id) { Rights::check('VIEW', 't_account'); return ['rows' => \App\Services\SecurityQuestions::health($id)]; }
 
+    /** Shop assignments of a person (R-C-41). */
+    public function personShops(\Illuminate\Http\Request $r, int $id)
+    {
+        Rights::check('VIEW', 't_account_branch');
+        return ['rows' => \App\Services\ShopAssignments::cards($id), 'roles' => \App\Services\ShopAssignments::ROLES, 'can_edit' => \App\Services\Perm::has($r->user(), 'form:t_account_branch:EDIT'),
+            'marketplaces' => DB::table('cat_marketplaces')->where('f_active', 1)->orderBy('id')->get(['id', DB::raw("COALESCE(NULLIF(marketplace_short,''), marketplace_descr) as name")]),
+            'shops' => \App\Services\Perm::mine(DB::table('t_branches'), 'id')->where('f_active', 1)->orderBy('shop_no')->get(['id', 'fk_id_marketplace as mp', DB::raw("TRIM(CONCAT_WS(' ', shop_no, shop_name)) as name")])];
+    }
+    public function personShopSave(\Illuminate\Http\Request $r, int $id, ?int $aid = null)
+    {
+        Rights::check($aid ? 'EDIT' : 'ADD', 't_account_branch');
+        try { return \App\Services\ShopAssignments::save(['fk_id_account' => $id] + $r->only(['fk_id_branch', 'role_code', 'd_from', 'd_to']), $aid); }
+        catch (\App\Services\ValidationErrors $e) { return response()->json(['message' => $e->getMessage(), 'errors' => array_map(fn ($m) => [$m], $e->errors)], 422); }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+    }
+    public function personShopRemove(\Illuminate\Http\Request $r, int $id, int $aid) { Rights::check('EDIT', 't_account_branch'); abort_unless(DB::table('t_account_branches')->where('id', $aid)->where('fk_id_account', $id)->exists(), 404); return \App\Services\ShopAssignments::remove($aid); }
+
     public function jobs(\Illuminate\Http\Request $r, int $id)
     {
         Rights::check('VIEW', 't_account_job_history');

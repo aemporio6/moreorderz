@@ -197,7 +197,8 @@ class RecordService
             SearchIndex::put($formKey, $table, $id, $ent);
             if (! empty($opt['event'])) EventBus::fire($opt['event'], $table, $id, ['form' => $formKey, 'created' => $created], $ent);
             FormAssist::remember($formKey, $data);   // for the "you used this last time" chips
-            if ($table === 't_src_po_lines') PoLines::sync((int) $id);      // FEE / COST freight-cost row, SAMPLE row, PO total (R-B_SOURCING-6)
+            if ($table === 't_src_po_lines') PoLines::sync((int) $id);
+            if ($table === 't_account_branches') ShopAssignments::saved((int) $id, $created);      // R-C-41: event + VA cache      // FEE / COST freight-cost row, SAMPLE row, PO total (R-B_SOURCING-6)
             if (str_starts_with($table, 't_src_') || $table === 'fin_lots') CycleAlerts::touched();      // sourcing alerts run again after the save (R-B_SOURCING-26)
             return ['id' => $id, 'created' => $created];
         });

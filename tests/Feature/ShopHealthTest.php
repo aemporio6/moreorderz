@@ -62,6 +62,6 @@ class ShopHealthTest extends TestCase
         $t = ShopHealth::trend($this->shopA, 2026, $this->tl); $this->assertSame('entered by TL', $t['history'][0]['text']); $this->assertSame('Negative feedback (number)', $t['history'][0]['field']); $this->assertSame(7, $t['months'][6]['positive']); $this->assertCount(12, $t['months']);
         $this->assertSame(['positive' => 7, 'negative' => 3], ShopHealth::page([], $this->tl, '2026-07-10')['boxes']); $this->assertSame('No Data Found', ShopHealth::page(['shop' => 999999], $this->tl, '2026-07-10')['empty_text']);
         $this->actingAs($this->va); $mine = ShopHealth::page(['va' => $this->accB], $this->va, '2026-07-10'); $this->assertFalse($mine['any']); $this->assertNull($mine['lists']); $this->assertSame(['101A (Pets)'], array_column($mine['rows'], 'shop_label'));
-        $this->getJson('/api/shop-health?month=7&year=2026')->assertOk()->assertJsonPath('rows.0.positive', 7); $this->postJson('/api/shop-health', ['shop' => $this->shopB, 'year' => 2026, 'month' => 1, 'field' => 'pf1', 'value' => '1'])->assertStatus(422);
+        $this->getJson('/api/shop-health?month=7&year=2026')->assertOk()->assertJsonPath('rows.0.positive', 7); $this->postJson('/api/shop-health', ['shop' => $this->shopB, 'year' => 2026, 'month' => 1, 'field' => 'pf1', 'value' => '1'])->assertStatus(403);      // R-C-41: the VA's shop scope now refuses another shop at the door
     }
 }

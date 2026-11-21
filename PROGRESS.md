@@ -574,3 +574,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-60 (21 Nov): automatic counts R-H-47 BUILT (triggers + ABC schedule). +3 register lines (554). 416 tests.
 - 7e-61 (21 Nov): Direct PO in one save R-B_SOURCING-2 BUILT (repeat, last price, rate, cartons, terms). +3 register lines (557). 417 tests.
 - 7e-62 (21 Nov): account code rule R-C-4 BUILT (format, uniqueness, suggestion, live check). +3 register lines (560). 418 tests.
+- 7e-63 (21 Nov): shop assignment = shop scope R-C-41 BUILT (VA one source, scope, Shops card). +3 register lines (563). 419 tests.

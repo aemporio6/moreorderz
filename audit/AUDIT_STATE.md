@@ -119,4 +119,5 @@ How to work each step: build → test → change the verdict lines in `audit/ver
 | 7e-60 | Automatic counts R-H-47 BUILT (CountTriggers: short pick, "Is it empty?", negative attempt, putaway no room, ABC schedule within the daily limit) | done | 554/1433 | 416 tests |
 | 7e-61 | Direct PO in one save R-B_SOURCING-2 BUILT (DirectPo: repeat from last PO, last price, stored rate, cycle DIRECT, cartons, terms, one transaction, opens on Payments) | done | 557/1433 | 417 tests |
 | 7e-62 | Account code rule R-C-4 BUILT (AccountCode: format, uniqueness for every person, MAX+1 suggestion with -EX series, live check) | done | 560/1433 | 418 tests |
-| 7e-63 | NEXT → recount; 3-line R-C-41 shop scope, R-B_SOURCING-16, R-H-49, R-H-19, R-A_SALES-87, R-FIN-22, R-FIN-47 …; rest of Sourcing 39 / 28 | todo | | |
+| 7e-63 | Shop assignment = shop scope R-C-41 BUILT (ShopAssignments: unique person+shop+role, VA overlap refused, events, VA cache, scope from assignments + own/seller shops, Shops card) | done | 563/1433 | 419 tests |
+| 7e-64 | NEXT → recount; 3-line R-B_SOURCING-16, R-H-49, R-H-19, R-A_SALES-87, R-FIN-22, R-FIN-47 …; rest of Sourcing 39 / 28 | todo | | |

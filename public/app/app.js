@@ -1310,7 +1310,7 @@
     $('#rDel').onclick = () => bulkRun(key, 'DELETE', [id], null, null, () => pageRecord(key, id));
     $('#rEdit').onclick = () => openForm(key, id, { onSaved: () => pageRecord(key, id) });
     if ($('#rMarks')) $('#rMarks').onclick = () => printNow('CARTON_MARK', [id]);
-    if (tab === 'details' && (S.boot.person_forms || []).includes(key)) { jobsCard(id); securityCard(id); }
+    if (tab === 'details' && (S.boot.person_forms || []).includes(key)) { jobsCard(id); securityCard(id); shopsCard(id); }
     $$('#main [data-tab]').forEach(b => b.onclick = () => { S.recTab = b.dataset.tab; pageRecord(key, id); });
   }
 
@@ -2511,6 +2511,26 @@
   }
   // ---------- job history of a person (R-C-39): a sub-list, newest first ----------
   // ---------- security questions per kit item (R-C-22): "Questions set n/6" ----------
+  // ---------- shop assignment = the person's shop scope (R-C-41) ----------
+  async function shopsCard(pid) {
+    let d; try { d = await api(`people/${pid}/shops`); } catch (e) { return; }
+    const host = document.createElement('div'); host.className = 'card'; host.style.marginTop = '12px'; $('#main').appendChild(host);
+    const again = () => { host.remove(); shopsCard(pid); };
+    host.innerHTML = `<div class="card-h"><h3>Shops · ${d.rows.length}</h3><span class="small muted">These shops are what this person sees (plus shops they own or sell for)</span>${d.can_edit ? `<button class="btn sm" id="shAdd" style="margin-left:auto">${ic('plus')} Assign a shop</button>` : ''}</div>
+      ${d.rows.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;padding:0 14px 14px">${d.rows.map(r => `<div class="card" style="padding:10px"><b>${esc((r.shop_no || '') + ' ' + (r.shop_name || ''))}</b> <span class="chip plain">${esc(r.role_code || '')}</span>
+        <div class="small muted">${esc(r.marketplace || '')} · owner ${esc(r.owner || '—')} · VA ${esc(r.va || '—')}</div><div class="small">${esc(r.address || '')}${r.mobile ? ' · ' + esc(r.mobile) : ''}</div><div class="small muted">from ${esc(r.d_from || '—')}${r.d_to ? ' to ' + esc(r.d_to) : ''}</div>
+        ${d.can_edit ? `<div style="margin-top:6px"><button class="btn sm" data-she="${r.id}">Edit</button> <button class="btn sm ghost" data-shd="${r.id}">Delete</button></div>` : ''}</div>`).join('')}</div>` : '<div class="empty">No shops assigned to this user.</div>'}`;
+    const form = r => { const mp = r ? (d.shops.find(s => +s.id === +r.shop) || {}).mp : '';
+      const m = modal(r ? 'Edit the shop assignment' : 'Assign a shop', '', `<div class="form" style="display:grid;gap:10px"><label>Marketplace<select id="saMp"><option value="">All</option>${d.marketplaces.map(x => `<option value="${x.id}" ${+x.id === +mp ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>
+        <label>Shop *<select id="saShop"></select></label><label>Role<select id="saRole">${d.roles.filter(x => x !== 'SELLER').map(x => `<option ${r && r.role_code === x ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
+        <label>From<input type="date" id="saFrom" value="${esc(r ? r.d_from || '' : S.boot.today)}"></label><label>To (blank = open)<input type="date" id="saTo" value="${esc(r ? r.d_to || '' : '')}"></label><div class="small" id="saErr" style="color:var(--err)"></div></div>`, '<button class="btn primary" id="saOk">Save</button>', false);
+      const fill = () => { const v = $('#saMp', m.ov).value; $('#saShop', m.ov).innerHTML = d.shops.filter(s => !v || +s.mp === +v).map(s => `<option value="${s.id}" ${r && +s.id === +r.shop ? 'selected' : ''}>${esc(s.name)}</option>`).join(''); }; fill(); $('#saMp', m.ov).onchange = fill;
+      $('#saOk', m.ov).onclick = async () => { try { toast((await api(`people/${pid}/shops` + (r ? '/' + r.id : ''), { method: 'POST', body: { fk_id_branch: +$('#saShop', m.ov).value, role_code: $('#saRole', m.ov).value, d_from: $('#saFrom', m.ov).value, d_to: $('#saTo', m.ov).value } })).message); m.close(); again(); } catch (e) { $('#saErr', m.ov).textContent = Object.values(e.errors || {}).flat().join(' ') || e.message; } }; };
+    if ($('#shAdd', host)) $('#shAdd', host).onclick = () => form(null);
+    $$('[data-she]', host).forEach(b => b.onclick = () => form(d.rows.find(x => +x.id === +b.dataset.she)));
+    $$('[data-shd]', host).forEach(b => b.onclick = () => { const m = modal('Delete', '', '<p>Are you sure, you want to delete this shop?</p>', '<button class="btn" id="sdNo">No</button><button class="btn primary" id="sdYes">Delete</button>', false);
+      $('#sdNo', m.ov).onclick = m.close; $('#sdYes', m.ov).onclick = async () => { try { toast((await api(`people/${pid}/shops/${b.dataset.shd}/delete`, { method: 'POST', body: {} })).message); m.close(); again(); } catch (e) { toast(e.message, 'err'); } }; });
+  }
   async function securityCard(pid) {
     let d; try { d = await api(`people/${pid}/security-questions`); } catch (e) { return; }
     const host = document.createElement('div'); host.className = 'card'; host.style.marginTop = '12px'; $('#main').appendChild(host);

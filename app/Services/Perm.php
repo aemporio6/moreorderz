@@ -387,6 +387,7 @@ class Perm
     {
         if (! $u || ($u->role_code === 'OWNER' && ! self::$viewAs)) return null;
         $ids = DB::table('mo_user_scopes')->where('user_id', $u->id)->where('kind', 'SHOP')->pluck('ref_id')->map(fn ($x) => (int) $x)->all();
+        $ids = array_values(array_unique(array_merge($ids, ShopAssignments::shopsOfUser($u))));      // + shop assignments valid today + own / seller shops (R-C-41)
         return $ids ?: null;
     }
 
