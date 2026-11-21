@@ -97,28 +97,35 @@ class WorkController extends Controller
     public function due(Request $r) { return \App\Services\DueEngine::list((int) Context::ent(), $r->user(), $r->only(['chip', 'status'])); }
     public function dueDone(Request $r, int $id) { try { return \App\Services\DueEngine::done((int) Context::ent(), $id, $r->user()); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
 
+    /** Tasks: scope mine (R-G_CORE-36), all (R-G_CORE-37 chips / filters / pages), stuck_on_me, to_approve. */
     public function tasks(Request $r)
     {
-        $u = $r->user();
-        $q = DB::table('tasks as t')->leftJoin('t_users as u', 'u.id', '=', 't.owner_user_id')->leftJoin('task_categories as c', 'c.id', '=', 't.category_id')
-            ->where(fn ($w) => $w->where('t.fk_id_ent', Context::ent())->orWhere('t.fk_id_ent', 0)->orWhereNull('t.fk_id_ent'));
-        $scope = $r->query('scope', 'mine');
-        if ($scope === 'to_approve') $q->where('t.status', 'DONE');      // waiting approval (R-G_CORE-7): filtered below to the ones this person may approve
-        elseif ($scope === 'stuck_on_me') $q->where('t.status', 'STUCK')->where('t.stuck_on_type', 'USER')->where('t.stuck_on_id', $u->id);   // tasks of others that wait on this person
-        elseif ($scope === 'mine' || ! \App\Services\Perm::has($u, 'work.tasks_may')) $q->where('t.owner_user_id', $u->id);
-        if ($r->query('status', 'open') === 'open' && $scope !== 'to_approve') $q->whereNotIn('t.status', ['DONE', 'APPROVED', 'CANCELLED']);
-        if ($s = $r->query('q')) $q->where('t.title', 'like', "%$s%");
-        $rows = $q->orderByRaw("FIELD(t.priority,'URGENT','HIGH','NORMAL','LOW')")->orderBy('t.due_at')->limit(300)
-            ->get(['t.id', 't.title', 't.status', 't.priority', 't.due_at', 't.depends_on_task_id', 't.due_changes', 't.flags', 't.parent_task_id', 't.rule_code', 't.source', 't.fix_url', 't.linked_module', 't.linked_record_id', 't.amount_gbp', 't.stuck_on_type', 't.stuck_on_text', 't.stuck_since', 'u.display_name as owner', 'c.name as category', 't.owner_user_id', 't.assigned_by_user_id', 't.rework_count', 't.score', 't.evidence_required']);
-        if ($scope === 'to_approve') $rows = $rows->filter(fn ($t) => $t->source !== 'RULE' && \App\Services\TaskScore::refusal($t, $u) === null)->values();
-        $why = DB::table('task_history')->whereIn('task_id', $rows->pluck('id')->all() ?: [0])->where('new_value', 'CREATED')->where('reason', 'like', '%owner by%')->pluck('reason', 'task_id');      // why this owner (R-G_CORE-94)
-        $today0 = \App\Services\TaskHealth::today(); $rows = $rows->map(fn ($t) => (array) $t + ['health' => \App\Services\TaskHealth::of($t, $today0), 'actions' => \App\Services\TaskFlow::actionsFor($t, $u), 'missing' => in_array($t->status, ['DOING', 'STUCK'], true) ? array_column(\App\Services\TaskFlow::missing($t), 'text') : [], 'label' => \App\Services\TaskFlow::LABELS[$t->status] ?? $t->status, 'ref' => \App\Services\TaskFlow::ref((int) $t->id), 'owner_why' => isset($why[$t->id]) ? ucfirst(trim(substr($why[$t->id], strpos($why[$t->id], 'owner by') + 9))) : null, 'may_approve' => $t->status === 'DONE' && $t->source !== 'RULE' && \App\Services\TaskScore::refusal($t, $u) === null, 'preview' => $t->status === 'DONE' ? \App\Services\TaskScore::parts($t, 'GOOD') : null, 'band' => $t->score !== null ? \App\Services\TaskScore::band((float) $t->score) : null]);
-        $today = date('Y-m-d');
+        $u = $r->user(); $scope = $r->query('scope', 'mine'); $L = \App\Services\TaskLists::class;
+        $f = $r->only(['person', 'category', 'status', 'source', 'marketplace', 'product', 'shop', 'q']);
+        if ($scope === 'mine') $d = $L::mine($u);
+        elseif ($scope === 'all') $d = $L::all($u, (string) $r->query('chip', 'open'), $f, $r->integer('page') ?: 1);
+        else {
+            $q = $L::base();
+            if ($scope === 'to_approve') $q->where('t.status', 'DONE');      // waiting approval (R-G_CORE-7): filtered below to the ones this person may approve
+            else $q->where('t.status', 'STUCK')->where('t.stuck_on_type', 'USER')->where('t.stuck_on_id', $u->id);      // stuck_on_me: tasks of others that wait on this person
+            $rows = $q->orderByRaw("FIELD(t.priority,'URGENT','HIGH','NORMAL','LOW')")->orderBy('t.due_at')->limit(300)->get(['t.*', 'u.display_name as owner', 'c.name as category']);
+            if ($scope === 'to_approve') $rows = $rows->filter(fn ($t) => $t->source !== 'RULE' && \App\Services\TaskScore::refusal($t, $u) === null)->values();
+            $d = ['tasks' => $L::decorate($rows, $u)];
+        }
         $toApprove = DB::table('tasks as t')->where('t.status', 'DONE')->where('t.source', '<>', 'RULE')->where(fn ($w) => $w->where('t.fk_id_ent', Context::ent())->orWhereNull('t.fk_id_ent'))->get(['t.id', 't.status', 't.owner_user_id', 't.assigned_by_user_id'])->filter(fn ($t) => \App\Services\TaskScore::refusal($t, $u) === null)->count();
-        return ['tasks' => $rows, 'to_approve' => $toApprove, 'my_score' => \App\Services\TaskScore::person((int) $u->id), 'qualities' => array_keys(\App\Services\TaskScore::QUALITY), 'stuck_on_me' => DB::table('tasks')->where('status', 'STUCK')->where('stuck_on_type', 'USER')->where('stuck_on_id', $u->id)->count(),
+        return $d + ['scope' => $scope, 'to_approve' => $toApprove, 'my_score' => \App\Services\TaskScore::person((int) $u->id), 'qualities' => array_keys(\App\Services\TaskScore::QUALITY), 'stuck_on_me' => DB::table('tasks')->where('status', 'STUCK')->where('stuck_on_type', 'USER')->where('stuck_on_id', $u->id)->count(),
             'stuck_on' => \App\Services\Guide::STUCK_ON, 'people' => DB::table('t_users')->where('f_active', 1)->where('id', '<>', $u->id)->orderBy('display_name')->get(['id', DB::raw('COALESCE(display_name, login_id) as name')]),
             'snoozes' => in_array($u->role_code, ['OWNER', 'PARTNER', 'MANAGER'], true) ? \App\Services\TaskActions::snoozes((int) Context::ent()) : [], 'bulk' => in_array($u->role_code, \App\Services\TaskScore::BOSS, true) ? \App\Services\TaskBulk::ACTIONS : null, 'can_end_snooze' => in_array($u->role_code, ['OWNER', 'PARTNER'], true),
-            'counts' => ['open' => $rows->count(), 'late' => $rows->filter(fn ($t) => $t['due_at'] < $today)->count(), 'urgent' => $rows->where('priority', 'URGENT')->count()]];
+            'boss' => $L::boss($u), 'all_people' => DB::table('t_users')->where('f_active', 1)->orderBy('display_name')->get(['id', DB::raw('COALESCE(display_name, login_id) as name')])];
+    }
+
+    /** R-G_CORE-38 dashboard, R-G_CORE-39 needs attention, R-G_CORE-37 export. */
+    public function tasksDashboard(Request $r) { return $this->act(fn () => \App\Services\TaskLists::dashboard($r->user(), $r->only(['person', 'shop']))); }
+    public function tasksAttention(Request $r) { return $this->act(fn () => \App\Services\TaskLists::attention($r->user(), $r->integer('page') ?: 1, 10, $r->only(['person', 'shop']))); }
+    public function tasksExport(Request $r)
+    {
+        [$name, $csv] = \App\Services\TaskLists::export($r->user(), (string) $r->query('chip', 'open'), $r->only(['person', 'category', 'status', 'source', 'marketplace', 'product', 'shop', 'q']));
+        return response($csv, 200, ['Content-Type' => 'text/csv; charset=UTF-8', 'Content-Disposition' => 'attachment; filename="' . $name . '"']);
     }
 
     public function taskStatus(Request $r, int $id)

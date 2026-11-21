@@ -44,6 +44,7 @@ class MoNightly extends Command
         }
         $subs = \App\Services\Subscriptions::nightly();
         $loans = \App\Services\FinanceExtras::loanTasks(); if ($loans) $this->line("Loan payments due: $loans new task(s)");
+        foreach (\Illuminate\Support\Facades\DB::table('t_enterprise')->pluck('id') as $e) \App\Services\TaskLists::dataQuality((int) $e);      // R-G_CORE-38 data-quality rule tasks (one a day)
         $this->line("Subscriptions overdue: $subs new task(s) · task digests go every minute at each person's digest time (mo:events)");
         \App\Services\SaleLines::purgeBin();   // the recycle bin keeps deleted sale lines for 30 days
         $nd = \App\Services\DsMatch::digest(); if ($nd) $this->line("Not matched digest: $nd person(s) told");

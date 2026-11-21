@@ -143,8 +143,8 @@ class HttpTest extends TestCase
         $rule = \App\Services\TaskEngine::open('SAL_ZERO', [77], 'Sale line with zero price', ['owner_user_id' => $va->id]);
         $manual = DB::table('tasks')->insertGetId(['fk_id_ent' => 1, 'title' => 'Call the forwarder', 'category_id' => 1, 'owner_user_id' => $va->id, 'priority' => 'NORMAL', 'status' => 'TODO', 'created_at' => now(), 'due_at' => '2026-01-01', 'source' => 'MANUAL']);
         $d = $this->actingAs($va)->getJson('/api/tasks')->assertOk()->json();
-        $this->assertSame(2, $d['counts']['open']);
-        $this->assertSame(1, $d['counts']['late']);
+        $this->assertSame(2, $d['tiles']['open']);
+        $this->assertSame(1, $d['tiles']['late']);
         $this->postJson("/api/tasks/$rule/status", ['status' => 'DONE'])->assertStatus(422);
         $this->postJson("/api/tasks/$manual/status", ['status' => 'STUCK'])->assertStatus(422);
         $this->postJson("/api/tasks/$manual/status", ['status' => 'DONE'])->assertStatus(422)->assertJsonPath('message', 'Refused: a TODO task cannot be marked done - start it first.');      // R-G_CORE-1

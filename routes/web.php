@@ -530,6 +530,9 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('returns', [OrdersController::class, 'returns']);
         Route::post('returns', [OrdersController::class, 'receiveReturn']);
         Route::get('tasks', [WorkController::class, 'tasks']);
+        Route::get('tasks/dashboard', [WorkController::class, 'tasksDashboard']);
+        Route::get('tasks/attention', [WorkController::class, 'tasksAttention']);
+        Route::get('tasks/export', [WorkController::class, 'tasksExport']);
         Route::get('tasks/new', [WorkController::class, 'taskForm']);
         Route::get('tasks/new/prefill', [WorkController::class, 'taskPrefill']);
         Route::get('tasks/new/records', [WorkController::class, 'taskRecords']);
