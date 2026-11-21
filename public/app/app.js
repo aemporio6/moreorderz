@@ -185,7 +185,7 @@
       if (r === '#/stock/counts') return await pageCounts();
       if ((mt = r.match(/^#\/prices\/(\d+)/))) return await pagePrices(+mt[1]);
       if (r.startsWith('#/stock')) return await pageStock({ low: r.includes('low=1') });
-      if (r === '#/buying') return await pageBuying();
+      if (r === '#/buying' || r.startsWith('#/buying?')) { const u = new URLSearchParams(r.split('?')[1] || ''); return await pageBuying(+(u.get('page') || 1), Object.fromEntries(['supplier', 'q', 'stage', 'reset'].filter(k => u.has(k)).map(k => [k, u.get(k)]))); }
       if ((mt = r.match(/^#\/research\/(\d+)/))) return await pageResearch(+mt[1]);
       if ((mt = r.match(/^#\/cycle-extras\/(\d+)/))) return await pageCycleExtras(+mt[1]);
       if ((mt = r.match(/^#\/cycle-journey\/(\d+)/))) return await pageCycleJourney(+mt[1]);
@@ -268,7 +268,7 @@
       if (r === '#/bulk-jobs') return await pageBulkJobs();
       if (r === '#/choices') return await pageChoices();
       if (r === '#/settings') return await pageSettings();
-      if (r.startsWith('#/audit')) return await pageAudit();
+      if (r.startsWith('#/audit')) { const u = new URLSearchParams(r.split('?')[1] || ''); return await pageAudit(Object.fromEntries(['user_id', 'from', 'to'].filter(k => u.get(k)).map(k => [k, u.get(k)]))); }
       if (r === '#/health') return await pageHealth();
       if (r === '#/ledger') return await pageLedger();
       if (r === '#/me') return await pageMe();
@@ -2481,7 +2481,7 @@
 
   // ---------- audit log ----------
   async function pageAudit(st = {}) {
-    busy(true); let d; try { d = await api('audit?' + new URLSearchParams({ page: st.page || 1, action: st.action || '', user: st.user || '', table: st.table || '' })); } finally { busy(false); }
+    busy(true); let d; try { d = await api('audit?' + new URLSearchParams({ page: st.page || 1, action: st.action || '', user: st.user || '', table: st.table || '', user_id: st.user_id || '', from: st.from || '', to: st.to || '' })); } finally { busy(false); }
     const pages = Math.max(1, Math.ceil(d.total / 50));
     $('#main').innerHTML = `<div class="page-head"><div><h1>Audit log</h1><div class="sub">Every change, sign-in and export. ${d.total.toLocaleString('en-GB')} rows. Nothing here can be edited or deleted.</div></div></div>
       <div class="card"><div class="list-bar"><input class="q" id="aU" placeholder="User login…" value="${esc(st.user || '')}"><input class="q" id="aT" placeholder="Table…" value="${esc(st.table || '')}"><select class="q" id="aA"><option value="">Every action</option>${['INSERT', 'UPDATE', 'DELETE', 'LOGIN', 'LOGIN_FAIL', 'LOGOUT', 'EXPORT', 'APPROVE', 'REJECT', 'LOCK', 'UNLOCK'].map(a => `<option ${st.action === a ? 'selected' : ''}>${a}</option>`).join('')}</select><button class="btn sm primary" id="aGo">Show</button></div>
@@ -2822,6 +2822,7 @@
     if (money) perCard('invoicing', '#bInv', (box, d) => { box.innerHTML = d.show ? `<div class="card"><div class="card-h"><h3>${esc(d.title)}</h3><span data-pslot style="margin-left:auto"></span></div>${kv(d.rows)}</div>` : ''; });
     if (money) perCard('investors', '#bInvest', (box, d) => { const m2 = v => money2(v);
       box.innerHTML = `<div class="card"><div class="card-h"><h3>${esc(d.title)}</h3><span data-pslot style="margin-left:auto"></span></div>${d.empty ? `<div class="empty">${esc(d.empty)}</div>` : kv([...d.invested.map(x => ['Invested (period) · ' + x.name + ' (' + x.cycles + ' cycles)', m2(x.amount)]), ...d.goods.map(x => ['Goods in hand (now) · ' + x.name, m2(x.amount)]), ['Returns (confirmed, period)', m2(d.returns)], ['Withdrawals (period)', m2(d.withdrawals)]])}</div>`; });
+    perCard('team', '#bTeam', (box, d) => { box.innerHTML = `<div class="card"><div class="card-h"><h3>${esc(d.title)}</h3><span data-pslot style="margin-left:auto"></span></div>${d.rows.length ? `<div class="card-b" id="tmList">${d.rows.map(r => `<div style="padding:4px 0"><a href="${esc(r.drill)}">${esc(r.line)}</a></div>`).join('')}</div>` : `<div class="empty">${esc(d.empty)}</div>`}</div>`; });
     const drawNeeds = (box, d) => { const P = { P1: '#c0392b', P2: '#e67e22' };
       box.innerHTML = `<div class="card"><div class="card-h"><h3>Needs action</h3><span class="small muted">${d.count}</span>${d.more ? '<a href="#" class="small" id="ndAll" style="margin-left:auto">show all</a>' : ''}</div>${d.rows.length ? `<div class="tbl-wrap"><table class="t" id="ndT"><tbody>${d.rows.map(r => `<tr class="click" data-link="${esc(r.link)}"><td style="width:40px"><span class="chip" style="background:${P[r.p] || '#888'};color:#fff">${esc(r.p)}</span></td><td><b>${esc(r.title)}</b><div class="small muted">${esc(r.detail)}</div></td><td><span class="chip plain">${esc(r.chip)}</span></td><td class="small">${esc(r.cycle)}</td><td class="small">${esc(r.due || '')}</td></tr>`).join('')}</tbody></table></div>` : `<div class="empty">${esc(d.empty)}</div>`}</div>`;
       $$('tr[data-link]', box).forEach(tr => tr.onclick = () => go(tr.dataset.link));
@@ -2839,8 +2840,9 @@
           <td title="${esc(r.eta_history || '')}">${esc(r.eta)}${r.eta_changes ? ` <span class="small muted">(${r.eta_changes}×)</span>` : ''}</td><td>${chip(r.customs, r.customs_tone)}</td><td>${chip(r.grn, r.grn_tone)}</td><td>${r.tracking_url ? `<a href="${esc(r.tracking_url)}" target="_blank" rel="noopener" class="small">tracking</a>` : ''}</td></tr>`).join('')}</tbody></table></div>` : `<div class="empty">${esc(d.empty)}</div>`}</div>`; });
   }
   const money2 = v => (+v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  async function pageBuying(page = 1) {
-    busy(true); let d; try { d = await api('buying?page=' + page); } finally { busy(false); }
+  async function pageBuying(page = 1, flt = {}) {
+    busy(true); let d; try { d = await api('buying?' + new URLSearchParams({ page, ...flt })); } finally { busy(false); }
+    const F = (d.stages && d.stages.filters) || {}, fgo = x => { const n = { supplier: F.supplier || '', q: F.q || '', stage: F.stage || '', ...x }; go('#/buying?' + new URLSearchParams(Object.fromEntries(Object.entries(n).filter(([, v]) => v !== '' && v !== null)))); };
     const k = d.kpi || {}, fail = (lbl, key) => `<div class="card" data-failed="${esc(lbl)}"><div class="card-b muted">${esc(lbl)}: This section could not load – the admin has been told. <a href="#" data-retry="${key}">Retry</a></div></div>`, card = (lbl, val, foot, tone, goto) => `<div class="card kpi ${tone || ''}" ${goto ? `data-go="${goto}" style="cursor:pointer"` : ''}><div class="bar"></div><div class="lbl">${lbl}</div><div class="val">${val}</div><div class="foot">${foot || ''}</div></div>`;
     $('#main').innerHTML = `<div class="page-head"><div><h1>Buying</h1><div class="sub">From an idea to stock on the shelf. Each open cycle shows where it stands.</div></div>
       <div class="actions">${d.rights.buy ? `<a class="btn" href="#/quick-buy">${ic('plus')} Quick buy</a><button class="btn" id="bRes">${ic('plus')} New research</button><button class="btn" id="bPo">${ic('plus')} Direct PO</button>` : ''}</div></div>
@@ -2850,18 +2852,23 @@
         ${card('GRN to post', k.grn_to_post, 'received but not in stock yet', k.grn_to_post ? 'warn' : 'done')}${card('Lots with provisional cost', k.lots_provisional, 'run the landed cost', k.lots_provisional ? 'warn' : 'done')}
         ${k.supplier_advances !== undefined ? card('Paid ahead to suppliers', money(k.supplier_advances), 'goods not received yet') + card('Owed to suppliers', money(k.supplier_payables), 'goods received, not paid') : ''}</div>` : fail('Buying figures', 'page')}
       ${d.stages ? `<div class="card" style="margin-top:14px"><div class="card-h"><h3>Open cycles by stage</h3><span class="small muted">${d.stages.legend.map(([l, c]) => `<span style="display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:middle;background:${c === 'hatched' ? 'repeating-linear-gradient(45deg,#0F5E63,#0F5E63 2px,#fff 2px,#fff 5px)' : c}"></span> ${l}`).join(' &nbsp; ')}</span></div>
-        <div class="card-b" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px" id="stTiles">${d.stages.tiles.map(t => `<div class="card kpi" data-tile="${t.key}"><div class="lbl">${esc(t.name)}</div><div class="val">${t.open}</div></div>`).join('')}</div></div>
-      <div class="card" style="margin-top:14px"><div class="card-h"><h3>Open cycles</h3><span class="small muted">${d.stages.total} open</span></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Cycle</th><th>Products</th><th>Suppliers</th><th>POs</th><th style="min-width:220px">Where it stands</th><th>Next action</th><th class="num">Days open</th></tr></thead><tbody>
+        <div class="card-b" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px" id="stTiles">${d.stages.tiles.map(t => `<div class="card kpi" data-tile="${t.key}" style="cursor:pointer;${F.stage === t.key ? 'outline:2px solid var(--accent)' : ''}" title="Show only cycles at this stage"><div class="lbl">${esc(t.name)}</div><div class="val">${t.open}</div></div>`).join('')}</div></div>
+      <div class="card" style="margin-top:14px"><div class="card-h"><h3>Open cycles</h3><span class="small muted">${d.stages.total} open</span></div>
+        <div class="list-bar" id="cyFilters" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:8px 12px"><select class="q" id="cfSup"><option value="">Supplier: All</option>${d.stages.suppliers.map(x => `<option value="${x.id}" ${+F.supplier === x.id ? 'selected' : ''}>${esc(x.name)} (${x.count})</option>`).join('')}</select>
+          <input class="q" id="cfQ" placeholder="Search SC number, PO number or product" value="${esc(F.q || '')}" style="min-width:260px">${F.stage ? `<span class="chip accent" id="cfStage">Filtered: ${esc(F.stage_name)} — <a href="#" id="cfClear">clear</a></span>` : ''}<a href="#" id="cfReset" class="small">Reset</a></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Cycle</th><th>Products</th><th>Suppliers</th><th>POs</th><th style="min-width:220px">Where it stands</th><th>Next action</th><th class="num">Days open</th></tr></thead><tbody>
       ${d.cycles.map(c => `<tr class="click" data-id="${c.id}"><td>${esc(c.cell)}</td><td>${c.products.map(esc).join('<br>')}</td><td>${c.suppliers.map(esc).join('<br>') || '—'}</td><td>${c.pos.map(esc).join('<br>') || '—'}</td>
         <td>${stageStrip(c.steps, c.progress_pct)}<div class="small">${esc(c.current_name)}</div>${c.missing_text ? `<div class="small" style="color:#b7791f">${esc(c.missing_text)}</div>` : ''}</td><td class="small">${esc(c.next_action)}</td><td class="num">${c.days_open}</td></tr>`).join('')}</tbody></table>
-      ${d.stages.total > d.stages.per_page ? `<div style="display:flex;gap:8px;padding:8px;justify-content:flex-end">${page > 1 ? `<button class="btn sm" id="bPrev">← Previous</button>` : ''}<span class="small muted">Page ${page} of ${Math.ceil(d.stages.total / d.stages.per_page)}</span>${page * d.stages.per_page < d.stages.total ? `<button class="btn sm" id="bNext">Next →</button>` : ''}</div>` : ''}${d.cycles.length ? '' : `<div class="empty">${ic('search')}<div>No open cycle. Start with a research idea and press GO, or make a Direct PO.</div></div>`}</div></div>` : fail('Open cycles', 'page')}`;
+      ${d.stages.total > d.stages.per_page ? `<div style="display:flex;gap:8px;padding:8px;justify-content:flex-end">${page > 1 ? `<button class="btn sm" id="bPrev">← Previous</button>` : ''}<span class="small muted">Page ${page} of ${Math.ceil(d.stages.total / d.stages.per_page)}</span>${page * d.stages.per_page < d.stages.total ? `<button class="btn sm" id="bNext">Next →</button>` : ''}</div>` : ''}${d.cycles.length ? '' : (F.supplier || F.q || F.stage ? `<div class="empty">${esc(d.stages.empty)}</div>` : `<div class="empty">${ic('search')}<div>No open cycle. Start with a research idea and press GO, or make a Direct PO.</div></div>`)}</div></div>` : fail('Open cycles', 'page')}`;
     S.failedCards = [...(d.failed || [])]; failBox();
     $$('#main [data-go]').forEach(x => x.onclick = () => go(x.dataset.go));
     $$('#main tr[data-id]').forEach(tr => tr.onclick = () => go('#/cycle/' + tr.dataset.id));
-    $('#main').insertAdjacentHTML('beforeend', `<div style="display:grid;grid-template-columns:minmax(260px,1fr) 2.4fr;gap:12px;margin-top:12px;align-items:start"><div><div id="bPay"></div><div id="bInv" style="margin-top:12px"></div><div id="bInvest" style="margin-top:12px"></div><div id="bContacts" style="margin-top:12px"></div></div><div><div id="bNeeds"></div><div id="bShips" style="margin-top:12px"></div></div></div>`);
+    $('#main').insertAdjacentHTML('beforeend', `<div style="display:grid;grid-template-columns:minmax(260px,1fr) 2.4fr;gap:12px;margin-top:12px;align-items:start"><div><div id="bPay"></div><div id="bInv" style="margin-top:12px"></div><div id="bInvest" style="margin-top:12px"></div><div id="bContacts" style="margin-top:12px"></div><div id="bTeam" style="margin-top:12px"></div></div><div><div id="bNeeds"></div><div id="bShips" style="margin-top:12px"></div></div></div>`);
     $('#main').addEventListener('click', e => { const a = e.target.closest('[data-retry]'); if (!a) return; e.preventDefault(); if (a.dataset.retry === 'page') pageBuying(page); else buyingCards(a.dataset.retry); });
     buyingCards(null, d.rights.money);
-    if ($('#bPrev')) $('#bPrev').onclick = () => pageBuying(page - 1); if ($('#bNext')) $('#bNext').onclick = () => pageBuying(page + 1);
+    if ($('#bPrev')) $('#bPrev').onclick = () => pageBuying(page - 1, flt); if ($('#bNext')) $('#bNext').onclick = () => pageBuying(page + 1, flt);
+    if (d.stages) { $$('[data-tile]').forEach(t => t.onclick = () => fgo({ stage: t.dataset.tile })); $('#cfSup').onchange = () => fgo({ supplier: $('#cfSup').value });
+      $('#cfQ').onkeydown = e => { if (e.key === 'Enter') fgo({ q: $('#cfQ').value.trim() }); }; if ($('#cfClear')) $('#cfClear').onclick = e => { e.preventDefault(); fgo({ stage: '' }); };
+      $('#cfReset').onclick = e => { e.preventDefault(); go('#/buying?reset=1'); }; }
     if (d.rights.buy) { $('#bRes').onclick = () => openForm('src_research', null, { onSaved: r => go('#/research/' + r.id) }); $('#bPo').onclick = () => directPo(); }
   }
   // ---------- Direct PO in one save (R-B_SOURCING-2) ----------

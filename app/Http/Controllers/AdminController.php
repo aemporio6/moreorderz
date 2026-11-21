@@ -149,6 +149,9 @@ class AdminController extends Controller
         if ($v = $r->query('action')) $q->where('a.action', $v);
         if ($v = $r->query('table')) $q->where('a.table_name', $v);
         if ($v = $r->query('user')) $q->where('u.login_id', 'like', "%$v%");
+        if ($v = (int) $r->query('user_id')) $q->where('a.user_id', $v);      // drill-down from the team activity card (R-F_SETUP-33)
+        if ($v = $r->query('from')) $q->where('a.created_at', '>=', $v . ' 00:00:00');
+        if ($v = $r->query('to')) $q->where('a.created_at', '<=', $v . ' 23:59:59');
         $total = (clone $q)->count();
         $page = max(1, (int) $r->query('page', 1));
         return ['total' => $total, 'page' => $page, 'rows' => $q->orderByDesc('a.id')->offset(($page - 1) * 50)->limit(50)

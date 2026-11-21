@@ -82,6 +82,32 @@ class DashCards
         return ['title' => 'Invoicing / Profit', 'rows' => $has ? $rows : [], 'show' => (bool) $has];
     }
 
+    /**
+     * R-F_SETUP-33: team activity per person in the period (one source: the records' created_by / importer, tasks done on time): sales entered, imports,
+     * GRNs, sourcing records (POs + payments + shipments + cycles), tasks done on time; top 6 people by total; each line "Name — n sales entered, n imports, …".
+     */
+    public static function team(int $ent, string $from, string $to): array
+    {
+        $a = $from . ' 00:00:00'; $b = $to . ' 23:59:59'; $c = [];
+        $add = function (string $k, $rows) use (&$c) { foreach ($rows as $uid => $n) if ($uid) $c[(int) $uid][$k] = ($c[(int) $uid][$k] ?? 0) + (int) $n; };
+        $cnt = fn (string $t, string $by, string $at, ?string $ent_col = 'fk_id_ent') => DB::table($t)->when($ent_col, fn ($q) => $q->where($ent_col, $ent))->whereBetween($at, [$a, $b])->whereNotNull($by)->groupBy($by)->selectRaw("$by as u, COUNT(*) as n")->pluck('n', 'u');
+        $add('sales', $cnt('t_sales', 'created_by', 'created_at'));
+        $add('imports', $cnt('t_sale_imports', 'imported_by', 'imported_at'));
+        $add('grns', $cnt('t_src_grn', 'created_by', 'created_at'));
+        foreach (['t_src_po', 't_src_payments', 't_src_shipments', 't_src_cycles'] as $t) $add('sourcing', $cnt($t, 'created_by', 'created_at'));
+        $add('tasks', DB::table('tasks')->where('fk_id_ent', $ent)->whereBetween('done_at', [$a, $b])->where(fn ($q) => $q->whereNull('due_at')->orWhereColumn('done_at', '<=', 'due_at'))->whereNotNull('owner_user_id')->groupBy('owner_user_id')->selectRaw('owner_user_id as u, COUNT(*) as n')->pluck('n', 'u'));
+        $names = DB::table('t_users')->whereIn('id', array_keys($c) ?: [0])->pluck('display_name', 'id');
+        $lab = ['sales' => 'sales entered', 'imports' => 'imports', 'grns' => 'GRNs', 'sourcing' => 'sourcing records', 'tasks' => 'tasks done on time'];
+        $rows = [];
+        foreach ($c as $uid => $m) {
+            $parts = []; foreach ($lab as $k => $l) if (! empty($m[$k])) $parts[] = $m[$k] . ' ' . $l;
+            $name = $names[$uid] ?? ('#' . $uid);
+            $rows[] = ['user_id' => $uid, 'name' => $name, 'total' => array_sum($m), 'counts' => $m + array_fill_keys(array_keys($lab), 0), 'line' => $name . ' — ' . implode(', ', $parts), 'drill' => "#/audit?user_id=$uid&from=$from&to=$to"];
+        }
+        usort($rows, fn ($x, $y) => [$y['total'], $x['name']] <=> [$x['total'], $y['name']]);
+        return ['title' => 'Team activity', 'rows' => array_slice($rows, 0, 6), 'empty' => 'No activity in period'];
+    }
+
     /** R-F_SETUP-20: Needs action over the open cycles – P1 then P2, then due date; top 20 with "show all"; the header counts every item. */
     public static function needs(int $ent, bool $all = false): array
     {

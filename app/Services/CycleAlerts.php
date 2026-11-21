@@ -74,14 +74,33 @@ class CycleAlerts
      * Days open (floor of days since the sourcing date, never below 0; 0 without a date), cycle cell "code + entered dd Mon · status".
      * Tiles: open cycles per current stage (a "Complete" cycle is not counted). Paged.
      */
-    public static function dashboard(int $ent, int $page = 1, int $per = 30): array
+    public static function dashboard(int $ent, int $page = 1, int $per = 60, array $f = []): array
     {
-        $all = DB::table('t_src_cycles')->where('fk_id_ent', $ent)->where('f_active', 1)->whereNotIn('status', ['CLOSED', 'Closed', 'CANCELLED', 'Cancelled', 'COMPLETED', 'Completed'])->orderByDesc('id')
+        // R-F_SETUP-18: open = active and status not Completed / Closed / Cancelled (empty = open); filters run first, then paging (60 per page)
+        $all = DB::table('t_src_cycles')->where('fk_id_ent', $ent)->where('f_active', 1)->where(fn ($w) => $w->whereNull('status')->orWhereRaw("UPPER(status) NOT IN ('CLOSED','CANCELLED','COMPLETED')"))->orderByDesc('id')
             ->get(['id', 'cycle_code', 'cycle_type', 'skipped_steps', 'created_by', 'status', 'sourcing_date', 'created_at', 'product_name']);
-        $tiles = array_fill_keys(array_keys(self::GROUPS), 0); $rows = [];
-        $page = max(1, $page); $from = ($page - 1) * $per; $today = new \DateTimeImmutable('today');
-        foreach ($all as $i => $c) {
-            $pl = self::pipeline($c); if ($pl['current']) $tiles[$pl['current']]++;
+        $sup = (int) ($f['supplier'] ?? 0); $q = mb_strtolower(trim((string) ($f['q'] ?? ''))); $stage = (string) ($f['stage'] ?? '');
+        $supOf = fn (int $cy) => DB::table('t_src_cycle_products')->where('fk_id_cycle', $cy)->where('f_active', 1)->whereNotNull('fk_id_supplier')->pluck('fk_id_supplier')
+            ->merge(DB::table('t_src_po')->where('fk_id_cycle', $cy)->where('f_active', 1)->whereNotNull('fk_id_supplier')->pluck('fk_id_supplier'))->map(fn ($x) => (int) $x)->unique()->all();
+        $hit = function (object $c) use ($q) {
+            if ($q === '') return true;
+            if (str_contains(mb_strtolower((string) $c->cycle_code), $q)) return true;
+            if (DB::table('t_src_po')->where('fk_id_cycle', $c->id)->where('f_active', 1)->where(fn ($w) => $w->whereRaw('LOWER(po_number) LIKE ?', ["%$q%"])->orWhereRaw('LOWER(po_code) LIKE ?', ["%$q%"]))->exists()) return true;
+            if (DB::table('t_src_cycle_products')->where('fk_id_cycle', $c->id)->where('f_active', 1)->where(fn ($w) => $w->whereRaw('LOWER(product_name) LIKE ?', ["%$q%"])->orWhereRaw('LOWER(sku) LIKE ?', ["%$q%"]))->exists()) return true;
+            return DB::table('t_src_po_lines as l')->join('t_product_vendors as p', 'p.id', '=', 'l.fk_id_product')->where('l.fk_id_cycle', $c->id)->where('l.f_active', 1)->where(fn ($w) => $w->whereRaw('LOWER(p.product_name_vendor) LIKE ?', ["%$q%"])->orWhereRaw('LOWER(p.SKU_VENDOR) LIKE ?', ["%$q%"]))->exists();
+        };
+        $supCount = []; $pls = []; $tiles = array_fill_keys(array_keys(self::GROUPS), 0); $keep = [];
+        foreach ($all as $c) {
+            $sups = $supOf((int) $c->id); $okQ = $hit($c);
+            if ($okQ) foreach ($sups as $s) $supCount[$s] = ($supCount[$s] ?? 0) + 1;
+            if (! $okQ || ($sup && ! in_array($sup, $sups, true))) continue;
+            $pl = self::pipeline($c); $pls[$c->id] = $pl; if ($pl['current']) $tiles[$pl['current']]++;
+            if ($stage !== '' && $pl['current'] !== $stage) continue;
+            $keep[] = $c;
+        }
+        $rows = []; $page = max(1, $page); $from = ($page - 1) * $per; $today = new \DateTimeImmutable('today');
+        foreach ($keep as $i => $c) {
+            $pl = $pls[$c->id];
             if ($i < $from || $i >= $from + $per) continue;
             $po = DB::table('t_src_po')->where('fk_id_cycle', $c->id)->where('f_active', 1)->orderBy('id')->get(['po_number', 'po_code']);
             $prods = DB::table('t_src_cycle_products as cp')->leftJoin('t_src_suppliers as s', 's.id', '=', 'cp.fk_id_supplier')->where('cp.fk_id_cycle', $c->id)->where('cp.f_active', 1)->orderBy('cp.id')->get(['cp.product_name', 'cp.target_qty', 's.supplier_name']);
@@ -92,7 +111,10 @@ class CycleAlerts
                 'suppliers' => $prods->pluck('supplier_name')->filter()->unique()->values()->all(), 'products' => $prods->map(fn ($p) => trim($p->product_name . ' ' . number_format((float) $p->target_qty, 0, '.', '')))->all(),
                 'pos' => $po->map(fn ($p) => $p->po_number ?: $p->po_code)->filter()->values()->all(), 'next_action' => $needs[0]['title'] ?? '—', 'days_open' => $days];
         }
-        return ['tiles' => array_map(fn ($k) => ['key' => $k, 'name' => self::GROUPS[$k], 'open' => $tiles[$k]], array_keys(self::GROUPS)), 'rows' => $rows, 'total' => $all->count(), 'page' => $page, 'per_page' => $per,
+        $supNames = $supCount ? DB::table('t_src_suppliers')->whereIn('id', array_keys($supCount))->orderBy('supplier_name')->pluck('supplier_name', 'id') : collect();
+        return ['tiles' => array_map(fn ($k) => ['key' => $k, 'name' => self::GROUPS[$k], 'open' => $tiles[$k]], array_keys(self::GROUPS)), 'rows' => $rows, 'total' => count($keep), 'page' => $page, 'per_page' => $per,
+            'filters' => ['supplier' => $sup ?: null, 'q' => $f['q'] ?? '', 'stage' => $stage ?: null, 'stage_name' => self::GROUPS[$stage] ?? null], 'empty' => 'No open cycles match the filter.',
+            'suppliers' => $supNames->map(fn ($n, $id) => ['id' => (int) $id, 'name' => $n, 'count' => $supCount[$id]])->values()->all(),
             'legend' => [['Done', self::STRIP['done']], ['Current', self::STRIP['current']], ['Pending', self::STRIP['pending']], ['Record missing', self::STRIP['missing']], ['Skipped', 'hatched']]];
     }
 

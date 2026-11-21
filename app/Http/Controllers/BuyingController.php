@@ -45,7 +45,12 @@ class BuyingController extends Controller
         $this->can($r, 'buying.SEE');
         $ent = (int) Context::ent();
         // R-F_SETUP-15: every block on its own; a failing one is named in the "could not load" box, the rest of the page works
-        $st = \App\Services\DashCards::run($ent, 'stages', 'Open cycles', fn () => \App\Services\CycleAlerts::dashboard($ent, max(1, (int) $r->query('page', 1))));      // R-F_SETUP-19: one stage engine for every cycle row
+        // R-F_SETUP-18 filters (supplier / search / stage tile) from the URL; the last ones are the user's saved view (Reset clears it)
+        $uid = (int) $r->user()->id; $pk = 'view:buying_cycles'; $f = array_filter(['supplier' => (int) $r->query('supplier') ?: null, 'q' => trim((string) $r->query('q')) ?: null, 'stage' => (string) $r->query('stage') ?: null]);
+        if ($r->boolean('reset')) { DB::table('t_user_column_prefs')->where('fk_id_user', $uid)->where('page_key', $pk)->delete(); $f = []; }
+        elseif ($f) DB::table('t_user_column_prefs')->updateOrInsert(['fk_id_user' => $uid, 'page_key' => $pk], ['prefs_json' => json_encode($f), 'hidden_columns' => '', 'updated_at' => now()]);
+        elseif (! $r->has('supplier') && ! $r->has('q') && ! $r->has('stage')) $f = json_decode((string) DB::table('t_user_column_prefs')->where('fk_id_user', $uid)->where('page_key', $pk)->value('prefs_json'), true) ?: [];
+        $st = \App\Services\DashCards::run($ent, 'stages', 'Open cycles', fn () => \App\Services\CycleAlerts::dashboard($ent, max(1, (int) $r->query('page', 1)), 60, $f));      // R-F_SETUP-19: one stage engine for every cycle row
         $kp = \App\Services\DashCards::run($ent, 'kpi', 'Buying figures', function () use ($ent, $r) { $d = Buy::dashboard($ent);
             if (! \App\Services\Perm::has($r->user(), 'buying.MONEY')) unset($d['pay_due_base'], $d['supplier_advances'], $d['supplier_payables']); return $d; });
         return ['kpi' => $kp['ok'] ? $kp['data'] : null, 'cycles' => $st['ok'] ? $st['data']['rows'] : [], 'stages' => $st['ok'] ? $st['data'] : null, 'failed' => array_values(array_map(fn ($x) => $x['label'], array_filter([$kp, $st], fn ($x) => ! $x['ok']))), 'rights' => $this->rights($r)];
@@ -127,11 +132,12 @@ class BuyingController extends Controller
     {
         $this->can($r, 'buying.SEE'); $ent = (int) Context::ent();
         if (in_array($card, ['payments', 'investors', 'invoicing'], true) && ! \App\Services\Perm::has($r->user(), 'buying.MONEY')) abort(403, 'This card needs the right to see money.');
-        $per = in_array($card, ['investors', 'invoicing'], true) ? \App\Services\Period::forCard((int) $r->user()->id, $card, $r->query('period'), $r->query('from'), $r->query('to')) : null;      // R-F_SETUP-27
+        $per = in_array($card, ['investors', 'invoicing', 'team'], true) ? \App\Services\Period::forCard((int) $r->user()->id, $card, $r->query('period'), $r->query('from'), $r->query('to')) : null;      // R-F_SETUP-27
         $fn = match ($card) {
             'contacts' => ['Contact today', fn () => \App\Services\SourcingBoard::contactToday($ent)], 'shipments' => ['Shipments on the way', fn () => \App\Services\SourcingBoard::shipments($ent, $r->boolean('all') ? 500 : 15)],
             'payments' => ['Supplier payments', fn () => \App\Services\DashCards::payments($ent)], 'needs' => ['Needs action', fn () => \App\Services\DashCards::needs($ent, $r->boolean('all'))],
             'investors' => ['Investors', fn () => \App\Services\DashCards::investors($ent, $per['from'], $per['to']) + ['period' => $per]],
+            'team' => ['Team activity', fn () => \App\Services\DashCards::team($ent, $per['from'], $per['to']) + ['period' => $per]],
             'invoicing' => ['Invoicing / Profit', fn () => \App\Services\DashCards::invoicing($ent, $per['from'], $per['to'], (string) Context::role()) + ['period' => $per]],
             default => abort(404) };
         return \App\Services\DashCards::run($ent, $card, $fn[0], $fn[1]);
