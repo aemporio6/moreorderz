@@ -37,7 +37,7 @@ class FormAssist
         if (! in_array($f['type'], ['select', 'multiselect'], true)) return null;
         if ($f['add_form'] && Registry::exists((string) $f['add_form'])) return ['form' => $f['add_form']];
         [$kind] = explode(':', (string) $f['source'], 2);
-        if ($kind === 'list') return ['inline' => true];
+        if ($kind === 'list') return FormStandard::fixedList((string) (explode(':', (string) $f['source'], 2)[1] ?? '')) ? null : ['inline' => true];      // a fixed list drives the program: no Add
         if ($kind === 'ref' && Registry::exists('reference_value')) return ['form' => 'reference_value'];
         if (($t = self::sourceTable($f)) && ($form = RecordService::formOfTable($t))) return ['form' => $form];
         return null;
@@ -48,7 +48,7 @@ class FormAssist
     {
         $f = self::field($formKey, $name) ?? abort(404);
         [$kind, $code] = array_pad(explode(':', (string) $f['source'], 2), 2, '');
-        if ($kind !== 'list' || $code === '') throw new \InvalidArgumentException('This list is fixed by the system – values cannot be added here.');
+        if ($kind !== 'list' || $code === '' || FormStandard::fixedList($code)) throw new \InvalidArgumentException('This list is fixed by the system – values cannot be added here.');
         $label = trim(preg_replace('/\s+/u', ' ', $label));
         if ($label === '' || mb_strlen($label) > 120) throw new \InvalidArgumentException('Type the new value (up to 120 characters).');
         $have = DB::table('sys_field_options')->where('list_code', $code)->where(fn ($w) => $w->whereRaw('LOWER(label) = ?', [mb_strtolower($label)])->orWhereRaw('LOWER(value) = ?', [mb_strtolower($label)]))->first();
@@ -90,7 +90,21 @@ class FormAssist
             $opts = $x->orderBy($lc)->limit($limit)->get()->map(fn ($r) => [(string) $r->id, (string) ($r->lbl ?? $r->id)])->all();
         }
         if ($q && ! $filters && ! in_array(explode(':', (string) $f['source'])[0], ['ref', 'table', 'own', 'party'], true)) $opts = array_values(array_filter($opts, fn ($o) => mb_stripos($o[1], $q) !== false || mb_stripos($o[0], $q) !== false));
-        return ['options' => $opts, 'more' => count($opts) >= $limit, 'narrowed_by' => array_keys($filters), 'recent' => self::recent($formKey, $name)];
+        return ['options' => $opts, 'more' => count($opts) >= $limit, 'narrowed_by' => array_keys($filters), 'recent' => self::recent($formKey, $name)] + ($q && ! $opts && ! $filters ? ['did_you_mean' => self::closest($f, $ent, $q)] : []);
+    }
+
+    /** Form standard (d): nothing matches the typed text → the closest names of the same list (spelling), at most 3. */
+    public static function closest(array $f, ?int $ent, string $q): array
+    {
+        $q = mb_strtolower(trim($q)); if (mb_strlen($q) < 3) return [];
+        $out = [];
+        foreach (Registry::options($f, $ent, null, 1000) as $o) {
+            $l = mb_strtolower((string) $o[1]); $best = 0;
+            foreach (array_merge([$l], preg_split('/[\s·,\-]+/u', $l) ?: []) as $part) if ($part !== '') { similar_text($q, $part, $pct); $best = max($best, $pct, levenshtein(substr($q, 0, 255), substr($part, 0, 255)) <= 2 ? 80 : 0); }
+            if ($best >= 70) $out[] = [$o[0], $o[1], $best];
+        }
+        usort($out, fn ($a, $b) => $b[2] <=> $a[2]);
+        return array_map(fn ($x) => [(string) $x[0], (string) $x[1]], array_slice($out, 0, 3));
     }
 
     // ---------- suggestions ----------

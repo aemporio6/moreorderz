@@ -65,7 +65,7 @@ class DirectorPickersTest extends TestCase
             $this->assertContains((string) $o, $ids, 'an old type-6 (Owner) account is offered'); $this->assertContains((string) $d, $ids);
             $this->assertNotContains((string) $s, $ids, 'a supplier-only party is not offered');
         }
-        $this->assertContains([(string) $o, 'Omar Bin Owner'], $this->opts('fk_director_1')['options'], 'label first + middle + surname');
+        $this->assertContains([(string) $o, 'Omar Bin Owner'], array_map(fn ($x) => array_slice($x, 0, 2), $this->opts('fk_director_1')['options']), 'label first + middle + surname (a third value is its group)');
         $def = collect(Registry::definition('cat_company_house', 'OWNER')['sections'])->flatMap(fn ($s) => $s['fields'])->keyBy('name');
         $this->assertSame(['roles' => (string) $dir], $def['fk_director_2']['add_preset'], '"+ Add" on a director gives the new party the role DIRECTOR');
     }

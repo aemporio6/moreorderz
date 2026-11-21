@@ -90,7 +90,7 @@ class Registry
                 'default_why' => self::defaultWhy($f),
                 'has_options' => in_array($f['type'], ['select', 'multiselect'], true),
                 'numbered' => str_starts_with((string) $f['default_rule'], 'numbering:'),
-                'add_preset' => str_starts_with((string) $f['source'], 'ref:') ? ['fk_reference_id' => DB::table('cat_references')->where('ref_code', substr($f['source'], 4))->value('id')] : DirectorPickers::addPreset($formKey, (string) $f['field_name']),
+                'add_preset' => str_starts_with((string) $f['source'], 'ref:') ? ['fk_reference_id' => DB::table('cat_references')->where('ref_code', substr($f['source'], 4))->value('id')] : (DirectorPickers::addPreset($formKey, (string) $f['field_name']) ?? FormStandard::partyPreset((string) $f['source']) ?? FormStandard::sourcePreset((string) $f['source'])),
                 'placeholder' => DirectorPickers::placeholder($formKey, (string) $f['field_name']), 'person_field' => DirectorPickers::personField($formKey, (string) $f['field_name']),
             ];
         }
@@ -136,19 +136,33 @@ class Registry
             return self::tableOptions('t_account', $ent, $q, $limit, false, $with ?: null);
         }
         if ($kind === 'table' || $kind === 'own') {
-            return self::tableOptions(explode('?', $arg)[0], $ent, $q, $limit, str_contains($arg, 'login=1'));
+            $w = []; if (str_contains($arg, '?')) { parse_str(explode('?', $arg, 2)[1], $w); unset($w['login']); }      // table:x?col=value narrows the list (form standard)
+            return self::tableOptions(explode('?', $arg)[0], $ent, $q, $limit, str_contains($arg, 'login=1'), null, $w);
         }
         return [];
     }
 
-    private static function tableOptions(string $table, ?int $ent, ?string $q, int $limit, bool $loginOnly = false, ?array $onlyIds = null): array
+    /** Form standard (owner 21 Nov 2026): a long list shows in groups – the group of each row (SQL on alias t). */
+    public const GROUPS = [
+        't_product_vendors' => "(SELECT g.product_type_name FROM cat_product_type g WHERE g.id = t.fk_id_product_type)",
+        't_branches' => "(SELECT COALESCE(NULLIF(g.marketplace_short,''), g.marketplace_descr) FROM cat_marketplaces g WHERE g.id = t.fk_id_marketplace)",
+        't_src_suppliers' => "(SELECT g.country_name FROM cat_country g WHERE g.id = t.fk_id_country)",
+        'cat_banks' => "(SELECT g.country_name FROM cat_country g WHERE g.id = t.country_id)",
+        'cat_inventory_locations' => 't.kind',
+        't_account' => "(SELECT MIN(ct.account_type_name) FROM t_account_in_types i JOIN cat_account_types ct ON ct.id = i.fk_id_account_type WHERE i.fk_id_account = t.id AND i.f_active = 1)",
+        't_src_cycles' => 't.status', 't_src_po' => 't.status',
+    ];
+    /** Label of a row where the plain label column is not enough. */
+    public const LABELS = ['t_product_vendors' => "CONCAT_WS(' · ', NULLIF(t.SKU_VENDOR,''), NULLIF(t.product_name_vendor,''))", 'cat_banks' => "COALESCE(NULLIF(t.bank_name,''), t.bank_short_name)"];
+
+    private static function tableOptions(string $table, ?int $ent, ?string $q, int $limit, bool $loginOnly = false, ?array $onlyIds = null, array $where = []): array
     {
         if (! Schema::hasTable($table)) return [];
         $pk = self::pk($table);
         if ($table === 't_account') {
             $mid = self::hasColumn($table, 'middle_name') ? "NULLIF(middle_name,''), " : '';      // label first + middle + surname (R-F_SETUP-38)
             $label = DB::raw("TRIM(CONCAT_WS(' ', NULLIF(first_name,''), {$mid}NULLIF(sur_name,''))) as lbl");
-            $x = DB::table($table)->select($pk . ' as id', $label);
+            $x = DB::table($table . ' as t')->select('t.' . $pk . ' as id', $label);
             if ($q) $x->whereRaw("CONCAT_WS(' ', first_name, " . ($mid ? 'middle_name, ' : '') . "sur_name) like ?", ["%$q%"]);
             if ($loginOnly) $x->where('f_login', 1);
             $x->where(fn ($w) => $w->whereNull('record_status')->orWhere('record_status', '<>', 'DRAFT'));      // a draft person never appears in pickers of other forms (R-C-20)
@@ -157,14 +171,17 @@ class Registry
         } else {
             $lc = self::labelColumn($table);
             $alt = $table === 't_src_po' && $lc === 'po_code' ? 'po_number' : null;      // a PO saved without its auto code is shown by its PO number, never as a bare id
-            $x = DB::table($table)->select($pk . ' as id', $alt ? DB::raw("COALESCE(NULLIF($lc, ''), $alt) as lbl") : $lc . ' as lbl');
-            if ($q) $alt ? $x->where(fn ($w) => $w->where($lc, 'like', "%$q%")->orWhere($alt, 'like', "%$q%")) : $x->where($lc, 'like', "%$q%");
-            $x->orderBy($lc);
-            if ($table === ProductScope::TABLE) ProductScope::apply($x, \Illuminate\Support\Facades\Auth::user(), $table);      // R-D-21: product dropdowns too
+            $expr = self::LABELS[$table] ?? ($alt ? "COALESCE(NULLIF(t.$lc, ''), t.$alt)" : "t.$lc");
+            $x = DB::table($table . ' as t')->select('t.' . $pk . ' as id', DB::raw("$expr as lbl"));
+            if ($q) $x->whereRaw("$expr like ?", ["%$q%"]);
+            $x->orderByRaw($expr);
+            if ($table === ProductScope::TABLE) ProductScope::apply($x, \Illuminate\Support\Facades\Auth::user(), 't');      // R-D-21: product dropdowns too
         }
-        if ($ent && self::hasColumn($table, 'fk_id_ent')) $x->where(fn ($w) => $w->where('fk_id_ent', $ent)->orWhere('fk_id_ent', 0)->orWhereNull('fk_id_ent'));
-        if (self::hasColumn($table, 'f_active')) $x->where('f_active', 1);
-        return $x->limit($limit)->get()->map(fn ($r) => [(string) $r->id, (string) ($r->lbl ?? $r->id)])->all();
+        if (isset(self::GROUPS[$table])) $x->addSelect(DB::raw(self::GROUPS[$table] . ' as grp'));
+        foreach ($where as $c => $v) if (is_string($c) && self::hasColumn($table, $c)) $x->where('t.' . $c, $v);
+        if ($ent && self::hasColumn($table, 'fk_id_ent')) $x->where(fn ($w) => $w->where('t.fk_id_ent', $ent)->orWhere('t.fk_id_ent', 0)->orWhereNull('t.fk_id_ent'));
+        if (self::hasColumn($table, 'f_active')) $x->where('t.f_active', 1);
+        return $x->limit($limit)->get()->map(fn ($r) => isset(self::GROUPS[$table]) ? [(string) $r->id, (string) ($r->lbl ?? $r->id), (string) ($r->grp ?? '') ?: 'Other'] : [(string) $r->id, (string) ($r->lbl ?? $r->id)])->all();
     }
 
     /** Why a new record already has a value in this field – shown as the "default" tag. Null = no default. */

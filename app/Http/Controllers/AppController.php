@@ -122,9 +122,7 @@ class AppController extends Controller
     /** + Create: every active entry of sys_forms the role may add, grouped by department. New modules appear by themselves. */
     public static function createCatalogue(string $role): array
     {
-        return DB::table('sys_forms')->where('f_active', 1)->where('f_in_create', 1)->orderBy('sort_no')->get(['form_key', 'title', 'department', 'module', 'f_quick'])
-            ->filter(fn ($f) => Registry::exists($f->form_key) && Rights::can($role, 'ADD', $f->form_key))
-            ->map(fn ($f) => ['key' => $f->form_key, 'title' => $f->title, 'dept' => $f->department ?: $f->module, 'quick' => (bool) $f->f_quick])->values()->all();
+        return \App\Services\FormStandard::createCatalogue($role);      // owner's form standard (f): built from the registry, every main form appears by itself
     }
 
     /** Live check of one typed field while the person types (R-F_SETUP-35: ISO code "already exists", code formats). */

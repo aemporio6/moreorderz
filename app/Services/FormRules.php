@@ -41,6 +41,7 @@ class FormRules
         $table = Registry::table($formKey);
         if ($table === 't_src_cartons') return self::cartons($data, $old);
         if ($table === 't_src_documents') return self::document($data, $old, $already);      // R-B_SOURCING-47 / 49
+        if ($table === 'fin_categories') return self::finCategory($data, $old, $id);      // form standard: money categories get a form
         if ($table === 't_product_vendors') return ProductFamily::check($data, $old, $id) + SkuCheck::onSave($data, $old, $id) + self::productCodes($data, $old);      // R-D-1 family coding / checks, R-D-2 exact SKU in the company
         if (in_array($table, ['t_src_products', 't_product_vendors'], true)) return self::productCodes($data, $old);
         if ($table === 'cat_ip_burgers') return self::isp($data);
@@ -67,6 +68,16 @@ class FormRules
         if ($strict) foreach (self::COMPANY_REQUIRED as $c) { $v = $val($c); if (($v === null || $v === '') && ! isset($already[$c]) && ! isset($e[$c])) $e[$c] = (Registry::labelOf('cat_company_house', $c) ?? $c) . ' is required.'; }
         $iso = $val('iso_code'); if ($strict && is_string($iso) && $iso !== '' && ! isset($e['iso_code']) && self::isoTaken($iso, $id)) $e['iso_code'] = 'This ISO code already exists. Please add another';
         return $e + DirectorPickers::check($data, $old);      // R-F_SETUP-36: the four pickers hold Director 1's own items
+    }
+
+    /** A system money category keeps its code, direction and place in the profit (the program uses them); a code is unique, in capitals. */
+    private static function finCategory(array &$data, array $old, ?int $id): array
+    {
+        $e = [];
+        if (isset($data['code'])) { $data['code'] = trim(preg_replace('/[^A-Z0-9]+/', '_', mb_strtoupper((string) $data['code'])), '_');
+            if ($data['code'] !== '' && DB::table('fin_categories')->where('code', $data['code'])->when($id, fn ($q) => $q->where('id', '<>', $id))->exists()) $e['code'] = 'This code already exists. Please add another'; }
+        if (! empty($old['f_system'])) foreach (['code', 'direction', 'profit_role'] as $c) if (array_key_exists($c, $data) && (string) $data[$c] !== (string) $old[$c]) $e[$c] = 'A system category keeps its ' . str_replace('_', ' ', $c) . ' – the program uses it.';
+        return $e;
     }
 
     /** R-B_SOURCING-47 / 49: name and Drive URL required (old alert); a URL without http(s):// is refused "Must start with https://". */
@@ -213,10 +224,38 @@ class FormRules
     }
 
     /** Fields checked live while the person types. */
-    public static function liveFields(string $formKey): array { $t = Registry::table($formKey); if ($t === 't_account') return ['account_code']; return $formKey === 'cat_company_house' ? array_keys(self::COMPANY) : ($t === 't_product_vendors' ? ['hs_code', 'sku_vendor'] : ($t === 't_src_products' ? ['hs_code'] : ($t === 'cat_ip_burgers' ? ['isp_code'] : ($t === 't_src_cycles' ? ['order_ref'] : [])))); }
+    public static function liveFields(string $formKey): array { return array_values(array_unique(array_merge(self::liveOwn($formKey), self::liveTyped($formKey)))); }
+    private static function liveOwn(string $formKey): array { $t = Registry::table($formKey); if ($t === 't_account') return ['account_code']; return $formKey === 'cat_company_house' ? array_keys(self::COMPANY) : ($t === 't_product_vendors' ? ['hs_code', 'sku_vendor'] : ($t === 't_src_products' ? ['hs_code'] : ($t === 'cat_ip_burgers' ? ['isp_code'] : ($t === 't_src_cycles' ? ['order_ref'] : [])))); }
 
     /** Live fields checked 500 ms after the last key (not only when the field is left). */
     public static function liveTyping(string $formKey): array { return Registry::table($formKey) === 't_product_vendors' ? ['sku_vendor'] : []; }
+
+    /** Form standard (d): every e-mail and link field of every form is checked when it is left, with a click-to-fix suggestion. */
+    private static function liveTyped(string $formKey): array
+    {
+        return array_values(array_map(fn ($f) => $f['field_name'], array_filter(Registry::fields($formKey), fn ($f) => in_array($f['type'], ['email', 'link'], true) && ! $f['secret'])));
+    }
+
+    public const MAIL_TYPOS = ['gmial.com' => 'gmail.com', 'gmai.com' => 'gmail.com', 'gmal.com' => 'gmail.com', 'gmail.co' => 'gmail.com', 'gmail.con' => 'gmail.com', 'gamil.com' => 'gmail.com', 'gnail.com' => 'gmail.com',
+        'hotmial.com' => 'hotmail.com', 'hotmai.com' => 'hotmail.com', 'hotmail.co' => 'hotmail.com', 'yahooo.com' => 'yahoo.com', 'yaho.com' => 'yahoo.com', 'yahoo.co' => 'yahoo.com', 'outlok.com' => 'outlook.com', 'outlook.co' => 'outlook.com', 'icloud.co' => 'icloud.com'];
+
+    /** A typed e-mail / link: [ok, message, suggest] – suggest is the value the "Use …" link puts into the field. */
+    public static function typed(string $type, string $value): array
+    {
+        $v = trim($value); if ($v === '') return ['ok' => true];
+        if ($type === 'email') {
+            $v = mb_strtolower(preg_replace('/\s+/', '', $v));
+            if (! preg_match('/^[^@\s]+@([^@\s]+\.[^@\s]+)$/', $v, $m)) { return ['ok' => false, 'message' => 'This is not an e-mail address (name@domain.com).', 'suggest' => null]; }
+            if (isset(self::MAIL_TYPOS[$m[1]])) { $s = substr($v, 0, -strlen($m[1])) . self::MAIL_TYPOS[$m[1]]; return ['ok' => false, 'message' => "Did you mean $s?", 'suggest' => $s]; }
+            return ['ok' => true, 'value' => $v];
+        }
+        if ($type === 'link') {
+            if (preg_match('~^https?://\S+\.\S+~i', $v)) return ['ok' => true];
+            $s = preg_match('~^(www\.|[\w-]+\.[a-z]{2,})~i', $v) ? 'https://' . preg_replace('~^/+~', '', $v) : null;
+            return ['ok' => false, 'message' => 'Must start with https://', 'suggest' => $s];
+        }
+        return ['ok' => true];
+    }
 
     /** Live check while typing (the old screen's message). */
     public static function live(string $formKey, string $field, string $value, ?int $id): array
@@ -225,6 +264,8 @@ class FormRules
         if ($field === 'account_code' && Registry::table($formKey) === 't_account') { $d = ['account_code' => $value]; $e = AccountCode::check($formKey, $d, [], $id); return ['ok' => ! $e, 'message' => $e['account_code'] ?? null, 'value' => $d['account_code'] ?? $value]; }      // R-C-4 in the browser
         if ($field === 'sku_vendor' && Registry::table($formKey) === 't_product_vendors') return SkuCheck::check((int) Context::ent(), $value, $id);      // R-D-2 live (block / warn / available)
         if ($field === 'order_ref' && Registry::table($formKey) === 't_src_cycles') return SrcDuplicate::live((int) Context::ent(), null, $value, $id) + ['value' => SrcDuplicate::clean($value)];
+        $tf = collect(Registry::fields($formKey))->firstWhere('field_name', $field);
+        if ($tf && in_array($tf['type'], ['email', 'link'], true) && ! ($formKey === 'cat_company_house' && isset(self::COMPANY[$field]))) return self::typed($tf['type'], $value);
         if ($formKey !== 'cat_company_house') return ['ok' => true];
         if ($field === 'iso_code' && self::strict($formKey)) { $taken = trim($value) !== '' && self::isoTaken($value, $id); return ['ok' => ! $taken, 'message' => $taken ? 'This ISO code already exists. Please add another' : null]; }
         $d = [$field => $value]; $e = isset(self::COMPANY[$field]) ? self::check($formKey, $d, [], $id, array_fill_keys(self::COMPANY_REQUIRED, 1)) : [];

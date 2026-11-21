@@ -1,6 +1,6 @@
 MR-1257|P|function cycle|step bar on buying cycles + first-time setup steps; not a step guide in every module
 MR-1258|P|class OrderFiles|formats found from the file itself; one importer with a breakdown per folder / module not built
-MR-1259|P|function options|Create everywhere, searchable multi-select with All / None, dropdowns that follow the field above (company and the registry's cascades_from), toast says where it was saved with its code and Open; open: the full what → company → brand chain of the + Create wizard
+MR-1259|P|function createCatalogue|Create everywhere – now built from the registry (every main form of every module appears by itself: 234 entries, was 143), searchable multi-select with All / None, dropdowns that follow the field above, toast says where it was saved with its code and Open; open: the full what → company → brand chain of the + Create wizard
 MR-1260|B|class Finder|one search for every module: no exact spelling (stems, sound, typing mistakes, synonyms), results in categories with scope chips, suggestions from the first letter, records of every form (indexed on save), the same word search inside every list; FinderTest
 MR-1261|B|function narrow|filters on every field of every list: per-column filter and a filter builder (operators per type, AND / OR groups, multi-select values, date presets); the list narrows as rules are added; ListStandardTest
 MR-1262|M||importer that recommends "goes to X, could go to Y" not built
@@ -16,7 +16,7 @@ MR-1271|P|class WaterfallService|profit per VA, owner, handler, investor, partne
 MR-1272|P|stock/pool|pool view per owner; cover a shortage from the pool not built
 MR-1273|N||guiding principle, not a function
 MR-1274|P|function boot|clean screens; open-in-new-tab menu, Refresh / Home buttons like Seller Central not built
-MR-1275|P|function addWay|+ Add on 564 of 615 live dropdowns: opens the form of the thing (stacking, comes back selected) or adds to the field's own list in place, also by typing a new name in the search; open: 45 lists fixed by the system (statuses that drive rules) and 6 tables without a form (fin_categories, print_adapters, t_sale_orders)
+MR-1275|B|class FormStandard|+ Add on every dropdown: 1,465 of 1,538 open the form of the thing (stacking, comes back selected) or add to the field's own central list, also by typing a new name; 67 fixed lists (the program uses their values – developer only) and 6 lists only the system makes (imports, printer drivers, device slots) show their reason; 0 without Add and without a reason. The money categories got their form. FormStandardTest walks every form and every dropdown; docs/FORM_STANDARD_AUDIT.md. Owner to confirm the fixed / system exceptions (OWNER_QUESTIONS B10).
 MR-1276|P|class Subscriptions|subscriptions with price, cycle, due dates; VPN / IP / cards / filings due dates not connected
 MR-1277|B|class Guide|suggestion chips, auto-correct with Undo, look-alike warning, "Why can't I save?", next step and "Why can't I continue?" on records, "Ask the Owner" on every refusal, "I am stuck" on tasks; GuideTest, FormAssistTest
 MR-1278|P|class HomeCards|one Home + module dashboards (Buying, Money, Accounts)
@@ -57,7 +57,7 @@ MR-1313|P|class CashForecast|cash forecast + profit views + marketplace API adap
 MR-1314|F|form:t_account|team member form with its sections
 MR-1317|B|function save|one form per record, one save path
 MR-1318|P|in_quick|Quick mode
-MR-1319|P|function addOption|+ Add on 564 of 615 live dropdowns (form or in place); open: the 45 system-fixed lists and 6 tables without a form
+MR-1319|B|function addOption|+ Add on every dropdown (form or in place, the new value saved to its central list and seen by every form); fixed and system-made lists keep a stated reason (FormStandard::audit, 0 left without). FormStandardTest.
 MR-1320|P|function chips|registry forms: chips, help, default tag, - / +, searchable dropdowns, cascading lists – on every field; open: the hand-made dialogs of the screens (orders, bank, stock …) do not have chips / help yet
 MR-1321|P|visible_to|registry visibility
 MR-1322|P|function boot|clean pages
@@ -80,7 +80,7 @@ MR-0001|P|class Merges|fresh build with one master per thing; merge with Undo; c
 MR-0002|P|class EventBus|history, events, numbering, role rights on every form; guidance and data rights not on every screen
 MR-0003|B|function save|one form per record, same table from the module page and + Create
 MR-0004|P|in_quick|Quick / Full of the same form
-MR-0005|P|function addWay|+ Add opens the full form of the master on top (stacks), saves, returns selected, the typed name carried over; shown as a stacked dialog, not a side panel; 51 dropdowns without Add (see MR-1275)
+MR-0005|P|function addWay|+ Add opens the full form of the master on top (stacks), saves, returns selected, the typed name carried over; every dropdown has it or a stated reason (FormStandardTest). Open: shown as a stacked dialog, not a side panel (D9).
 MR-0006|B|function chips|every field of a registry form: ? help (line shows on focus, Help mode shows all), "default" tag with its reason, up to 2 chips – from the linked record · you used this last time · used most; FormAssistTest
 MR-0007|B|data-step|number and money fields have - / + with the step of the registry (money 0.01, quantity 1) and its min / max
 MR-0008|P|form:cat_reference|1,533 dropdowns, all fed from a list

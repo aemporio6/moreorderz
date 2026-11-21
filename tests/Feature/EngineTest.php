@@ -23,9 +23,9 @@ class EngineTest extends TestCase
 
     public function test_registry_is_loaded_and_every_data_form_has_a_table(): void
     {
-        $this->assertSame(4095, DB::table('sys_registry')->count());
+        $this->assertSame(4102, DB::table('sys_registry')->count());
         $forms = DB::table('sys_registry')->distinct()->pluck('form_key');
-        $this->assertCount(322, $forms);
+        $this->assertCount(323, $forms);
         $noTable = $forms->filter(fn ($k) => ! Registry::table($k) || ! Registry::columns(Registry::table($k)))->values()->all();
         // 20 forms are tools (filters, wizards, upload pages): they save nothing, so they have no table. Every other form must have one.
         $tools = ['acc_settings', 'count_session', 'csv_generator', 'csv_reader', 'drp_inventory', 'invoice_period_pick', 'location_generator', 'orders_audit', 'pack_check', 'sale_import',

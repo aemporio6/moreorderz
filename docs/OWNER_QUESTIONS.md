@@ -36,6 +36,7 @@ Updated 21 Nov 2026 (batch 7e-101). How to answer: write **OK** next to a line t
 | B7 | R-B_SOURCING-18 | Parent fields carried by Save & Next are locked; the unlock icon changes them | — |
 | B8 | R-B_SOURCING-4 | A repeated cycle takes the last agreed price (latest PO line, else the supplier's RFQ final price, else the old target) | — |
 | B9 | R-F_SETUP-28 | A product counts as Private when it is private on any marketplace × shop | — |
+| B10 | Form standard | Every dropdown has + Add, except 67 fixed lists whose values the program uses (statuses, modes like FIFO / FBA) and 6 lists only the system makes (sales orders, bank statements, printer drivers, device slots) – these show the reason instead (docs/FORM_STANDARD_AUDIT.md) | the developer adds a value to a fixed list |
 
 ## C. Suggested defaults written in the specification (220 lines)
 
