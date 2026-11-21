@@ -103,6 +103,9 @@ class LandedVersionsTest extends TestCase
         $fr = $this->f('t_src_freight_costs', ['fk_id_ent' => 1, 'fk_id_cycle' => $this->cy, 'freight_code' => 'FRT-LV', 'cost_type' => 'Ocean Freight', 'amount' => 40, 'base_amount' => 40, 'exchange_rate' => 1, 'f_active' => 1, 'created_at' => date('Y-m-d H:i:s', strtotime('-2 minutes'))]);
         $this->assertSame(0, LandedVersions::autoRerun(1), 'debounce: changed 2 minutes ago');
         DB::table('t_src_freight_costs')->where('id', $fr)->update(['created_at' => date('Y-m-d H:i:s', strtotime('-10 minutes'))]);
+        \App\Services\Choices::set('LC_AUTO_RERUN_MINUTES', 'OFF', 1); $this->assertSame(0, LandedVersions::autoRerun(1), 'Choices: never by itself');
+        \App\Services\Choices::set('LC_AUTO_RERUN_MINUTES', '15', 1); $this->assertSame(0, LandedVersions::autoRerun(1), 'Choices: 15 minutes – changed 10 minutes ago');
+        \App\Services\Choices::set('LC_AUTO_RERUN_MINUTES', '5', 1);      // the default
         $this->assertSame(1, LandedVersions::autoRerun(1)); $this->assertSame(3.42, $this->lotCost(), '(1,000 + 328 typed + 40 new) ÷ 400');
         $this->assertSame(0, LandedVersions::autoRerun(1), 'once per change');
         DB::table('t_src_freight_costs')->where('id', $fr)->update(['f_active' => 0]); Buy::landedCost($this->po, ['freight' => 328]);

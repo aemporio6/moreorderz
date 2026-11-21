@@ -82,18 +82,33 @@ class Choices
             '1' => ['Yes', 'VAT on marketplace fees and on expenses is kept apart as VAT to claim back (account 1400) and shown in the VAT report.']], true],
         // owner rule 22 Nov 03:47 / 03:48: my suggestions are the defaults, never locked – a list of roles is a multiple choice with All and + Add
         'DIRECTOR_ROLES' => ['Company form: Directors 1–3 are picked from people with the role …', 'Recommended: Owner, Director and Partner – the people who can sign for a company. "+ Add" on a director makes a new person with role Director.', 'OWNER,DIRECTOR,PARTNER', []],
+        'FBA_LOCATION_KINDS' => ['Stock reports: a location counts as "at Amazon / the marketplace" when its kind is …', 'Recommended: Marketplace fulfilment centre, Third-party warehouse and FBA – stock there is ours but not on our shelves. A location an inbound shipment was sent to always counts.', 'MARKETPLACE_FULFILMENT,THREE_PL,FBA,3PL', []],
+        'CYCLE_REPEAT_PRICE' => ['Repeat a sourcing cycle: the target price of each product is …', 'Recommended: the last agreed price – what we really paid last time is the best start for the new order.', 'LAST_AGREED', [
+            'LAST_AGREED' => ['the last agreed price', 'Suggested: the latest PO line, else the supplier\'s RFQ final price of the old cycle, else the old target.'],
+            'RFQ_FIRST' => ['the RFQ final price first', 'The supplier\'s RFQ final price of the old cycle, else the latest PO line, else the old target.'],
+            'TARGET' => ['the old cycle\'s target', 'Keeps the target typed on the old cycle; prices are agreed again.']]],
+        'LC_AUTO_RERUN_MINUTES' => ['Landed cost: after new freight, customs or GRN rows the PROVISIONAL landed cost is worked out again …', 'Recommended: 5 minutes after the last change – several rows typed one after another give one new version. A FINAL landed cost never changes by itself.', '5', [
+            '0' => ['at the next worker run', 'As soon as the worker sees the change.'], '5' => ['5 minutes after the last change', 'Suggested.'], '15' => ['15 minutes after the last change', ''],
+            '60' => ['1 hour after the last change', ''], 'OFF' => ['never by itself', 'Only when someone presses Calculate.']]],
         'HIDDEN_MARGIN_ROLES' => ['Owner Home › Invoicing / Profit: who sees the row "Hidden margin"?', 'Recommended: Owner only – a partner\'s share is worked out on the net profit, so the margin kept by the company stays with the Owner.', 'OWNER', []],
     ];
 
     /** Multiple choices: key → where the options come from (party roles = roles of people, login roles = roles of logins). Value = comma list or ALL. */
-    public const MULTI = ['DIRECTOR_ROLES' => 'party_roles', 'HIDDEN_MARGIN_ROLES' => 'login_roles'];
+    public const MULTI = ['DIRECTOR_ROLES' => 'party_roles', 'HIDDEN_MARGIN_ROLES' => 'login_roles', 'FBA_LOCATION_KINDS' => 'list:LOCATION_KIND'];
 
     /** [code => [label, effect]] of a multiple choice (All first). */
     public static function options(string $key): array
     {
         if (! isset(self::MULTI[$key])) return self::LIST[$key][3];
+        $src = self::MULTI[$key];
+        if (str_starts_with($src, 'list:')) {      // a list of the registry (fixed lists the program uses have no + Add)
+            $o = ['ALL' => ['All', 'Every value of the list.']];
+            foreach (\Illuminate\Support\Facades\DB::table('sys_field_options')->where('list_code', substr($src, 5))->where('f_active', 1)->orderBy('sort')->get(['value', 'label']) as $r) $o[strtoupper((string) $r->value)] = [(string) $r->label, ''];
+            foreach (explode(',', self::LIST[$key][2]) as $d) $o[$d] ??= [$d, 'older name, kept'];
+            return $o;
+        }
         $o = ['ALL' => ['All roles', 'Every role, also roles added later.']];
-        if (self::MULTI[$key] === 'party_roles') foreach (\Illuminate\Support\Facades\DB::table('cat_account_types')->where('f_active', 1)->whereNotNull('role_code')->where('role_code', '<>', '')->orderBy('sort')->orderBy('account_type_name')->get(['role_code', 'account_type_name']) as $r) $o[strtoupper((string) $r->role_code)] ??= [(string) $r->account_type_name, ''];
+        if ($src === 'party_roles') foreach (\Illuminate\Support\Facades\DB::table('cat_account_types')->where('f_active', 1)->whereNotNull('role_code')->where('role_code', '<>', '')->orderBy('sort')->orderBy('account_type_name')->get(['role_code', 'account_type_name']) as $r) $o[strtoupper((string) $r->role_code)] ??= [(string) $r->account_type_name, ''];
         else foreach (Perm::roles() as $code => $r) if ($r['active']) $o[$code] = [$r['label'], ''];
         foreach (explode(',', self::LIST[$key][2]) as $d) $o[$d] ??= [ucfirst(strtolower($d)), ''];      // the recommended roles are always offered
         return $o;
@@ -148,7 +163,7 @@ class Choices
             }
             $out[] = ['key' => $key, 'question' => $q, 'why' => $why, 'value' => $cur, 'recommended' => $fact ? null : $def, 'per_shop' => in_array($key, self::PER_SHOP, true), 'shops' => $shops,
                 'options' => array_map(fn ($v, $o) => ['value' => (string) $v, 'label' => $o[0], 'effect' => $o[1], 'recommended' => ! $fact && in_array((string) $v, $recList, true)], array_keys($opts), $opts), 'fact' => $fact,
-                'multi' => $multi, 'values' => $multi ? array_values(array_filter(explode(',', strtoupper($cur)))) : null, 'add_url' => $multi ? (self::MULTI[$key] === 'party_roles' ? '#/list/cat_account_type' : '#/rights') : null];
+                'multi' => $multi, 'values' => $multi ? array_values(array_filter(explode(',', strtoupper($cur)))) : null, 'add_url' => $multi ? (self::MULTI[$key] === 'party_roles' ? '#/list/cat_account_type' : (self::MULTI[$key] === 'login_roles' ? '#/rights' : null)) : null];
         }
         return $out;
     }
@@ -158,8 +173,9 @@ class Choices
         if (! isset(self::LIST[$key])) throw new \InvalidArgumentException('Unknown choice.');
         if (isset(self::MULTI[$key])) {
             $v = array_values(array_unique(array_filter(array_map('trim', explode(',', strtoupper($value))))));
-            if (! $v) throw new \InvalidArgumentException('Choose at least one role (or All).');
-            $ok = self::options($key); foreach ($v as $x) if (! isset($ok[$x])) throw new \InvalidArgumentException("Choose roles from the list ($x is not one).");
+            $what = str_starts_with(self::MULTI[$key], 'list:') ? 'value' : 'role';
+            if (! $v) throw new \InvalidArgumentException("Choose at least one $what (or All).");
+            $ok = self::options($key); foreach ($v as $x) if (! isset($ok[$x])) throw new \InvalidArgumentException("Choose {$what}s from the list ($x is not one).");
             $value = in_array('ALL', $v, true) ? 'ALL' : implode(',', $v);
         } elseif (! isset(self::LIST[$key][3][$value])) throw new \InvalidArgumentException('Choose one of the options shown.');
         $old = self::get($key, $ent);

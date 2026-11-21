@@ -101,7 +101,8 @@ class LandedVersions
      */
     public static function autoRerun(int $ent, ?string $now = null): int
     {
-        $now ??= date('Y-m-d H:i:s'); $cut = date('Y-m-d H:i:s', strtotime("$now -5 minutes")); $n = 0;
+        $wait = Choices::get('LC_AUTO_RERUN_MINUTES', $ent); if ($wait === 'OFF') return 0;      // Settings › Choices (default 5 minutes)
+        $now ??= date('Y-m-d H:i:s'); $cut = date('Y-m-d H:i:s', strtotime("$now -" . (int) $wait . ' minutes')); $n = 0;
         $runs = DB::table('t_src_landed_cost')->where('fk_id_ent', $ent)->where('f_active', 1)->whereNull('superseded_by')->whereNotNull('fk_id_cycle')->where('landed_status', 'PROVISIONAL')->orderByDesc('id')->get()->unique('fk_id_cycle');
         foreach ($runs as $h) {
             if (DB::table('fin_lots')->where('fk_id_cycle', $h->fk_id_cycle)->where('landed_status', 'FINAL')->exists()) continue;

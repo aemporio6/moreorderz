@@ -17,16 +17,20 @@ class CycleRepeat
     public const CARTON_CONFIG = ['sku', 'config_name', 'unit_l', 'unit_w', 'unit_h', 'unit_cbm', 'volumetric_weight', 'unit_net_weight', 'unit_gross_weight', 'carton_tare_weight', 'units_per_carton', 'carton_l', 'carton_w', 'carton_h', 'carton_net_weight', 'carton_gross_weight', 'carton_cbm', 'hs_code', 'fk_id_country'];
 
     /** Last agreed price of a cycle product: its latest PO line, else the RFQ final price of its supplier in the source cycle, else its target. */
-    public static function lastPrice(object $cp): array
+    public static function lastPrice(object $cp, ?int $ent = null): array
     {
+        $mode = Choices::get('CYCLE_REPEAT_PRICE', $ent ?? (int) (DB::table('t_src_cycles')->where('id', $cp->fk_id_cycle)->value('fk_id_ent') ?: 0) ?: null);      // Settings › Choices
+        $target = [$cp->target_unit_cost === null ? null : (float) $cp->target_unit_cost, 'target of the old cycle'];
+        if ($mode === 'TARGET') return $target;
         $line = DB::table('t_src_po_lines as l')->join('t_src_po as p', 'p.id', '=', 'l.fk_id_po')->where('l.f_active', 1)->where('p.f_active', 1)->where('l.unit_price', '>', 0)
             ->where(fn ($w) => $w->where('l.fk_id_cycle_product', $cp->id)->when($cp->fk_id_product, fn ($x) => $x->orWhere('l.fk_id_product', $cp->fk_id_product)))
             ->orderByDesc('p.po_date')->orderByDesc('l.id')->first(['l.unit_price', 'p.po_number']);
-        if ($line) return [(float) $line->unit_price, 'last PO line (' . $line->po_number . ')'];
+        $fromLine = $line ? [(float) $line->unit_price, 'last PO line (' . $line->po_number . ')'] : null;
+        if ($fromLine && $mode !== 'RFQ_FIRST') return $fromLine;
         $rfq = $cp->fk_id_supplier ? DB::table('t_src_rfq')->where('fk_id_cycle', $cp->fk_id_cycle)->where('f_active', 1)->where('final_unit_price', '>', 0)->where('fk_id_supplier', $cp->fk_id_supplier)
             ->orderByDesc('rfq_date')->orderByDesc('id')->first(['final_unit_price', 'rfq_code']) : null;      // an RFQ is per supplier: a product without supplier keeps its target
         if ($rfq) return [(float) $rfq->final_unit_price, 'RFQ final price (' . $rfq->rfq_code . ')'];
-        return [$cp->target_unit_cost === null ? null : (float) $cp->target_unit_cost, 'target of the old cycle'];
+        return $fromLine ?? $target;
     }
 
     public static function repeat(int $ent, int $sourceId, int $userId): array
@@ -39,7 +43,7 @@ class CycleRepeat
             $new = (int) DB::table('t_src_cycles')->insertGetId(RecordService::fillNotNull('t_src_cycles', $row));
             $map = []; $prices = [];
             foreach (DB::table('t_src_cycle_products')->where('fk_id_cycle', $src->id)->where('f_active', 1)->orderBy('id')->get() as $cp) {
-                [$price, $from] = self::lastPrice($cp);
+                [$price, $from] = self::lastPrice($cp, $ent);
                 $p = (array) $cp; unset($p['id']);
                 $p = array_merge($p, ['fk_id_cycle' => $new, 'target_unit_cost' => $price, 'created_by' => $userId, 'updated_by' => null, 'created_at' => $now, 'updated_at' => $now]);
                 $map[$cp->id] = (int) DB::table('t_src_cycle_products')->insertGetId($p);

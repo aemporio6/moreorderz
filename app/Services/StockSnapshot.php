@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\DB;
  */
 class StockSnapshot
 {
-    public const FBA_KINDS = ['FBA', 'FC', 'AMAZON', 'MARKETPLACE', '3PL', 'THREEPL'];
+    /* the kinds that count as "at Amazon" are the Settings › Choices multiple choice FBA_LOCATION_KINDS */
     private const BUCKET = ['TRANSIT' => 'transit', 'DAMAGED' => 'damaged', 'RETURNS' => 'returned', 'WRITTEN_OFF' => 'written_off', 'MISSING' => 'lost',
         'SHIPPED' => null, 'CUSTOMER' => null, 'SUPPLIER' => null, 'PRODUCTION' => 'production'];      // null = not ours any more (sold / sent back)
 
@@ -27,10 +27,10 @@ class StockSnapshot
     public static function buckets(int $ent): array
     {
         $fbaDest = DB::table('fba_shipments')->where('fk_id_ent', $ent)->whereNotNull('fk_id_dest_location')->pluck('fk_id_dest_location')->map(fn ($x) => (int) $x)->flip();
-        $out = [];
+        $out = []; $fba = Choices::list('FBA_LOCATION_KINDS', $ent);      // Settings › Choices (default: marketplace fulfilment, third-party warehouse, FBA)
         foreach (DB::table('cat_inventory_locations')->where(fn ($w) => $w->where('fk_id_ent', $ent)->orWhereNull('fk_id_ent')->orWhere('fk_id_ent', 0))->get(['id', 'kind']) as $l) {
             $k = strtoupper((string) $l->kind);
-            $out[(int) $l->id] = isset($fbaDest[(int) $l->id]) || in_array($k, self::FBA_KINDS, true) ? 'amazon' : (array_key_exists($k, self::BUCKET) ? self::BUCKET[$k] : 'warehouse');
+            $out[(int) $l->id] = isset($fbaDest[(int) $l->id]) || in_array($k, $fba, true) ? 'amazon' : (array_key_exists($k, self::BUCKET) ? self::BUCKET[$k] : 'warehouse');
         }
         return $out;
     }
