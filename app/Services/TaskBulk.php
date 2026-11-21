@@ -32,7 +32,7 @@ class TaskBulk
     {
         $ids = self::check($u, $action, $ids, $in); $ent = (int) Context::ent(); $rows = [];
         $who = $action === 'REASSIGN' ? (string) DB::table('t_users')->where('id', (int) $in['owner'])->value('display_name') : '';
-        foreach (DB::table('tasks')->whereIn('id', $ids)->where(fn ($w) => $w->where('fk_id_ent', $ent)->orWhereNull('fk_id_ent')->orWhere('fk_id_ent', 0))->orderBy('id')->get() as $t) {
+        foreach (TaskVisibility::apply(DB::table('tasks as t'), $u)->whereIn('t.id', $ids)->orderBy('t.id')->get(['t.*']) as $t) {
             $old = match ($action) { 'REASSIGN' => (string) DB::table('t_users')->where('id', $t->owner_user_id)->value('display_name'), 'DUE' => substr((string) $t->due_at, 0, 10), default => TaskFlow::LABELS[$t->status] ?? $t->status };
             $new = match ($action) { 'REASSIGN' => $who, 'DUE' => (string) $in['date'], 'REMIND' => 'reminder', default => 'Cancelled' };
             $why = null;
@@ -59,7 +59,7 @@ class TaskBulk
     public static function apply(object $u, string $action, array $ids, array $in): array
     {
         $ids = self::check($u, $action, $ids, $in); $ent = (int) Context::ent(); $done = []; $not = []; $warn = [];
-        foreach (DB::table('tasks')->whereIn('id', $ids)->where(fn ($w) => $w->where('fk_id_ent', $ent)->orWhereNull('fk_id_ent')->orWhere('fk_id_ent', 0))->orderBy('id')->get() as $t) {
+        foreach (TaskVisibility::apply(DB::table('tasks as t'), $u)->whereIn('t.id', $ids)->orderBy('t.id')->get(['t.*']) as $t) {
             try {
                 $before = ['owner_user_id' => $t->owner_user_id, 'due_at' => $t->due_at, 'due_changes' => $t->due_changes, 'flags' => $t->flags, 'status' => $t->status, 'acknowledged_at' => $t->acknowledged_at];
                 $res = DB::transaction(function () use ($t, $u, $action, $in) { self::one($t, $u, $action, $in); return null; });

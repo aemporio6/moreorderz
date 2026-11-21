@@ -31,6 +31,7 @@ class TaskDigest
         $cover = collect();
         foreach (DB::table('tasks')->whereIn('status', self::OPEN)->whereNotNull('owner_user_id')->where('owner_user_id', '<>', $userId)->orderBy('due_at')->get() as $t)
             if (TaskOwner::absent((int) $t->owner_user_id, $date) && TaskOwner::usable((int) $t->owner_user_id) === $userId) $cover->push($t);
+        if ($u) { $approve = $approve->filter(fn ($t) => TaskVisibility::canSee($t, $u))->values(); $cover = $cover->filter(fn ($t) => TaskVisibility::canSee($t, $u))->values(); }      // R-G_CORE-19
         return [
             'LATE' => $own()->whereRaw('DATE(due_at) < ?', [$date])->get(),
             'DUE TODAY' => $own()->whereRaw('DATE(due_at) = ?', [$date])->get(),
@@ -60,9 +61,10 @@ class TaskDigest
     public static function team(int $bossId, string $date): ?string
     {
         $first = strtok(self::name($bossId), ' ') ?: self::name($bossId);
-        $late = DB::table('tasks as t')->join('t_users as u', 'u.id', '=', 't.owner_user_id')->whereIn('t.status', self::OPEN)->whereRaw('DATE(t.due_at) < ?', [$date])
+        $boss = DB::table('t_users')->where('id', $bossId)->first(); $vis = fn () => $boss ? TaskVisibility::apply(DB::table('tasks as t'), $boss) : DB::table('tasks as t');      // R-G_CORE-19
+        $late = $vis()->join('t_users as u', 'u.id', '=', 't.owner_user_id')->whereIn('t.status', self::OPEN)->whereRaw('DATE(t.due_at) < ?', [$date])
             ->groupBy('u.id', 'u.display_name')->orderByDesc(DB::raw('COUNT(*)'))->selectRaw('u.display_name n, COUNT(*) c')->get();
-        $stuck = DB::table('tasks')->where('status', 'STUCK')->count(); $wait = DB::table('tasks')->where('status', 'DONE')->where('source', '<>', 'RULE')->count();
+        $stuck = $vis()->where('t.status', 'STUCK')->count(); $wait = $vis()->where('t.status', 'DONE')->where('t.source', '<>', 'RULE')->count();
         $over = [];
         foreach (DB::table('t_users')->where('f_active', 1)->get(['id', 'display_name']) as $p) { $l = TaskCreate::load((int) $p->id); if ($l['open'] > $l['limit']) $over[] = $p->display_name . " ({$l['open']}/{$l['limit']})"; }
         if (! $late->count() && ! $stuck && ! $wait && ! $over && ! (int) AlertRules::threshold('digest_send_empty')) return null;

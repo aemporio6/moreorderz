@@ -238,7 +238,8 @@ class AppController extends Controller
         Rights::check('VIEW', $key);
         $table = \App\Services\Registry::table($key);
         $kinds = $table ? \App\Services\Vault::kinds($table) : [];
-        return ['values' => RecordService::get($key, $id), 'vault' => array_keys(array_filter($kinds, fn ($k) => $k === 'VAULT')), 'card' => array_keys(array_filter($kinds, fn ($k) => $k === 'CARD')),
+        return ['values' => \App\Services\Mask::row($key, RecordService::get($key, $id), \Illuminate\Support\Facades\Auth::user()),      // R-G_CORE-62 a hidden field is not in the answer
+             'vault' => array_keys(array_filter($kinds, fn ($k) => $k === 'VAULT')), 'card' => array_keys(array_filter($kinds, fn ($k) => $k === 'CARD')),
             'never' => array_keys(array_filter($kinds, fn ($k) => $k === 'NEVER')), 'may_reveal' => \App\Services\Vault::mayReveal(Context::role())];
     }
 

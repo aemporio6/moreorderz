@@ -105,7 +105,7 @@ class WorkController extends Controller
         if ($scope === 'mine') $d = $L::mine($u);
         elseif ($scope === 'all') $d = $L::all($u, (string) $r->query('chip', 'open'), $f, $r->integer('page') ?: 1);
         else {
-            $q = $L::base();
+            $q = $L::visible($L::base(), $u);      // R-G_CORE-19
             if ($scope === 'to_approve') $q->where('t.status', 'DONE');      // waiting approval (R-G_CORE-7): filtered below to the ones this person may approve
             else $q->where('t.status', 'STUCK')->where('t.stuck_on_type', 'USER')->where('t.stuck_on_id', $u->id);      // stuck_on_me: tasks of others that wait on this person
             $rows = $q->orderByRaw("FIELD(t.priority,'URGENT','HIGH','NORMAL','LOW')")->orderBy('t.due_at')->limit(300)->get(['t.*', 'u.display_name as owner', 'c.name as category']);

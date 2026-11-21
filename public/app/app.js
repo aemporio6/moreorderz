@@ -1899,6 +1899,7 @@
         } catch (e) { $('#tiR', m.ov).innerHTML = `<div style="color:var(--err)">${esc(e.message)}</div>`; $('#tiI', m.ov).disabled = true; } };
       $('#tiF', m.ov).onchange = () => { $('#tiI', m.ov).disabled = true; $('#tiR', m.ov).innerHTML = ''; };
       $('#tiC', m.ov).onclick = () => send(false); $('#tiI', m.ov).onclick = () => send(true); };
+    if (qs.get('import') === '1' && $('#tkImport')) $('#tkImport').click();      // opened from the Import Center (report type TASKS)
     const showDigest = async uid => { try { const x = await api('tasks/digest-preview' + (uid ? '?user=' + uid : ''));
       modal('Digest of ' + x.user, `Sent at ${x.at} on ${x.date}`, `<pre style="white-space:pre-wrap;font:inherit;margin:0">${esc(x.text || '')}</pre>${x.team ? `<h3 style="margin:14px 0 6px">Team digest</h3><pre style="white-space:pre-wrap;font:inherit;margin:0">${esc(x.team)}</pre>` : ''}`, '', false); } catch (e) { toast(e.message, 'err'); } };
     $('#tkDigest').onclick = () => d.bulk ? miniForm('Preview digest', 'A boss can see anyone\'s digest.', [{ name: 'user', label: 'Person', value: '', options: [['', 'Me']].concat(d.people.map(p => [p.id, p.name])) }], async v => { await showDigest(v.user); return { message: '' }; }, 'Show') : showDigest();
@@ -3326,7 +3327,7 @@
 
   function pageImportHub() {
     const tiles = [['#/orders', 'Orders', 'eBay orders report, Temu order list, any order table – Orders › Load order file.'], ['#/settlements', 'Marketplace money files', 'TikTok workbook, Amazon settlement (date range and flat file V2), eBay transaction report, OnBuy / Temu tables.'],
-      ['#/bank', 'Bank statements', 'CSV or Excel from the bank, in the layout of that bank.'], ['#/labels', 'Carrier label PDFs', 'Labels downloaded from the carrier, linked to their orders.'], ['#/import-history', 'Everything loaded so far', 'Every file, when, by whom, new / already there / problems; and the old-tool import, table by table.']];
+      ['#/bank', 'Bank statements', 'CSV or Excel from the bank, in the layout of that bank.'], ['#/labels', 'Carrier label PDFs', 'Labels downloaded from the carrier, linked to their orders.'], ['#/tasks?scope=all&import=1', 'Tasks (CSV)', 'New tasks from a CSV file: check first (changes nothing), then all or nothing; undo by batch. Partner / Manager.'], ['#/import-history', 'Everything loaded so far', 'Every file, when, by whom, new / already there / problems; and the old-tool import, table by table.']];
     $('#main').innerHTML = `<div class="page-head"><div><h1>Import a file</h1><div class="sub">Each kind of file is loaded where its work is done. The tool finds the layout from the file itself; a file loaded twice adds nothing.</div></div></div>
       <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">${tiles.map(([h, t, w]) => `<a class="card" href="${h}" style="display:block;padding:14px;text-decoration:none;color:inherit"><b>${esc(t)}</b><div class="small muted" style="margin-top:4px">${esc(w)}</div></a>`).join('')}</div>`;
   }

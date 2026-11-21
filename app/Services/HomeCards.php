@@ -36,10 +36,10 @@ class HomeCards
         if (self::$coreDone) return;
         self::$coreDone = true;
         $open = fn () => DB::table('tasks')->whereNotIn('status', ['DONE', 'APPROVED', 'CANCELLED']);
-        self::register(['*'], function ($ent, $u) use ($open) {
-            $n = $open()->where('owner_user_id', $u->id)->count();
-            $late = $open()->where('owner_user_id', $u->id)->where('due_at', '<', date('Y-m-d'))->count();
-            return ['label' => 'My tasks', 'value' => $n, 'foot' => $late ? "$late late" : 'none late', 'tone' => $late ? 'err' : ($n ? 'warn' : 'done'), 'go' => '#/tasks'];
+        self::register(['*'], function ($ent, $u) {      // R-G_CORE-36: the same groups as My tasks feed Home "Needs action"
+            $d = TaskLists::mine($u)['tiles']; $need = $d['late'] + $d['due_today'] + $d['waiting_on_me'];
+            return ['label' => 'My tasks', 'value' => $d['open'], 'foot' => $need ? "needs action: {$d['late']} late · {$d['due_today']} due today · {$d['waiting_on_me']} waiting on me" : 'nothing needs action',
+                'tone' => $d['late'] ? 'err' : ($need ? 'warn' : 'done'), 'go' => '#/tasks'];
         });
         self::register(['OWNER', 'MANAGER', 'TL'], function ($ent) use ($open) {
             $q = fn () => $open()->where(fn ($w) => $w->where('fk_id_ent', $ent)->orWhere('fk_id_ent', 0));

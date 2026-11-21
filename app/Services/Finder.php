@@ -308,7 +308,7 @@ class Finder
     /** Records from the search index: every word must be in the row (or its synonym); amount, phone digits, e-mail; typing mistakes by sound; only forms he may see, only his shops. */
     private static function records(string $q, array $words, array $alts, object $u, int $limit = 30): array
     {
-        $ent = Context::ent(); $digits = preg_replace('/\D+/', '', $q); $shops = Perm::shops($u); $amount = self::amountRange($q); $cols = ['title', 'subtitle', 'url', 'department', 'search_text', 'entity', 'entity_id'];
+        $ent = Context::ent(); $digits = preg_replace('/\D+/', '', $q); $shops = Perm::shops($u); $amount = Mask::money($u) ? self::amountRange($q) : null; /* R-G_CORE-62: no search by amount without the money right */ $cols = ['title', 'subtitle', 'url', 'department', 'search_text', 'entity', 'entity_id'];
         $base = fn () => DB::table('sys_search_index')
             ->when($ent, fn ($x) => $x->where(fn ($w) => $w->where('fk_id_ent', $ent)->orWhere('fk_id_ent', 0)))
             ->when($shops !== null, fn ($x) => $x->where(fn ($w) => $w->whereNull('fk_id_branch')->orWhere('fk_id_branch', 0)->orWhereIn('fk_id_branch', $shops)))
@@ -327,7 +327,9 @@ class Finder
         if (! $rows && count($words) === 1 && mb_strlen($words[0]) >= 4 && trim($key = self::sound($words[0])) !== '')
             $rows = $base()->where('sound_key', 'like', "%$key%")->orderByDesc('updated_at')->limit($limit)->get($cols)->all();
         $ok = [];
-        return array_values(array_filter($rows, fn ($r) => $ok[$r->department] ??= (Registry::exists((string) $r->department) && Perm::has($u, 'form:' . $r->department . ':VIEW'))));
+        $rows = array_values(array_filter($rows, fn ($r) => $ok[$r->department] ??= (Registry::exists((string) $r->department) && Perm::has($u, 'form:' . $r->department . ':VIEW'))));
+        foreach ($rows as $r) { $r->title = Mask::text($r->title, $u); $r->subtitle = Mask::text($r->subtitle ?? null, $u); }      // R-G_CORE-62
+        return $rows;
     }
 
     /** Sound key of a text (one key per word), so "Ahmd" finds "Ahmed". */

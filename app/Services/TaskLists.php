@@ -28,12 +28,7 @@ class TaskLists
     public static function partner(object $u): bool { return in_array($u->role_code, ['OWNER', 'PARTNER'], true); }
 
     /** Only the tasks this person may see: everything with "see the tasks of everyone", else his own, assigned, helper, watcher or stuck on him. */
-    public static function visible($q, object $u)
-    {
-        if (self::boss($u) || Perm::has($u, 'work.tasks_may')) return $q;      // Partner / Manager see all (confidential tasks: R-G_CORE-19)
-        return $q->where(fn ($w) => $w->where('t.owner_user_id', $u->id)->orWhere('t.assigned_by_user_id', $u->id)->orWhere(fn ($s) => $s->where('t.stuck_on_type', 'USER')->where('t.stuck_on_id', $u->id))
-            ->orWhereIn('t.id', DB::table('task_helpers')->where('user_id', $u->id)->select('task_id'))->orWhereIn('t.id', DB::table('task_watchers')->where('user_id', $u->id)->select('task_id')));
-    }
+    public static function visible($q, object $u) { return TaskVisibility::apply($q, $u); }      // R-G_CORE-19
 
     /** The row as every list shows it (health, the person's buttons, missing items, proof). */
     public static function decorate($rows, object $u): array
@@ -64,11 +59,11 @@ class TaskLists
         $mine = self::base()->where('t.owner_user_id', $u->id)->whereIn('t.status', self::OPEN)
             ->orderByRaw('CASE WHEN t.due_at IS NOT NULL AND DATE(t.due_at) < ? THEN 0 WHEN DATE(t.due_at) = ? THEN 1 ELSE 2 END', [$today, $today])->orderByRaw('t.due_at IS NULL')->orderBy('t.due_at')
             ->orderByRaw("FIELD(t.priority,'URGENT','HIGH','NORMAL','LOW')")->orderBy('t.id')->limit(300)->get(self::COLS);
-        $approve = self::base()->where('t.status', 'DONE')->where('t.source', '<>', 'RULE')->where('t.owner_user_id', '<>', $u->id)->orderBy('t.due_at')->get(self::COLS)->filter(fn ($t) => TaskScore::refusal($t, $u) === null)->values();
+        $approve = self::visible(self::base(), $u)->where('t.status', 'DONE')->where('t.source', '<>', 'RULE')->where('t.owner_user_id', '<>', $u->id)->orderBy('t.due_at')->get(self::COLS)->filter(fn ($t) => TaskScore::refusal($t, $u) === null)->values();
         $stuck = self::base()->where('t.status', 'STUCK')->where('t.stuck_on_type', 'USER')->where('t.stuck_on_id', $u->id)->orderBy('t.due_at')->get(self::COLS);
-        $cover = self::base()->whereIn('t.status', self::OPEN)->whereNotNull('t.owner_user_id')->where('t.owner_user_id', '<>', $u->id)->orderBy('t.due_at')->get(self::COLS)
+        $cover = self::visible(self::base(), $u)->whereIn('t.status', self::OPEN)->whereNotNull('t.owner_user_id')->where('t.owner_user_id', '<>', $u->id)->orderBy('t.due_at')->get(self::COLS)
             ->filter(fn ($t) => TaskOwner::absent((int) $t->owner_user_id) && (self::boss($u) || TaskOwner::usable((int) $t->owner_user_id) === (int) $u->id))->values();
-        $helper = self::base()->whereIn('t.status', self::OPEN)->whereIn('t.id', DB::table('task_helpers')->where('user_id', $u->id)->select('task_id'))->orderBy('t.due_at')->get(self::COLS);
+        $helper = self::visible(self::base(), $u)->whereIn('t.status', self::OPEN)->whereIn('t.id', DB::table('task_helpers')->where('user_id', $u->id)->select('task_id'))->orderBy('t.due_at')->get(self::COLS);
         $late = $mine->filter(fn ($t) => $t->due_at && substr((string) $t->due_at, 0, 10) < $today)->count();
         $dueToday = $mine->filter(fn ($t) => substr((string) $t->due_at, 0, 10) === $today)->count();
         return ['tasks' => self::decorate($mine, $u), 'tiles' => ['open' => $mine->count(), 'late' => $late, 'due_today' => $dueToday, 'waiting_on_me' => $approve->count() + $stuck->count()],
@@ -137,7 +132,7 @@ class TaskLists
     {
         if (! self::boss($u)) throw new \InvalidArgumentException('Refused: "Needs attention" is for a Partner or Manager.');
         $today = TaskHealth::today(); $rows = [];
-        $q = self::base()->whereIn('t.status', [...self::OPEN, 'DONE'])->when(! empty($f['person']), fn ($w) => $w->where('t.owner_user_id', (int) $f['person']))
+        $q = self::visible(self::base(), $u)->whereIn('t.status', [...self::OPEN, 'DONE'])->when(! empty($f['person']), fn ($w) => $w->where('t.owner_user_id', (int) $f['person']))
             ->when(! empty($f['shop']), fn ($w) => $w->whereIn('t.linked_module', ['t_branches', 'SHOP'])->where('t.linked_record_id', (int) $f['shop']));
         $ack = DB::table('task_categories')->pluck('ack_hours', 'id');
         foreach ($q->get(self::COLS) as $t) {
@@ -177,19 +172,19 @@ class TaskLists
         $tz = new \DateTimeZone((string) (Settings::get('COMPANY_TIMEZONE', (int) Context::ent(), 'Europe/London') ?: 'Europe/London'));
         $monday = (new \DateTimeImmutable('monday this week', $tz))->setTime(0, 0)->setTimezone(new \DateTimeZone(date_default_timezone_get()))->format('Y-m-d H:i:s');
         $sf = fn ($q) => $q->when(! empty($f['shop']), fn ($w) => $w->whereIn('t.linked_module', ['t_branches', 'SHOP'])->where('t.linked_record_id', (int) $f['shop']))->when(! empty($f['person']), fn ($w) => $w->where('t.owner_user_id', (int) $f['person']));
-        $closed = $sf(self::base())->where('t.status', 'APPROVED')->where('t.approved_at', '>=', $monday)->pluck('t.id');
+        $closed = $sf(self::visible(self::base(), $u))->where('t.status', 'APPROVED')->where('t.approved_at', '>=', $monday)->pluck('t.id');
         $noProof = $closed->filter(fn ($id) => ! DB::table('task_evidence')->where('task_id', $id)->whereNull('hidden_at')->whereIn('type', TaskFlow::COUNTING)->exists())->count();
         $avg = DB::table('task_scores')->where('closed_at', '>=', now()->subDays(30))->avg('score');
         $today = TaskHealth::today();
         $people = [];
-        foreach ($sf(self::base())->whereNotNull('t.owner_user_id')->whereIn('t.status', [...self::OPEN, 'DONE'])->get(['t.owner_user_id', 't.status', 't.due_at', 'u.display_name'])->groupBy('owner_user_id') as $uid => $ts) {
+        foreach ($sf(self::visible(self::base(), $u))->whereNotNull('t.owner_user_id')->whereIn('t.status', [...self::OPEN, 'DONE'])->get(['t.owner_user_id', 't.status', 't.due_at', 'u.display_name'])->groupBy('owner_user_id') as $uid => $ts) {
             $sc = DB::table('task_scores')->where('user_id', $uid)->where('closed_at', '>=', now()->subDays(30))->avg('score');
             $people[] = ['id' => (int) $uid, 'name' => $ts->first()->display_name, 'open' => $ts->whereIn('status', self::OPEN)->count(),
                 'late' => $ts->filter(fn ($t) => in_array($t->status, self::OPEN, true) && $t->due_at && substr((string) $t->due_at, 0, 10) < $today)->count(),
                 'waiting' => $ts->where('status', 'DONE')->count(), 'score' => $sc !== null ? (int) round($sc) : null, 'away' => (bool) TaskOwner::absent((int) $uid)];
         }
         usort($people, fn ($a, $b) => [$b['late'], $b['open'], $a['name']] <=> [$a['late'], $a['open'], $b['name']]);
-        $mods = $sf(self::base())->whereIn('t.status', self::OPEN)->selectRaw("COALESCE(t.linked_module, 'NOT LINKED') m, COUNT(*) open, SUM(t.due_at IS NOT NULL AND DATE(t.due_at) < ?) late", [$today])->groupBy('m')->orderByDesc('open')->get()
+        $mods = $sf(self::visible(self::base(), $u))->whereIn('t.status', self::OPEN)->selectRaw("COALESCE(t.linked_module, 'NOT LINKED') m, COUNT(*) open, SUM(t.due_at IS NOT NULL AND DATE(t.due_at) < ?) late", [$today])->groupBy('m')->orderByDesc('open')->get()
             ->map(fn ($r) => ['module' => $r->m, 'open' => (int) $r->open, 'late' => (int) $r->late])->all();
         $dq = DB::table('tasks')->whereIn('rule_code', ['TASK_NO_DUE', 'TASK_NOT_LINKED'])->whereIn('status', self::OPEN)->pluck('title')->all();      // made by the nightly job
         return ['tiles' => ['open' => $count('open'), 'late' => $count('late'), 'stuck' => $count('stuck'), 'today' => $count('today'), 'waiting' => $count('waiting'), 'nodue' => $count('nodue'),

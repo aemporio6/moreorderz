@@ -33,14 +33,16 @@ class TaskFlow
 
     public static function ref(int $id): string { return 'T-' . str_pad((string) $id, 4, '0', STR_PAD_LEFT); }
 
-    public static function mayWork(object $t, object $u): bool { return (int) $t->owner_user_id === (int) $u->id || Perm::has($u, 'work.taskStatus_may'); }
+    /** Work (status moves) = owner, a boss (status right), or the cover of the absent owner (R-G_CORE-19); a confidential task: owner and Partners only. */
+    public static function mayWork(object $t, object $u): bool
+    {
+        if ((int) $t->owner_user_id === (int) $u->id) return true;
+        if ((int) ($t->is_confidential ?? 0)) return TaskVisibility::partner($u);
+        return Perm::has($u, 'work.taskStatus_may') || in_array((int) $t->owner_user_id, TaskVisibility::covered((int) $u->id), true);
+    }
 
     /** May this person see the task (owner, assigner, helper, watcher, a boss, or the status right)? */
-    public static function canSee(object $t, object $u): bool
-    {
-        if (in_array((int) $u->id, [(int) $t->owner_user_id, (int) $t->assigned_by_user_id], true) || in_array($u->role_code, TaskScore::BOSS, true) || Perm::has($u, 'work.taskStatus_may')) return true;
-        return DB::table('task_helpers')->where('task_id', $t->id)->where('user_id', $u->id)->exists() || DB::table('task_watchers')->where('task_id', $t->id)->where('user_id', $u->id)->exists();
-    }
+    public static function canSee(object $t, object $u): bool { return TaskVisibility::canSee($t, $u); }      // R-G_CORE-19 one rule
 
     /** What still stops DONE (the Done gate), in the rule's order. Empty = may be done. */
     public static function missing(object $t): array
