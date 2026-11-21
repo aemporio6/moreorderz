@@ -32,6 +32,10 @@ class Choices
         'LOT_OWNER_SHARE' => ['Route "lot profit": how much of the profit of his own lots\' units does a lot owner get?', 'The rest of that profit goes on down the waterfall (agreements, then the company). Applies to months locked from now on.', '100', [
             '100' => ['100 %', 'All the profit of the units sold from his own lots (after tax reserve and VA / handler shares).'], 'AGREEMENT' => ['The % of his own agreement', 'His PO agreement % for lots of that PO, else his pool / shop agreement %, else 100 %.'],
             '90' => ['90 %', ''], '80' => ['80 %', ''], '75' => ['75 %', ''], '70' => ['70 %', ''], '60' => ['60 %', ''], '50' => ['50 %', ''], '40' => ['40 %', ''], '30' => ['30 %', ''], '25' => ['25 %', ''], '20' => ['20 %', ''], '10' => ['10 %', '']]],
+        'DS_MIN_MARGIN' => ['Drop shipping: the smallest margin a line should make', 'A drop shipping line below this margin opens a task for the shop (it can be accepted with a note). A line below 0 % is always flagged. A shop can have its own value.', '10', [
+            '0' => ['0 %', ''], '5' => ['5 %', ''], '10' => ['10 %', 'Suggested.'], '12' => ['12 %', ''], '15' => ['15 %', ''], '20' => ['20 %', ''], '25' => ['25 %', ''], '30' => ['30 %', '']]],
+        'VA_EXPENSES_BEFORE_SHARE' => ['VA statement: are the shop expenses taken off before or after the VA share?', 'After: VA share = VA % × after-fee profit, then the expenses come off the store part. Before: the share is worked out on after-fee profit less expenses.', '0', [
+            '0' => ['After the VA share', 'The VA share does not carry the shop expenses.'], '1' => ['Before the VA share', 'The VA shares the shop expenses.']]],
         'TEMU_SALE_VALUE' => ['Temu order list: which price is the sale value of a line?', 'Temu pays the seller its base price; the buyer pays the retail price (with Temu\'s own margin and VAT). The money file later settles what was really paid.', 'BASE', [
             'BASE' => ['Temu\'s base price (what the seller is paid)', 'Uses "activity goods base price", else "goods base price", × quantity.'], 'RETAIL' => ['Retail price the buyer paid', 'Uses "retail price total" of the line.']]],
         'MENU_NAMES' => ['Which names does the menu show?', 'Only the words in the menu change; every screen stays where it is.', 'SIMPLE', [
@@ -61,7 +65,7 @@ class Choices
     ];
 
     /** Choices a shop can have its own value for (several shops, several values); the company value is the default for every other shop. */
-    public const PER_SHOP = ['PROFIT_SHARE_AFTER_OVERHEADS', 'CLOSE_FIRST_FILE_PARTIAL', 'LATE_LINES_LOCKED_MONTH', 'WH_UNSHIPPED_AT_CONFIRM', 'DEFAULT_PROFIT_ROUTE', 'LOT_OWNER_SHARE', 'TEMU_SALE_VALUE', 'VA_SALARY_SOURCE', 'OUTPUT_VAT_MODE', 'STATEMENT_SEND'];
+    public const PER_SHOP = ['PROFIT_SHARE_AFTER_OVERHEADS', 'CLOSE_FIRST_FILE_PARTIAL', 'LATE_LINES_LOCKED_MONTH', 'WH_UNSHIPPED_AT_CONFIRM', 'DEFAULT_PROFIT_ROUTE', 'LOT_OWNER_SHARE', 'TEMU_SALE_VALUE', 'DS_MIN_MARGIN', 'VA_EXPENSES_BEFORE_SHARE', 'VA_SALARY_SOURCE', 'OUTPUT_VAT_MODE', 'STATEMENT_SEND'];
 
     /** The shop's own value if it has one, else the company default, else the recommended option. No company yet (first sign-in after install) → the global value or the recommended one. */
     public static function get(string $key, ?int $ent, ?int $shop = null): string

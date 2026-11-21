@@ -356,4 +356,13 @@ class OrdersController extends Controller
     public function saleDsCandidates(Request $r, int $id) { $this->can($r, 'orders.dsLink'); return \App\Services\DsMatch::candidates($id, $r->user()); }
     public function saleDsLink(Request $r, int $id) { return $this->run(fn () => \App\Services\DsMatch::link($id, (int) $r->input('item'), (string) $r->input('reason'), $r->user())); }
     public function saleDsUnlink(Request $r, int $id) { return $this->run(fn () => \App\Services\DsMatch::unlink($id, (string) $r->input('reason'), $r->user())); }
+
+    // ---------- shop label, sales reports, saved VA share, drop-shipping margin (R-A_SALES-81, 50, 51, 31, 91) ----------
+    public function shopLabels(Request $r) { return ['shops' => \App\Services\ShopLabel::list($r->user(), ['marketplace' => $r->query('marketplace'), 'active_only' => $r->boolean('active_only')])]; }
+    private function reportFilters(Request $r): array { return $r->only(['year', 'marketplace', 'shop', 'vendor', 'vendor_inventory', 'company', 'owner', 'va']); }
+    public function saleReportAnnual(Request $r) { $this->can($r, 'orders.saleReports'); return \App\Services\SalesReports::annual($this->reportFilters($r), $r->user()) + ['lists' => \App\Services\SalesReports::filterLists($r->user())]; }
+    public function saleReportDetailed(Request $r) { $this->can($r, 'orders.saleReports'); return \App\Services\SalesReports::detailed($this->reportFilters($r), $r->user()) + ['lists' => \App\Services\SalesReports::filterLists($r->user())]; }
+    public function saleReportDownload(Request $r, string $report, string $format) { return $this->run(function () use ($r, $report, $format) { $this->can($r, 'orders.saleReports'); $x = \App\Services\SalesReports::download($report, $format, $this->reportFilters($r), $r->user()); return response($x['body'], 200, ['Content-Type' => $x['type'], 'Content-Disposition' => 'attachment; filename="' . $x['name'] . '"']); }); }
+    public function saleRefreshVa(Request $r, int $id) { return $this->run(fn () => \App\Services\SalesReports::refreshVa($id, (string) $r->input('reason'), $r->user())); }
+    public function saleMarginAccept(Request $r, int $id) { return $this->run(fn () => \App\Services\DsMatch::acceptMargin($id, (string) $r->input('note'), $r->user())); }
 }

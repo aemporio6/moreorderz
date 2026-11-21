@@ -179,6 +179,7 @@ class SalesService
             }
             $revenue = round($revenue, 2);
             if ($revenue > 0) Ledger::post($ent, $postDate, 'SALE_CONFIRM', $branchId, [['account' => '1100', 'debit' => $revenue, 'ref_id' => $branchId], ['account' => '4000', 'credit' => $revenue, 'ref_id' => $branchId]], ['memo' => "Sales {$shop->shop_name} $month"]);
+            SalesReports::syncShares();      // the VA share of each batch is saved as it stands at Confirm
             // the import batches of this shop + month leave the Pending list once none of their lines is open
             [$yy, $mm] = array_map('intval', explode('-', $month));
             foreach (DB::table('t_sale_imports')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->where('period_year', $yy)->where('period_month', $mm)->where('status', '<>', 'Confirmed')->get() as $b) {

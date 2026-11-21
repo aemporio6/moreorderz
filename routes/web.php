@@ -251,6 +251,12 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('print-routes', [PrintController::class, 'route']);
         Route::get('orders', [OrdersController::class, 'board']);
         Route::get('sales', [OrdersController::class, 'saleLines']);
+        Route::get('shops/labels', [OrdersController::class, 'shopLabels']);
+        Route::get('sales/reports/annual', [OrdersController::class, 'saleReportAnnual']);
+        Route::get('sales/reports/detailed', [OrdersController::class, 'saleReportDetailed']);
+        Route::get('sales/reports/{report}/{format}', [OrdersController::class, 'saleReportDownload'])->where(['report' => 'annual|detailed', 'format' => 'csv|xlsx|pdf']);
+        Route::post('sales/import/{id}/refresh-va', [OrdersController::class, 'saleRefreshVa'])->whereNumber('id');
+        Route::post('sales/{id}/margin-accept', [OrdersController::class, 'saleMarginAccept'])->whereNumber('id');
         Route::post('sales/rematch', [OrdersController::class, 'saleRematch']);
         Route::get('sales/not-matched.csv', [OrdersController::class, 'saleNotMatchedCsv']);
         Route::get('sales/{id}/match', [OrdersController::class, 'saleMatch'])->whereNumber('id');
