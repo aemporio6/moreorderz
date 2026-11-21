@@ -73,12 +73,12 @@ class ConnectController extends Controller
     {
         $this->can($r, 'connect.messages');
         $ent = (int) Context::ent(); $wa = Messenger::waConnection($ent) ?? DB::table('api_connections')->whereIn('adapter', Messenger::WA_ADAPTERS)->whereIn('fk_id_ent', [$ent, 0])->first();
-        $strip = fn ($b) => explode("\n\x1e", (string) $b, 2)[0];
-        return ['whatsapp' => $wa ? ['status' => $wa->status, 'label' => $wa->label] : null, 'email' => Messenger::emailReady(),
-            'wa' => DB::table('wa_outbound as o')->leftJoin('t_account as a', 'a.id', '=', 'o.fk_id_account')->whereIn('o.fk_id_ent', [$ent, 0])->orderByDesc('o.id')->limit(150)
-                ->get(['o.id', 'o.template_code', 'o.body', 'o.status', 'o.error', 'o.attempts', 'o.queued_at', 'o.sent_at', DB::raw("TRIM(CONCAT(a.first_name, ' ', a.sur_name)) as who"), 'o.phone'])
-                ->map(function ($m) use ($strip) { $m->body = $strip($m->body); $m->phone = '…' . substr((string) $m->phone, -4); return $m; }),
-            'mail' => DB::table('email_outbound')->whereIn('fk_id_ent', [$ent, 0])->orderByDesc('id')->limit(150)->get(['id', 'to_address', 'subject', 'status', 'error', 'attempts', 'queued_at', 'sent_at']),
+                return ['whatsapp' => $wa ? ['status' => $wa->status, 'label' => $wa->label] : null, 'email' => Messenger::emailReady(),
+            // R-G_CORE-46: the one queue (tm_messages) – WhatsApp and e-mail of every engine
+            'wa' => DB::table('tm_messages as o')->leftJoin('t_account as a', 'a.id', '=', 'o.fk_id_account')->leftJoin('t_users as u', 'u.id', '=', 'o.user_id')->where('o.channel', 'WHATSAPP')->where('o.direction', 'OUT')->whereIn('o.fk_id_ent', [$ent, 0])->orderByDesc('o.id')->limit(150)
+                ->get(['o.id', 'o.template_key as template_code', 'o.text as body', 'o.status', 'o.error', 'o.retry_count as attempts', 'o.created_at as queued_at', 'o.sent_at', 'o.note', DB::raw("COALESCE(NULLIF(TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)), ''), u.display_name) as who"), 'o.to_address as phone'])
+                ->map(function ($m) { $m->phone = '…' . substr((string) $m->phone, -4); if ($m->status === 'QUEUED' && $m->note && ! $m->error) $m->error = $m->note; return $m; }),
+            'mail' => DB::table('tm_messages')->where('channel', 'EMAIL')->where('direction', 'OUT')->whereIn('fk_id_ent', [$ent, 0])->orderByDesc('id')->limit(150)->get(['id', 'to_address', 'subject', 'status', 'error', 'retry_count as attempts', 'created_at as queued_at', 'sent_at']),
             'inbox' => DB::table('wa_inbound as i')->leftJoin('t_account as a', 'a.id', '=', 'i.fk_id_account')->whereIn('i.fk_id_ent', [$ent, 0])->orderByDesc('i.id')->limit(100)
                 ->get(['i.id', 'i.body', 'i.status', 'i.note', 'i.received_at', 'i.media_id', DB::raw("TRIM(CONCAT(a.first_name, ' ', a.sur_name)) as who")]),
             'templates' => DB::table('wa_templates')->orderBy('code')->get(['code', 'title', 'audience', 'body', 'f_active'])];
@@ -87,8 +87,7 @@ class ConnectController extends Controller
     public function retryMessage(Request $r, string $kind, int $id)
     {
         $this->can($r, 'connect.retryMessage');
-        $t = $kind === 'mail' ? 'email_outbound' : 'wa_outbound';
-        DB::table($t)->where('id', $id)->whereIn('status', ['FAILED', 'HELD'])->update(['status' => 'QUEUED', 'attempts' => 0, 'next_try_at' => null, 'error' => null]);
+        DB::table('tm_messages')->where('id', $id)->where('channel', $kind === 'mail' ? 'EMAIL' : 'WHATSAPP')->where('status', 'FAILED')->update(['status' => 'QUEUED', 'retry_count' => 0, 'send_after' => null, 'error' => null, 'failed_at' => null]);      // one queue
         return $this->run(fn () => Messenger::sendDue(20));
     }
 

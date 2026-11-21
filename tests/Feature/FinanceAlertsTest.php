@@ -42,20 +42,20 @@ class FinanceAlertsTest extends TestCase
         $a = DB::table('fin_alerts')->where('company_id', 1)->where('code', 'FA1')->first();
         $this->assertSame(['OPEN', 'company'], [$a->status, $a->ref_key]); $this->assertStringContainsString('Free cash 9,000.00', $a->message);
         $task = DB::table('tasks')->where('dedupe_key', 'FIN_FA1:' . $a->id)->first(); $this->assertNotNull($task, 'task FIN_FA1:<alert id>'); $this->assertSame($this->owner->id, (int) $task->owner_user_id);
-        $this->assertSame(1, DB::table('wa_outbound')->where('template_code', 'FIN_ALERT')->where('link_id', $a->id)->count());
+        $this->assertSame(1, DB::table('tm_messages')->where('channel', 'WHATSAPP')->where('template_key', 'FIN_ALERT')->where('link_id', $a->id)->count());
         // next hour: no repeat
         $this->assertSame(0, FinanceAlerts::run(1, '2026-11-21 11:00:00')['repeated']);
-        $this->assertSame(1, DB::table('wa_outbound')->where('template_code', 'FIN_ALERT')->where('link_id', $a->id)->count());
+        $this->assertSame(1, DB::table('tm_messages')->where('channel', 'WHATSAPP')->where('template_key', 'FIN_ALERT')->where('link_id', $a->id)->count());
         // after 2 days: sent again (the task stays the same one)
         $this->assertSame(1, FinanceAlerts::run(1, '2026-11-23 10:00:00')['repeated']);
-        $this->assertSame(2, DB::table('wa_outbound')->where('template_code', 'FIN_ALERT')->where('link_id', $a->id)->count());
+        $this->assertSame(2, DB::table('tm_messages')->where('channel', 'WHATSAPP')->where('template_key', 'FIN_ALERT')->where('link_id', $a->id)->count());
         $this->assertSame(1, DB::table('tasks')->where('dedupe_key', 'FIN_FA1:' . $a->id)->count());
         // cash 12,000 → resolved, task closed
         $this->freeTo(12000);
         $this->assertSame(1, FinanceAlerts::run(1, '2026-11-23 11:00:00')['resolved']);
         $this->assertSame('RESOLVED', DB::table('fin_alerts')->where('id', $a->id)->value('status'));
         $this->assertSame('DONE', DB::table('tasks')->where('id', $task->id)->value('status'));
-        $this->assertSame(3, DB::table('fin_messages')->where('event_key', 'like', 'FA1:company|%')->count(), 'messages log: task + 2 WhatsApp');
+        $this->assertSame(3, DB::table('tm_messages')->where('event_key', 'like', 'FA1:company|%')->count(), 'messages log (one queue): task + 2 WhatsApp');
     }
 
     public function test_r66_other_alerts_find_their_subjects(): void

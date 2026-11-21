@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
  * R-FIN-50 monthly summary and missing-report task; R-FIN-32 the nightly / monthly finance jobs.
  * - 1st of the month 08:00: one WhatsApp per partner with any ACTIVE agreement: "Monthly summary: balance £x, profit to date £y. Open your
  *   Partner Account for details." – all companies added up; key MONTHLY:YYYY-MM:<partner>, so a second run the same month sends nothing.
- *   Logged in fin_messages (kind MONTHLY); a partner without a WhatsApp number (or who switched messages off) is logged as not sent.
+ *   Queued in the one message queue tm_messages (event MONTHLY:YYYY-MM:partner); a partner without a WhatsApp number (or who switched messages off) is logged as not sent.
  * - Hourly: task FIN_REPORT_MISSING:<shop> "Upload the next settlement report for <shop> (last ended <date>)" for each OPEN / CHECKED period
  *   whose month ended more than settlement_overdue_days (17) ago with no later period of the shop. Improved: it closes by itself when the
  *   next settlement arrives (or a later period exists). While it is open, the shop's general FIN_SETTLEMENT_OVERDUE task is not raised too.
@@ -26,7 +26,7 @@ class FinanceMonthly
             ->distinct()->pluck('investor_id')->map(fn ($x) => (int) $x);
         foreach ($partners as $p) {
             $key = "MONTHLY:$month:$p";
-            if (DB::table('fin_messages')->where('event_key', $key)->exists()) { $n['already']++; continue; }
+            if (DB::table('tm_messages')->where('event_key', $key)->exists()) { $n['already']++; continue; }      // R-G_CORE-46 one queue: once per partner and month
             $bal = 0.0; $profit = 0.0; $cur = null;
             foreach (DB::table('fin_investor_ledger')->where('investor_id', $p)->distinct()->pluck('company_id')->merge(DB::table('fin_investor_agreements')->where('investor_id', $p)->distinct()->pluck('company_id'))->unique() as $co) {
                 $a = PartnerService::account((int) $co, $p); $bal += (float) $a['balance']; $profit += (float) $a['profit_to_date']; $cur ??= Fx::base((int) $co);
@@ -35,9 +35,8 @@ class FinanceMonthly
             $text = 'Monthly summary: balance ' . self::money($bal, $cur) . ', profit to date ' . self::money($profit, $cur) . '. Open your Partner Account for details.';
             $ent = (int) (DB::table('fin_investor_agreements')->where('investor_id', $p)->where('status', 'ACTIVE')->value('company_id') ?? 0);
             $ph = Messenger::whatsappOf($p, true);
-            if ($ph) Messenger::queueWa($ent, $p, $ph, 'MONTHLY_SUMMARY', ['balance' => self::money($bal, $cur), 'profit' => self::money($profit, $cur), 'link' => FinanceSettings::appUrl() . '/#/my-account'], 't_account', $p);
-            DB::table('fin_messages')->insertOrIgnore(['investor_id' => $p, 'user_id' => null, 'kind' => 'MONTHLY', 'channel' => 'WHATSAPP', 'text' => $ph ? $text : 'Not sent: no WhatsApp number (or switched off) – ' . $text,
-                'event_key' => $key, 'status' => $ph ? 'QUEUED' : 'FAILED', 'created_at' => now()]);
+            if ($ph) Messenger::queueWa($ent, $p, $ph, 'MONTHLY_SUMMARY', ['balance' => self::money($bal, $cur), 'profit' => self::money($profit, $cur), 'link' => FinanceSettings::appUrl() . '/#/my-account'], 't_account', $p, $key);
+            else Messenger::notSent($ent, $p, null, 'WHATSAPP', 'MONTHLY_SUMMARY', $text, 'No WhatsApp number – or WhatsApp switched off for this person', $key);
             $n[$ph ? 'sent' : 'not_sent']++;
         }
         return $n;

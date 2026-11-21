@@ -6,7 +6,7 @@ FIN-5|F|form:fin_marketplace_setting|form only
 FIN-6|B|function saveSystem|18 finance system keys with label, help, default, min / max, Owner only (old refusal), 'Unknown setting <key>', history old->new, alert_repeat_days >= 1, statement_folder in the private store (no .., not public) used for statement PDFs, app_url for links; matching / alerts / snapshot / close read them; FinanceSettingsTest r6 (match_payout_days 3->4 history + next match uses 4)
 FIN-7|B|function createBank|bank accounts with opening balance booked, balance per account
 FIN-9|P|class Audit|every write audited; proof link per bank line not built
-FIN-10|P|class Messenger|one outbox per channel, never twice, statements sent; partner opt-out per kind not built
+FIN-10|P|class Messenger|partner messages through the one queue tm_messages (never twice per event + channel, R-G_CORE-46), WhatsApp / e-mail switches per partner honoured for optional kinds, statements always sent, partner quiet hours apply; open: Notify templates per kind with a mandatory flag, the 600-character cut checked per kind
 FIN-11|P|class Rights|Warehouse never sees money; one Mask service removing keys for every role / export not built
 FIN-12|P|function overview|company switch; "All companies (added up)" and the Never-list tests partly
 FIN-8|B|function saveAgreement|agreements with scope, %, fee, dates; history kept, paid agreement cannot be edited; "Change share" versioning partly

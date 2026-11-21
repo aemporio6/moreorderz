@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
  *   new subject → fin_alerts OPEN + sent on every channel of the rule; still true → sent again only after alert_repeat_days (2, minimum 1);
  *   gone → RESOLVED, its task closed. Dedupe key = code + subject (ref_key). A rule switched off raises nothing and its open alerts are resolved.
  * Channels: TASK raises FIN_<code>:<alert id> (sys_rules FIN_FA1 … FIN_FA10); WHATSAPP (template FIN_ALERT) and EMAIL go to every active login of
- * the rule's roles (OWNER, PARTNER, FINANCE_VA = role FINANCE) through the outbox; every message is logged in fin_messages ("Messages sent").
+ * the rule's roles (OWNER, PARTNER, FINANCE_VA = role FINANCE) through the outbox; every message is one row of the one message queue tm_messages ("Messages sent", R-G_CORE-46).
  * Thresholds come from the settings (free_cash_alert_limit, payout_tolerance, settlement_overdue_days, bank_overdue_days, large_fee_gbp,
  * slow_days, dead_days, agreement_ending_days, supplier_due_days, period_open_days, alert_repeat_days).
  * FA3 / FA4 / FA9 send messages only by default: their tasks are already raised by FIN_SETTLEMENT_OVERDUE, FIN_BANK_STALE and SRC_PAY_DUE.
@@ -187,34 +187,38 @@ class FinanceAlerts
     /** Send one alert on the rule's channels; returns how many messages were logged. */
     private static function send(object $rule, int $ent, int $alertId, string $key, string $msg, string $now): int
     {
-        $ch = array_filter(explode(',', (string) $rule->channels)); $n = 0; $ev = $rule->code . ':' . $key . '|' . $now;      // one message per alert, person, channel and send time (fin_messages is unique on event + channel)
+        $ch = array_filter(explode(',', (string) $rule->channels)); $n = 0; $ev = $rule->code . ':' . $key . '|' . $now;      // one message per alert, person, channel and send time (the one queue tm_messages is unique on event + channel)
         $roles = array_values(array_filter(array_map(fn ($r) => self::ROLES[$r] ?? null, explode(',', (string) $rule->to_roles))));
         if (in_array('TASK', $ch, true)) {
             $owner = DB::table('t_users')->whereIn('role_code', $roles ?: ['OWNER'])->where('f_active', 1)->where(fn ($w) => $w->where('fk_id_ent', $ent)->orWhereNull('fk_id_ent')->orWhere('fk_id_ent', 0))->orderByRaw("role_code = 'OWNER' DESC")->orderBy('id')->value('id');
             $was = TaskEngine::isOpen('FIN_' . $rule->code, [$alertId]);      // a repeat keeps the same open task (no second message for it)
             $t = TaskEngine::open('FIN_' . $rule->code, [$alertId], $rule->code . ' · ' . $msg, ['ent' => $ent, 'module' => 'fin_alerts', 'record_id' => $alertId, 'fix_url' => '#/fin-alerts'] + ($owner ? ['owner_user_id' => (int) $owner] : []));
-            if ($t && ! $was) { DB::table('fin_alerts')->where('id', $alertId)->update(['task_id' => $t]); $n += self::log(null, $owner ? (int) $owner : null, $rule->code, 'TASK', $msg, $ev, 'SENT'); }
+            if ($t && ! $was) { DB::table('fin_alerts')->where('id', $alertId)->update(['task_id' => $t]); $n += self::log($ent, null, $owner ? (int) $owner : null, $rule->code, 'INAPP', 'Task ' . \App\Services\TaskFlow::ref((int) $t) . ': ' . $msg, $ev); }
         }
         $link = FinanceSettings::appUrl() . '/#/fin-alerts';
         foreach (DB::table('t_users')->whereIn('role_code', $roles)->where('f_active', 1)->where(fn ($w) => $w->where('fk_id_ent', $ent)->orWhereNull('fk_id_ent')->orWhere('fk_id_ent', 0))->get(['id', 'fk_id_account', 'display_name']) as $u) {
             $acc = (int) $u->fk_id_account;
             if (in_array('WHATSAPP', $ch, true)) {
                 $ph = $acc ? Messenger::whatsappOf($acc, true) : null;
-                if ($ph) { Messenger::queueWa($ent, $acc, $ph, 'FIN_ALERT', ['code' => $rule->code, 'text' => $msg, 'link' => $link], 'fin_alerts', $alertId); $n += self::log(null, (int) $u->id, $rule->code, 'WHATSAPP', $msg, $ev, 'QUEUED'); }
-                else $n += self::log(null, (int) $u->id, $rule->code, 'WHATSAPP', 'Not sent: no WhatsApp number (or switched off) – ' . $msg, $ev, 'FAILED');
+                if ($ph) { Messenger::queueWa($ent, $acc, $ph, 'FIN_ALERT', ['code' => $rule->code, 'text' => $msg, 'link' => $link], 'fin_alerts', $alertId, self::key($ev, (int) $u->id)); $n++; }
+                else $n += self::log($ent, $acc ?: null, (int) $u->id, $rule->code, 'WHATSAPP', $msg, $ev, 'No WhatsApp number – or WhatsApp switched off for this person');
             }
             if (in_array('EMAIL', $ch, true)) {
                 $to = $acc ? Messenger::emailOf($acc, true) : null;
-                if ($to) { Messenger::queueEmail($ent, $acc, $to, 'Finance alert ' . $rule->code . ': ' . $rule->label, $msg . "\n\n" . $link, null, 'FIN_ALERT', 'fin_alerts', $alertId); $n += self::log(null, (int) $u->id, $rule->code, 'EMAIL', $msg, $ev, 'QUEUED'); }
-                else $n += self::log(null, (int) $u->id, $rule->code, 'EMAIL', 'Not sent: no e-mail address (or switched off) – ' . $msg, $ev, 'FAILED');
+                if ($to) { Messenger::queueEmail($ent, $acc, $to, 'Finance alert ' . $rule->code . ': ' . $rule->label, $msg . "\n\n" . $link, null, 'FIN_ALERT', 'fin_alerts', $alertId, self::key($ev, (int) $u->id)); $n++; }
+                else $n += self::log($ent, $acc ?: null, (int) $u->id, $rule->code, 'EMAIL', $msg, $ev, 'No email on file – or e-mail switched off for this person');
             }
         }
         return $n;
     }
 
-    private static function log(?int $investor, ?int $user, string $kind, string $channel, string $text, string $ev, string $status): int
+    /** The event key of one alert message to one person (one row per person × channel – R-G_CORE-46). */
+    private static function key(string $ev, int $user): string { return mb_substr($ev . '|u' . $user, 0, 120); }
+
+    /** A message that is not sent (no number, switched off) or the task notice: one row in the one queue (FAILED with the reason, or SENT in-app). */
+    private static function log(int $ent, ?int $acc, ?int $user, string $code, string $channel, string $text, string $ev, ?string $why = null): int
     {
-        DB::table('fin_messages')->insertOrIgnore(['investor_id' => $investor, 'user_id' => $user, 'kind' => mb_substr($kind, 0, 30), 'channel' => $channel, 'text' => mb_substr($text, 0, 600), 'event_key' => mb_substr($ev . '|u' . (int) $user, 0, 190), 'status' => $status, 'created_at' => now(), 'sent_at' => $status === 'SENT' ? now() : null]);
+        Messenger::notSent($ent, $acc, $user, $channel, $code, mb_substr($text, 0, 600), (string) $why, self::key($ev, (int) $user));
         return 1;
     }
 
@@ -224,9 +228,11 @@ class FinanceAlerts
         $per = 25;
         $aq = DB::table('fin_alerts')->where('company_id', $ent)->where('status', 'OPEN');
         $alerts = (clone $aq)->orderByDesc('first_at')->orderByDesc('id')->offset(($page - 1) * $per)->limit($per)->get(['id', 'code', 'ref_key', 'message', 'first_at', 'last_sent_at', 'task_id'])->all();
-        $mq = DB::table('fin_messages as m')->leftJoin('t_users as u', 'u.id', '=', 'm.user_id')->whereIn('m.kind', array_keys(self::RULES))
-            ->when($q, fn ($x) => $x->where(fn ($w) => $w->where('m.text', 'like', "%$q%")->orWhere('m.kind', 'like', "$q%")->orWhere('u.display_name', 'like', "%$q%")));
-        $msgs = (clone $mq)->orderByDesc('m.id')->offset(($mpage - 1) * $per)->limit($per)->get(['m.id', 'm.kind', 'm.channel', 'm.text', 'm.status', 'm.created_at', 'u.display_name as to_name'])->all();
+        $mq = DB::table('tm_messages as m')->leftJoin('t_users as u', 'u.id', '=', 'm.user_id')->whereIn('m.rule_code', array_merge(array_keys(self::RULES), ['FIN_ALERT']))->whereIn('m.fk_id_ent', [$ent, 0])      // R-G_CORE-46 one queue
+            ->where(fn ($w) => $w->where('m.rule_code', '<>', 'FIN_ALERT')->orWhere('m.link_table', 'fin_alerts'))
+            ->when($q, fn ($x) => $x->where(fn ($w) => $w->where('m.text', 'like', "%$q%")->orWhere('m.rule_code', 'like', "$q%")->orWhere('u.display_name', 'like', "%$q%")));
+        $msgs = (clone $mq)->orderByDesc('m.id')->offset(($mpage - 1) * $per)->limit($per)->get(['m.id', 'm.rule_code as kind', 'm.channel', 'm.text', 'm.status', 'm.error', 'm.created_at', 'u.display_name as to_name'])
+            ->map(function ($m) { if ($m->kind === 'FIN_ALERT' && preg_match('/alert (FA\d+)/', (string) $m->text, $x)) $m->kind = $x[1]; if ($m->status === 'FAILED' && $m->error) $m->text = 'Not sent: ' . $m->error . ' – ' . $m->text; return $m; })->all();
         return ['rules' => self::rules(), 'roles' => array_keys(self::ROLES), 'channels' => self::CHANNELS, 'alerts' => $alerts, 'alerts_total' => (clone $aq)->count(), 'page' => $page,
             'messages' => $msgs, 'messages_total' => (clone $mq)->count(), 'mpage' => $mpage, 'per' => $per];
     }

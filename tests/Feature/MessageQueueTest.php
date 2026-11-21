@@ -89,4 +89,23 @@ class MessageQueueTest extends TestCase
         $this->assertSame(10, $this->actingAs($va)->getJson("/api/tasks/$t/messages")->assertOk()->json('per'));
         $this->assertStringContainsString('Time,Direction,Channel', $this->actingAs($partner)->get('/api/messages/log.csv')->assertOk()->getContent());
     }
+
+    public function test_r46_every_engine_goes_through_the_one_door(): void
+    {
+        $acc = DB::table('t_account')->insertGetId(RecordService::fillNotNull('t_account', ['fk_id_ent' => 1, 'account_code' => 'OD' . random_int(10000, 99999), 'first_name' => 'Door', 'f_active' => 1,
+            'whatsapp_number' => '+44770' . random_int(1000000, 9999999), 'timezone' => 'UTC', 'quiet_from' => '00:00', 'quiet_to' => '23:59']));      // quiet almost all day
+        $w = \App\Services\Connect\Messenger::queueWa(1, $acc, '447700900999', 'CAPITAL_CALL', ['name' => 'Door', 'amount' => '£500.00', 'due' => '01 Dec', 'link' => 'l'], 'fin_capital_calls', 7, 'CC:7:' . $acc);
+        $again = \App\Services\Connect\Messenger::queueWa(1, $acc, '447700900999', 'CAPITAL_CALL', ['name' => 'Door', 'amount' => '£500.00', 'due' => '01 Dec', 'link' => 'l'], 'fin_capital_calls', 7, 'CC:7:' . $acc);
+        $this->assertSame($w, $again, 'the same event key → one row');
+        $m = DB::table('tm_messages')->find($w);
+        $this->assertSame(['WHATSAPP', 'QUEUED', 'fin_capital_calls', 7, $acc], [$m->channel, $m->status, $m->link_table, (int) $m->link_id, (int) $m->fk_id_account]);
+        $this->assertNotNull($m->send_after, 'the person\'s quiet hours hold an engine message too');
+        $r = \App\Services\Connect\Messenger::queueText(1, $acc, '447700900999', 'Thanks');
+        $this->assertNull(DB::table('tm_messages')->where('id', $r)->value('send_after'), 'a reply is never held');
+        $this->connection('WHATSAPP_LOG'); TmQueue::dispatch();
+        $this->assertSame(['FAILED', 'Outside the 24-hour window – template needed'], [DB::table('tm_messages')->where('id', $r)->value('status'), DB::table('tm_messages')->where('id', $r)->value('error')], 'free text only inside the window');
+        $n = \App\Services\Connect\Messenger::notSent(1, $acc, null, 'EMAIL', 'STATEMENT', 'Your statement', 'No email on file');
+        $this->assertSame(['FAILED', 'No email on file'], [DB::table('tm_messages')->where('id', $n)->value('status'), DB::table('tm_messages')->where('id', $n)->value('error')]);
+        $this->assertSame(0, DB::table('wa_outbound')->count() + DB::table('email_outbound')->count() + DB::table('fin_messages')->count(), 'the old outboxes are not written any more');
+    }
 }

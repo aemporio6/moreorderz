@@ -150,8 +150,8 @@ class ListStandardTest extends TestCase
         if (Perm::has($fin, 'form:src_research:EXPORT')) { $this->actingAs($fin); $this->assertSame([], $this->getJson('/api/export-templates/src_research')->json('templates')); $this->get("/api/export-template/$id/download")->assertStatus(404); }
         // schedule: queued once per day as an e-mail with the file
         $this->assertSame(1, ListExports::runScheduled('2026-11-23')); $this->assertSame(0, ListExports::runScheduled('2026-11-23'));
-        $mail = DB::table('email_outbound')->where('link_table', 'mo_export_templates')->where('link_id', $id)->first();
-        $this->assertSame('boss@example.test', $mail->to_address); $this->assertStringContainsString("exports/$id/Stock check_", $mail->body);
+        $mail = DB::table('tm_messages')->where('channel', 'EMAIL')->where('link_table', 'mo_export_templates')->where('link_id', $id)->first();      // one queue (R-G_CORE-46)
+        $this->assertSame('boss@example.test', $mail->to_address); $this->assertStringContainsString("exports/$id/Stock check_", (string) $mail->attachment);
         DB::table('mo_export_templates')->where('id', $id)->update(['schedule' => 'WEEKLY', 'last_run_at' => null]);
         $this->assertSame(0, ListExports::runScheduled('2026-11-24')); $this->assertSame(1, ListExports::runScheduled('2026-11-30'));                   // Tuesday no, Monday yes
         $this->actingAs($this->owner)->postJson("/api/export-template/$id/remove")->assertOk();

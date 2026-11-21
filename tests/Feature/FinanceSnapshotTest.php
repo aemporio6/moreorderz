@@ -82,10 +82,10 @@ class FinanceSnapshotTest extends TestCase
         // the rule's test: run twice on 1 Nov → one message per partner
         FinanceMonthly::summaries('2026-11-01'); $second = FinanceMonthly::summaries('2026-11-01');
         $this->assertSame(0, $second['sent'] + $second['not_sent']);
-        $this->assertSame(1, DB::table('fin_messages')->where('event_key', "MONTHLY:2026-11:$p")->count());
-        $this->assertSame(1, DB::table('wa_outbound')->where('template_code', 'MONTHLY_SUMMARY')->where('link_id', $p)->count());
-        $this->assertStringContainsString('Monthly summary: balance £200.00, profit to date £300.00. Open your Partner Account for details.', DB::table('fin_messages')->where('event_key', "MONTHLY:2026-11:$p")->value('text'));
-        $this->assertSame('FAILED', DB::table('fin_messages')->where('event_key', "MONTHLY:2026-11:$q")->value('status'), 'no number: logged as not sent, not tried again');
+        $this->assertSame(1, DB::table('tm_messages')->where('event_key', "MONTHLY:2026-11:$p")->count(), 'one queue (R-G_CORE-46)');
+        $this->assertSame(1, DB::table('tm_messages')->where('template_key', 'MONTHLY_SUMMARY')->where('link_id', $p)->count());
+        $this->assertStringContainsString('Monthly summary: balance £200.00, profit to date £300.00. Open your Partner Account for details.', DB::table('tm_messages')->where('event_key', "MONTHLY:2026-11:$p")->value('text'));
+        $this->assertSame('FAILED', DB::table('tm_messages')->where('event_key', "MONTHLY:2026-11:$q")->value('status'), 'no number: logged as not sent, not tried again');
         $this->assertSame(1, FinanceMonthly::summaries('2026-12-01')['sent'], 'next month: a new message');
 
         // missing report: September still OPEN, 32 days after it ended, no later period → task; the next settlement closes it

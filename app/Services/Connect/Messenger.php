@@ -11,9 +11,9 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 
 /**
- * Messages that leave the tool: WhatsApp (wa_outbound) and e-mail (email_outbound). Engines only queue; the worker (mo:send-messages, every minute) sends.
- * Nothing is sent without a working channel: without a WhatsApp connection / an e-mail server the message waits as HELD and goes out as soon as one is set up.
- * A message that fails is tried again 3 times (15 / 30 / 45 minutes), then the Admin gets task SYS_WA_FAILING.
+ * Messages that leave the tool: WhatsApp and e-mail, all in the one queue tm_messages (R-G_CORE-46; the old wa_outbound / email_outbound / fin_messages are history).
+ * Engines only queue; the worker (mo:send-messages, every minute, TmQueue) sends. Nothing is sent without a working channel: the message waits QUEUED with the reason
+ * and goes out as soon as one is set up. A failed send is tried again (send_retry_minutes) up to send_retry_max times, then FAILED and the Admin gets SYS_WA_FAILING.
  */
 class Messenger
 {
@@ -41,22 +41,44 @@ class Messenger
         return [str_replace(array_map(fn ($k) => '{' . $k . '}', array_keys($vars)), array_map('strval', array_values($vars)), $t->body), $params, $t->title];
     }
 
-    public static function queueWa(int $ent, ?int $accountId, string $phone, string $code, array $vars, ?string $linkTable = null, ?int $linkId = null): int
+    /**
+     * R-G_CORE-46 the one door: every engine queues into tm_messages (one row per person × channel, UNIQUE event key + channel – a key given twice is one row).
+     * The person is the account; the login (user_id) is filled when the person has one. Quiet hours of the person apply (not to a reply inside a conversation).
+     */
+    private static function put(int $ent, ?int $accountId, string $channel, string $to, ?string $code, string $text, array $more, ?string $eventKey, bool $quiet = true): int
     {
-        [$body] = self::render($code, $vars);
-        return DB::table('wa_outbound')->insertGetId(['fk_id_ent' => $ent, 'fk_id_account' => $accountId, 'phone' => mb_substr($phone, 0, 30), 'template_code' => $code, 'body' => $body . "\n\x1e" . json_encode($vars), 'link_table' => $linkTable, 'link_id' => $linkId, 'status' => 'QUEUED', 'queued_at' => now()]);
+        $user = $accountId ? DB::table('t_users')->where('fk_id_account', $accountId)->where('f_active', 1)->orderBy('id')->value('id') : null;
+        $later = $quiet && $accountId ? \App\Services\PersonChannels::quietUntil(DB::table('t_account')->where('id', $accountId)->first(['id', 'fk_id_ent', 'timezone', 'quiet_from', 'quiet_to'])) : null;
+        $key = mb_substr($eventKey ?? ('Q:' . ($code ?: $channel) . ':' . bin2hex(random_bytes(8))), 0, 120);
+        DB::table('tm_messages')->insertOrIgnore($more + ['fk_id_ent' => $ent, 'fk_id_account' => $accountId, 'user_id' => $user, 'channel' => $channel, 'direction' => 'OUT', 'to_address' => mb_substr($to, 0, 200),
+            'template_key' => $code, 'rule_code' => $code ? mb_substr($code, 0, 40) : null, 'text' => $text, 'event_key' => $key, 'status' => 'QUEUED', 'send_after' => $later[0] ?? null, 'note' => $later[1] ?? null, 'retry_count' => 0, 'created_at' => now()]);
+        return (int) DB::table('tm_messages')->where('event_key', $key)->where('channel', $channel)->value('id');
     }
 
-    /** A free-text reply inside the 24-hour window (WhatsApp commands, R-G_CORE-52). */
+    public static function queueWa(int $ent, ?int $accountId, string $phone, string $code, array $vars, ?string $linkTable = null, ?int $linkId = null, ?string $eventKey = null): int
+    {
+        [$body, $params] = self::render($code, $vars);
+        return self::put($ent, $accountId, 'WHATSAPP', $phone, $code, $body, ['template_params' => json_encode($params), 'link_table' => $linkTable, 'link_id' => $linkId], $eventKey);
+    }
+
+    /** A free-text reply inside the 24-hour window (WhatsApp commands, R-G_CORE-52) – goes at once, quiet hours do not hold a reply. */
     public static function queueText(int $ent, ?int $accountId, string $phone, string $text, ?string $linkTable = null, ?int $linkId = null): int
     {
-        return DB::table('wa_outbound')->insertGetId(['fk_id_ent' => $ent, 'fk_id_account' => $accountId, 'phone' => mb_substr($phone, 0, 30), 'template_code' => 'FREE_TEXT', 'body' => mb_substr($text, 0, 4000), 'link_table' => $linkTable, 'link_id' => $linkId, 'status' => 'QUEUED', 'queued_at' => now()]);
+        return self::put($ent, $accountId, 'WHATSAPP', $phone, 'FREE_TEXT', mb_substr($text, 0, 4000), ['link_table' => $linkTable, 'link_id' => $linkId], null, false);
     }
 
-    public static function queueEmail(int $ent, ?int $accountId, string $to, string $subject, string $body, ?string $file = null, ?string $code = null, ?string $linkTable = null, ?int $linkId = null): int
+    public static function queueEmail(int $ent, ?int $accountId, string $to, string $subject, string $body, ?string $file = null, ?string $code = null, ?string $linkTable = null, ?int $linkId = null, ?string $eventKey = null): int
     {
-        return DB::table('email_outbound')->insertGetId(['fk_id_ent' => $ent, 'fk_id_account' => $accountId, 'to_address' => mb_substr($to, 0, 190), 'subject' => mb_substr($subject, 0, 200), 'body' => $body . ($file ? "\n\x1e" . $file : ''),
-            'template_code' => $code, 'link_table' => $linkTable, 'link_id' => $linkId, 'status' => 'QUEUED', 'queued_at' => now()]);
+        return self::put($ent, $accountId, 'EMAIL', $to, $code, $body, ['subject' => mb_substr($subject, 0, 200), 'attachment' => $file, 'link_table' => $linkTable, 'link_id' => $linkId], $eventKey);
+    }
+
+    /** A message that could not be queued (no number / switched off) is still one row, FAILED with the reason (R-G_CORE-46 (5)). */
+    public static function notSent(int $ent, ?int $accountId, ?int $userId, string $channel, string $code, string $text, string $why, ?string $eventKey = null): int
+    {
+        $key = mb_substr($eventKey ?? ('Q:' . $code . ':' . bin2hex(random_bytes(8))), 0, 120);
+        DB::table('tm_messages')->insertOrIgnore(['fk_id_ent' => $ent, 'fk_id_account' => $accountId, 'user_id' => $userId, 'channel' => $channel, 'direction' => 'OUT', 'rule_code' => mb_substr($code, 0, 40), 'text' => $text,
+            'event_key' => $key, 'status' => $channel === 'INAPP' ? 'SENT' : 'FAILED', 'error' => $channel === 'INAPP' ? null : $why, 'failed_at' => $channel === 'INAPP' ? null : now(), 'sent_at' => $channel === 'INAPP' ? now() : null, 'retry_count' => 0, 'created_at' => now()]);
+        return (int) DB::table('tm_messages')->where('event_key', $key)->where('channel', $channel)->value('id');
     }
 
     private static function link(string $hash): string { return rtrim((string) config('app.url'), '/') . '/' . $hash; }
@@ -100,45 +122,8 @@ class Messenger
 
     public static function emailReady(): bool { return ! in_array(config('mail.default'), ['log', 'array', null, ''], true) || app()->bound('mail.fake'); }
 
-    /** The worker: send what is due. */
-    public static function sendDue(int $max = 100): array
-    {
-        $job = DB::table('sys_job_runs')->insertGetId(['job_code' => 'MSG_SEND', 'started_at' => now(), 'run_status' => 'RUNNING']);
-        $done = ['wa_sent' => 0, 'wa_held' => 0, 'wa_failed' => 0, 'mail_sent' => 0, 'mail_held' => 0, 'mail_failed' => 0];
-        $due = fn ($q) => $q->where(fn ($w) => $w->where('status', 'QUEUED')->orWhere('status', 'HELD')->orWhere(fn ($f) => $f->where('status', 'FAILED')->where('attempts', '<', 3)))->where(fn ($w) => $w->whereNull('next_try_at')->orWhere('next_try_at', '<=', now()))->orderBy('id')->limit($max);
-        foreach ($due(DB::table('wa_outbound'))->get() as $m) {
-            $c = self::waConnection((int) $m->fk_id_ent);
-            if (! $c) { if ($m->status !== 'HELD') DB::table('wa_outbound')->where('id', $m->id)->update(['status' => 'HELD', 'error' => 'No WhatsApp connection is set up (System › API connections). It goes out as soon as one is.']); $done['wa_held']++; continue; }
-            $vars = json_decode((string) (explode("\n\x1e", $m->body, 2)[1] ?? '[]'), true) ?: [];
-            try {
-                $ad = Connections::adapter($c);
-                if ($m->template_code === 'FREE_TEXT') $id = $ad->sendText($m->phone, (string) $m->body);      // a reply inside the 24-hour window
-                else { [, $params] = self::render((string) $m->template_code, $vars); $id = $ad->send($m->phone, (string) $m->template_code, $params); }
-                DB::table('wa_outbound')->where('id', $m->id)->update(['status' => 'SENT', 'provider_msg_id' => $id, 'sent_at' => now(), 'error' => null, 'attempts' => $m->attempts + 1]); $done['wa_sent']++;
-                TaskEngine::close('SYS_WA_FAILING', [(int) $m->fk_id_ent], 'WhatsApp sends again');
-            } catch (\Throwable $e) {
-                $a = $m->attempts + 1;
-                DB::table('wa_outbound')->where('id', $m->id)->update(['status' => 'FAILED', 'attempts' => $a, 'error' => mb_substr($e->getMessage(), 0, 255), 'next_try_at' => now()->addMinutes(15 * $a)]); $done['wa_failed']++;
-                if ($a >= 3) TaskEngine::open('SYS_WA_FAILING', [(int) $m->fk_id_ent], 'WhatsApp messages are not going out: ' . mb_substr($e->getMessage(), 0, 150), ['ent' => (int) $m->fk_id_ent, 'fix_url' => '#/messages']);
-                if ($e instanceof ApiError && $e->auth) DB::table('api_connections')->where('id', $c->id)->update(['status' => 'EXPIRED', 'last_error' => mb_substr($e->getMessage(), 0, 255)]);
-            }
-        }
-        foreach ($due(DB::table('email_outbound'))->get() as $m) {
-            if (! self::emailReady()) { if ($m->status !== 'HELD') DB::table('email_outbound')->where('id', $m->id)->update(['status' => 'HELD', 'error' => 'No e-mail server is set up (MAIL_… lines of the .env file). It goes out as soon as one is.']); $done['mail_held']++; continue; }
-            [$body, $file] = array_pad(explode("\n\x1e", $m->body, 2), 2, null);
-            try {
-                Mail::raw($body, function ($msg) use ($m, $file) {
-                    $msg->to($m->to_address)->subject($m->subject);
-                    if ($file && Storage::disk('local')->exists($file)) $msg->attach(Storage::disk('local')->path($file), ['as' => basename($file), 'mime' => ['csv' => 'text/csv', 'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'][strtolower(pathinfo($file, PATHINFO_EXTENSION))] ?? 'application/pdf']);
-                });
-                DB::table('email_outbound')->where('id', $m->id)->update(['status' => 'SENT', 'sent_at' => now(), 'error' => null, 'attempts' => $m->attempts + 1]); $done['mail_sent']++;
-            } catch (\Throwable $e) {
-                $a = $m->attempts + 1; DB::table('email_outbound')->where('id', $m->id)->update(['status' => 'FAILED', 'attempts' => $a, 'error' => mb_substr($e->getMessage(), 0, 255), 'next_try_at' => now()->addMinutes(15 * $a)]); $done['mail_failed']++;
-            }
-        }
-        DB::table('sys_job_runs')->where('id', $job)->update(['finished_at' => now(), 'run_status' => 'OK', 'items_done' => $done['wa_sent'] + $done['mail_sent'], 'messages_queued' => $done['wa_held'] + $done['mail_held']]);
-        return $done;
-    }
+    /** The worker: send what is due – one sender for every engine (R-G_CORE-46). */
+    public static function sendDue(int $max = 100): array { return \App\Services\TmQueue::dispatch($max); }
 
     /**
      * WhatsApp webhook (POST). Only a body signed with the app secret of one of the WhatsApp connections is read.

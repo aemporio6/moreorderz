@@ -24,7 +24,7 @@ class WaCommandsTest extends TestCase
         $this->call('POST', '/wa/inbound', [], [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_X_HUB_SIGNATURE_256' => 'sha256=' . hash_hmac('sha256', $body, 'appsec')], $body)->assertOk();
     }
     private function last(): object { return DB::table('wa_inbound')->orderByDesc('id')->first(); }
-    private function reply(): string { return (string) DB::table('wa_outbound')->where('template_code', 'FREE_TEXT')->orderByDesc('id')->value('body'); }
+    private function reply(): string { return (string) DB::table('tm_messages')->where('template_key', 'FREE_TEXT')->orderByDesc('id')->value('text'); }      // replies go through the one queue (R-G_CORE-46)
     private function person(string $role, string $phone): \App\Models\User
     {
         $acc = $this->f('t_account', ['fk_id_ent' => 1, 'account_code' => 'W' . random_int(1000, 9999), 'first_name' => $role, 'f_active' => 1, 'whatsapp_number' => $phone]);
@@ -46,7 +46,7 @@ class WaCommandsTest extends TestCase
         // unknown number → IGNORED, no reply
         $this->send('449999999999', ['type' => 'text', 'text' => ['body' => 'DONE']]);
         $this->assertSame(['IGNORED', 'IGNORED', 'Unknown number - ignored (R13)'], [$this->last()->action, $this->last()->status, $this->last()->note]);
-        $this->assertSame(0, DB::table('wa_outbound')->where('template_code', 'FREE_TEXT')->count());
+        $this->assertSame(0, DB::table('tm_messages')->where('template_key', 'FREE_TEXT')->count());
         // no task named
         $this->send('447700900111', ['type' => 'text', 'text' => ['body' => 'DONE']]);
         $this->assertSame('NO_TASK', $this->last()->action); $this->assertStringStartsWith('Which task? Reply to the task message', $this->reply());
@@ -84,7 +84,7 @@ class WaCommandsTest extends TestCase
         $va = $this->person('VA', '447700900333'); $other = $this->person('VA', '447700900444');
         $mk = fn (int $owner, string $title) => $this->f('tasks', ['fk_id_ent' => 1, 'title' => $title, 'owner_user_id' => $owner, 'status' => 'TODO', 'source' => 'MANUAL', 'priority' => 'NORMAL', 'created_at' => now(), 'due_at' => date('Y-m-d')]);
         $t1 = $mk($va->id, 'Ring the supplier'); $t2 = $mk($va->id, 'Check the parcel'); $theirs = $mk($other->id, 'Not yours');
-        foreach ([$t1, $t2] as $i => $t) DB::table('wa_outbound')->insert(['fk_id_ent' => 1, 'fk_id_account' => $va->fk_id_account, 'phone' => '447700900333', 'template_code' => 'TASK_NEW', 'body' => 'x', 'link_table' => 'tasks', 'link_id' => $t, 'status' => 'SENT', 'provider_msg_id' => "wamid.T$i"]);
+        foreach ([$t1, $t2] as $i => $t) DB::table('tm_messages')->insert(['fk_id_ent' => 1, 'fk_id_account' => $va->fk_id_account, 'user_id' => $va->id, 'task_id' => $t, 'channel' => 'WHATSAPP', 'direction' => 'OUT', 'to_address' => '447700900333', 'template_key' => 'tm_new_task', 'text' => 'x', 'event_key' => "N1:$t", 'status' => 'SENT', 'provider_id' => "wamid.T$i", 'retry_count' => 0, 'created_at' => now()]);      // task alerts in the one queue
 
         $this->send('447700900333', ['type' => 'text', 'text' => ['body' => 'STUCK'], 'context' => ['id' => 'wamid.T0']]);
         $this->assertSame('Say who or what it is stuck on, e.g. "STUCK waiting for supplier PI".', $this->reply());
@@ -108,7 +108,7 @@ class WaCommandsTest extends TestCase
         // OK to an approval sent to this number (the manager) → decided with the web rules
         $mgr = $this->person('MANAGER', '447700900555');
         $ap = $this->f('sys_approvals', ['fk_id_ent' => 1, 'action_code' => 'TEST_WA', 'entity' => 'x', 'entity_id' => 1, 'amount_gbp' => 50, 'requested_by' => $va->id, 'requested_at' => now(), 'status' => 'PENDING']);
-        DB::table('wa_outbound')->insert(['fk_id_ent' => 1, 'fk_id_account' => $mgr->fk_id_account, 'phone' => '447700900555', 'template_code' => 'APPROVAL', 'body' => 'x', 'link_table' => 'sys_approvals', 'link_id' => $ap, 'status' => 'SENT', 'provider_msg_id' => 'wamid.AP']);
+        \App\Services\Connect\Messenger::queueWa(1, $mgr->fk_id_account, '447700900555', 'APPROVAL', [], 'sys_approvals', $ap); DB::table('tm_messages')->where('link_table', 'sys_approvals')->where('link_id', $ap)->update(['status' => 'SENT', 'provider_id' => 'wamid.AP']);      // through the one door
         $this->send('447700900555', ['type' => 'text', 'text' => ['body' => 'NO'], 'context' => ['id' => 'wamid.AP']]);
         $this->assertSame('REFUSED', $this->last()->action, 'NO needs a reason, as on the web'); $this->assertSame('PENDING', DB::table('sys_approvals')->where('id', $ap)->value('status'));
         $this->send('447700900555', ['type' => 'text', 'text' => ['body' => 'OK']]);

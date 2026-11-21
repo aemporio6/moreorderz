@@ -225,7 +225,7 @@ class AlertRules
                 'status' => $ch === 'INAPP' ? 'SENT' : ($error ? 'FAILED' : 'QUEUED'), 'error' => $error, 'send_after' => $ch !== 'INAPP' && ! $error && $later ? $later[0] : null, 'note' => $ch !== 'INAPP' && ! $error && $later ? $later[1] : null, 'sent_at' => $ch === 'INAPP' ? now() : null, 'failed_at' => $error ? now() : null, 'created_at' => now()];
             if (! DB::table('tm_messages')->insertOrIgnore($row)) continue;
             $ids[] = (int) DB::table('tm_messages')->where('event_key', $key)->where('channel', $ch)->value('id');
-            if ($ch === 'INAPP') Notify::push($userId, 'TASK', $m['text'], $taskId ? '#/tasks' : null, $taskId);
+            if ($ch === 'INAPP') Notify::push($userId, 'TASK', $m['text'], $taskId ? '#/tasks' : null, $taskId, false);      // its own row is above
         }
         if ($ids && $taskId) DB::table('tasks')->where('id', $taskId)->update(['last_notified_at' => now()]);
         return $ids;

@@ -171,29 +171,35 @@ class ConnectTest extends TestCase
 
     public function test_messages_wait_without_a_channel_and_go_out_when_one_is_set_up(): void
     {
+        // R-G_CORE-46: every engine queues into the one queue tm_messages; outside the 24-hour window only an APPROVED template goes (R-G_CORE-53)
+        DB::table('wa_templates')->where('code', 'STATEMENT')->update(['approval_status' => 'APPROVED']);
         $partner = DB::table('t_account')->insertGetId(RecordService::fillNotNull('t_account', ['fk_id_ent' => 1, 'account_code' => 'P' . random_int(100, 999), 'first_name' => 'Pat', 'sur_name' => 'Partner', 'f_active' => 1, 'whatsapp_number' => '+44 7700 900123']));
         $id = Messenger::queueWa(1, $partner, Messenger::whatsappOf($partner), 'STATEMENT', ['month' => 'October 2026', 'profit' => '120.00', 'balance' => '300.00', 'link' => 'https://x/#/p']);
         Messenger::sendDue();
-        $this->assertSame('HELD', DB::table('wa_outbound')->where('id', $id)->value('status'));
+        $w = DB::table('tm_messages')->find($id);
+        $this->assertSame(['QUEUED', 0], [$w->status, (int) $w->retry_count], 'no connection: it waits, no try counted');
+        $this->assertStringContainsString('No WhatsApp connection', (string) $w->error);
         Connections::save(['adapter' => 'WHATSAPP_CLOUD', 'secrets' => ['phone_number_id' => '1055', 'access_token' => 'EAAG-SECRET', 'app_secret' => 'appsec', 'verify_token' => 'vt']]);
         $err = ['error' => ['message' => 'Template not approved']];
-        Http::fake(['graph.facebook.com/*' => Http::sequence()->push(['messages' => [['id' => 'wamid.ABC']]])->push($err, 400)->push($err, 400)->push($err, 400)]);
+        Http::fake(['graph.facebook.com/*' => Http::sequence()->push(['messages' => [['id' => 'wamid.ABC']]])->push($err, 400)->push($err, 400)->push($err, 400)->push($err, 400)]);
         Messenger::sendDue();
-        $m = DB::table('wa_outbound')->find($id);
-        $this->assertSame(['SENT', 'wamid.ABC'], [$m->status, $m->provider_msg_id]);
+        $m = DB::table('tm_messages')->find($id);
+        $this->assertSame(['SENT', 'wamid.ABC'], [$m->status, $m->provider_id]);
         Http::assertSent(fn (HttpRequest $q) => $q['to'] === '447700900123' && $q['template']['name'] === 'statement' && array_column($q['template']['components'][0]['parameters'], 'text') === ['October 2026', '120.00', '300.00', 'https://x/#/p']);
-        // e-mail: held without a mail server, sent with one
+        // e-mail: waits without a mail server, sent with one
         $e = Messenger::queueEmail(1, $partner, 'pat@example.test', 'Statement', 'Hello');
         config(['mail.default' => 'log']); Messenger::sendDue();
-        $this->assertSame('HELD', DB::table('email_outbound')->where('id', $e)->value('status'));
+        $this->assertSame('QUEUED', DB::table('tm_messages')->where('id', $e)->value('status'));
+        $this->assertStringContainsString('No e-mail server', (string) DB::table('tm_messages')->where('id', $e)->value('error'));
         config(['mail.default' => 'smtp']); Mail::fake(); Messenger::sendDue();
-        $this->assertSame('SENT', DB::table('email_outbound')->where('id', $e)->value('status'));
-        // three failures → a task for the admin
+        $this->assertSame('SENT', DB::table('tm_messages')->where('id', $e)->value('status'));
+        // the first try + 3 retries fail → FAILED with the provider error and a task for the admin
         $f = Messenger::queueWa(1, $partner, '447700900123', 'STATEMENT', ['month' => 'x', 'profit' => '1', 'balance' => '1', 'link' => 'l']);
-        for ($i = 0; $i < 3; $i++) { DB::table('wa_outbound')->where('id', $f)->update(['next_try_at' => null]); Messenger::sendDue(); }
-        $this->assertSame([3, 'FAILED'], [(int) DB::table('wa_outbound')->where('id', $f)->value('attempts'), DB::table('wa_outbound')->where('id', $f)->value('status')]);
-        $this->assertStringContainsString('Template not approved', DB::table('wa_outbound')->where('id', $f)->value('error'));
+        for ($i = 0; $i < 4; $i++) { DB::table('tm_messages')->where('id', $f)->update(['send_after' => null]); Messenger::sendDue(); }
+        $this->assertSame([4, 'FAILED'], [(int) DB::table('tm_messages')->where('id', $f)->value('retry_count'), DB::table('tm_messages')->where('id', $f)->value('status')]);
+        $this->assertStringContainsString('Template not approved', DB::table('tm_messages')->where('id', $f)->value('error'));
         $this->assertTrue(DB::table('tasks')->where('rule_code', 'SYS_WA_FAILING')->exists());
+        $this->assertSame(0, DB::table('wa_outbound')->count() + DB::table('email_outbound')->count(), 'the old outboxes are no longer written');
     }
 
     public function test_whatsapp_webhook_reads_only_signed_bodies_and_done_closes_the_owners_own_task(): void

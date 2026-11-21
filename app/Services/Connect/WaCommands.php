@@ -45,7 +45,7 @@ class WaCommands
         $type = (string) ($msg['type'] ?? 'text');
         $media = in_array($type, ['image', 'document', 'audio', 'video', 'voice', 'sticker'], true) ? ($msg[$type] ?? []) : null;
         $text = trim((string) ($msg['text']['body'] ?? $msg['button']['text'] ?? $msg['interactive']['button_reply']['title'] ?? ($media['caption'] ?? '')));
-        $ctx = (string) ($msg['context']['id'] ?? ''); $out = $ctx !== '' ? DB::table('wa_outbound')->where('provider_msg_id', $ctx)->first() : null;
+        $ctx = (string) ($msg['context']['id'] ?? ''); $out = $ctx !== '' ? self::outOf($ctx) : null;
 
         // a number answering our numbered question
         if ($media === null && preg_match('/^\d{1,2}$/', $text) && ($q = DB::table('wa_inbound')->where('fk_id_account', $acc)->where('action', 'CHOOSE')->whereNotNull('pending_json')->where('received_at', '>=', now()->subDay())->orderByDesc('id')->first())) {
@@ -162,14 +162,32 @@ class WaCommands
         return $r ? ['kind' => 'call', 'id' => (int) $r->id, 'label' => 'Capital call #' . $out->link_id] : null;
     }
 
+    /** The message we sent that a reply quotes (R-G_CORE-46 one queue; old outbox rows are still read). A task alert counts as linked to its task. */
+    private static function outOf(string $providerId): ?object
+    {
+        $m = DB::table('tm_messages')->where('provider_id', $providerId)->first(['link_table', 'link_id', 'task_id']);
+        if ($m) return (object) ['link_table' => $m->link_table ?: ($m->task_id ? 'tasks' : null), 'link_id' => $m->link_id ?: $m->task_id];
+        return DB::table('wa_outbound')->where('provider_msg_id', $providerId)->first(['link_table', 'link_id']);
+    }
+
+    /** Messages sent to this person about rows of $table (one queue + the old outbox): the linked ids. */
+    private static function sentAbout(string $table, int $acc): array
+    {
+        $uid = (int) DB::table('t_users')->where('fk_id_account', $acc)->value('id');
+        $ids = DB::table('tm_messages')->where(fn ($w) => $w->where('fk_id_account', $acc)->when($uid, fn ($x) => $x->orWhere('user_id', $uid)))
+            ->where(fn ($w) => $w->where('link_table', $table)->when($table === 'tasks', fn ($x) => $x->orWhereNotNull('task_id')))->get(['link_table', 'link_id', 'task_id'])
+            ->map(fn ($m) => $m->link_table === $table ? (int) $m->link_id : (int) $m->task_id)->all();
+        return array_values(array_unique(array_merge($ids, DB::table('wa_outbound')->where('fk_id_account', $acc)->where('link_table', $table)->pluck('link_id')->map(fn ($x) => (int) $x)->all())));
+    }
+
     /** What an OK / NO with no task can answer: own tasks not yet acknowledged, pending approvals and open capital calls sent to this number. */
     private static function openItems(User $u, int $acc, int $ent, array $kinds): array
     {
         $out = [];
-        if (in_array('task', $kinds, true)) foreach (DB::table('tasks as t')->join('wa_outbound as o', fn ($j) => $j->on('o.link_id', '=', 't.id')->where('o.link_table', 'tasks'))->where('o.fk_id_account', $acc)->where('t.owner_user_id', $u->id)
-            ->whereNull('t.acknowledged_at')->whereIn('t.status', TaskFlow::OPEN)->distinct()->orderBy('t.id')->limit(5)->get(['t.id', 't.title']) as $t) $out[] = ['kind' => 'task', 'id' => (int) $t->id, 'label' => TaskFlow::ref((int) $t->id) . ' ' . mb_substr($t->title, 0, 40)];
-        if (in_array('approval', $kinds, true)) foreach (DB::table('sys_approvals as a')->join('wa_outbound as o', fn ($j) => $j->on('o.link_id', '=', 'a.id')->where('o.link_table', 'sys_approvals'))->where('o.fk_id_account', $acc)->where('a.status', 'PENDING')->where('a.fk_id_ent', $ent)
-            ->distinct()->orderBy('a.id')->limit(5)->get(['a.id', 'a.action_code', 'a.amount_gbp']) as $a) $out[] = ['kind' => 'approval', 'id' => (int) $a->id, 'label' => 'Approval ' . $a->action_code . '-' . $a->id . ' ' . number_format((float) $a->amount_gbp, 2)];
+        if (in_array('task', $kinds, true)) foreach (DB::table('tasks as t')->whereIn('t.id', self::sentAbout('tasks', $acc) ?: [0])->where('t.owner_user_id', $u->id)
+            ->whereNull('t.acknowledged_at')->whereIn('t.status', TaskFlow::OPEN)->orderBy('t.id')->limit(5)->get(['t.id', 't.title']) as $t) $out[] = ['kind' => 'task', 'id' => (int) $t->id, 'label' => TaskFlow::ref((int) $t->id) . ' ' . mb_substr($t->title, 0, 40)];
+        if (in_array('approval', $kinds, true)) foreach (DB::table('sys_approvals as a')->whereIn('a.id', self::sentAbout('sys_approvals', $acc) ?: [0])->where('a.status', 'PENDING')->where('a.fk_id_ent', $ent)
+            ->orderBy('a.id')->limit(5)->get(['a.id', 'a.action_code', 'a.amount_gbp']) as $a) $out[] = ['kind' => 'approval', 'id' => (int) $a->id, 'label' => 'Approval ' . $a->action_code . '-' . $a->id . ' ' . number_format((float) $a->amount_gbp, 2)];
         if (in_array('call', $kinds, true)) foreach (DB::table('fin_capital_call_responses as r')->join('fin_capital_calls as c', 'c.id', '=', 'r.call_id')->where('r.investor_id', $acc)->where('r.status', 'SENT')->where('c.status', 'OPEN')->where('c.company_id', $ent)
             ->orderBy('r.id')->limit(5)->get(['r.id', 'c.id as call', 'r.amount_asked']) as $c) $out[] = ['kind' => 'call', 'id' => (int) $c->id, 'label' => 'Capital call #' . $c->call . ' ' . number_format((float) $c->amount_asked, 2)];
         return $out;

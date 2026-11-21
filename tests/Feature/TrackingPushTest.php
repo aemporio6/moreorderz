@@ -15,7 +15,7 @@ class TrackingPushTest extends TestCase
     {
         $f = fn ($t, $d) => (int) DB::table($t)->insertGetId(RecordService::fillNotNull($t, $d));
         $prof = $f('mp_profiles', ['fk_id_ent' => 1, 'code' => 'P' . uniqid(), 'name' => 'Prof', 'tracking_upload_when' => $when, 'tracking_upload_layout' => $layout, 'dispatch_cutoff_time' => '16:00:00', 'f_active' => 1, 'created_at' => now()]);
-        $shop = $f('t_branches', ['fk_id_ent' => 1, 'fk_id_mp_profile' => $prof, 'shop_no' => 'S' . random_int(100, 999), 'shop_name' => $when . ' shop', 'iso_branch' => 'X' . random_int(10, 99), 'f_active' => 1]);
+        $shop = $f('t_branches', ['fk_id_ent' => 1, 'fk_id_mp_profile' => $prof, 'shop_no' => 'S' . random_int(100, 999), 'shop_name' => $when . ' shop', 'iso_branch' => 'X' . uniqid(), 'f_active' => 1]);      // unique per run (was a 1-in-90 clash)
         return [$shop, $prof];
     }
 

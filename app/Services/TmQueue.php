@@ -37,13 +37,15 @@ class TmQueue
         $rows = DB::table('tm_messages')->where('status', 'QUEUED')->whereIn('channel', ['WHATSAPP', 'EMAIL'])->where(fn ($w) => $w->whereNull('send_after')->orWhere('send_after', '<=', $ts))->orderBy('id')->limit($max)->get();
         foreach ($rows as $m) {
             if (! DB::table('tm_messages')->where('id', $m->id)->where('status', 'QUEUED')->update(['status' => 'SENDING'])) continue;      // claimed by another run
-            $user = DB::table('t_users')->where('id', $m->user_id)->first(['id', 'fk_id_ent', 'fk_id_account']); $ent = (int) ($user->fk_id_ent ?? 0);
+            $user = $m->user_id ? DB::table('t_users')->where('id', $m->user_id)->first(['id', 'fk_id_ent', 'fk_id_account']) : null;
+            $ent = (int) ($m->fk_id_ent ?? 0) ?: (int) ($user->fk_id_ent ?? 0); $acc = (int) ($m->fk_id_account ?? 0) ?: (int) ($user->fk_id_account ?? 0); $c = null;
             try {
                 if ($m->channel === 'WHATSAPP') {
                     $c = Messenger::waConnection($ent);
                     if (! $c) { self::wait($m, 'No WhatsApp connection is set up (System › API connections). It goes out as soon as one is.'); $done['waiting']++; continue; }
                     $ad = Connections::adapter($c);
-                    if (self::inWindow($user->fk_id_account ?? null, $now)) $id = $ad->sendText((string) $m->to_address, (string) $m->text);
+                    if (self::inWindow($acc ?: null, $now)) $id = $ad->sendText((string) $m->to_address, (string) $m->text);
+                    elseif ($m->template_key === 'FREE_TEXT') throw new \DomainException('Outside the 24-hour window – template needed');
                     else {
                         $tpl = DB::table('wa_templates')->where('code', $m->template_key)->where('f_active', 1)->where('approval_status', 'APPROVED')->first();
                         if (! $tpl) throw new \DomainException('Outside the 24-hour window – template needed');
@@ -52,16 +54,23 @@ class TmQueue
                     $note = $c->adapter === 'WHATSAPP_LOG' ? 'log provider' : null;
                 } else {
                     if (! Messenger::emailReady()) { self::wait($m, 'No e-mail server is set up (MAIL_… lines of the .env file). It goes out as soon as one is.'); $done['waiting']++; continue; }
-                    Mail::raw((string) $m->text, fn ($msg) => $msg->to((string) $m->to_address)->subject((string) ($m->subject ?: 'MoreOrderz')));
+                    Mail::raw((string) $m->text, function ($msg) use ($m) {
+                        $msg->to((string) $m->to_address)->subject((string) ($m->subject ?: 'MoreOrderz'));
+                        $f = (string) ($m->attachment ?? '');
+                        if ($f !== '' && \Illuminate\Support\Facades\Storage::disk('local')->exists($f)) $msg->attach(\Illuminate\Support\Facades\Storage::disk('local')->path($f), ['as' => basename($f)]);
+                    });
                     $id = null; $note = null;
                 }
                 DB::table('tm_messages')->where('id', $m->id)->update(['status' => 'SENT', 'sent_at' => now(), 'provider_id' => $id, 'error' => null] + ($note ? ['note' => $note] : []));
+                if ($m->channel === 'WHATSAPP') TaskEngine::close('SYS_WA_FAILING', [$ent], 'WhatsApp sends again');
                 $done['sent']++;
             } catch (\Throwable $e) {
+                if ($e instanceof ApiError && $e->auth && $c) DB::table('api_connections')->where('id', $c->id)->update(['status' => 'EXPIRED', 'last_error' => mb_substr($e->getMessage(), 0, 255)]);
                 $tries = (int) $m->retry_count + 1; $max_ = (int) AlertRules::threshold('send_retry_max') ?: 3;
                 $permanent = $e instanceof \DomainException || ($e instanceof ApiError && $e->auth);
                 if ($permanent || $tries > $max_) {
                     DB::table('tm_messages')->where('id', $m->id)->update(['status' => 'FAILED', 'failed_at' => now(), 'retry_count' => $tries, 'error' => mb_substr($e->getMessage(), 0, 255)]); $done['failed']++;
+                    if ($m->channel === 'WHATSAPP' && ! $e instanceof \DomainException) TaskEngine::open('SYS_WA_FAILING', [$ent], 'WhatsApp messages are not going out: ' . mb_substr($e->getMessage(), 0, 150), ['ent' => $ent, 'fix_url' => '#/messages']);
                 } else {
                     DB::table('tm_messages')->where('id', $m->id)->update(['status' => 'QUEUED', 'retry_count' => $tries, 'error' => mb_substr($e->getMessage(), 0, 255),
                         'send_after' => $now->modify('+' . ((int) AlertRules::threshold('send_retry_minutes') ?: 10) . ' minutes')->format('Y-m-d H:i:s')]); $done['retry']++;

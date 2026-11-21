@@ -332,8 +332,8 @@ class DsMatch
             $acc = DB::table('t_account')->where('id', $va)->first(); if (! $acc) continue; $text = "{$d['n']} sale line(s) still not matched – " . implode(', ', $d['shops']);
             $user = $acc->login_id ? DB::table('t_users')->where('login_id', $acc->login_id)->where('f_active', 1)->first() : null; $done = false;
             if ($user && ! DB::table('tm_notifications')->where('user_id', $user->id)->where('text', 'like', '%still not matched%')->where('created_at', '>=', today())->exists()) { Notify::push((int) $user->id, 'TASK', $text, '#/sales'); $done = true; }
-            if (($p = Connect\Messenger::whatsappOf((int) $va)) && ! DB::table('wa_outbound')->where('template_code', 'NOT_MATCHED_DIGEST')->where('fk_id_account', $va)->where('queued_at', '>=', today())->exists()) {
-                Connect\Messenger::queueWa((int) $d['ent'], (int) $va, $p, 'NOT_MATCHED_DIGEST', ['name' => trim($acc->first_name . ' ' . $acc->sur_name), 'count' => $d['n'], 'shops' => implode(', ', $d['shops']), 'link' => rtrim((string) config('app.url'), '/') . '/#/sales']); $done = true; }
+            if (($p = Connect\Messenger::whatsappOf((int) $va)) && ! DB::table('tm_messages')->where('event_key', 'NMD:' . $va . ':' . date('Y-m-d'))->exists()) {      // one a day (R-G_CORE-46 one queue)
+                Connect\Messenger::queueWa((int) $d['ent'], (int) $va, $p, 'NOT_MATCHED_DIGEST', ['name' => trim($acc->first_name . ' ' . $acc->sur_name), 'count' => $d['n'], 'shops' => implode(', ', $d['shops']), 'link' => rtrim((string) config('app.url'), '/') . '/#/sales'], null, null, 'NMD:' . $va . ':' . date('Y-m-d')); $done = true; }
             if ($done) $told++;
         }
         return $told;

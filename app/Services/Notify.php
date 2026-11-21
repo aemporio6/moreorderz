@@ -9,9 +9,13 @@ class Notify
 {
     public const TYPES = ['TASK' => 'Tasks', 'APPROVAL' => 'Approvals', 'FINANCE' => 'Finance', 'IMPORT' => 'Imports', 'ACCESS' => 'Rights', 'DUE' => 'Due dates', 'SYSTEM' => 'System'];
 
-    public static function push(int $userId, string $type, string $text, ?string $url = null, ?int $taskId = null): void
+    /** The bell. $log: also one INAPP row of the one message queue (R-G_CORE-46) – AlertRules writes its own row and passes false. */
+    public static function push(int $userId, string $type, string $text, ?string $url = null, ?int $taskId = null, bool $log = true): void
     {
         if ($userId <= 0 || trim($text) === '') return;
+        if ($log) DB::table('tm_messages')->insertOrIgnore(['user_id' => $userId, 'task_id' => $taskId, 'rule_code' => 'BELL_' . (isset(self::TYPES[$type]) ? $type : 'SYSTEM'), 'channel' => 'INAPP', 'direction' => 'OUT',
+            'text' => mb_substr($text, 0, 500), 'event_key' => 'BELL:' . bin2hex(random_bytes(10)), 'status' => 'SENT', 'sent_at' => now(), 'retry_count' => 0, 'created_at' => now(),
+            'fk_id_ent' => (int) (DB::table('t_users')->where('id', $userId)->value('fk_id_ent') ?? 0)]);
         DB::table('tm_notifications')->insert(['user_id' => $userId, 'task_id' => $taskId, 'type' => isset(self::TYPES[$type]) ? $type : 'SYSTEM', 'text' => mb_substr($text, 0, 500), 'url' => $url ? mb_substr($url, 0, 255) : null, 'created_at' => now()]);
     }
 
