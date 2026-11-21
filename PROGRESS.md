@@ -292,3 +292,17 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - **Partly built, said honestly**: 34 (refund / return / landed-cost change after Confirm as an adjustment line in the next open month), 42 (the Vendor role's own-inventory view), 46 (background job + e-mail / WhatsApp for large exports; DS investor cell), 31 (saved VA share amount and basis, Refresh VA %, click a figure, Month Close figures).
 - Tests: 255 pass (5,058 checks); new `tests/Feature/SaleViewTest.php` (8). Browser checked with a made-up file; no script errors.
 - Register after this batch: BUILT 272 of 1,433 (19 %); Sales 28 of 155 (18 %).
+
+## Sales batch 4 – drop-shipping match (21 Nov 2026)
+- New service `app/Services/DsMatch.php`; migration `000024` (event `DS_BATCH_APPLIED`, setting `DS_OWN_PHONES`).
+- **The 5-matching rule** (R-A_SALES-19): a sale line without a product of ours is compared with the supplier orders (`drp_items`) of the same shop and the batch month on name, address, town, postcode, phone; 3 of 5 (setting `DS_MIN_MATCH`) make it a drop-shipping line. The five values come from the marketplace's "Address match" columns (Sale Columns popup), else from the buyer name and the contacts text. Street / St, Road / Rd and similar are treated as the same word.
+- **Own phone numbers** (20): a number on supplier orders of 3 or more buyers, and the numbers listed in `DS_OWN_PHONES`, are never used.
+- **Assignment** (21): most fields, same order no, title words, same quantity, closest date; one supplier order = one sale line; an order already linked in another import is named in the note.
+- **Lock** (22): one matching run per company at a time; a second run waits up to 60 s and then says "busy".
+- **Money** (23): drop-shipping line – rate = total, buy amount = supplier cost in base currency at the supplier order date, profit = total − cost. Not matched – cost 0, profit 0, reason and best score kept; the strip shows "n line(s) without cost (not matched)".
+- **Reasons and CSV** (24): "SKU not in inventory; no drop shipping item matched (best 2 of 5, 3 needed)"; CSV per import or per list filter with the original file columns + "Why not matched", formula guard.
+- **Re-match** (25): button on Sales lines for the not matched Pending lines of the view; also runs by itself when a supplier-orders file is applied (event `DS_BATCH_APPLIED` with shop, month, year – the upload itself belongs to the Products rules R-D-73 … and must fire this event). Four log entries per matched line.
+- **Explanation** (26): the badge (5 green, 4 teal, 3 yellow) opens a table with ✓ / ✗ per field; supplier address and phone are masked unless the right `orders.dsSeeContact`; Link / Unlink by hand with a reason (right `orders.dsLink`). New right `orders.dsRematch`.
+- **Partly built, said honestly**: 21 (ties are warned, no manual-pick list), 25 (no daily digest), 26 (masking not yet on the drop-shipping list / its export), 66 (the DS Columns set waits for the supplier-file upload).
+- Tests: 264 pass (5,174 checks); new `tests/Feature/DsMatchTest.php` (9) with the rules' examples (John A Smith → 4 of 5; USD 10 at 0.80 → £8.00, profit £6.99; 8 of 10 after the supplier file; `not_matched_101A_jul26_2026-08-02.csv`; ••••••123). Browser checked with made-up data.
+- Register after this batch: BUILT 281 of 1,433 (20 %); Sales 36 of 155 (23 %).
