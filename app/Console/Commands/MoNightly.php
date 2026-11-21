@@ -28,7 +28,8 @@ class MoNightly extends Command
             \App\Services\MoneyService::staleTasks((int) $ent);
             \App\Services\CloseService::openTasks((int) $ent);
             \App\Services\SkuHomes::tasks((int) $ent);
-            \App\Services\ThreePlTariff::missingTasks((int) $ent);      // PRD_FEE_MISSING (R-D-23)
+            \App\Services\ThreePlTariff::missingTasks((int) $ent);
+            \App\Services\NotListed::closeDone((int) $ent);      // LST_CREATE closes when the listing exists (R-D-58)      // PRD_FEE_MISSING (R-D-23)
             \App\Services\SalesWatch::nightly((int) $ent);      // SAL_NO_COST, LST_STATUS, IMP_WAITING
             $this->line("Company $ent: stock mismatches {$r['mismatch']}, negative balances {$r['negative_balances']}, value = ledger: " . ($r['value_matches_ledger'] ? 'yes' : 'NO') . ", low stock tasks open {$low['open']}");
         }

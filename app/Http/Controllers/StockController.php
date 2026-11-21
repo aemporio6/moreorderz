@@ -30,6 +30,20 @@ class StockController extends Controller
         catch (\InvalidArgumentException|\RuntimeException $e) { return response()->json(['message' => $e->getMessage(), 'errors' => ['_form' => [$e->getMessage()]]], 422); }
     }
 
+    /** Products not listed per shop (R-D-58). */
+    public function notListed(Request $r)
+    {
+        \App\Services\Perm::need($r->user(), 'stock.notListed'); $ent = (int) Context::ent(); \App\Services\NotListed::closeDone($ent);
+        $f = $r->only(['shop', 'type', 'preset', 'packing']);
+        return \App\Services\NotListed::summary($ent, $f) + ['lines' => ! empty($f['shop']) || $r->boolean('lines') ? \App\Services\NotListed::lines($ent, $f) : null, 'can_task' => \App\Services\Perm::has($r->user(), 'stock.notListed')];
+    }
+    public function notListedTasks(Request $r)
+    {
+        \App\Services\Perm::need($r->user(), 'stock.notListed');
+        $pairs = array_values(array_filter(array_map(fn ($p) => is_array($p) && count($p) === 2 ? [(int) $p[0], (int) $p[1]] : null, (array) $r->input('pairs', []))));
+        return \App\Services\NotListed::createTasks((int) Context::ent(), $pairs, $r->only(['shop', 'type', 'preset', 'packing']));
+    }
+
     /** Products list (R-D-35). */
     public function products(Request $r)
     {

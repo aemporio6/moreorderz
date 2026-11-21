@@ -97,6 +97,7 @@ class PermCatalogue
         'stock.homes' => ['Homes', 'Stock', ['OWNER', 'MANAGER', 'WAREHOUSE', 'SOURCING', 'TL']],
         'stock.lotCost' => ['Lot cost', 'Stock', ['OWNER', 'MANAGER', 'FINANCE']],
         'stock.lots_may' => ['Lots – may', 'Stock', ['OWNER', 'MANAGER', 'FINANCE']],
+        'stock.notListed' => ['Products not listed per shop', 'Stock', ['OWNER', 'MANAGER', 'TL']],
         'stock.opening' => ['Opening', 'Stock', ['OWNER', 'MANAGER']],
         'stock.ownership' => ['Ownership', 'Stock', ['OWNER', 'MANAGER']],
         'stock.prices' => ['Prices', 'Stock', ['OWNER', 'MANAGER', 'FINANCE', 'ACCOUNTANT', 'VA', 'TL']],

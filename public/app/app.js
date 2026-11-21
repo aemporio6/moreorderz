@@ -157,6 +157,7 @@
       if (r.startsWith('#/variations/')) return await pageVariations(+r.split('/')[2]);
       if (r.startsWith('#/due')) return await pageDue();
       if (r === '#/products' || r.startsWith('#/products?')) return await pageProducts();
+      if (r.startsWith('#/not-listed')) return await pageNotListed(Object.fromEntries(new URLSearchParams(r.split('?')[1] || '')));
       if (r.startsWith('#/alerts')) return await pageAlerts();
       if (r.startsWith('#/tasks')) return await pageTasks(r.includes('scope=all') ? 'all' : r.includes('scope=stuck_on_me') ? 'stuck_on_me' : r.includes('scope=to_approve') ? 'to_approve' : 'mine');
       if ((mt = r.match(/^#\/stock\/product\/(\d+)/))) return await pageStockProduct(+mt[1]);
@@ -1330,6 +1331,29 @@
   function dupLive(supEl, refEl, outEl, cycle) { let t; const run = () => { clearTimeout(t); t = setTimeout(async () => { const sup = supEl ? +supEl.value : 0, ref = refEl.value.trim(); outEl.textContent = ''; if ((supEl && !sup) || !ref) return;
       try { const r = await api('buying/duplicate-check?' + new URLSearchParams({ supplier: sup || '', ref, cycle: cycle || '' })); if (!r.ok) outEl.innerHTML = `${esc(r.message)} · <a href="#/cycle/${r.existing.id}">open</a>`; } catch (x) { } }, 400); };
     refEl.addEventListener('input', run); supEl && supEl.addEventListener('change', run); }
+  // ---------- products not listed per shop (R-D-58) ----------
+  async function pageNotListed(f = {}) {
+    busy(true); let d; try { d = await api('not-listed?' + new URLSearchParams(Object.entries(f).filter(([, v]) => v))); } finally { busy(false); }
+    const opt2 = (l, v, all) => `<option value="">${all}</option>` + l.map(x => `<option value="${esc(x.id ?? x)}" ${String(x.id ?? x) === String(v || '') ? 'selected' : ''}>${esc(x.name ?? x)}</option>`).join('');
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Products not listed</h1><div class="sub">Per shop: products visible to it (Pool on its marketplace or Private with the shop ticked), active, with stock, not parents – that have no ACTIVE listing there.</div></div>
+      <div class="actions"><a class="btn" href="#/import" title="Upload a listing file">Upload</a></div></div>
+      <div class="card"><div class="list-bar" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="nlShop">${opt2(d.shops, f.shop, 'All shops')}</select><select id="nlType">${opt2(d.types, f.type, 'All types')}</select>
+        <select id="nlPreset">${opt2(d.presets, f.preset, 'All preset groups')}</select><select id="nlPack">${opt2(d.packings, f.packing, 'All packings')}</select></div>
+      <div class="tbl-wrap"><table class="t"><thead><tr><th>Shop</th><th>Shop detail</th><th class="num">Total</th><th class="num">Not used</th><th></th></tr></thead><tbody>
+      ${d.rows.map(r => `<tr><td><b>${esc(r.shop_label)}</b></td><td class="small muted">${esc(r.detail)}</td><td class="num">${r.total}</td><td class="num" style="${r.not_used ? 'font-weight:600;color:#b7791f' : ''}">${r.not_used}</td><td><button class="btn sm" data-nlv="${r.shop}">View</button></td></tr>`).join('')}</tbody></table>
+      ${d.rows.length ? '' : `<div class="empty">${ic('check')}<div>No shops in your scope.</div></div>`}</div></div>
+      ${d.lines ? `<div class="card" style="margin-top:12px"><div class="card-h"><h3>Not listed · ${d.lines.count}</h3>${d.can_task && d.lines.count ? '<span style="margin-left:auto"></span><button class="btn sm" id="nlSel">Create listing task (ticked)</button> <button class="btn sm primary" id="nlAll">Create listing task (all)</button>' : ''}</div>
+        <div class="tbl-wrap"><table class="t"><thead><tr><th><input type="checkbox" id="nlChkAll"></th><th>Shop no</th><th>SKU</th><th>Product</th><th class="num">Stock</th><th>Task</th></tr></thead><tbody>
+        ${d.lines.rows.map(r => `<tr><td>${r.task_open ? '' : `<input type="checkbox" data-nl="${r.shop}:${r.product}">`}</td><td>${esc(r.shop_no)}</td><td><a href="#/stock/product/${r.product}">${esc(r.sku)}</a></td><td>${esc(r.name)}</td><td class="num">${r.stock}</td><td>${r.task_open ? '<span class="chip pend">task open</span>' : ''}</td></tr>`).join('')}</tbody></table>
+        ${d.lines.count ? '' : `<div class="empty">${ic('check')}<div>Everything is listed.</div></div>`}</div></div>` : ''}`;
+    const go3 = ch => go('#/not-listed?' + new URLSearchParams(Object.entries({ ...f, ...ch }).filter(([, v]) => v)));
+    $('#nlShop').onchange = e => go3({ shop: e.target.value }); $('#nlType').onchange = e => go3({ type: e.target.value }); $('#nlPreset').onchange = e => go3({ preset: e.target.value }); $('#nlPack').onchange = e => go3({ packing: e.target.value });
+    $$('[data-nlv]').forEach(b => b.onclick = () => go3({ shop: b.dataset.nlv }));
+    if ($('#nlChkAll')) $('#nlChkAll').onchange = e => $$('[data-nl]').forEach(x => x.checked = e.target.checked);
+    const make = async pairs => { try { toast((await api('not-listed/tasks', { method: 'POST', body: { pairs, ...f } })).message); pageNotListed(f); } catch (e) { toast(e.message, 'err'); } };
+    if ($('#nlSel')) $('#nlSel').onclick = () => { const p = $$('[data-nl]').filter(x => x.checked).map(x => x.dataset.nl.split(':').map(Number)); if (!p.length) return toast('Tick the products first.', 'err'); make(p); };
+    if ($('#nlAll')) $('#nlAll').onclick = () => make([]);
+  }
   // ---------- products list (R-D-35, Type R-D-25, Cover R-D-37, WAC R-D-38) ----------
   let PL = null;
   async function pageProducts() {

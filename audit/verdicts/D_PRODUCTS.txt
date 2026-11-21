@@ -45,7 +45,7 @@
 53|M||parent + child staged import not built
 54|M||import wizard with named mappings not built
 55|P|tracking-upload|tracking upload layouts per marketplace; the 25-column shipping export not built
-58|F|form:t_products_shop_not_listed|form only; "not listed per shop" logic not built
+58|B|class NotListed|universe per shop = products visible to that shop (Pool on its marketplace, or Private with the shop ticked; a child follows its parent), active, own stock > 0 and not out of stock, child or alone level (not parents) minus products with an ACTIVE listing in that shop (company products, not a fixed vendor); summary #/not-listed per shop: Shop, Shop detail (marketplace · owner), Total, Not used, View, Upload; drill-down Shop no / SKU / Product with filters Shop / Type / Preset group / Packing; bulk "Create listing task" (ticked or all) → LST_CREATE one per shop + product to the shop's TL, closed by itself (nightly and when the page opens) when the ACTIVE listing exists or the product left the shop's list; shop scope applies. Rule test passes (visible Pool on eBay, stock 5, no listing in shop 101 → in "Not used")
 59|M||eBay active-listings import not built
 60|M||legacy per-shop rows -> listings not built
 62|F|form:car_preset|form only

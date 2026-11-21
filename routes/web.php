@@ -151,6 +151,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('ledger', [AdminController::class, 'ledger']);
         Route::get('stock/on-hand', [StockController::class, 'onHand']);
         Route::get('products', [StockController::class, 'products']);
+        Route::get('not-listed', [StockController::class, 'notListed']);
+        Route::post('not-listed/tasks', [StockController::class, 'notListedTasks']);
         Route::post('products/view', [StockController::class, 'productsView']);
         Route::get('products/export/{format}', [StockController::class, 'productsExport'])->where('format', 'csv|xlsx|pdf');
         Route::get('stock/product/{id}', [StockController::class, 'product'])->whereNumber('id');
