@@ -226,6 +226,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('src-doc-requirements', [BuyingController::class, 'docRequirementSave']);
         Route::post('rfq/{id}/accept', [BuyingController::class, 'acceptRfq'])->whereNumber('id');
         Route::post('po', [BuyingController::class, 'createPo']);
+        Route::get('direct-po/prefill', [BuyingController::class, 'directPoPrefill']);
+        Route::post('direct-po', [BuyingController::class, 'directPo']);
         Route::get('po/{id}', [BuyingController::class, 'po'])->whereNumber('id');
         Route::post('po/{id}/confirm', [BuyingController::class, 'confirmPo'])->whereNumber('id');
         Route::post('po/{id}/landed', [BuyingController::class, 'landed'])->whereNumber('id');

@@ -1,5 +1,5 @@
 1|P|cycle_type|types FULL / DIRECT / QUICK used; HISTORICAL (old entry) type and skipped-step map per type not built
-2|P|function createPo|Direct PO in one save with FX kept; "repeat from last PO" prefill partly ("Repeat this order")
+2|B|class DirectPo|Direct PO page #/direct-po: supplier (required), Repeat from PO (default the supplier's last PO: lines, currency, incoterm, payment term, units per carton, last price), currency default supplier's, rate default today's and stored, incoterm, payment terms, expected ready, required delivery, deposit % or single 100 % term, notes; lines need the product and qty > 0, price default last paid; one transaction: cycle DIRECT approved (rfq,samples,production,qc skipped) → cycle products CONFIRMED → PO lines → cartons → confirmed PO with terms + PO_CONFIRMED → po_total = balance_amount → history DIRECT_PO_CREATED → opens the cycle on Payments; old messages; failure → "Save failed - nothing was created" (DirectPoTest)
 3|P|function confirmPo|30 / 70 schedule at confirm; cartons from units per carton not built
 4|M||repeat from cycle (copy products + RFQs) not built
 5|F|form:old_entry|form only; Old entry screen (4 sections, back-dated) not built – old purchases come by the data import

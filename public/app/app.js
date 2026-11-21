@@ -181,7 +181,8 @@
       if (r === '#/buying') return await pageBuying();
       if ((mt = r.match(/^#\/research\/(\d+)/))) return await pageResearch(+mt[1]);
       if ((mt = r.match(/^#\/cycle-extras\/(\d+)/))) return await pageCycleExtras(+mt[1]);
-      if ((mt = r.match(/^#\/cycle\/(\d+)/))) return await pageCycle(+mt[1]);
+      if (r.startsWith('#/direct-po')) return await pageDirectPo(null, null);
+      if ((mt = r.match(/^#\/cycle\/(\d+)/))) { await pageCycle(+mt[1]); if (r.includes('tab=payments')) { const h = $$('#main h3').find(x => x.textContent.startsWith('3. Payments')); if (h) h.scrollIntoView({ block: 'start' }); } return; }
       if (r === '#/quick-buy') return await pageQuickBuy();
       if (r === '#/forecast') return await pageForecast();
       if (r === '#/labels') return await pageLabels();
@@ -2630,11 +2631,46 @@
     $$('#main tr[data-id]').forEach(tr => tr.onclick = () => go('#/cycle/' + tr.dataset.id));
     if (d.rights.buy) { $('#bRes').onclick = () => openForm('src_research', null, { onSaved: r => go('#/research/' + r.id) }); $('#bPo').onclick = () => directPo(); }
   }
-  async function directPo() {
-    const p = await bpick();
-    miniForm('Direct PO', 'A purchase order without research: for a repeat order or a known supplier.', [{ name: 'supplier', label: 'Supplier', required: true, options: opt(p.suppliers, x => [x.id, x.name]) }, { name: 'product', label: 'Product', required: true, options: opt(p.products, x => [x.id, x.name]) },
-      { name: 'qty', label: 'Units', type: 'number', required: true }, { name: 'unit_price', label: 'Price per unit', type: 'number', required: true }, { name: 'currency', label: 'Currency', required: true, value: p.base, help: '3 letters, e.g. USD' },
-      { name: 'date', label: 'PO date', type: 'date', required: true, value: S.boot.today }, { name: 'deposit_pct', label: 'Deposit %', type: 'number', value: 30 }, { name: 'order_ref', label: 'Supplier PI / order no.', help: 'Exactly as issued. Keep the reference clean - versions/corrections go in the notes.' }], async v => { const r = await withDup(x => api('po', { method: 'POST', body: { ...v, ...x } })); go('#/po/' + r.id); return r; }, 'Make PO');
+  // ---------- Direct PO in one save (R-B_SOURCING-2) ----------
+  async function directPo() { go('#/direct-po'); }
+  async function pageDirectPo(sup, rep) {
+    const p = await bpick(); let d = null;
+    if (sup) { busy(true); try { d = await api('direct-po/prefill?' + new URLSearchParams({ supplier: sup, ...(rep ? { repeat: rep } : {}) })); } catch (e) { toast(e.message, 'err'); } finally { busy(false); } }
+    const L = d ? d.lines.map(x => ({ ...x })) : [];
+    if (!L.length) L.push({ product: '', name: '', sku: '', qty: '', unit_price: '', units_per_carton: '' });
+    const opt2 = (list, v, blank) => `<option value="">${blank}</option>` + list.map(x => `<option value="${x.id}" ${+x.id === +v ? 'selected' : ''}>${esc(x.name)}</option>`).join('');
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/buying">Buying</a> ›</div><h1>Direct PO</h1><div class="sub">One save makes the cycle, the confirmed PO, its lines, cartons and payment terms. Nothing is saved if any part fails.</div></div></div>
+      <div class="card"><div class="form" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">
+        <div class="fld"><label><span>Supplier *</span></label><select id="dpSup">${opt2(p.suppliers, sup, 'Select the Supplier')}</select></div>
+        ${d ? `<div class="fld"><label><span>Repeat from PO</span></label><select id="dpRep"><option value="0">— start empty —</option>${d.pos.map(x => `<option value="${x.id}" ${+x.id === +d.repeat_from ? 'selected' : ''}>${esc(x.po_number)} · ${esc(x.po_date)} · ${(+x.po_total).toFixed(2)}</option>`).join('')}</select></div>
+        <div class="fld"><label><span>Currency</span></label><input id="dpCur" value="${esc(d.currency)}" maxlength="3"></div>
+        <div class="fld"><label><span>Exchange rate (to ${esc(p.base)})</span></label><input id="dpRate" type="number" step="0.000001" value="${d.rate}"></div>
+        <div class="fld"><label><span>Incoterm</span></label><select id="dpInc">${opt2(d.incoterms, d.incoterm, '—')}</select></div>
+        <div class="fld"><label><span>Payment terms</span></label><select id="dpPt">${opt2(d.payment_terms, d.payment_term, '—')}</select></div>
+        <div class="fld"><label><span>Expected ready</span></label><input id="dpReady" type="date"></div>
+        <div class="fld"><label><span>Required delivery</span></label><input id="dpDel" type="date"></div>
+        <div class="fld"><label><span>Deposit %</span></label><input id="dpDep" type="number" value="${d.deposit_pct}"><label class="chk small"><input type="checkbox" id="dpFull"> or: single 100% term (paid in full)</label></div>
+        <div class="fld"><label><span>Supplier PI / order no.</span></label><input id="dpRef"></div>
+        <div class="fld" style="grid-column:1/-1"><label><span>Notes</span></label><input id="dpNotes" placeholder="PI number, remarks..."></div>` : ''}</div></div>
+      ${d ? `<div class="card" style="margin-top:12px"><div class="tbl-wrap"><table class="t"><thead><tr><th>Product *</th><th class="num">Qty *</th><th class="num">Unit price</th><th class="num">Units / carton</th><th class="num">Line total</th><th></th></tr></thead><tbody id="dpLines"></tbody></table></div>
+        <div style="display:flex;gap:10px;align-items:center;margin-top:8px"><button class="btn sm" id="dpAdd">${ic('plus')} Add line</button><span style="margin-left:auto">Total <b id="dpTot">0.00</b> ${esc(d.currency)}</span></div>
+        <div id="dpErr" class="small" style="color:var(--err);margin-top:6px"></div><div style="margin-top:10px"><button class="btn primary" id="dpSave">Save direct PO</button></div></div>` : '<div class="card" style="margin-top:12px"><div class="empty">Select the Supplier to start.</div></div>'}`;
+    $('#dpSup').onchange = e => pageDirectPo(e.target.value || null, null);
+    if (!d) return;
+    $('#dpRep').onchange = e => pageDirectPo(sup, e.target.value === '0' ? null : e.target.value);
+    const prodOpts = v => `<option value="">Choose…</option>` + p.products.map(x => `<option value="${x.id}" ${+x.id === +v ? 'selected' : ''}>${esc(x.name)}</option>`).join('');
+    const tot = () => { let t = 0; L.forEach(l => t += Math.round((+l.qty || 0) * (+l.unit_price || 0) * 100) / 100); $('#dpTot').textContent = t.toFixed(2); };
+    const draw = () => { $('#dpLines').innerHTML = L.map((l, i) => `<tr><td><select data-l="${i}" data-k="product">${prodOpts(l.product)}</select></td><td class="num"><input type="number" min="1" data-l="${i}" data-k="qty" value="${l.qty}" style="width:90px"></td>
+        <td class="num"><input type="number" step="0.0001" data-l="${i}" data-k="unit_price" value="${l.unit_price}" style="width:100px"></td><td class="num"><input type="number" min="0" data-l="${i}" data-k="units_per_carton" value="${l.units_per_carton || ''}" style="width:80px"></td>
+        <td class="num" data-lt="${i}">${((+l.qty || 0) * (+l.unit_price || 0)).toFixed(2)}</td><td><button class="btn sm ghost" data-del="${i}">✕</button></td></tr>`).join('');
+      $$('[data-l]').forEach(x => x.oninput = x.onchange = () => { L[+x.dataset.l][x.dataset.k] = x.value; $(`[data-lt="${x.dataset.l}"]`).textContent = ((+L[+x.dataset.l].qty || 0) * (+L[+x.dataset.l].unit_price || 0)).toFixed(2); tot(); });
+      $$('[data-del]').forEach(b => b.onclick = () => { L.splice(+b.dataset.del, 1); draw(); }); tot(); };
+    draw(); $('#dpAdd').onclick = () => { L.push({ product: '', qty: '', unit_price: '', units_per_carton: '' }); draw(); };
+    $('#dpSave').onclick = async () => { $('#dpErr').textContent = ''; busy(true);
+      try { const r = await withDup(x => api('direct-po', { method: 'POST', body: { supplier: +sup, repeat_from: +$('#dpRep').value || null, currency: $('#dpCur').value, rate: +$('#dpRate').value || null, incoterm: +$('#dpInc').value || null, payment_term: +$('#dpPt').value || null,
+          expected_ready: $('#dpReady').value || null, required_delivery: $('#dpDel').value || null, deposit_pct: +$('#dpDep').value, paid_in_full: $('#dpFull').checked, notes: $('#dpNotes').value || null, order_ref: $('#dpRef').value || null,
+          lines: L.filter(l => l.product || l.qty).map(l => ({ product: +l.product || null, qty: +l.qty || 0, unit_price: l.unit_price === '' ? null : +l.unit_price, units_per_carton: +l.units_per_carton || 0 })), ...x } }));
+        toast(r.message); BPICK = null; go(`#/cycle/${r.cycle}?tab=payments`); } catch (e) { $('#dpErr').textContent = e.message; } busy(false); };
   }
 
   async function pageResearch(id) {

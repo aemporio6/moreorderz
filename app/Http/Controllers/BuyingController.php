@@ -150,6 +150,14 @@ class BuyingController extends Controller
         return $this->run(function () use ($id) { Buy::acceptRfq($id); return ['message' => 'Quote accepted']; });
     }
 
+    /** Direct PO in one transaction (R-B_SOURCING-2): what the form opens with, and the save. */
+    public function directPoPrefill(Request $r) { $this->can($r, 'buying.BUY'); return $this->run(fn () => \App\Services\DirectPo::prefill((int) Context::ent(), (int) $r->query('supplier'), $r->filled('repeat') ? (int) $r->query('repeat') : null)); }
+    public function directPo(Request $r)
+    {
+        $this->can($r, 'buying.BUY');
+        return $this->run(fn () => \App\Services\DirectPo::save((int) Context::ent(), $r->only(['supplier', 'repeat_from', 'currency', 'rate', 'incoterm', 'payment_term', 'expected_ready', 'required_delivery', 'deposit_pct', 'paid_in_full', 'notes', 'order_ref', 'dup_reason', 'dup_checked', 'lines'])));
+    }
+
     public function createPo(Request $r)
     {
         $this->can($r, 'buying.BUY');
