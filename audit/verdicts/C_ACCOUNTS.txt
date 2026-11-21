@@ -7,7 +7,7 @@
 7|F|form:t_account_mobile|REACH group and contact checks not built
 8|P|class Merges|look-alike people found on the Merge screen; not checked at save with "Save anyway + reason"
 9|M||one-transaction quick save with status contract not built
-10|F|form:external_contact|quick form behaviour (roles pills, payment terms, bank rows) not built
+10|B|class ExternalContact|External Contact quick form: ExternalContact::meta/validate/create (old messages word for word), roles as pills from the roles master flags is_ec / is_paid / sort (migration 000085 from the old config lists), Payment Terms only with a paid role → one Job history row (marketplace + start date, blank dates NULL), repeatable address / mobile / e-mail / bank rows with + Add another and Remove from 2 rows, rows follow the current country unless set by hand, server fills a missing row country, banks of the row's country + optgroup other countries + New bank (reused by name), company none / new / existing (f_external only), PayPal e-mail required and added to E-mails; GET/POST people/external/new; ExternalContactTest; clicked in a browser
 11|M||section navigator / live status not built
 12|M||derived defaults on person save not built
 13|F|form:cat_company_house|external company flag behaviour not built

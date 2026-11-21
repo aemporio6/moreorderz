@@ -139,6 +139,14 @@ class AppController extends Controller
 
     /** Shop assignments of a person (R-C-41). */
     /** Person header: count chips and health (R-C-18). */
+    /** R-C-10: the External Contact quick form (roles pills, repeatable rows, company, banks, PayPal, payment terms). */
+    public function externalForm(\Illuminate\Http\Request $r) { Rights::check('ADD', 'external_contact'); return \App\Services\ExternalContact::meta((int) \App\Services\Context::ent()); }
+    public function externalSave(\Illuminate\Http\Request $r)
+    {
+        Rights::check('ADD', 'external_contact');
+        try { return \App\Services\ExternalContact::create((int) \App\Services\Context::ent(), $r->all(), (int) \Illuminate\Support\Facades\Auth::id()); }
+        catch (\App\Services\ValidationErrors $e) { return response()->json(['message' => 'Please fix ' . count($e->errors) . ' thing(s) before saving.', 'errors' => array_map(fn ($m) => [$m], $e->errors)], 422); }
+    }
     public function personHeader(\Illuminate\Http\Request $r, int $id) { $f = (string) RecordService::formOfTable('t_account'); Rights::check('VIEW', $f); RecordService::get($f, $id); return \App\Services\PersonHeader::for($id); }
 
     public function personShops(\Illuminate\Http\Request $r, int $id)

@@ -3489,6 +3489,64 @@
   // ---------- form: built from the registry; Quick / Full; Back, Undo, Redo, Fill from last, suggestions ----------
   const lastSaved = (() => { try { return JSON.parse(localStorage.getItem('mo_last_forms') || '{}'); } catch (e) { return {}; } })();
   // ---------- New task (R-G_CORE-2): category = SLA preset, pick-only record link, dependency by name, absence cover, weekly-limit warning ----------
+  // R-C-10: External Contact quick form – roles as pills (paid role opens Payment Terms), repeatable rows that follow the current country, banks per country
+  async function ecNew(onSaved) {
+    let M; busy(true); try { M = await api('people/external/new'); } catch (e) { busy(false); return toast(e.message, 'err'); } busy(false);
+    const D = M.default_country, row = k => ({ addresses: { line1: '', line2: '', post_code: '', counti: '', type: 'O' }, mobiles: { mobile_no: '', type: 'O' }, emails: { email: '' }, banks: { bank_id: '', new_bank_name: '', currency_id: '', account_no: '', sort_code: '', iban: '', swift: '' } }[k]);
+    const st = { account_code: M.code, title: '', first_name: '', middle_name: '', sur_name: '', current_country: D, f_active: 1, private_notes: '', roles: new Set(), all: false,
+      addresses: [], mobiles: [], emails: [], banks: [], company_mode: 'none', company_name: '', company_country: '', company_vat: '', company_id: '', paypal_name: '', paypal_email: '', job_marketplace: '', job_start_date: '', job_salary: '', job_salary_date: '' };
+    const add = k => st[k].push(Object.assign(row(k), k === 'emails' ? {} : { country: st.current_country, _auto: true }));
+    ['addresses', 'mobiles', 'emails', 'banks'].forEach(add);
+    let err = {};
+    const paid = () => M.roles.some(r => r.is_paid && st.roles.has(r.id));
+    const cOpt = v => M.countries.map(c => `<option value="${c.id}" ${+v === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
+    const E = k => err[k] ? `<div class="errtext">${esc(err[k][0] || err[k])}</div>` : '';
+    const inp = (path, v, ph = '', t = 'text') => `<input data-p="${path}" type="${t}" value="${esc(v ?? '')}" placeholder="${esc(ph)}" autocomplete="off">`;
+    const fld = (label, html, ek, req) => `<div class="fld ${ek && err[ek] ? 'has-err' : ''}" data-ek="${ek || ''}"><label><span>${esc(label)}</span>${req ? ' <span class="req">*</span>' : ''}</label>${html}${ek ? E(ek) : ''}</div>`;
+    const bankSel = (b, i) => { const here = M.banks.filter(x => x.country === +b.country), other = M.banks.filter(x => x.country !== +b.country);
+      return `<select data-p="banks.${i}.bank_id"><option value="">Choose…</option>${here.map(x => `<option value="${x.id}" ${String(b.bank_id) === String(x.id) ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}${other.length ? `<optgroup label="Banks in other countries">${other.map(x => `<option value="${x.id}" ${String(b.bank_id) === String(x.id) ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</optgroup>` : ''}<option value="new" ${b.bank_id === 'new' ? 'selected' : ''}>+ New bank (type the name)</option></select>`; };
+    const rep = (k, title, body) => `<div class="fsec"><div class="fsec-h"><b>${title}s</b></div>${st[k].map((r, i) => `<div style="border:1px dashed var(--line);border-radius:8px;padding:8px;margin:6px 0"><div style="display:flex"><b class="small">${title} ${i + 1}</b><span style="flex:1"></span>${st[k].length >= 2 ? `<a href="#" class="small" data-rm="${k}.${i}">Remove</a>` : ''}</div><div class="form">${body(r, i)}</div></div>`).join('')}<button type="button" class="btn sm" data-addrow="${k}">+ Add another</button></div>`;
+    const ec = M.roles.filter(r => r.is_ec), rest = M.roles.filter(r => !r.is_ec).sort((a, b) => a.name.localeCompare(b.name));
+    const pill = r => `<button type="button" class="chip ${st.roles.has(r.id) ? 'accent' : 'plain'}" data-role="${r.id}" title="${r.is_paid ? 'Paid role – opens Payment Terms' : ''}">${st.roles.has(r.id) ? '✓ ' : ''}${esc(r.name)}${r.is_paid ? ' £' : ''}</button>`;
+    const html = () => `
+      <div class="fsec ${err.roles ? 'has-err' : ''}"><div class="fsec-h"><b>Type &amp; role</b><span class="small muted">pick one or more</span></div><div style="display:flex;gap:6px;flex-wrap:wrap" data-ek="roles">${(ec.length ? ec : rest).map(pill).join('')}${ec.length && rest.length ? (st.all ? rest.map(pill).join('') : `<a href="#" data-allroles class="small">Show all roles (${rest.length} more)</a>`) : ''}</div>${E('roles')}</div>
+      <div class="fsec"><div class="fsec-h"><b>Profile</b></div><div class="form">
+        ${fld('Account Code', inp('account_code', st.account_code), 'account_code', true)}${fld('Title', `<select data-p="title"><option value="">–</option>${M.titles.map(t => `<option ${st.title === t ? 'selected' : ''}>${t}</option>`).join('')}</select>`, 'title')}
+        ${fld('First Name', inp('first_name', st.first_name), 'first_name', true)}${fld('Middle Name', inp('middle_name', st.middle_name), 'middle_name')}${fld('Surname', inp('sur_name', st.sur_name), 'sur_name', true)}
+        ${fld('Current Country', `<select data-p="current_country">${cOpt(st.current_country)}</select>`, 'current_country', true)}${fld('Private Notes', `<textarea data-p="private_notes" rows="2">${esc(st.private_notes)}</textarea>`, 'private_notes')}</div></div>
+      ${rep('addresses', 'Address', (a, i) => fld('Country', `<select data-p="addresses.${i}.country">${cOpt(a.country)}</select>`, `addresses[${i}][country]`) + fld('Type', `<select data-p="addresses.${i}.type"><option value="O" ${a.type === 'O' ? 'selected' : ''}>Office</option><option value="H" ${a.type === 'H' ? 'selected' : ''}>Home</option></select>`) + fld('Address', inp(`addresses.${i}.line1`, a.line1, 'street, building, unit'), `addresses[${i}][line1]`) + fld('Address line 2', inp(`addresses.${i}.line2`, a.line2), `addresses[${i}][line2]`) + fld('County/City', inp(`addresses.${i}.counti`, a.counti), `addresses[${i}][counti]`) + fld('Post Code', inp(`addresses.${i}.post_code`, a.post_code), `addresses[${i}][post_code]`))}
+      ${rep('mobiles', 'Mobile', (m, i) => fld('Country', `<select data-p="mobiles.${i}.country">${cOpt(m.country)}</select>`, `mobiles[${i}][country]`) + fld('Mobile No', inp(`mobiles.${i}.mobile_no`, m.mobile_no, '', 'tel'), `mobiles[${i}][mobile_no]`) + fld('Office/Home', `<select data-p="mobiles.${i}.type"><option value="O" ${m.type === 'O' ? 'selected' : ''}>Office</option><option value="H" ${m.type === 'H' ? 'selected' : ''}>Home</option></select>`))}
+      ${rep('emails', 'E-mail', (m, i) => fld('Email', inp(`emails.${i}.email`, m.email, '', 'email'), `emails[${i}][email]`))}
+      <div class="fsec"><div class="fsec-h"><b>Company</b></div><div class="seg" style="margin-bottom:6px">${[['none', 'No company'], ['new', 'New company'], ['existing', 'Company already in the system']].map(([v, l]) => `<button type="button" data-cmode="${v}" class="${st.company_mode === v ? 'on' : ''}">${l}</button>`).join('')}</div><div class="form">
+        ${st.company_mode === 'new' ? fld('Company Name', inp('company_name', st.company_name), 'company_name', true) + fld('Country', `<select data-p="company_country"><option value="">Same as the person</option>${cOpt(st.company_country)}</select>`, 'company_country') + fld('VAT No (optional)', inp('company_vat', st.company_vat), 'company_vat') : ''}
+        ${st.company_mode === 'existing' ? fld('Company', M.companies.length ? `<select data-p="company_id"><option value="">Choose…</option>${M.companies.map(c => `<option value="${c.id}" ${String(st.company_id) === String(c.id) ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>` : '<select disabled><option>(none yet)</option></select>', 'company_id', true) : ''}</div></div>
+      ${rep('banks', 'Bank', (b, i) => fld('Bank Country', `<select data-p="banks.${i}.country">${cOpt(b.country)}</select>`, `banks[${i}][country]`) + fld('Bank Name', bankSel(b, i), `banks[${i}][bank_id]`) + (b.bank_id === 'new' ? fld('New bank name', inp(`banks.${i}.new_bank_name`, b.new_bank_name), `banks[${i}][new_bank_name]`, true) : '') + fld('Currency (optional)', `<select data-p="banks.${i}.currency_id"><option value="">–</option>${M.currencies.map(c => `<option value="${c.id}" ${String(b.currency_id) === String(c.id) ? 'selected' : ''}>${esc(c.code)}</option>`).join('')}</select>`, `banks[${i}][currency_id]`) + fld('Account Number', inp(`banks.${i}.account_no`, b.account_no, 'or the IBAN'), `banks[${i}][account_no]`) + fld('Sort Code', inp(`banks.${i}.sort_code`, b.sort_code), `banks[${i}][sort_code]`) + fld('IBAN', inp(`banks.${i}.iban`, b.iban), `banks[${i}][iban]`) + fld('SWIFT / BIC', inp(`banks.${i}.swift`, b.swift), `banks[${i}][swift]`))}
+      <div class="fsec"><div class="fsec-h"><b>PayPal</b><span class="small muted">optional – the e-mail is added to E-mails</span></div><div class="form">${fld('PayPal Name', inp('paypal_name', st.paypal_name), 'paypal_name')}${fld('PayPal Email', inp('paypal_email', st.paypal_email, '', 'email'), 'paypal_email')}</div></div>
+      ${paid() ? `<div class="fsec"><div class="fsec-h"><b>Payment Terms</b><span class="small muted">saved as one Job history row (renewal, share %, £ rate can be added there)</span></div><div class="form">${fld('Marketplace', `<select data-p="job_marketplace"><option value="">Choose…</option>${M.marketplaces.map(m => `<option value="${m.id}" ${String(st.job_marketplace) === String(m.id) ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select>`, 'job_marketplace')}${fld('Start Date', inp('job_start_date', st.job_start_date, '', 'date'), 'job_start_date')}${fld('Salary / Rate', inp('job_salary', st.job_salary, 'whole number'), 'job_salary')}${fld('Salary Date', inp('job_salary_date', st.job_salary_date, '', 'date'), 'job_salary_date')}</div></div>` : ''}`;
+    const m = modal('New · External Contact', 'Quick form – roles, how to reach, company, bank, PayPal and payment terms in one save.', `<div id="ecBox" class="fhost"></div>`,
+      `<span class="left small" id="ecMsg" style="color:var(--err)"></span><button class="btn" id="ecCancel">Cancel</button><button class="btn primary" id="ecSave">${ic('save')} Save</button>`);
+    const box = $('#ecBox', m.ov), draw = () => { box.innerHTML = html(); };
+    const setP = (p, v) => { const k = p.split('.'); if (k.length === 1) st[k[0]] = v; else st[k[0]][+k[1]][k[2]] = v; };
+    box.addEventListener('input', e => { const p = e.target.dataset.p; if (p && e.target.tagName !== 'SELECT') { setP(p, e.target.value); const w = e.target.closest('.fld'); if (w && w.classList.contains('has-err')) { w.classList.remove('has-err'); const t = $('.errtext', w); t && t.remove(); } } });
+    box.addEventListener('change', e => { const p = e.target.dataset.p; if (!p) return;
+      if (p === 'current_country') { const old = st.current_country; st.current_country = e.target.value; ['addresses', 'mobiles', 'banks'].forEach(k => st[k].forEach(r => { if (r._auto && String(r.country) === String(old)) r.country = st.current_country; })); return draw(); }
+      setP(p, e.target.value); const k = p.split('.');
+      if (k[2] === 'country') { st[k[0]][+k[1]]._auto = false; if (k[0] === 'banks') return draw(); }
+      if (k[2] === 'bank_id') return draw(); });
+    box.addEventListener('click', e => { const t = e.target;
+      const r = t.closest('[data-role]'); if (r) { const id = +r.dataset.role; st.roles.has(id) ? st.roles.delete(id) : st.roles.add(id); delete err.roles; return draw(); }
+      if (t.closest('[data-allroles]')) { e.preventDefault(); st.all = true; return draw(); }
+      const a = t.closest('[data-addrow]'); if (a) { add(a.dataset.addrow); return draw(); }
+      const rm = t.closest('[data-rm]'); if (rm) { e.preventDefault(); const [k, i] = rm.dataset.rm.split('.'); st[k].splice(+i, 1); err = {}; return draw(); }
+      const c = t.closest('[data-cmode]'); if (c) { st.company_mode = c.dataset.cmode; return draw(); } });
+    $('#ecCancel', m.ov).onclick = m.close;
+    $('#ecSave', m.ov).onclick = async () => { const clean = x => x.map(r => { const o = { ...r }; delete o._auto; return o; });
+      const body = { ...st, roles: [...st.roles], addresses: clean(st.addresses), mobiles: clean(st.mobiles), emails: st.emails, banks: clean(st.banks) }; delete body.all;
+      busy(true); try { const r = await api('people/external/new', { method: 'POST', body }); m.close(); toast(r.message, 'ok', r.open); onSaved ? onSaved(r) : go(r.open); }
+      catch (x) { err = x.errors || {}; draw(); $('#ecMsg', m.ov).textContent = x.message; const f = $('.has-err', box); f && f.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+      busy(false); };
+    draw();
+  }
   async function taskNew(preset = {}, onSaved) {
     let f; try { f = await api('tasks/new'); } catch (e) { return toast(e.message, 'err'); }
     const st = { record: preset.record || null, depends: null };
@@ -3533,6 +3591,7 @@
     $$('[data-exo]', m.ov).forEach(a => a.onclick = ev => { ev.preventDefault(); m.close(); openForm(x.next.form, +a.dataset.exo, { onSaved: opt.onSaved }); });
   }
   async function openForm(key, id, opt = {}) {
+    if (key === 'external_contact' && !id && !opt.full) return ecNew(opt.onSaved);      // R-C-10: the External Contact quick form
     if (key === 'task' && !id) return taskNew(opt.preset || {}, opt.onSaved);      // R-G_CORE-2: the task form with SLA prefill and pick-only links
     busy(true); let def, rec, vinfo = {};
     try { def = await api('form/' + key); if (id) { vinfo = await api(`record/${key}/${id}`); rec = vinfo.values; } else rec = def.blank; } catch (e) { busy(false); return toast(e.message, 'err'); }
