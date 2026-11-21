@@ -25,6 +25,9 @@ class AppServiceProvider extends ServiceProvider
         \App\Services\Approvals::handler('STOCK_ADJUST', function (object $a, bool $ok) {
             if ($ok) { $d = json_decode($a->change_json, true)['adjust']; \App\Services\StockService::adjust((int) $a->fk_id_ent, (int) $d['product'], (int) $d['location'], (int) $d['qty'], $d['reason'], isset($d['unit_cost']) ? ['unit_cost' => $d['unit_cost']] : []); }
         });
+        \App\Services\Approvals::handler('SALE_BULK_DELETE', function (object $a, bool $ok) {      // more than 500 sale lines: carried out only after a second person said yes
+            if ($ok) { $d = json_decode($a->change_json, true); \App\Services\SaleLines::bulkApply((int) $d['shop'], (string) $d['from'], (string) $d['to'], (string) $d['reason']); }
+        });
         \App\Services\Approvals::handler('EXPENSE', function (object $a, bool $ok) {
             if ($ok) { \Illuminate\Support\Facades\DB::table('fin_expenses')->where('id', $a->entity_id)->update(['f_active' => 1]); \App\Services\MoneyService::postExpense((int) $a->entity_id); }
         });

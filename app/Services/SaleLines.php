@@ -277,6 +277,46 @@ class SaleLines
     }
 
     // ---------- R-A_SALES-40: delete a line or a whole month (to the recycle bin, with Undo) ----------
+    // ---------- R-A_SALES-53: bulk delete of the Pending sales of a shop between two dates ----------
+    public const BULK_WARNING = 'This deletes all rows between From and To for the selected shop.';
+    public const BULK_SECOND_APPROVAL = 500;
+
+    private static function bulkQuery(int $shopId, string $from, string $to) { return DB::table('t_sales')->where('fk_id_ent', Context::ent())->where('fk_id_branch', $shopId)->whereBetween('d_order', [$from, $to])->where('sale_source', '<>', 'history')->where('status', 'Pending')->where(fn ($w) => $w->whereNull('f_locked')->orWhere('f_locked', 0)); }
+
+    /** Preview: "n lines in m batches will be deleted" – only Pending lines; confirmed / refunded ones are counted as left alone. */
+    public static function bulkPreview(int $shopId, ?string $from, ?string $to, ?object $u): array
+    {
+        Perm::need($u, 'orders.saleBulkDelete');
+        if (! $shopId) throw new \InvalidArgumentException('Select a shop.'); foreach ([$from, $to] as $d) if (! $d || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) throw new \InvalidArgumentException('From and To dates are required.');
+        if ($from > $to) throw new \InvalidArgumentException('From must be on or before To.');
+        $shop = DB::table('t_branches')->where('id', $shopId)->where('fk_id_ent', Context::ent())->first() ?? throw new \InvalidArgumentException('Shop not found.'); if (! Perm::shopAllowed($u, $shopId)) abort(403, "You don't have rights for this shop.");
+        $q = self::bulkQuery($shopId, $from, $to); $n = (clone $q)->count(); $m = (clone $q)->where('fk_id_import', '>', 0)->distinct()->count('fk_id_import');
+        $other = DB::table('t_sales')->where('fk_id_ent', Context::ent())->where('fk_id_branch', $shopId)->whereBetween('d_order', [$from, $to])->where('sale_source', '<>', 'history')->count() - $n;
+        return ['lines' => $n, 'batches' => $m, 'left_alone' => $other, 'text' => "$n line(s) in $m batch(es) will be deleted" . ($other ? ". $other line(s) that are confirmed or refunded stay." : '.'), 'warning' => self::BULK_WARNING, 'shop' => SalesImport::label($shop),
+            'needs_approval' => $n > self::BULK_SECOND_APPROVAL, 'approval_text' => $n > self::BULK_SECOND_APPROVAL ? 'More than ' . self::BULK_SECOND_APPROVAL . ' lines: a second person must approve before anything is deleted.' : null];
+    }
+
+    /** Apply with a reason. Up to 500 lines at once; above that the request waits for a second person (Approvals) and is carried out on approval. */
+    public static function bulkDelete(int $shopId, ?string $from, ?string $to, string $reason, ?object $u): array
+    {
+        $p = self::bulkPreview($shopId, $from, $to, $u); if (mb_strlen(trim($reason)) < 3) throw new \InvalidArgumentException('Write the reason.');
+        if (! $p['lines']) throw new \InvalidArgumentException('There are no Pending sale lines between these dates for this shop.');
+        if ($p['needs_approval']) { $id = Approvals::request((int) Context::ent(), 'SALE_BULK_DELETE', 't_branches', $shopId, (float) $p['lines'], ['shop' => $shopId, 'from' => $from, 'to' => $to, 'reason' => trim($reason), 'lines' => $p['lines']], "Bulk delete of {$p['lines']} sale lines of {$p['shop']} ($from to $to)");
+            return ['message' => "{$p['lines']} lines is more than " . self::BULK_SECOND_APPROVAL . ': the request waits for a second person. Nothing was deleted yet.', 'waiting' => true, 'approval' => $id, 'lines' => $p['lines']]; }
+        return self::bulkApply($shopId, $from, $to, trim($reason));
+    }
+
+    /** The delete itself: every Pending line goes to the recycle bin (30 days, Undo), its stock reservation is given back. */
+    public static function bulkApply(int $shopId, string $from, string $to, string $reason): array
+    {
+        return DB::transaction(function () use ($shopId, $from, $to, $reason) {
+            $group = "bulk:$shopId:" . time(); $n = 0; $imports = [];
+            foreach (self::bulkQuery($shopId, $from, $to)->lockForUpdate()->get() as $s) { if ((int) $s->fk_id_import) $imports[(int) $s->fk_id_import] = 1; self::bin($s, $group, mb_substr("Bulk delete $from to $to: $reason", 0, 250)); $n++; }
+            Audit::log('t_branches', $shopId, 'DELETE', ['from' => $from, 'to' => $to, 'lines' => $n, 'batches' => count($imports)], 'Bulk delete of sales: ' . $reason, (int) Context::ent());
+            return ['message' => "$n sale line(s) deleted. They stay in the recycle bin for 30 days.", 'lines' => $n, 'undo' => $group, 'waiting' => false];
+        });
+    }
+
     private static function bin(object $s, string $group, string $note): void
     {
         DB::table('mo_recycle_bin')->insert(['fk_id_ent' => (int) $s->fk_id_ent, 'table_name' => 't_sales', 'row_id' => (int) $s->id, 'label' => mb_substr("Order {$s->order_no} · {$s->sku}", 0, 255), 'group_key' => $group, 'row_json' => json_encode((array) $s), 'deleted_by' => Auth::id(), 'deleted_at' => now(), 'note' => $note]);
@@ -415,7 +455,7 @@ class SaleLines
         $mps = DB::table('cat_marketplaces')->whereIn('fk_id_ent', [0, $ent])->orderBy('marketplace_short')->get(['id', DB::raw("COALESCE(NULLIF(marketplace_short,''), NULLIF(marketplace_descr,''), CONCAT('Marketplace ', id)) as name"), 'f_active']);
         $shops = array_map(fn ($x) => ['id' => $x['id'], 'marketplace' => $x['marketplace'], 'name' => $x['label'], 'active' => $x['active'], 'va' => $x['va'], 'va_pct' => $x['va_pct']], ShopLabel::list($u));      // the one shop label, sorted by marketplace then shop no
         $base = ['marketplaces' => $mps, 'shops' => $shops, 'periods' => self::periods(), 'page_sizes' => self::PAGE_SIZES, 'natures' => self::NATURES, 'source_tags' => self::SOURCE_TAGS,
-            'rights' => ['see_cost' => $u && Perm::has($u, 'orders.MONEY'), 'delete_month' => $u && Perm::has($u, 'orders.saleDeleteMonth'), 'export' => $u && Perm::has($u, 'orders.saleExport'), 'rematch' => $u && Perm::has($u, 'orders.dsRematch'), 'ds_link' => $u && Perm::has($u, 'orders.dsLink'), 'unlock' => $u && Perm::has($u, 'orders.saleUnlock'), 'import' => $u && Perm::has($u, 'orders.saleImport'), 'confirm' => $u && Perm::has($u, 'orders.CONFIRM')],
+            'rights' => ['see_cost' => $u && Perm::has($u, 'orders.MONEY'), 'delete_month' => $u && Perm::has($u, 'orders.saleDeleteMonth'), 'export' => $u && Perm::has($u, 'orders.saleExport'), 'bulk_delete' => $u && Perm::has($u, 'orders.saleBulkDelete'), 'rematch' => $u && Perm::has($u, 'orders.dsRematch'), 'ds_link' => $u && Perm::has($u, 'orders.dsLink'), 'unlock' => $u && Perm::has($u, 'orders.saleUnlock'), 'import' => $u && Perm::has($u, 'orders.saleImport'), 'confirm' => $u && Perm::has($u, 'orders.CONFIRM')],
             'self_check' => SalesImport::selfCheckMessage()];
         if (! empty($f['batch']) && ($bt = DB::table('t_sale_imports as i')->join('t_branches as b', 'b.id', '=', 'i.fk_id_branch')->where('i.id', (int) $f['batch'])->where('i.fk_id_ent', $ent)->first(['i.id', 'i.status', 'i.error_rows', 'i.period_month', 'i.period_year', 'i.fk_id_branch', 'b.shop_no', 'b.shop_name'])))
             $base['batch_info'] = ['id' => $bt->id, 'label' => 'Showing one import only: ' . $bt->shop_no . ' (' . $bt->shop_name . ') - ' . SalesImport::monthName((int) $bt->period_month, (int) $bt->period_year), 'status' => $bt->status, 'errors' => (int) $bt->error_rows, 'shop' => (int) $bt->fk_id_branch, 'month' => sprintf('%04d-%02d', $bt->period_year, $bt->period_month)];

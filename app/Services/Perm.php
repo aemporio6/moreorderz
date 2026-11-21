@@ -168,6 +168,7 @@ class Perm
         $c['orders.vaStatementApprove'] = ['Approve or send back a VA statement', 'Orders and dispatch', ['OWNER']];
         $c['orders.saleReports'] = ['See the Annual and the Detailed sale report', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'FINANCE']];
         $c['orders.saleExport'] = ['Export the sales list (PDF, Word, Excel, CSV)', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'FINANCE']];
+        $c['orders.saleBulkDelete'] = ['Delete the Pending sales of a shop between two dates (bulk)', 'Orders and dispatch', ['OWNER']];
         $c['orders.saleUnlock'] = ['Unlock a confirmed month of sales (with a reason)', 'Orders and dispatch', ['OWNER']];
         $c['orders.saleImport'] = ['Import the monthly sales file of a shop', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
         $c['orders.saleColumns'] = ['Set the Sale Columns of a marketplace (which CSV column is which field)', 'Orders and dispatch', ['OWNER', 'MANAGER']];
@@ -313,7 +314,7 @@ class Perm
     }
 
     /** Rights that stay with the Owner for ever – nobody can hand out the key to the rights themselves. */
-    public const OWNER_ONLY = ['admin.permissions', 'orders.saleUnlock'];
+    public const OWNER_ONLY = ['admin.permissions', 'orders.saleUnlock', 'orders.saleBulkDelete'];
 
     public static function known(string $code): bool
     {

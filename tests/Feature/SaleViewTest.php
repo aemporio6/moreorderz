@@ -197,4 +197,26 @@ class SaleViewTest extends TestCase
         $other = \App\Models\User::find(DB::table('t_users')->insertGetId($this->fill('t_users', ['fk_id_ent' => 1, 'login_id' => 'o2@demo.test', 'display_name' => 'O2', 'role_code' => 'OWNER', 'f_active' => 1]))); $this->actingAs($other); $this->get('/api/sales/export/job/' . $q['job'])->assertStatus(404);      // only the person who asked
         @unlink(storage_path('app/' . $j->file_path)); @rmdir(dirname(storage_path('app/' . $j->file_path)));
     }
+
+    public function test_bulk_delete_is_owner_only_previews_and_goes_to_the_recycle_bin(): void
+    {
+        $this->world(); $lines = []; for ($i = 1; $i <= 7; $i++) $lines[] = "K-$i," . sprintf('%02d', $i) . "/07/2026,Ann,BOWL-01,Dog bowl,1,9.00,RM"; $lines[] = 'K-9,20/07/2026,Bob,BOWL-01,Dog bowl,1,9.00,RM'; $r = $this->import($lines);
+        DB::table('t_sales')->where('order_no', 'K-7')->update(['status' => 'Confirmed', 'f_locked' => 1]);
+        $va = \App\Models\User::find(DB::table('t_users')->insertGetId($this->fill('t_users', ['fk_id_ent' => 1, 'login_id' => 'va@demo.test', 'display_name' => 'V', 'role_code' => 'VA', 'f_active' => 1])));
+        $this->actingAs($va); \App\Services\Perm::flush(); $this->postJson('/api/sales/bulk-delete', ['shop' => $this->shop, 'from' => '2026-07-01', 'to' => '2026-07-07', 'reason' => 'x'])->assertStatus(403);      // a VA calls bulk delete → 403
+        $this->actingAs($this->owner); \App\Services\Perm::flush();
+        $p = SaleLines::bulkPreview($this->shop, '2026-07-01', '2026-07-07', $this->owner); $this->assertSame([6, 1, 1, false], [$p['lines'], $p['batches'], $p['left_alone'], $p['needs_approval']]);
+        $this->assertSame('6 line(s) in 1 batch(es) will be deleted. 1 line(s) that are confirmed or refunded stay.', $p['text']); $this->assertSame('This deletes all rows between From and To for the selected shop.', $p['warning']);
+        foreach ([[0, '2026-07-01', '2026-07-07', 'Select a shop.'], [$this->shop, '', '2026-07-07', 'From and To dates are required.']] as [$s, $f, $t, $msg]) { try { SaleLines::bulkPreview($s, $f, $t, $this->owner); $this->fail('no error'); } catch (\InvalidArgumentException $e) { $this->assertSame($msg, $e->getMessage()); } }
+        try { SaleLines::bulkDelete($this->shop, '2026-07-01', '2026-07-07', ' ', $this->owner); $this->fail('no error'); } catch (\InvalidArgumentException $e) { $this->assertSame('Write the reason.', $e->getMessage()); }
+        $x = SaleLines::bulkDelete($this->shop, '2026-07-01', '2026-07-07', 'wrong file', $this->owner); $this->assertSame([6, false], [$x['lines'], $x['waiting']]);
+        $this->assertSame([2, 6], [DB::table('t_sales')->count(), DB::table('mo_recycle_bin')->where('group_key', $x['undo'])->count()]); $this->assertSame(2, (int) DB::table('t_sale_imports')->where('id', $r['batch'])->value('saved_rows'));
+        SaleLines::restore($x['undo']); $this->assertSame(8, DB::table('t_sales')->count());      // Undo brings them back
+        // more than 500 lines: nothing is deleted until a second person approves
+        $one = (array) DB::table('t_sales')->where('order_no', 'K-1')->first(); unset($one['id']); $bulk = []; for ($i = 0; $i < 510; $i++) $bulk[] = ['order_no' => "Z-$i", 'raw_csv' => null] + $one; DB::table('t_sales')->insert($bulk);
+        $w = SaleLines::bulkDelete($this->shop, '2026-07-01', '2026-07-07', 'test month', $this->owner); $this->assertTrue($w['waiting']); $this->assertSame(518, DB::table('t_sales')->count());
+        try { \App\Services\Approvals::decide($w['approval'], true); $this->fail('no error'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('a second person must decide', $e->getMessage()); }
+        $o2 = \App\Models\User::find(DB::table('t_users')->insertGetId($this->fill('t_users', ['fk_id_ent' => 1, 'login_id' => 'o2@demo.test', 'display_name' => 'O2', 'role_code' => 'OWNER', 'f_active' => 1]))); $this->actingAs($o2); \App\Services\Context::set(1, (int) $o2->id); \App\Services\Perm::flush();
+        \App\Services\Approvals::decide($w['approval'], true); $this->assertSame(2, DB::table('t_sales')->count());
+    }
 }

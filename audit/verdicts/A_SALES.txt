@@ -50,7 +50,7 @@
 50|P|function annual|filters year 2020–2030, marketplace → shop (shop label) → the shop's VA and %, project / vendor, vendor inventory, company; always 12 months + Year Total; Sales, Buy, Qty, Fee, Profit before fee, After fee, VA share = Σ saved batch shares, Store share, Net, Loss; cost-basis label; CSV / PDF (profit green, loss red) / Excel with the rule's names and column order; 12 tiles + bar chart. Tested with the rule's example (800 / 40 / 10 % → 760 / 76 / 684). Missing: VA read from the shop assignment role (the shop's seller is used)
 51|B|function detailed|one row per shop sorted by marketplace then shop no with the shop label, Owner and VA; per month Total, Purchase, Qty, Profit + Annual; filters year, project / vendor, vendor inventory, owner, VA; PDF on the large square page, CSV, Excel; heat colours on profit; click a cell → the sales list of that shop + month. Tested: the cell equals the list's strip
 52|P|class OldImport|old sales copied as history lines; legacy profit columns / compare report per rule not built
-53|M||bulk delete with preview / approval not built
+53|B|function bulkDelete|inputs shop + From + To (read-only from the filter, all required); preview "n line(s) in m batch(es) will be deleted", only Pending lines; apply with a required reason, every line to the recycle bin with its stock reservation given back and Undo; Owner only (the right can never be handed out); above 500 lines a second person must approve before anything is deleted; the warning text is kept. Tested with the rule's example (VA → 403, preview, recycle bin, second approval)
 54|M||Gen-1 SALE sheet type not built
 55|M||Etsy orders type not built
 56|M||supplier orders (BUY) file type not built

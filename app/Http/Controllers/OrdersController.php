@@ -418,4 +418,7 @@ class OrdersController extends Controller
 
     public function saleExportQueue(Request $r) { return $this->run(function () use ($r) { $this->can($r, 'orders.saleExport'); return \App\Services\SaleView::queue($this->saleFilters($r), strtolower((string) $r->input('format', 'xlsx')), $r->user()); }); }
     public function saleExportJob(Request $r, int $id) { $this->can($r, 'orders.saleExport'); $f = \App\Services\SaleView::jobFile($id, $r->user()); return response(file_get_contents($f['path']), 200, ['Content-Type' => $f['type'], 'Content-Disposition' => 'attachment; filename="' . $f['name'] . '"']); }
+
+    public function saleBulkPreview(Request $r) { return $this->run(fn () => \App\Services\SaleLines::bulkPreview((int) $r->query('shop'), $r->query('from'), $r->query('to'), $r->user())); }
+    public function saleBulkDelete(Request $r) { return $this->run(fn () => \App\Services\SaleLines::bulkDelete((int) $r->input('shop'), $r->input('from'), $r->input('to'), (string) $r->input('reason'), $r->user())); }
 }
