@@ -74,6 +74,7 @@ class Money2Test extends TestCase
         $reason = fn (int $id) => DB::table('fin_lot_consumption')->where('fk_id_sale', $id)->pluck('reason')->unique()->values()->all();
         $this->assertSame([[], ['WRITE_OFF'], ['SALE'], ['SALE']], [$reason($a), $reason($b), $reason($c), $reason($d)]);      // the lost product is marked as a write-off in the lot ledger
         $this->assertSame(45.0, Ledger::balance(1, '1100', null, $this->shop));      // revenue = what is left of the totals: 0 + 0 + 5 + 40
+        $this->actingAs($this->owner); $row = collect(\App\Services\SaleLines::list(['marketplace' => (int) DB::table('t_branches')->where('id', $this->shop)->value('fk_id_marketplace'), 'from' => '2026-09-01', 'to' => '2026-09-30'], $this->owner)['rows'])->firstWhere('id', $d); $this->assertSame('Pool', $row['lot_owners']);      // after Confirm the line shows the owner(s) of the lots it was taken from (R-A_SALES-30)
     }
 
     public function test_refund_proposal_accept_books_the_refund_and_reject_needs_a_reason(): void

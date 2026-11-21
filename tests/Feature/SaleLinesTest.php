@@ -67,6 +67,20 @@ class SaleLinesTest extends TestCase
         $this->assertStringContainsString('Sold at 10.00, listed at 12.99', (string) DB::table('tasks')->where('rule_code', 'SAL_PRICE_MISMATCH')->value('title'));
     }
 
+    public function test_visibility_and_investors_on_a_line_follow_the_product_then_its_parent(): void
+    {
+        $this->world(); $row = (array) DB::table('t_product_vendors')->where('id', $this->product)->first(); unset($row['id']); foreach (array_keys($row) as $k) { if (strtolower($k) === 'sku_vendor') $row[$k] = 'BOWL-01-BLUE'; if (strtolower($k) === 'f_parent') $row[$k] = 3; if (strtolower($k) === 'f_id_parent') $row[$k] = $this->product; }
+        $child = DB::table('t_product_vendors')->insertGetId($row); $acc = fn (string $n) => DB::table('t_account')->insertGetId($this->fill('t_account', ['fk_id_ent' => 1, 'first_name' => $n, 'sur_name' => '', 'f_active' => 1]));
+        foreach (['X', 'Y'] as $n) DB::table('t_product_investors')->insert($this->fill('t_product_investors', ['fk_id_product' => $this->product, 'fk_id_account' => $acc($n)]));
+        $this->assertSame(['X', 'Y'], SaleLines::investorsOf($child, $this->product)); $this->assertSame([], SaleLines::investorsOf($child, null));      // a child with no own investor shows the parent's: "X, Y"
+        DB::table('t_product_investors')->insert($this->fill('t_product_investors', ['fk_id_product' => $child, 'fk_id_account' => $acc('Z')])); $this->assertSame(['Z', 'X', 'Y'], SaleLines::investorsOf($child, $this->product));
+        $vis = fn (int $p, string $m, int $shop = 0) => DB::table('t_product_visibility')->insert($this->fill('t_product_visibility', ['fk_id_product' => $p, 'fk_id_marketplace' => $this->mp, 'visibility_mode' => $m, 'fk_id_branch' => $shop]));
+        $this->assertSame('', SaleLines::visibility($child, $this->product, $this->mp, $this->shop)); $vis($this->product, 'pool'); $this->assertSame('POOL', SaleLines::visibility($child, $this->product, $this->mp, $this->shop));      // the parent's row is the fallback
+        $id = $this->order('V-1', 12.99, 1, null, 'BOWL-01-BLUE'); $this->assertSame('POOL', DB::table('t_sales')->where('id', $id)->value('visibility_mode'));      // stored on the line at import
+        $vis($child, 'private', $this->shop); $this->assertSame('PRIVATE', SaleLines::visibility($child, $this->product, $this->mp, $this->shop)); $this->assertSame('POOL', SaleLines::visibility($child, $this->product, $this->mp, $this->shop + 999));      // per marketplace × shop: only that shop is Private
+        $r = collect(SaleLines::list(['marketplace' => $this->mp, 'q' => 'V-1', 'from' => '2000-01-01', 'to' => '2100-01-01'], $this->owner)['rows'])->firstWhere('id', $id); $this->assertSame(['Private', 'Z, X, Y'], [$r['visibility'], $r['investor']]);      // the list shows both live
+    }
+
     public function test_a_variation_child_reads_its_own_marketplace_price_and_shipping(): void
     {
         $this->world(); $row = (array) DB::table('t_product_vendors')->where('id', $this->product)->first(); unset($row['id']); foreach (array_keys($row) as $k) { if (strtolower($k) === 'sku_vendor') $row[$k] = 'BOWL-01-RED'; if (strtolower($k) === 'f_parent') $row[$k] = 3; if (strtolower($k) === 'f_id_parent') $row[$k] = $this->product; }

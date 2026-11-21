@@ -74,12 +74,33 @@ class SaleLines
     }
 
     /** The cost columns of a line at intake (own-stock line with a product), and the tasks about missing price history / a price that differs. */
+    /**
+     * Pool / Private of a product for a shop (R-A_SALES-30): the product's own row for that shop, else its row for the marketplace, else the parent's (shop, then marketplace). 'POOL' | 'PRIVATE' | ''.
+     * $rows may hold the visibility rows already read (for a list), else they are read here.
+     */
+    public static function visibility(int $productId, ?int $parentId, int $marketplaceId, int $shopId, ?array $rows = null): string
+    {
+        $ids = array_values(array_filter([$productId, (int) $parentId])); if (! $ids) return '';
+        $rows ??= DB::table('t_product_visibility')->whereIn('fk_id_product', $ids)->where('fk_id_marketplace', $marketplaceId)->whereIn('fk_id_branch', [0, $shopId])->get()->all();
+        foreach ($ids as $pid) foreach ([$shopId, 0] as $b) foreach ($rows as $r) if ((int) $r->fk_id_product === $pid && (int) $r->fk_id_marketplace === $marketplaceId && (int) $r->fk_id_branch === $b) return strtoupper((string) $r->visibility_mode);
+        return '';
+    }
+
+    /** Names of the investors of a product: its own and its parent's, in that order, without repeats. */
+    public static function investorsOf(int $productId, ?int $parentId, ?array $byProduct = null): array
+    {
+        $ids = array_values(array_filter([$productId, (int) $parentId])); if (! $ids) return [];
+        if ($byProduct === null) { $byProduct = []; foreach (DB::table('t_product_investors as pi')->join('t_account as a', 'a.id', '=', 'pi.fk_id_account')->whereIn('pi.fk_id_product', $ids)->orderBy('pi.id')->get(['pi.fk_id_product', DB::raw("TRIM(CONCAT_WS(' ', NULLIF(a.first_name,''), NULLIF(a.sur_name,''))) as n")]) as $i) $byProduct[$i->fk_id_product][] = $i->n; }
+        $out = []; foreach ($ids as $pid) foreach ($byProduct[$pid] ?? [] as $n) if (! in_array($n, $out, true)) $out[] = $n; return $out;
+    }
+
     public static function intakeCost(object $product, object $shop, string $date, int $qty, float $rate, float $total, int $ent): array
     {
         $c = self::expectedCost($product, (int) $shop->fk_id_marketplace, $date, $ent); $x = self::calc($total, $c['raw'], $qty, $c['carrier_rate'], $c['packing_rate']);
         if (in_array($c['cost_source'], ['current', 'product'], true)) TaskEngine::open('PRICE_HISTORY_MISSING', [$product->id, $shop->fk_id_marketplace], 'No price history for ' . ($product->SKU_VENDOR ?? 'product') . ' on this marketplace – set its price with a start date', ['ent' => $ent, 'module' => 't_product_vendors', 'record_id' => (int) $product->id, 'fix_url' => '#/prices/' . $product->id]);
         elseif ($c['sale'] > 0 && abs($c['sale'] - $rate) >= 0.01) TaskEngine::open('SAL_PRICE_MISMATCH', [$product->id, $shop->id, $date], 'Sold at ' . number_format($rate, 2) . ', listed at ' . number_format($c['sale'], 2) . ': ' . ($product->SKU_VENDOR ?? ''), ['ent' => $ent, 'module' => 't_product_vendors', 'record_id' => (int) $product->id, 'fix_url' => '#/prices/' . $product->id]);
-        return ['raw_price' => $c['raw'], 'fk_id_car_pkg_svc' => $c['fk_id_car_pkg_svc'], 'carrier_rate' => $c['carrier_rate'], 'fk_id_packing' => $c['fk_id_packing'], 'packing_rate' => $c['packing_rate'], 'cost_source' => $c['cost_source'],
+        return ['visibility_mode' => self::visibility((int) $product->id, (int) ($product->f_id_parent ?? 0) ?: null, (int) $shop->fk_id_marketplace, (int) $shop->id),      // Pool / Private as it stands at import
+            'raw_price' => $c['raw'], 'fk_id_car_pkg_svc' => $c['fk_id_car_pkg_svc'], 'carrier_rate' => $c['carrier_rate'], 'fk_id_packing' => $c['fk_id_packing'], 'packing_rate' => $c['packing_rate'], 'cost_source' => $c['cost_source'],
             'fk_id_price_period' => $c['fk_id_price_period'], 'buy_rate' => $x['product_cost'], 'buy_amount' => $x['buy_amount'], 'profit' => $x['profit']];
     }
 
@@ -476,17 +497,20 @@ class SaleLines
                 's.cost_source', 's.f_out_of_period', 's.status', 's.f_locked', 's.f_edited', 's.refund_loss_nature', 's.refund_loss_amount', 's.refund_reason', 's.visibility_mode', 's.sale_source', 's.fk_drp_item', 's.ds_match_count', 's.ds_note', 's.fk_product_id', 's.fk_id_car_pkg_svc', 's.fk_id_packing', 's.fulfilment_channel', 's.raw_csv', 's.fk_id_marketplace',
                 'b.shop_no', 'b.shop_name', DB::raw("CONCAT(cc.carrier_name, '-', cv.pkg_svc_name) as carrier_name"), 'pk.packing_name', 'co.ent_name as company']);
         $money = $base['rights']['see_cost'];
-        $invs = []; foreach (DB::table('t_product_investors as pi')->join('t_account as a', 'a.id', '=', 'pi.fk_id_account')->whereIn('pi.fk_id_product', $rows->pluck('fk_product_id')->filter()->unique())->get(['pi.fk_id_product', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as n")]) as $i) $invs[$i->fk_id_product][] = $i->n;
+        $pids = $rows->pluck('fk_product_id')->filter()->unique()->values(); $parents = $pids->isEmpty() ? [] : DB::table('t_product_vendors')->whereIn('id', $pids)->where('f_id_parent', '>', 0)->pluck('f_id_parent', 'id')->all(); $both = $pids->merge(array_values($parents))->unique()->values();
+        $invs = []; foreach (DB::table('t_product_investors as pi')->join('t_account as a', 'a.id', '=', 'pi.fk_id_account')->whereIn('pi.fk_id_product', $both)->orderBy('pi.id')->get(['pi.fk_id_product', DB::raw("TRIM(CONCAT_WS(' ', NULLIF(a.first_name,''), NULLIF(a.sur_name,''))) as n")]) as $i) $invs[$i->fk_id_product][] = $i->n;      // a child shows its own + its parent's investors
+        $vis = $both->isEmpty() ? [] : DB::table('t_product_visibility')->whereIn('fk_id_product', $both)->get()->all();      // Pool / Private is shown live, with the parent as fallback
+        $lotOwners = []; $done = $rows->where('status', 'Confirmed')->pluck('id'); if ($done->isNotEmpty()) foreach (DB::table('fin_lot_consumption as c')->leftJoin('t_account as a', 'a.id', '=', 'c.fk_id_owner')->whereIn('c.fk_id_sale', $done)->whereNull('c.fk_id_reverses')->get(['c.fk_id_sale', 'c.fk_id_owner', DB::raw("TRIM(CONCAT_WS(' ', NULLIF(a.first_name,''), NULLIF(a.sur_name,''))) as n")]) as $c) { $n = $c->fk_id_owner ? ($c->n ?: 'Account ' . $c->fk_id_owner) : 'Pool'; if (! in_array($n, $lotOwners[$c->fk_id_sale] ?? [], true)) $lotOwners[$c->fk_id_sale][] = $n; }
         $dsi = $rows->pluck('fk_drp_item')->filter()->isEmpty() ? collect() : DB::table('drp_items as d')->leftJoin('drp_platforms as p', 'p.id', '=', 'd.fk_platform')->whereIn('d.id', $rows->pluck('fk_drp_item')->filter()->unique())->get(['d.id', 'd.ship_name', 'd.qty', 'p.platform_name'])->keyBy('id');
         $plats = $dsi->map(fn ($x) => $x->platform_name)->all();
-        $out = $rows->map(function ($s) use ($u, $money, $invs, $plats, $dsi) {
+        $out = $rows->map(function ($s) use ($u, $money, $invs, $plats, $dsi, $vis, $parents, $lotOwners) {
             $kind = self::kind($s); $a = self::actions($s, $u);
             $row = ['id' => $s->id, 'order_no' => $s->order_no, 'd_order' => $s->d_order, 'cust_name' => $s->cust_name, 'cust_contacts' => $s->cust_contacts, 'sku' => $kind === 'DS' && preg_match('/^(NOSKU|DS-\d+)/', (string) $s->sku) ? '-' : $s->sku, 'product_info' => $s->product_info, 'qty' => (int) $s->qty,
                 'sale_rate' => (float) $s->sale_rate, 'total_amount' => (float) $s->total_amount, 'status' => $s->status, 'confirmed' => self::confirmed($s), 'kind' => $kind, 'edited' => (bool) $s->f_edited, 'out_of_period' => (bool) $s->f_out_of_period, 'shop' => trim($s->shop_no . ' ' . $s->shop_name), 'shop_no' => $s->shop_no, 'fk_id_branch' => $s->fk_id_branch,
-                'visibility' => $kind === 'DS' ? 'Drop shipping' : ($kind === 'NM' ? 'Not matched' : ($s->visibility_mode === 'POOL' ? 'Pool' : ($s->visibility_mode === 'PRIVATE' ? 'Private' : 'Not set'))), 'company' => $s->company, 'nm_note' => $kind === 'NM' ? $s->ds_note : null, 'product_id' => (int) $s->fk_product_id ?: null, 'ds_item' => (int) $s->fk_drp_item ?: null,
+                'visibility' => $kind === 'DS' ? 'Drop shipping' : ($kind === 'NM' ? 'Not matched' : ((($v = self::visibility((int) $s->fk_product_id, $parents[$s->fk_product_id] ?? null, (int) $s->fk_id_marketplace, (int) $s->fk_id_branch, $vis)) ?: strtoupper((string) $s->visibility_mode)) === 'POOL' ? 'Pool' : (($v ?: strtoupper((string) $s->visibility_mode)) === 'PRIVATE' ? 'Private' : 'Not set'))), 'company' => $s->company, 'nm_note' => $kind === 'NM' ? $s->ds_note : null, 'product_id' => (int) $s->fk_product_id ?: null, 'ds_item' => (int) $s->fk_drp_item ?: null,
                 'refund' => $s->status === 'Refunded' ? ['nature' => self::NATURES[$s->refund_loss_nature] ?? $s->refund_loss_nature, 'loss' => (float) $s->refund_loss_amount, 'reason' => $s->refund_reason] : null,
                 'actions' => array_map(fn ($x) => ['ok' => (bool) $x[0], 'why' => $x[0] ? null : $x[1]], $a), 'month' => substr((string) $s->d_order, 0, 7),
-                'investor' => $kind === 'OWN' ? (implode(', ', $invs[$s->fk_product_id] ?? []) ?: 'None') : ($kind === 'DS' ? 'Drop shipping' : 'None'), 'ds_platform' => $plats[$s->fk_drp_item] ?? null,
+                'investor' => $kind === 'OWN' ? (implode(', ', self::investorsOf((int) $s->fk_product_id, $parents[$s->fk_product_id] ?? null, $invs)) ?: 'None') : ($kind === 'DS' ? 'Drop shipping' : 'None'), 'lot_owners' => isset($lotOwners[$s->id]) ? implode(', ', $lotOwners[$s->id]) : null, 'ds_platform' => $plats[$s->fk_drp_item] ?? null,
                 'ds' => $kind === 'DS' ? ['n' => (int) $s->ds_match_count, 'colour' => (int) $s->ds_match_count >= 5 ? '#28a745' : ((int) $s->ds_match_count === 4 ? '#20c997' : '#ffc107'), 'buyer' => $dsi[$s->fk_drp_item]->ship_name ?? null, 'platform' => $plats[$s->fk_drp_item] ?? null, 'qty' => isset($dsi[$s->fk_drp_item]) ? (int) $dsi[$s->fk_drp_item]->qty : null,
                     'differs' => isset($dsi[$s->fk_drp_item]) && (int) $dsi[$s->fk_drp_item]->qty !== (int) $s->qty ? 'Not the same as the sale quantity (' . (int) $s->qty . ')' : null, 'gone' => ! isset($dsi[$s->fk_drp_item])] : null, 'best' => $kind === 'NM' ? 'best ' . (int) $s->ds_match_count . '/5' : null, 'xc' => SaleView::extraValues($s->raw_csv, (int) $s->fk_id_marketplace)];
             if ($money) $row += ['raw_price' => $kind === 'OWN' ? (float) $s->raw_price : 0.0, 'carrier_rate' => $kind === 'OWN' ? (float) $s->carrier_rate : 0.0, 'packing_rate' => $kind === 'OWN' ? (float) $s->packing_rate : 0.0, 'buy_rate' => $kind === 'DS' ? 0.0 : (float) $s->buy_rate, 'buy_amount' => (float) $s->buy_amount, 'profit' => (float) $s->profit,

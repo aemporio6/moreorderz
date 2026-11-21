@@ -465,3 +465,14 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - **R-A_SALES-50 completed**: `SalesImport::vaAccount(shop, day)` and `vaShops(va, day)` – the VA is the holder of the shop assignment role VA / SELLER on that day; the shop's seller field is only the fallback. Used by the batch (`vaOf`), the shop label (`ShopLabel::list`), the annual report's VA filter and its VA list.
 - Tests: 324 pass (3 new).
 - Register after this batch: BUILT 363 of 1,433 (25 %); Sales 92 of 155 (59 %).
+
+### Batch 7e-16 (21 Nov 2026)
+- **R-A_SALES-30 completed** (visibility and investors on each line):
+  - `SaleLines::visibility(product, parent, marketplace, shop)` – the product's row for that shop, else its row for the marketplace, else the parent's. Stored on the line at import (inside `intakeCost`, so the import, the daily intake and "link a SKU" all set it) and shown live in the list.
+  - Migration `000036`: `t_product_visibility.fk_id_branch` (0 = every shop of the marketplace); the unique key is now product + marketplace + shop.
+  - `SaleLines::investorsOf` – a child shows its own investors, then its parent's.
+  - A Confirmed line shows the owner(s) of the stock lots it was taken from (`lot_owners`; "Pool" when the lot has no owner).
+- **R-A_SALES-70 completed**: the fulfilment order form (manager / team leader part) has "Suggest the cheapest for this parcel" – it calls `carriers/cheapest` with the parcel's weight and size and fills the carrier service.
+- Known and not changed: the Pool / Private filter of the sales list still filters on the value stored at import, not on the live value (belongs to R-A_SALES-42).
+- Tests: 325 pass (1 new, 1 longer).
+- Register after this batch: BUILT 365 of 1,433 (25 %); Sales 93 of 155 (60 %).
