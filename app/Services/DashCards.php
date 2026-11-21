@@ -50,6 +50,38 @@ class DashCards
         return ['base' => $base, 'open_po_value' => round($open, 2), 'paid' => round($paid, 2), 'terms_due' => round($due, 2), 'due_7_days' => round($week, 2), 'link' => '#/src-outstanding', 'title' => 'Supplier payments'];
     }
 
+    /** R-F_SETUP-30: Investors card – same sources as the investor report (R-F_SETUP-8). */
+    public static function investors(int $ent, string $from, string $to): array
+    {
+        $inv = DB::table('t_src_investments as i')->leftJoin('t_account as a', 'a.id', '=', 'i.fk_id_investor')->where('i.fk_id_ent', $ent)->where('i.f_active', 1)->whereNotNull('i.fk_id_investor')->whereBetween('i.invest_date', [$from, $to])
+            ->get(['i.fk_id_investor as id', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as name"), 'i.fk_id_cycle', 'i.base_amount', 'i.invest_amount']);
+        $invested = $inv->groupBy('id')->map(fn ($g) => ['name' => $g->first()->name ?: '#' . $g->first()->id, 'amount' => round($g->sum(fn ($x) => (float) $x->base_amount > 0 ? (float) $x->base_amount : (float) $x->invest_amount), 2), 'cycles' => $g->pluck('fk_id_cycle')->filter()->unique()->count()])
+            ->sortByDesc('amount')->take(5)->values()->all();
+        $goods = DB::table('fin_lots as l')->leftJoin('t_account as a', 'a.id', '=', 'l.fk_id_owner')->where('l.company_id', $ent)->whereNotNull('l.fk_id_owner')->where('l.fk_id_owner', '>', 0)->where('l.qty_left', '>', 0)
+            ->groupBy('l.fk_id_owner', 'a.first_name', 'a.sur_name')->selectRaw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as name, SUM(l.qty_left * l.unit_cost_gbp) as v")->orderByDesc('v')->limit(5)->get()
+            ->map(fn ($r) => ['name' => $r->name, 'amount' => round((float) $r->v, 2)])->all();
+        $returns = round((float) DB::table('t_inv_period_investors as x')->join('t_inv_periods as p', 'p.id', '=', 'x.fk_id_period')->where('p.fk_id_ent', $ent)->where('p.status', 'CONFIRMED')->whereBetween('p.d_from', [$from, $to])->where('x.fk_id_investor_account', '>', 0)->sum('x.share_amount'), 2);
+        $out = round((float) DB::table('fin_withdrawals')->where('company_id', $ent)->whereIn('status', ['APPROVED', 'PAID'])->whereBetween(DB::raw('DATE(COALESCE(approved_at, requested_at))'), [$from, $to])->sum('amount'), 2);
+        return ['title' => 'My Investments / Investors', 'invested' => $invested, 'goods' => $goods, 'returns' => $returns, 'withdrawals' => $out, 'empty' => $invested || $goods || $returns || $out ? null : 'No investments in period'];
+    }
+
+    /** R-F_SETUP-29: Invoicing / Profit card – the investor settlement engine; hidden margin for the OWNER only. */
+    public static function invoicing(int $ent, string $from, string $to, ?string $role): array
+    {
+        $open = DB::table('t_invoices')->where('fk_id_ent', $ent)->whereColumn('total', '>', 'amount_paid')->whereRaw("UPPER(COALESCE(status,'')) NOT LIKE '%CANCEL%'")->selectRaw('COUNT(*) n, COALESCE(SUM(total - amount_paid),0) v')->first();
+        $unc = (int) DB::table('t_inv_periods')->where('fk_id_ent', $ent)->where('status', 'UNCONFIRMED')->count();
+        $per = DB::table('t_inv_periods')->where('fk_id_ent', $ent)->whereBetween('d_from', [$from, $to])->selectRaw('COUNT(*) n, COALESCE(SUM(gross_profit),0) g, COALESCE(SUM(final_net_profit),0) net, COALESCE(SUM(capital - actual_cost),0) hm')->first();
+        $split = DB::table('t_inv_profit_splits')->where('fk_id_ent', $ent)->where('f_active', 1)->orderByDesc('d_effective_from')->orderByDesc('id')->first(['investor_pct', 'owner_pct', 'va_pct', 'handler_pct']);
+        $pc = fn ($v) => rtrim(rtrim(number_format((float) $v, 2, '.', ''), '0'), '.') . '%';
+        $rows = [['Outstanding to settle (now)', number_format((float) $open->v, 2) . ' (' . (int) $open->n . ' invoices)']];
+        if ($unc) $rows[] = ['Periods not settled', (string) $unc];
+        $rows[] = ['Settlement periods (period)', (string) (int) $per->n]; $rows[] = ['Gross profit (period)', number_format((float) $per->g, 2)]; $rows[] = ['Net profit (period)', number_format((float) $per->net, 2)];
+        if ($role === 'OWNER') $rows[] = ['Hidden margin (period)', number_format((float) $per->hm, 2)];
+        if ($split) $rows[] = ['Profit split (Inv/Own/VA/Hnd)', implode(' / ', array_map($pc, [$split->investor_pct, $split->owner_pct, $split->va_pct, $split->handler_pct]))];
+        $has = (int) $open->n || $unc || (int) $per->n || $split;
+        return ['title' => 'Invoicing / Profit', 'rows' => $has ? $rows : [], 'show' => (bool) $has];
+    }
+
     /** R-F_SETUP-20: Needs action over the open cycles – P1 then P2, then due date; top 20 with "show all"; the header counts every item. */
     public static function needs(int $ent, bool $all = false): array
     {

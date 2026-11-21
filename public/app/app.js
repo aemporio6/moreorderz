@@ -1879,19 +1879,19 @@
       ${Object.entries(groups).map(([g, rs]) => `<div class="card" style="margin-bottom:12px"><div class="card-h"><h3>${esc(g)}</h3></div><div class="card-b" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px">${rs.map(r => `<a href="#/reports/${r.key}" class="card kpi" style="display:block;text-decoration:none;color:inherit"><div style="font-weight:650">${esc(r.title)}</div><div class="foot">${esc(r.what)}</div></a>`).join('')}</div></div>`).join('')
         || `<div class="card"><div class="empty">${ic('file')}<div>Your role has no reports. Ask the Owner if you need one.</div></div></div>`}`;
   }
+  const PERIODS = { TODAY: 'Today', THIS_WEEK: 'This Week', THIS_MONTH: 'This Month', LAST_MONTH: 'Last Month', LAST_3_MONTHS: 'Last Three Months', LAST_6_MONTHS: 'Last 6 Months', THIS_YEAR: 'This Year', CUSTOM: 'Custom Range/Date' };
   async function pageReport(key, st = {}) {
     const q = new URLSearchParams(); ['from', 'to'].forEach(k => st[k] && q.set(k, st[k]));
     busy(true); let d; try { d = await api(`reports/${key}?` + q); } catch (e) { busy(false); $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/reports">Reports</a> ›</div><h1>Report</h1></div></div><div class="card"><div class="empty">${ic('alert')}<div>${esc(e.message)}</div></div></div>`; return; } busy(false);
     const fmt = (v, t) => v === null || v === undefined || v === '' ? '' : t === 'money' ? amt(v) : t === 'int' ? (+v).toLocaleString('en-GB') : esc(v), num = t => t === 'money' || t === 'int';
     $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/reports">Reports</a> ›</div><h1>${esc(d.title)}</h1><div class="sub">${esc(d.what)}${d.columns.some(c => c.type === 'money') ? ` Money in ${esc(d.base)}.` : ''}</div></div>
-        <div class="actions">${d.dates ? `<input class="q" type="date" id="rpFrom" value="${esc(d.from)}" style="min-width:0" aria-label="From"><input class="q" type="date" id="rpTo" value="${esc(d.to)}" style="min-width:0" aria-label="To">` : ''}${key === 'team_engagements' ? `<a class="btn" href="/api/reports/team_engagements/xlsx?to=${esc(d.to)}" title="team_engagements_YYYY-MM.xlsx for the month of the end date">${ic('ext')} Excel</a>` : ''}<a class="btn" href="/api/reports/${key}/csv?from=${esc(d.from)}&to=${esc(d.to)}" title="Download this report as a spreadsheet file">${ic('ext')} Export</a></div></div>
+        <div class="actions">${d.dates ? periodSelect('report_' + key, { key: st.period || 'CUSTOM', from: d.from, to: d.to, options: PERIODS }, p => pageReport(key, { from: p.from, to: p.to, period: p.key })) : ''}${key === 'team_engagements' ? `<a class="btn" href="/api/reports/team_engagements/xlsx?to=${esc(d.to)}" title="team_engagements_YYYY-MM.xlsx for the month of the end date">${ic('ext')} Excel</a>` : ''}<a class="btn" href="/api/reports/${key}/csv?from=${esc(d.from)}&to=${esc(d.to)}" title="Download this report as a spreadsheet file">${ic('ext')} Export</a></div></div>
       <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr>${d.columns.map(c => `<th class="${num(c.type) ? 'num' : ''}">${esc(c.label)}</th>`).join('')}</tr></thead><tbody>
         ${d.rows.map(r => `<tr>${d.columns.map(c => `<td class="${num(c.type) ? 'num' : ''}" ${c.type === 'date' ? 'style="white-space:nowrap"' : ''}>${c.key === 'state' && r[c.key] ? `<span class="chip err">${esc(r[c.key])}</span>` : fmt(r[c.key], c.type)}</td>`).join('')}</tr>`).join('')}
         ${d.rows.length && Object.keys(d.totals).length ? `<tr style="font-weight:700;border-top:2px solid var(--line)">${d.columns.map((c, i) => `<td class="${num(c.type) ? 'num' : ''}">${i === 0 ? 'Total' : c.key in d.totals ? fmt(d.totals[c.key], c.type) : ''}</td>`).join('')}</tr>` : ''}</tbody></table>
         ${d.rows.length ? '' : `<div class="empty">${ic('check')}<div>Nothing to show${d.dates ? ' between these dates' : ''}.</div></div>`}</div></div>
       <div class="small muted" style="margin-top:10px">${esc(d.note || '')} ${d.rows.length} row(s).</div>`;
-    const go2 = () => pageReport(key, { from: $('#rpFrom').value, to: $('#rpTo').value });
-    if ($('#rpFrom')) { $('#rpFrom').onchange = go2; $('#rpTo').onchange = go2; }
+
   }
 
   // ---------- partners and investors ----------
@@ -2792,6 +2792,18 @@
 
   // R-F_SETUP-19: the 12-stage strip of the stage engine (done teal, current black, pending grey, record missing amber, skipped hatched)
   const stageStrip = (steps, pct) => `<div style="display:flex;gap:2px;align-items:center" data-strip>${steps.map(s => `<span data-st="${s.key}" data-state="${s.state}" title="${esc(s.name)}: ${s.state === 'missing' ? 'record missing' : s.state}${s.count ? ' (' + s.count + ')' : ''}" style="flex:1;min-width:10px;height:10px;border-radius:2px;background:${s.strip === 'hatched' ? 'repeating-linear-gradient(45deg,#0F5E63,#0F5E63 2px,#fff 2px,#fff 5px)' : s.strip}"></span>`).join('')}${pct !== undefined ? `<b class="small" style="margin-left:6px;white-space:nowrap">${pct}%</b>` : ''}</div>`;
+  // R-F_SETUP-27: the one period component – a choice is resolved (and remembered per user per card) by the server; Custom applies only when both dates are filled
+  function periodSelect(card, p, onApply) {
+    const id = 'pd' + Math.random().toString(36).slice(2, 7), opts = p.options || {};
+    const html = `<span data-period="${card}" style="display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap"><select id="${id}s" class="q" style="min-width:0">${Object.entries(opts).map(([k, l]) => `<option value="${k}" ${k === p.key ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
+      <span id="${id}c" style="display:${p.key === 'CUSTOM' ? 'inline-flex' : 'none'};gap:4px"><input type="date" class="q" id="${id}f" value="${esc(p.from)}" style="min-width:0"><input type="date" class="q" id="${id}t" value="${esc(p.to)}" style="min-width:0"><button class="btn sm" id="${id}a">Apply</button></span>
+      <span class="small muted" id="${id}r">${esc(p.from)} – ${esc(p.to)}</span></span>`;
+    setTimeout(() => { const sel = $('#' + id + 's'); if (!sel) return;
+      const send = async (k, f, t) => { const r = await api(`period/${card}?` + new URLSearchParams({ period: k, ...(f ? { from: f } : {}), ...(t ? { to: t } : {}) })); onApply(r); };
+      sel.onchange = () => { if (sel.value === 'CUSTOM') { $('#' + id + 'c').style.display = 'inline-flex'; return; } send(sel.value); };
+      $('#' + id + 'a').onclick = () => { const f = $('#' + id + 'f').value, t = $('#' + id + 't').value; if (!f || !t) return; send('CUSTOM', f, t); }; }, 0);
+    return html;
+  }
   // R-F_SETUP-15: the "could not load" box above the page lists the failed cards (max 10); a card that loads again leaves the list
   function failBox() { const b = $('#bFailed'); if (!b) return; const f = [...new Set(S.failedCards || [])].slice(0, 10);
     b.innerHTML = f.length ? `<div class="card" style="border-left:4px solid #e8a33d;margin-bottom:12px"><div class="card-b"><b>Some sections could not load</b><div class="small">${f.map(esc).join(' · ')}</div><div class="small muted">The rest of the page works. The admin has been told.</div></div></div>` : ''; }
@@ -2805,6 +2817,11 @@
       failBox(); draw(box, r.data); };
     if (money) load('payments', '#bPay', (box, d) => { const f = (l, v, c) => `<a href="${d.link}" class="card kpi" style="display:block;text-decoration:none;color:inherit"><div class="lbl">${l}</div><div class="val" style="${c ? 'color:' + c : ''}">${money2(v)}</div><div class="foot">${esc(d.base)}</div></a>`;
       box.innerHTML = `<div class="card" id="payBox"><div class="card-h"><h3>${esc(d.title)}</h3></div><div class="card-b" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${f('Open PO value', d.open_po_value)}${f('Paid so far', d.paid)}${f('Scheduled terms still due', d.terms_due, '#7C2D12')}${f('Due in 7 days', d.due_7_days)}</div></div>`; });
+    const kv = rows => `<table class="t"><tbody>${rows.map(([l, v]) => `<tr><td>${esc(l)}</td><td class="num">${esc(v)}</td></tr>`).join('')}</tbody></table>`;
+    const perCard = (key, sel, draw) => load(key, sel, (box, d) => { draw(box, d); const ps = $('[data-pslot]', box); if (ps) ps.innerHTML = periodSelect(key, d.period, () => buyingCards(key, money)); });
+    if (money) perCard('invoicing', '#bInv', (box, d) => { box.innerHTML = d.show ? `<div class="card"><div class="card-h"><h3>${esc(d.title)}</h3><span data-pslot style="margin-left:auto"></span></div>${kv(d.rows)}</div>` : ''; });
+    if (money) perCard('investors', '#bInvest', (box, d) => { const m2 = v => money2(v);
+      box.innerHTML = `<div class="card"><div class="card-h"><h3>${esc(d.title)}</h3><span data-pslot style="margin-left:auto"></span></div>${d.empty ? `<div class="empty">${esc(d.empty)}</div>` : kv([...d.invested.map(x => ['Invested (period) · ' + x.name + ' (' + x.cycles + ' cycles)', m2(x.amount)]), ...d.goods.map(x => ['Goods in hand (now) · ' + x.name, m2(x.amount)]), ['Returns (confirmed, period)', m2(d.returns)], ['Withdrawals (period)', m2(d.withdrawals)]])}</div>`; });
     const drawNeeds = (box, d) => { const P = { P1: '#c0392b', P2: '#e67e22' };
       box.innerHTML = `<div class="card"><div class="card-h"><h3>Needs action</h3><span class="small muted">${d.count}</span>${d.more ? '<a href="#" class="small" id="ndAll" style="margin-left:auto">show all</a>' : ''}</div>${d.rows.length ? `<div class="tbl-wrap"><table class="t" id="ndT"><tbody>${d.rows.map(r => `<tr class="click" data-link="${esc(r.link)}"><td style="width:40px"><span class="chip" style="background:${P[r.p] || '#888'};color:#fff">${esc(r.p)}</span></td><td><b>${esc(r.title)}</b><div class="small muted">${esc(r.detail)}</div></td><td><span class="chip plain">${esc(r.chip)}</span></td><td class="small">${esc(r.cycle)}</td><td class="small">${esc(r.due || '')}</td></tr>`).join('')}</tbody></table></div>` : `<div class="empty">${esc(d.empty)}</div>`}</div>`;
       $$('tr[data-link]', box).forEach(tr => tr.onclick = () => go(tr.dataset.link));
@@ -2841,7 +2858,7 @@
     S.failedCards = [...(d.failed || [])]; failBox();
     $$('#main [data-go]').forEach(x => x.onclick = () => go(x.dataset.go));
     $$('#main tr[data-id]').forEach(tr => tr.onclick = () => go('#/cycle/' + tr.dataset.id));
-    $('#main').insertAdjacentHTML('beforeend', `<div style="display:grid;grid-template-columns:minmax(260px,1fr) 2.4fr;gap:12px;margin-top:12px;align-items:start"><div><div id="bPay"></div><div id="bContacts" style="margin-top:12px"></div></div><div><div id="bNeeds"></div><div id="bShips" style="margin-top:12px"></div></div></div>`);
+    $('#main').insertAdjacentHTML('beforeend', `<div style="display:grid;grid-template-columns:minmax(260px,1fr) 2.4fr;gap:12px;margin-top:12px;align-items:start"><div><div id="bPay"></div><div id="bInv" style="margin-top:12px"></div><div id="bInvest" style="margin-top:12px"></div><div id="bContacts" style="margin-top:12px"></div></div><div><div id="bNeeds"></div><div id="bShips" style="margin-top:12px"></div></div></div>`);
     $('#main').addEventListener('click', e => { const a = e.target.closest('[data-retry]'); if (!a) return; e.preventDefault(); if (a.dataset.retry === 'page') pageBuying(page); else buyingCards(a.dataset.retry); });
     buyingCards(null, d.rights.money);
     if ($('#bPrev')) $('#bPrev').onclick = () => pageBuying(page - 1); if ($('#bNext')) $('#bNext').onclick = () => pageBuying(page + 1);
