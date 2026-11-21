@@ -108,14 +108,14 @@ class Carriers
         if ($id) {
             $old = DB::table('t_carrier_pkg_svc')->where('id', $id)->first() ?? throw new \InvalidArgumentException('Preset not found.'); self::carrier((int) $old->fk_id_carrier);
             foreach (['carrier' => 'fk_id_carrier', 'package' => 'fk_id_car_package', 'service' => 'fk_id_car_service'] as $k => $col) if (isset($d[$k]) && (int) $d[$k] !== (int) $old->$col) throw new \InvalidArgumentException('Carrier, package and service of a preset cannot be changed. Make a new preset instead.');
-            DB::table('t_carrier_pkg_svc')->where('id', $id)->update(['pkg_svc_name' => $name] + (array_key_exists('f_active', $d) ? ['f_active' => (int) (bool) $d['f_active']] : []));
+            DB::table('t_carrier_pkg_svc')->where('id', $id)->update(['pkg_svc_name' => $name] + (array_key_exists('f_active', $d) ? ['f_active' => (int) (bool) $d['f_active']] : []) + (array_key_exists('needs_weight', $d) ? ['needs_weight' => (int) (bool) $d['needs_weight']] : []));
             if (array_key_exists('rate', $d) && $d['rate'] !== '' && $d['rate'] !== null && ((float) $d['rate'] !== (float) $old->rate || ! empty($d['valid_from']))) self::setRate('CARRIER', $id, $d['rate'], $d['valid_from'] ?? null, $u);
             Audit::log('t_carrier_pkg_svc', $id, 'UPDATE', ['pkg_svc_name' => $name]); return ['message' => 'Preset saved.', 'id' => $id];
         }
         $car = self::carrier((int) ($d['carrier'] ?? 0)); $pkg = DB::table('t_carrier_packages')->where('id', (int) ($d['package'] ?? 0))->where('fk_id_carrier', $car->id)->first() ?? throw new \InvalidArgumentException('Choose a package of this carrier.');
         $svc = DB::table('t_carrier_services')->where('id', (int) ($d['service'] ?? 0))->where('fk_id_carrier', $car->id)->first() ?? throw new \InvalidArgumentException('Choose a service of this carrier.'); $rate = self::money($d['rate'] ?? null, 'Rate');
         if (DB::table('t_carrier_pkg_svc')->where(['fk_id_carrier' => $car->id, 'fk_id_car_package' => $pkg->id, 'fk_id_car_service' => $svc->id])->exists()) throw new \InvalidArgumentException('This carrier, package and service already have a preset.');
-        $id = (int) DB::table('t_carrier_pkg_svc')->insertGetId(['pkg_svc_name' => $name, 'fk_id_carrier' => $car->id, 'fk_id_car_package' => $pkg->id, 'fk_id_car_service' => $svc->id, 'rate' => $rate, 'f_active' => 1]);
+        $id = (int) DB::table('t_carrier_pkg_svc')->insertGetId(['pkg_svc_name' => $name, 'fk_id_carrier' => $car->id, 'fk_id_car_package' => $pkg->id, 'fk_id_car_service' => $svc->id, 'rate' => $rate, 'f_active' => 1, 'needs_weight' => (int) ! empty($d['needs_weight'])]);
         DB::table('mo_rate_history')->insert(['kind' => 'CARRIER', 'ref_id' => $id, 'rate' => $rate, 'valid_from' => '2000-01-01', 'created_by' => $u->id ?? null, 'created_at' => now()]);
         Audit::log('t_carrier_pkg_svc', $id, 'INSERT', ['pkg_svc_name' => $name, 'rate' => $rate]); return ['message' => 'Preset added.', 'id' => $id];
     }
@@ -141,7 +141,7 @@ class Carriers
         foreach ($carriers as $c) foreach ($pk[$c->id] ?? [] as $p) foreach ($sv[$c->id] ?? [] as $s) {
             $x = $pre[$c->id . ':' . $p->id . ':' . $s->id] ?? null; if (! $x && (! $p->f_active || ! $s->f_active || ! $c->f_active)) continue;      // no gap for switched-off parts
             if (! $x) $gaps++;
-            $rows[] = ['preset' => $x ? (int) $x->id : null, 'active' => $x ? (bool) ($x->f_active ?? 1) : null, 'group' => $x->pkg_svc_name ?? null, 'carrier' => (int) $c->id, 'carrier_name' => $c->carrier_name, 'package' => (int) $p->id, 'package_name' => $p->package_name, 'weight' => (float) $p->weight, 'l' => (float) $p->dim_length, 'w' => (float) $p->dim_width, 'h' => (float) $p->dim_height,
+            $rows[] = ['preset' => $x ? (int) $x->id : null, 'active' => $x ? (bool) ($x->f_active ?? 1) : null, 'needs_weight' => $x ? (bool) ($x->needs_weight ?? 0) : false, 'group' => $x->pkg_svc_name ?? null, 'carrier' => (int) $c->id, 'carrier_name' => $c->carrier_name, 'package' => (int) $p->id, 'package_name' => $p->package_name, 'weight' => (float) $p->weight, 'l' => (float) $p->dim_length, 'w' => (float) $p->dim_width, 'h' => (float) $p->dim_height,
                 'service' => (int) $s->id, 'service_name' => $s->service_name, 'rate' => $x ? (float) $x->rate : null, 'later' => $x ? DB::table('mo_rate_history')->where('kind', 'CARRIER')->where('ref_id', $x->id)->where('valid_from', '>', date('Y-m-d'))->orderBy('valid_from')->first(['rate', 'valid_from']) : null];
         }
         return ['rows' => $rows, 'gaps' => $gaps, 'carriers' => $carriers->all(), 'packages' => DB::table('t_carrier_packages')->whereIn('fk_id_carrier', $carriers->pluck('id'))->orderBy('package_name')->get()->all(), 'services' => DB::table('t_carrier_services')->whereIn('fk_id_carrier', $carriers->pluck('id'))->orderBy('service_name')->get()->all(),

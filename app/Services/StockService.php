@@ -240,8 +240,8 @@ class StockService
             $value = round($value, 2);
             if ($value != 0.0) {
                 Ledger::post($ent, date('Y-m-d'), 'STOCK_ADJUST', $productId, $value < 0
-                    ? [['account' => '5500', 'debit' => -$value], ['account' => '1200', 'credit' => -$value]]
-                    : [['account' => '1200', 'debit' => $value], ['account' => '4100', 'credit' => $value]], ['memo' => mb_substr("Stock adjustment {$p->SKU_VENDOR}: $reason", 0, 255)]);
+                    ? [['account' => $opt['expense'] ?? '5500', 'debit' => -$value], ['account' => '1200', 'credit' => -$value]]
+                    : [['account' => '1200', 'debit' => $value], ['account' => '4100', 'credit' => $value]], ['memo' => mb_substr($opt['memo'] ?? "Stock adjustment {$p->SKU_VENDOR}: $reason", 0, 255)]);
             }
             self::refreshCache($productId);
             Audit::log('t_product_vendors', $productId, 'UPDATE', ['stock_adjust' => [null, $qty], 'location' => $locId], $reason, $ent);

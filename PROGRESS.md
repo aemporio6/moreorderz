@@ -548,3 +548,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-34 (21 Nov): alert rules catalogue R-G_CORE-49 BUILT (N1–N14 + MANUAL + APPROVED, Partner screen #/alerts, texts per language); thresholds + N6 timer partial. +4 register lines. 378 tests.
 - 7e-35 (21 Nov): duplicate guard supplier + order reference R-B_SOURCING-7 BUILT (all entry modes, live hint, Save anyway with reason in history). +4 register lines. 380 tests.
 - 7e-36 (21 Nov): PO line types R-B_SOURCING-6 BUILT (FEE / COST via freight-cost row into landed cost by value, SAMPLE rows, product-only shipping). +4 register lines. 383 tests.
+- 7e-37 (21 Nov): pack verification / weight / box / packing materials R-H-29 BUILT (scan check, Short back to picking, split parcel, box + weight suggestion, packing stock). +4 register lines. 386 tests.

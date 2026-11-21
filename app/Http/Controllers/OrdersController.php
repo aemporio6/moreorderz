@@ -45,7 +45,7 @@ class OrdersController extends Controller
         return ['rows' => $rows, 'counts' => ['to_pick' => $count(['RESERVED']), 'short' => $count(['SHORT']), 'picking' => $count(['PICKING']), 'picked' => $count(['PICKED']), 'packed' => $count(['PACKED'])],
             'shops' => \App\Services\Perm::mine(DB::table('t_branches'), 'id')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name as name']),
             'carriers' => DB::table('t_carriers')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('carrier_name')->get(['id', 'carrier_name as name']),
-            'boxes' => DB::table('wh_box_sizes')->where('fk_id_ent', $ent)->where('f_active', 1)->get(['id', 'box_code as name']),
+            'boxes' => DB::table('wh_box_sizes')->whereIn('fk_id_ent', [$ent, 0])->where('f_active', 1)->get(['id', 'box_code as name']),
             'pick_lists' => DB::table('wh_pick_tasks')->where('fk_id_ent', $ent)->whereIn('status', ['OPEN', 'IN_PROGRESS'])->orderBy('id')->get(['id', 'task_code', 'status', 'created_at',
                 DB::raw('(SELECT COUNT(*) FROM wh_pick_task_lines l WHERE l.fk_id_pick_task = wh_pick_tasks.id AND l.line_status = "OPEN") as open_lines')]),
             'ready' => DB::table('wh_parcels as p')->leftJoin('t_carriers as c', 'c.id', '=', 'p.fk_id_carrier')->where('p.fk_id_ent', $ent)->where('p.status', 'READY')->orderBy('p.id')->get(['p.id', 'p.parcel_code', 'p.order_no', 'p.tracking_no', 'p.fk_id_carrier', 'c.carrier_name as carrier']),
@@ -221,10 +221,30 @@ class OrdersController extends Controller
     public function pack(Request $r)
     {
         $this->can($r, 'orders.WAREHOUSE');
-        $d = $r->validate(['order_no' => 'required|string|max:100', 'branch' => 'required|integer', 'carrier' => 'nullable|integer', 'box' => 'nullable|integer', 'weight_g' => 'nullable|integer|min:1', 'tracking_no' => 'nullable|string|max:60']);
+        $d = $r->validate(['order_no' => 'required|string|max:100', 'branch' => 'required|integer', 'carrier' => 'nullable|integer', 'service' => 'nullable|integer', 'box' => 'nullable|integer', 'weight_g' => 'nullable|integer|min:1', 'tracking_no' => 'nullable|string|max:60', 'scans' => 'nullable|array|max:500', 'scans.*' => 'nullable|string|max:80', 'sales' => 'nullable|array|max:200', 'sales.*' => 'integer']);
         return $this->run(function () use ($d) { $id = Dispatch::pack(array_filter($d, fn ($v) => $v !== null));
             $pj = \App\Services\PrintService::auto((int) Context::ent(), 'WH_AUTOPRINT_PACKING_SLIP', 'PACKING_SLIP', [$id], 'AUTO_PACK');
             return ['id' => $id, 'print' => $pj && $pj['status'] === 'PRINTED' ? $pj + ['url' => "/api/print-jobs/{$pj['job']}/pdf"] : null, 'parcel_code' => DB::table('wh_parcels')->where('id', $id)->value('parcel_code'), 'message' => 'Parcel packed and ready']; });
+    }
+
+    /** What the pack screen needs: the items with their codes, the box / weight suggestion, whether scans and weight are required (R-H-29). */
+    public function packCheck(Request $r)
+    {
+        $this->can($r, 'orders.WAREHOUSE');
+        $d = $r->validate(['order_no' => 'required|string|max:100', 'branch' => 'required|integer', 'service' => 'nullable|integer', 'scans' => 'nullable|array', 'scans.*' => 'nullable|string|max:80']);
+        $ent = (int) Context::ent(); $lines = \App\Services\PackService::lines($ent, $d['order_no'], (int) $d['branch']);
+        if (! $lines) return response()->json(['message' => 'No open order lines found for this order.'], 422);
+        return ['lines' => array_map(fn ($l) => array_intersect_key($l, array_flip(['sale', 'product', 'sku', 'name', 'qty', 'listing_sku', 'ean', 'wh_status'])), $lines), 'suggest' => \App\Services\PackService::suggest($ent, $lines),
+            'scan_required' => \App\Services\PackService::scanOn($ent), 'weight_required' => \App\Services\PackService::needsWeight(isset($d['service']) ? (int) $d['service'] : null),
+            'verify' => isset($d['scans']) ? \App\Services\PackService::verify($lines, $d['scans']) : null, 'packing_stock' => \App\Services\PackService::stockOn($ent),
+            'presets' => DB::table('t_carrier_pkg_svc')->where('f_active', 1)->orderBy('pkg_svc_name')->get(['id', 'pkg_svc_name as name', 'needs_weight', 'fk_id_carrier as carrier'])];
+    }
+
+    public function packShort(Request $r)
+    {
+        $this->can($r, 'orders.WAREHOUSE');
+        $d = $r->validate(['order_no' => 'required|string|max:100', 'branch' => 'required|integer', 'product' => 'required|integer', 'qty' => 'required|integer|min:1']);
+        return $this->run(fn () => \App\Services\PackService::short((int) Context::ent(), $d['order_no'], (int) $d['branch'], (int) $d['product'], (int) $d['qty']));
     }
 
     // ---- handover ----

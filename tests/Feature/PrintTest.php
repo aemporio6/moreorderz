@@ -49,6 +49,7 @@ class PrintTest extends TestCase
         $sale = Sales::intake($shop, [['order_no' => 'ORD-1', 'd_order' => date('Y-m-d'), 'sku' => 'BOWL-01', 'qty' => 2, 'sale_rate' => 12.99, 'cust_name' => 'Private Buyer Name', 'ship_to_address' => '1 Secret Street', 'tracking_no' => 'TRK1']])['ids'][0];
         $task = Dispatch::buildPickList(1);
         foreach (DB::table('wh_pick_task_lines')->where('fk_id_pick_task', $task)->pluck('id') as $l) Dispatch::pick($l);
+        \App\Services\Settings::set('WH_SCAN_CONFIRM_PACK', 'N', 1);      // item scans are checked in PackTest (R-H-29)
         $parcel = Dispatch::pack(['branch' => $shop, 'order_no' => 'ORD-1', 'tracking_no' => 'TRK1', 'carrier' => $car]);
         return ['parcel' => (int) $parcel, 'task' => (int) $task, 'bin' => $bin, 'carrier' => $car];
     }

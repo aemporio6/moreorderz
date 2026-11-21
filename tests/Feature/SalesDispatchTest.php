@@ -89,6 +89,7 @@ class SalesDispatchTest extends TestCase
         $this->assertSame([7, 3, 3], [Stock::balance($this->p, $dispatch), Stock::balance($this->p, $this->binB), Stock::available($this->p)]);
         try { Dispatch::pick($lines[0]->id); $this->fail('picked twice'); } catch (\RuntimeException $e) { $this->assertStringContainsString('already done', $e->getMessage()); }
 
+        \App\Services\Settings::set('WH_SCAN_CONFIRM_PACK', 'N', 1);      // item scans are checked in PackTest (R-H-29)
         $parcel = Dispatch::pack(['order_no' => 'ORD-1', 'branch' => $this->shop, 'weight_g' => 900, 'tracking_no' => 'TRK123']);
         try { Dispatch::pack(['order_no' => 'ORD-1', 'branch' => $this->shop]); $this->fail('packed twice'); } catch (\RuntimeException $e) { $this->assertStringContainsString('already packed', $e->getMessage()); }
 
@@ -162,6 +163,7 @@ class SalesDispatchTest extends TestCase
         $id = $this->order('ORD-1', 4);
         $task = Dispatch::buildPickList(1);
         foreach (DB::table('wh_pick_task_lines')->where('fk_id_pick_task', $task)->get() as $l) Dispatch::pick($l->id);
+        \App\Services\Settings::set('WH_SCAN_CONFIRM_PACK', 'N', 1);      // item scans are checked in PackTest (R-H-29)
         Dispatch::pack(['order_no' => 'ORD-1', 'branch' => $this->shop, 'tracking_no' => 'TRK9']);
         $ses = Dispatch::openHandover($this->carrier); Dispatch::scan($ses, 'TRK9'); Dispatch::closeHandover($ses);
         $shipped = Stock::systemLocation(1, 'SHIPPED');

@@ -40,6 +40,7 @@ class OrdersHttpTest extends TestCase
         $this->postJson('/api/pick-lists')->assertStatus(422)->assertJsonPath('message', 'Nothing is waiting to be picked.');
         $line = $this->getJson("/api/pick-lists/$task")->assertOk()->json('lines.0');
         $this->assertSame(['A-A-01', 3], [$line['bin'], $line['qty']]);
+        \App\Services\Settings::set('WH_SCAN_CONFIRM_PACK', 'N', 1);      // item scans are checked in PackTest (R-H-29)
         $this->postJson('/api/pack', ['order_no' => 'ORD-1', 'branch' => $shop])->assertStatus(422);
         $this->postJson("/api/pick-lines/{$line['id']}")->assertOk();
         $this->postJson('/api/pack', ['order_no' => 'ORD-1', 'branch' => $shop, 'tracking_no' => 'TRK1', 'weight_g' => 500])->assertOk();

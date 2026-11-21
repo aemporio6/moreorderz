@@ -147,20 +147,36 @@ class DispatchService
             $ent = (int) Context::ent();
             $lines = DB::table('t_sales')->where('fk_id_ent', $ent)->where('order_no', $d['order_no'])->where('fk_id_branch', $d['branch'])->where('status', 'Pending')->where('sale_source', 'active')->lockForUpdate()->get();
             if ($lines->isEmpty()) throw new \RuntimeException('No open order lines found for this order.');
+            if (! empty($d['sales'])) {      // Split parcel: only the chosen lines go into this parcel (R-H-29)
+                $lines = $lines->whereIn('id', array_map('intval', (array) $d['sales']))->values();
+                if ($lines->isEmpty()) throw new \InvalidArgumentException('Choose at least one line of this order for the parcel.');
+            } else $lines = $lines->filter(fn ($s) => ! DB::table('wh_parcel_lines as pl')->join('wh_parcels as p', 'p.id', '=', 'pl.fk_id_parcel')->where('pl.fk_id_sale', $s->id)->whereNotIn('p.status', ['VOID', 'CANCELLED'])->exists())->values();
+            if ($lines->isEmpty()) throw new \RuntimeException("Order {$d['order_no']} is already packed.");
             foreach ($lines as $s) {
                 $r = DB::table('wh_reservations')->where('fk_id_sale', $s->id)->whereNotIn('status', ['RELEASED'])->first();
                 if (! $r || $r->status !== 'PICKED') throw new \RuntimeException("Order {$s->order_no}: {$s->sku} is not fully picked yet.");
                 if (DB::table('wh_parcel_lines as pl')->join('wh_parcels as p', 'p.id', '=', 'pl.fk_id_parcel')->where('pl.fk_id_sale', $s->id)->whereNotIn('p.status', ['VOID', 'CANCELLED'])->exists()) throw new \RuntimeException("Order {$s->order_no} is already packed.");
             }
-            $box = ! empty($d['box']) ? DB::table('wh_box_sizes')->where('id', $d['box'])->where('fk_id_ent', $ent)->first() : null;
+            // pack verification, weight, box (R-H-29)
+            $pl = array_values(array_filter(PackService::lines($ent, (string) $d['order_no'], (int) $d['branch']), fn ($l) => $lines->contains('id', (int) $l['sale'])));
+            if (PackService::scanOn($ent)) {
+                if (empty($d['scans'])) throw new \InvalidArgumentException('Scan each item of the order to verify it (or switch WH_SCAN_CONFIRM_PACK off).');
+                $v = PackService::verify($pl, (array) $d['scans']); if (! $v['ok']) throw new \InvalidArgumentException(PackService::refusal($v));
+            }
+            $sug = PackService::suggest($ent, $pl);
+            if (PackService::needsWeight(isset($d['service']) ? (int) $d['service'] : null) && empty($d['weight_g'])) throw new \InvalidArgumentException('Weight is needed for this carrier service – weigh the parcel.');
+            $boxId = ! empty($d['box']) ? (int) $d['box'] : $sug['box'];
+            $box = $boxId ? DB::table('wh_box_sizes')->where('id', $boxId)->whereIn('fk_id_ent', [$ent, 0])->first() : null;
+            if (! empty($d['box']) && ! $box) throw new \InvalidArgumentException('Box not found.');
             $carrier = $d['carrier'] ?? DB::table('t_branches')->where('id', $d['branch'])->value('fk_id_default_carrier');
             $pid = (int) DB::table('wh_parcels')->insertGetId(['fk_id_ent' => $ent, 'parcel_code' => Numbering::next('PRC', $ent), 'fk_id_branch' => $d['branch'], 'order_no' => $d['order_no'], 'fk_id_site' => (int) ($lines[0]->fk_id_sell_location ?: 0), 'fk_id_carrier' => $carrier,
-                'fk_id_box' => $box->id ?? null, 'weight_g' => $d['weight_g'] ?? null, 'length_cm' => $box ? $box->inner_l_mm / 10 : null, 'width_cm' => $box ? $box->inner_w_mm / 10 : null, 'height_cm' => $box ? $box->inner_h_mm / 10 : null,
+                'fk_id_box' => $box->id ?? null, 'box_suggested' => $sug['box'], 'fk_id_car_pkg_svc' => $d['service'] ?? null, 'weight_g' => $d['weight_g'] ?? $sug['weight_g'], 'length_cm' => $box ? $box->inner_l_mm / 10 : null, 'width_cm' => $box ? $box->inner_w_mm / 10 : null, 'height_cm' => $box ? $box->inner_h_mm / 10 : null,
                 'tracking_no' => $d['tracking_no'] ?? null, 'label_status' => ! empty($d['tracking_no']) ? 'READY' : 'NONE', 'status' => 'READY', 'packed_by' => Context::userId(), 'packed_at' => now(), 'created_at' => now()]);
             foreach ($lines as $s) {
-                DB::table('wh_parcel_lines')->insert(['fk_id_parcel' => $pid, 'fk_id_sale' => $s->id, 'fk_id_product' => $s->fk_product_id, 'qty' => $s->qty, 'qty_packed' => $s->qty]);
+                DB::table('wh_parcel_lines')->insert(['fk_id_parcel' => $pid, 'fk_id_sale' => $s->id, 'fk_id_product' => $s->fk_product_id, 'qty' => $s->qty, 'qty_packed' => $s->qty, 'qty_scanned' => isset($v) ? $s->qty : null]);
                 DB::table('t_sales')->where('id', $s->id)->update(['wh_status' => 'PACKED', 'tracking_no' => $d['tracking_no'] ?? $s->tracking_no]);
             }
+            PackService::useBox($ent, $pid, $box->id ?? null);      // packing materials as stock (WH_PACKING_STOCK)
             EventBus::fire('PARCEL_PACKED', 'wh_parcels', $pid, ['order' => $d['order_no']], $ent);
             EventBus::fire('PARCEL_READY', 'wh_parcels', $pid, [], $ent);
             return $pid;

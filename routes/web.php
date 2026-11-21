@@ -408,6 +408,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('pick-lists/{id}', [OrdersController::class, 'pickList'])->whereNumber('id');
         Route::post('pick-lines/{lineId}', [OrdersController::class, 'pick'])->whereNumber('lineId');
         Route::post('pack', [OrdersController::class, 'pack']);
+        Route::get('pack/check', [OrdersController::class, 'packCheck']);
+        Route::post('pack/short', [OrdersController::class, 'packShort']);
         Route::post('handover', [OrdersController::class, 'openHandover']);
         Route::post('handover/{id}/scan', [OrdersController::class, 'scan'])->whereNumber('id');
         Route::post('handover/{id}/close', [OrdersController::class, 'closeHandover'])->whereNumber('id');

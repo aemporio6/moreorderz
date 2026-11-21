@@ -26,7 +26,7 @@
 26|B|function pick|picking on the phone (Work screen)
 27|B|function pick|short pick -> back in queue + count task
 28|M||partial / abandoned / reprinted pick lists not built
-29|P|function pack|pack only fully picked, once; weight / box / materials not built
+29|B|class PackService|Pack: order lines (one parcel per order, Split parcel = choose the lines); scan each item by SKU / EAN / UPC / listing SKU (WH_SCAN_CONFIRM_PACK, default Y): wrong / extra → refused with the reason, missing → Short sends the units Dispatch → Missing and the line back to picking (new pick list); weight typed (scale later), required when the carrier preset needs it (needs_weight on the preset screen); box suggestion = product pack box (new pack spec fields: box, packed weight, packed L×W×H) for single-SKU parcels, else the smallest WH_BOX (wh_box_sizes, company-0 template) fitting summed volume + weight, user may change it, suggestion kept; WH_PACKING_STOCK: box packing product −1, movement packing_use, reason PACKING_USE, owner DEFAULT_STOCK_OWNER, cost booked as packing cost (5200, memo parcel + shop, on the parcel); packing slip auto-print (WH_AUTOPRINT_PACKING_SLIP); order lines PACKED (parcel Ready per R-H-33). Rule test passes (3 × SKU-A, pack box B2 → suggestion B2, 420 g, box stock −1 PACKING_USE)
 30|F|form:carrier_service_rule|form only
 31|P|function buyLabels|labels bought through the carrier connection / label PDF import; not tested on a real account
 32|P|function reprint|reprint with reason; void / address change not built
