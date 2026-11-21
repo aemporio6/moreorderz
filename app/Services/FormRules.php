@@ -32,7 +32,8 @@ class FormRules
     {
         if (Registry::table($formKey) === 't_account' && ($old['record_status'] ?? null) === 'DRAFT') $data['record_status'] = 'ACTIVE';      // the final Save of a draft person (R-C-20 / R-C-9)
         $code = Registry::table($formKey) === 't_account' ? AccountCode::check($formKey, $data, $old, $id) : [];      // R-C-4 one account-code rule
-        return $code + OwnItems::check($formKey, $data, $old, $id) + self::checkForm($formKey, $data, $old, $id, $already);      // R-C-20: an own item must be the person's own
+        $inherit = SourcingInherit::check((string) Registry::table($formKey), $data, $old);      // R-B_SOURCING-21 supplier / SKU of the cycle steps
+        return $code + $inherit + OwnItems::check($formKey, $data, $old, $id) + self::checkForm($formKey, $data, $old, $id, $already);      // R-C-20: an own item must be the person's own
     }
 
     private static function checkForm(string $formKey, array &$data, array $old, ?int $id, array $already = []): array

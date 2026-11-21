@@ -18,7 +18,7 @@
 18|M||Save & Next with carried context not built
 19|M||"already exists" guard on Next not built
 20|M||step pager not built
-21|P|function cycle|supplier from the cycle's PO; SKU inherit partly
+21|B|class SourcingInherit|supplier of RFQ / Sample / PO / QC / Shipment / Payment = linked:cycle.supplier (latest active PO, else latest RFQ), filled only when empty, chips for every supplier of the cycle, a Payment takes the chosen PO's supplier, never the product master; SKU on Allocation / Carton / Ownership / Platform allocation / PO line / Transfer read-only "Auto from Product" from the cycle product, cleared with it; registry + field_registry corrected; SourcingInheritTest
 22|P|function cycle|step lists scoped to the cycle on the workspace
 23|M||"[Saved: value] (re-select)" rule not built
 24|P|function cycle|cycle header with code, status, supplier; MOQ / chips not built
