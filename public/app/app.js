@@ -2635,6 +2635,10 @@
           <td style="white-space:nowrap"><button class="btn sm" data-more="${c.key || c.tmp}" title="List price, fee, carrier preset and packing per marketplace">Details</button>${E && c.key ? ` <button class="btn sm" data-dup="${c.key.slice(1)}">Duplicate</button> <button class="btn sm ghost" data-rm="${c.key.slice(1)}">Remove</button>` : ''}</td></tr>`).join('')}</tbody></table>${cards.length ? '' : '<div class="empty">No child yet. Press "Add child".</div>'}</div><div id="vaOut" class="small" style="padding:8px 12px"></div></div>`;
       const byK = k => cards.find(c => (c.key || c.tmp) === k);
       $$('[data-p]').forEach(el => el.onchange = () => { const c = byK(el.dataset.k); c[el.dataset.p] = el.type === 'checkbox' ? (el.checked ? 1 : 0) : el.value; });
+      $$('[data-p="sku"]').forEach(el => { let t; el.oninput = () => { clearTimeout(t); t = setTimeout(async () => { const c = byK(el.dataset.k); let m = el.parentElement.querySelector('.skuchk'); if (!m) { el.insertAdjacentHTML('afterend', '<div class="small skuchk"></div>'); m = el.parentElement.querySelector('.skuchk'); }      // R-D-2 live SKU check, 500 ms after the last key
+        if (!el.value.trim()) { m.innerHTML = ''; return; }
+        try { const r = await api('sku-check?' + new URLSearchParams({ sku: el.value, id: c && c.key ? c.key.slice(1) : '' })); m.style.color = r.ok ? (r.level === 'warn' ? '#b7791f' : 'var(--ok,#1e7e34)') : 'var(--err)'; m.innerHTML = esc(r.message || '') + (r.link ? ` <a href="${esc(r.link)}" target="_blank" rel="noopener">open</a>` : ''); }
+        catch (x) { m.style.color = ''; m.textContent = 'Will verify on save'; } }, 500); }; });
       $$('[data-c]').forEach(el => el.onchange = () => { const c = byK(el.dataset.c); (c.marketplaces[el.dataset.m] = c.marketplaces[el.dataset.m] || {})[el.dataset.f] = el.value; });
       $$('[data-more]').forEach(b => b.onclick = () => { const c = byK(b.dataset.more), val = (m, f) => { const o = c.marketplaces[m.id] && c.marketplaces[m.id][f] !== undefined ? c.marketplaces[m.id][f] : (c.mp && c.mp[m.id] && c.mp[m.id][f].own ? c.mp[m.id][f].value : ''); const inh = c.mp && c.mp[m.id] && !c.mp[m.id][f].own ? c.mp[m.id][f].value : null; return [o ?? '', inh]; };
         const sel = (m, f, list) => { const [o, inh] = val(m, f); return `<select data-mm="${m.id}" data-mf="${f}" ${E ? '' : 'disabled'}><option value="">${inh ? 'from parent: ' + esc((list.find(x => x.id == inh) || {}).name || inh) : '—'}</option>${list.map(x => `<option value="${x.id}" ${String(x.id) === String(o) ? 'selected' : ''}>${esc(x.name)} (${f2(x.rate)})</option>`).join('')}</select>`; };
@@ -3520,10 +3524,21 @@
     // auto-correct while typing ends (with Undo) and look-alike warning before a duplicate is saved
     const fixOf = (f, v) => { let x = String(v).replace(/\s+/g, ' ').trim(); if (f.auto_correct === 'upper') x = x.toUpperCase(); else if (f.auto_correct === 'lower' || f.type === 'email') x = x.toLowerCase(); return x; };
     const drawUnder = f => { const u = $(`[data-under="${f.name}"]`, ov); if (u) u.innerHTML = under(f); };
+    // typed code checks (R-F_SETUP-35); SKU: block / look-alike / available with a link, 500 ms after the last key (R-D-2)
+    const liveCheck = async (el, name, typing) => { const w = el.closest('.fld') || $(`[data-w="${name}"]`, ov); if (w) { w.classList.remove('has-err'); $$('.live', w).forEach(m => m.remove()); }
+      if (!el.value.trim() || /^•/.test(el.value)) return;
+      try { const r = await api(`form/${key}/live?` + new URLSearchParams({ field: name, value: el.value, id: id || '' })); if (!w) return; $$('.live', w).forEach(m => m.remove());
+        if (!typing && r.value && r.value !== el.value) { el.value = r.value; change(name, r.value); }
+        const link = r.link ? ` <a href="${esc(r.link)}" target="_blank" rel="noopener">${r.ok ? 'open ' + esc(r.match || '') : 'Open it'}</a>` : '';
+        if (!r.ok) { w.classList.add('has-err'); w.insertAdjacentHTML('beforeend', `<div class="errtext live">${esc(r.message)}${link}</div>`); }
+        else if (r.level === 'warn') w.insertAdjacentHTML('beforeend', `<div class="small live" data-live-warn style="color:#b7791f">${esc(r.message)}${link}</div>`);
+        else if (r.level === 'ok' && typing) w.insertAdjacentHTML('beforeend', `<div class="small live" data-live-ok style="color:var(--ok,#1e7e34)">${esc(r.message)}</div>`); }
+      catch (x) { if (typing && w) w.insertAdjacentHTML('beforeend', '<div class="small muted live">Will verify on save</div>'); } };
+    const liveTimers = {};
+    $('#fBody', ov).addEventListener('input', e => { const el = e.target, name = el.dataset.f; if (!name || !(def.live_typing || []).includes(name)) return; clearTimeout(liveTimers[name]); liveTimers[name] = setTimeout(() => liveCheck(el, name, true), 500); });
     $('#fBody', ov).addEventListener('focusout', async e => { const el = e.target, name = el.dataset.f; if (!name) return; const f = flds.find(x => x.name === name); if (!f || el.type === 'checkbox' || el.type === 'password') return;
       if (['text', 'email', 'tel'].includes(el.type) && el.value) { const fx = fixOf(f, el.value); if (fx !== el.value && !fixes['!' + name]) { fixes[name] = el.value; el.value = fx; change(name, fx); drawUnder(f); } }
-      if ((def.live || []).includes(name)) { const w = el.closest('.fld') || $(`[data-w="${name}"]`, ov); if (w) { w.classList.remove('has-err'); const m0 = w.querySelector('.errtext.live'); m0 && m0.remove(); }      // typed code checks while typing (R-F_SETUP-35)
-        if (el.value.trim() && !/^•/.test(el.value)) { try { const r = await api(`form/${key}/live?` + new URLSearchParams({ field: name, value: el.value, id: id || '' })); if (r.value && r.value !== el.value) { el.value = r.value; change(name, r.value); } if (!r.ok && w) { w.classList.add('has-err'); w.insertAdjacentHTML('beforeend', `<div class="errtext live">${esc(r.message)}</div>`); } } catch (x) { } } }
+      if ((def.live || []).includes(name)) await liveCheck(el, name, (def.live_typing || []).includes(name));
       if ((def.lookalike || []).includes(name) && el.value.trim().length >= 3) { try { const r = await api(`lookalike/${key}?` + new URLSearchParams({ field: name, value: el.value, id: id || '' })); alike[name] = r.matches; } catch (x) { alike[name] = []; } drawUnder(f); } else if (alike[name]) { alike[name] = []; drawUnder(f); } });
     $('#fBody', ov).addEventListener('input', e => { if (e.target.dataset.f && e.target.value !== '') { const w = e.target.closest('.fld'); w && $$('.mo-chips', w).forEach(c => c.remove()); } });
     $('#fBody', ov).addEventListener('change', e => { const el = e.target; if (!el.dataset.f) return; typed.add(el.dataset.f); change(el.dataset.f, read(el)); const w = el.closest('.fld'); if (w && w.classList.contains('has-err')) { w.classList.remove('has-err'); const m = w.querySelector('.errtext'); m && m.remove(); } refreshWhy(); });

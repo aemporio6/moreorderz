@@ -44,7 +44,7 @@ class VariationsTest extends TestCase
         $this->world();
         V::save($this->p, [['sku' => 'TEE-1'], ['sku' => 'TEE'], ['sku' => '']], $this->owner);
         $r = V::save($this->p, [['sku' => 'TEE-2'], ['sku' => 'TEE'], ['sku' => '', 'name' => 'x']], $this->owner);
-        $this->assertSame('1 created · 0 saved · 2 skipped', $r['message']); $this->assertStringContainsString('SKU TEE already exists', $r['errors'][0]); $this->assertStringContainsString('Child SKU is required', $r['errors'][1]);
+        $this->assertSame('1 created · 0 saved · 2 skipped', $r['message']); $this->assertStringContainsString('TEE: This SKU already exists – open it', $r['errors'][0]);      // R-D-2 one message for product and child $this->assertStringContainsString('Child SKU is required', $r['errors'][1]);
         $child = (int) DB::table('t_product_vendors')->where('SKU_VENDOR', 'TEE-1')->value('id');
         try { V::save($child, [['sku' => 'X']], $this->owner); $this->fail(); } catch (\InvalidArgumentException $e) { $this->assertSame('This product is a child product and child sku can not be added for this product', $e->getMessage()); }
         V::copyParentPrices($this->p, $this->owner); $this->assertSame(2, DB::table('t_variation_marketplace_prices')->where('fk_id_marketplace', $this->mp)->where('sale_price', 8.25)->count());

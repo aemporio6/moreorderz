@@ -64,6 +64,9 @@ class StockController extends Controller
     public function putaways(Request $r) { \App\Services\Perm::need($r->user(), 'stock.CHANGE'); return ['rows' => \App\Services\WarehouseMode::putaways((int) Context::ent()), 'bins' => \Illuminate\Support\Facades\DB::table('cat_inventory_locations')->where('fk_id_ent', Context::ent())->where('kind', 'BIN')->where('f_active', 1)->orderBy('pick_seq')->limit(500)->get(['id', 'location_name as name'])]; }
     public function putaway(Request $r, int $id) { \App\Services\Perm::need($r->user(), 'stock.CHANGE'); return $this->run(fn () => \App\Services\WarehouseMode::putaway((int) Context::ent(), $id, (int) $r->input('bin'), $r->filled('qty') ? (int) $r->input('qty') : null)); }
 
+    /** SKU live check (R-D-2) for the child cards of a parent. */
+    public function skuCheck(Request $r) { $this->can($r, 'stock.SEE'); return \App\Services\SkuCheck::check((int) Context::ent(), (string) $r->query('sku', ''), $r->integer('id') ?: null); }
+
     /** Stock alerts page (R-D-46). */
     public function stockAlerts(Request $r) { $this->can($r, 'stock.SEE'); return \App\Services\StockAlerts::page((int) Context::ent()) + ['can_change' => \App\Services\Perm::has($r->user(), 'stock.CHANGE'), 'can_buy' => \App\Services\Perm::has($r->user(), 'buying.BUY')]; }
     public function stockAlertUpdate(Request $r, int $id)
