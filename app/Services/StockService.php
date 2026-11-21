@@ -329,9 +329,9 @@ class StockService
     public static function selfCheck(int $ent): array
     {
         $bad = DB::table('t_product_vendors as p')->where('p.fk_id_ent', $ent)
-            ->selectRaw('p.id, p.SKU_VENDOR sku, p.stock cached, (SELECT COALESCE(SUM(b.qty),0) FROM fin_lot_balances b JOIN fin_lots l ON l.id=b.fk_id_lot WHERE l.fk_id_product=p.id) units, (SELECT COALESCE(SUM(m.qty_change),0) FROM t_stock_movements m WHERE m.fk_id_product=p.id) ledger')
-            ->havingRaw('cached <> units OR units <> ledger')->get();
-        $r = TaskEngine::sync('STK_LEDGER_MISMATCH', $bad->map(fn ($b) => ['key' => [$b->id], 'title' => "Stock differs for {$b->sku}: product says {$b->cached}, lots {$b->units}, ledger {$b->ledger}", 'opt' => ['module' => 't_product_vendors', 'record_id' => $b->id]])->all(), null, $ent);
+            ->selectRaw('p.id, p.SKU_VENDOR sku, p.stock cached, (SELECT COALESCE(SUM(b.qty),0) FROM fin_lot_balances b JOIN fin_lots l ON l.id=b.fk_id_lot WHERE l.fk_id_product=p.id) units, (SELECT COALESCE(SUM(m.qty_change),0) FROM t_stock_movements m WHERE m.fk_id_product=p.id) ledger, (SELECT COALESCE(SUM(b.qty),0) FROM fin_lot_balances b JOIN fin_lots l ON l.id=b.fk_id_lot WHERE l.fk_id_product=p.id AND b.fk_id_location IS NOT NULL) at_loc')
+            ->havingRaw('cached <> units OR units <> ledger OR cached <> at_loc')->get();      // R-F_SETUP-28: also product stock vs Σ location qty (stock > 0 without any location row counts)
+        $r = TaskEngine::sync('STK_LEDGER_MISMATCH', $bad->map(fn ($b) => ['key' => [$b->id], 'title' => "Stock differs for {$b->sku}: product says " . (float) $b->cached . ', locations ' . (float) $b->at_loc . ', lots ' . (float) $b->units . ', ledger ' . (float) $b->ledger, 'opt' => ['module' => 't_product_vendors', 'record_id' => $b->id]])->all(), null, $ent);
         $neg = DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->where('l.company_id', $ent)->where('b.qty', '<', 0)->count();
         $gl = Ledger::balance($ent, '1200');
         return ['mismatch' => $bad->count(), 'negative_balances' => $neg, 'stock_value' => self::value($ent), 'ledger_1200' => $gl, 'value_matches_ledger' => abs(self::value($ent) - $gl) < 0.005] + $r;

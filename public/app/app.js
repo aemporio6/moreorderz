@@ -199,6 +199,7 @@
       if ((mt = r.match(/^#\/stock\/counts\/(\d+)/))) return await pageCount(+mt[1]);
       if (r === '#/stock/counts') return await pageCounts();
       if ((mt = r.match(/^#\/prices\/(\d+)/))) return await pagePrices(+mt[1]);
+      if (r.startsWith('#/stock/health')) return await pageStockHealth((r.match(/c=(\w+)/) || [])[1] || 'low');
       if (r.startsWith('#/stock')) return await pageStock({ low: r.includes('low=1') });
       if (r.startsWith('#/buying/overview')) return await pageBuyingOverview(r.split('?')[1] || '');
       if (r === '#/buying' || r.startsWith('#/buying?')) { const u = new URLSearchParams(r.split('?')[1] || ''); return await pageBuying(+(u.get('page') || 1), Object.fromEntries(['supplier', 'q', 'stage', 'reset'].filter(k => u.has(k)).map(k => [k, u.get(k)]))); }
@@ -2554,6 +2555,16 @@
     if (kind === 'ownership') return miniForm('Give units to another owner', 'The lot is split. Cost and received date stay the same, so the selling order does not change.', [{ name: 'lot', label: 'Lot', required: true, value: preset.lot, options: [[preset.lot, preset.lot_code]] }, { name: 'qty', label: 'Units', type: 'number', required: true },
       { name: 'to_owner', label: 'New owner', required: true, options: opt(p.owners, x => [x.id, x.name]) }], send('stock/ownership'), 'Give');
   }
+  // R-F_SETUP-28: the products behind one row of the Inventory Management card
+  async function pageStockHealth(c) {
+    busy(true); let d; try { d = await api('stock-health?c=' + c); } finally { busy(false); }
+    const n = x => (+x).toLocaleString('en-GB', { maximumFractionDigits: 2 });
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/buying/overview">Business overview</a> › Inventory Management</div><h1>${esc(d.title)}</h1><div class="sub">${d.total} product(s). Open one to fix it; the list and its task close by themselves once the stock is right.</div></div></div>
+      <div class="seg" style="margin-bottom:10px;flex-wrap:wrap">${Object.entries(d.conditions).map(([k, l]) => `<a href="#/stock/health?c=${k}" class="${k === d.key ? 'on' : ''}" style="padding:6px 10px;display:inline-block">${esc(l)}</a>`).join('')}</div>
+      <div class="card"><div class="tbl-wrap"><table class="t" id="shList"><thead><tr><th>SKU</th><th>Product</th><th class="num">Stock</th><th class="num">At locations</th><th class="num">Min level</th><th>Out-of-stock flag</th><th>Landing price</th></tr></thead><tbody>
+        ${d.rows.map(r => `<tr data-go="${esc(r.link)}" style="cursor:pointer"><td><a href="${esc(r.link)}">${esc(r.sku || '#' + r.id)}</a></td><td>${esc(r.name || '')}</td><td class="num">${n(r.stock)}</td><td class="num" style="${r.stock !== r.at_locations ? 'color:var(--err);font-weight:600' : ''}">${n(r.at_locations)}</td><td class="num">${r.min_level ? n(r.min_level) : ''}</td><td>${r.out_of_stock_flag ? 'Yes' : ''}</td><td>${r.cost_set ? 'set' : '<span class="chip warn">empty</span>'}</td></tr>`).join('')}</tbody></table>${d.rows.length ? '' : '<div class="empty">Nothing here – every product is fine on this point.</div>'}</div></div>`;
+    $$('#shList tr[data-go]').forEach(tr => tr.onclick = e => { if (!e.target.closest('a')) go(tr.dataset.go); });
+  }
   async function pageStock(st = {}) {
     busy(true); let d; try { d = await api('stock/on-hand?q=' + encodeURIComponent(st.q || '')); } finally { busy(false); }
     const rows = st.low ? d.rows.filter(r => r.low) : d.rows;
@@ -2846,6 +2857,7 @@
     load('lots', '#bLots', (box, d) => { const tone = { teal: '#d9f0ee', amber: '#fff1d6', red: '#fde2e0' };
       box.innerHTML = `<div class="card"><div class="card-h"><h3>${esc(d.title)}</h3></div>${d.rows.length ? `<div class="tbl-wrap"><table class="t" id="lotT"><thead><tr><th>Batch / Lot</th><th class="num">Qty accepted</th><th>Owner / Investor</th><th class="num">${esc(d.header)}</th></tr></thead><tbody>${d.rows.map(r => `<tr><td>${esc(r.batch)}<div class="small muted">${esc(r.sku || '')} · ${esc(r.lot)}${r.cycle_id ? ` · <a href="#/cycle/${r.cycle_id}">${esc(r.cycle)}</a>` : ''}</div></td><td class="num">${(+r.qty).toLocaleString()}</td><td>${esc(r.owner)}</td><td class="num">${r.cost !== undefined ? (+r.cost).toFixed(4) + ' ' : ''}<span class="chip" style="background:${tone[r.tone]}">${esc(r.chip)}</span></td></tr>`).join('')}</tbody></table></div>` : `<div class="empty">${esc(d.empty)}</div>`}</div>`; });
     perCard('buyingcard', '#oBuy', (box, d) => { box.innerHTML = `<div class="card"><div class="card-h"><h3>${esc(d.title)}</h3><span data-pslot style="margin-left:auto"></span></div>${kv([['Purchases (period)', d.purchases], ['Last purchase', d.last], ...(d.value !== undefined ? [['Buy value (period)', money2(d.value)]] : [])])}<div class="card-b"><a href="${d.link}" class="small">Open module</a></div></div>`; });
+    load('stockhealth', '#oStock', (box, d) => { box.innerHTML = `<div class="card" id="stockHealth"><div class="card-h"><h3>${esc(d.title)}</h3></div><table class="t"><tbody>${d.rows.map(r => `<tr><td><a href="${r.link}">${esc(r.label)}</a></td><td class="num" style="${r.count ? 'color:#b7791f;font-weight:600' : ''}">${esc(String(r.figure))}</td></tr>`).join('')}</tbody></table><div class="card-b"><a href="${d.link}" class="small">Open module</a></div></div>`; });      // R-F_SETUP-28
     load('glance', '#oGlance', (box, d) => { box.innerHTML = `<div class="card"><div class="card-h"><h3>${esc(d.title)}</h3></div><table class="t"><tbody>${d.rows.map(r => `<tr><td><a href="${r.link}">${esc(r.label)}</a></td><td class="num">${esc(String(r.figure))}</td></tr>`).join('')}</tbody></table><div class="card-b"><a href="${d.link}" class="small">Open module</a></div></div>`; });
     perCard('team', '#bTeam', (box, d) => { box.innerHTML = `<div class="card"><div class="card-h"><h3>${esc(d.title)}</h3><span data-pslot style="margin-left:auto"></span></div>${d.rows.length ? `<div class="card-b" id="tmList">${d.rows.map(r => `<div style="padding:4px 0"><a href="${esc(r.drill)}">${esc(r.line)}</a></div>`).join('')}</div>` : `<div class="empty">${esc(d.empty)}</div>`}</div>`; });
     const drawNeeds = (box, d) => { const P = { P1: '#c0392b', P2: '#e67e22' };
@@ -2870,7 +2882,7 @@
     <div class="small muted" style="margin-bottom:8px">This page only reads data – nothing here changes a record. Click any cycle, tile or row to open the real screen.</div>`;
   async function pageBuyingOverview(qs) {
     $('#main').innerHTML = `${buyTabs('overview', qs)}<div class="page-head"><div><h1>Business overview</h1></div></div><div id="bFailed"></div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:12px;align-items:start"><div id="oBuy"></div><div id="oGlance"></div><div id="bInv"></div><div id="bInvest"></div><div id="bTeam"></div></div>`;
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:12px;align-items:start"><div id="oBuy"></div><div id="oGlance"></div><div id="oStock"></div><div id="bInv"></div><div id="bInvest"></div><div id="bTeam"></div></div>`;
     S.failedCards = []; const r = await api('buying?' + qs).catch(() => ({ rights: {} })); buyingCards(null, !!(r.rights || {}).money);
     $('#main').addEventListener('click', e => { const a = e.target.closest('[data-retry]'); if (!a) return; e.preventDefault(); buyingCards(a.dataset.retry, !!(r.rights || {}).money); });
   }

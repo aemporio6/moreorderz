@@ -137,6 +137,7 @@ class BuyingController extends Controller
             'contacts' => ['Contact today', fn () => \App\Services\SourcingBoard::contactToday($ent)], 'shipments' => ['Shipments on the way', fn () => \App\Services\SourcingBoard::shipments($ent, $r->boolean('all') ? 500 : 15)],
             'payments' => ['Supplier payments', fn () => \App\Services\DashCards::payments($ent)], 'needs' => ['Needs action', fn () => \App\Services\DashCards::needs($ent, $r->boolean('all'))],
             'investors' => ['Investors', fn () => \App\Services\DashCards::investors($ent, $per['from'], $per['to']) + ['period' => $per]],
+            'stockhealth' => ['Inventory Management', fn () => \App\Services\StockHealth::card($ent)],      // R-F_SETUP-28
             'lots' => ['Inventory receiving', fn () => \App\Services\DashCards::lots($ent, $money)], 'glance' => ['Sourcing Management', fn () => \App\Services\DashCards::glance($ent, $money)],
             'buyingcard' => ['Buying Management', fn () => \App\Services\DashCards::buying($ent, $per['from'], $per['to'], $money) + ['period' => $per]],
             'team' => ['Team activity', fn () => \App\Services\DashCards::team($ent, $per['from'], $per['to']) + ['period' => $per]],
@@ -144,6 +145,8 @@ class BuyingController extends Controller
             default => abort(404) };
         return \App\Services\DashCards::run($ent, $card, $fn[0], $fn[1]);
     }
+    /** R-F_SETUP-28: the products behind one row of the Inventory Management card. */
+    public function stockHealth(Request $r) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\StockHealth::list((int) Context::ent(), (string) $r->query('c', 'low'))); }
     /** R-F_SETUP-22 / 23: Contact today and the shipments board on the buying dashboard. */
     public function contactsToday(Request $r) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\SourcingBoard::contactToday((int) Context::ent())); }
     public function contactsWa(Request $r) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\SourcingBoard::whatsapp((int) Context::ent(), (string) $r->input('key'), (int) $r->input('cycle'), (string) $r->input('item'), trim((string) $r->input('text')))); }
