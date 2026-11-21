@@ -51,11 +51,19 @@ class SalesReports
         if (! empty($f['vendor_inventory'])) $q->whereIn('s.fk_product_id', DB::table('t_product_vendors')->where('fk_id_vendor', (int) $f['vendor_inventory'])->select('id'));           // products of that vendor
         if (! empty($f['company'])) { $c = (int) $f['company']; $q->where(fn ($w) => $w->where('s.fk_id_company', $c)->orWhere(fn ($x) => $x->where(fn ($y) => $y->whereNull('s.fk_id_company')->orWhere('s.fk_id_company', 0))->whereIn('s.fk_id_branch', DB::table('t_branches')->where('fk_id_company', $c)->select('id')))); }
         if (! empty($f['owner'])) $q->whereIn('s.fk_id_branch', DB::table('t_branches')->where('fk_id_owner', (int) $f['owner'])->select('id'));
-        if (! empty($f['va'])) $q->whereIn('s.fk_id_branch', DB::table('t_branches')->where('fk_id_seller', (int) $f['va'])->select('id'));
+        if (! empty($f['va'])) $q->whereIn('s.fk_id_branch', SalesImport::vaShops((int) $f['va'], date('Y-m-d')) ?: [0]);      // the VA = holder of the shop assignment role (seller field as fallback)
         return $q;
     }
 
     public static function year(mixed $y): int { $y = (int) $y; return $y >= 2020 && $y <= 2030 ? $y : (int) date('Y'); }
+
+    /** VAs for the filter: holders of a running VA / SELLER shop assignment, plus the sellers named on a shop. */
+    private static function vas(): array
+    {
+        $n = "TRIM(CONCAT_WS(' ', NULLIF(a.first_name,''), NULLIF(a.middle_name,''), NULLIF(a.sur_name,'')))"; $shops = Perm::mine(DB::table('t_branches'), 'id')->where('fk_id_ent', Context::ent()); $day = date('Y-m-d');
+        $ids = (clone $shops)->whereNotNull('fk_id_seller')->pluck('fk_id_seller')->merge(DB::table('t_account_branches')->whereIn('fk_id_branch', (clone $shops)->select('id'))->whereIn('role_code', ['VA', 'SELLER'])->where(fn ($w) => $w->whereNull('d_to')->orWhere('d_to', '>=', $day))->pluck('fk_id_account'))->unique()->filter()->all();
+        return DB::table('t_account as a')->whereIn('a.id', $ids ?: [0])->orderByRaw($n)->get(['a.id', DB::raw("CONCAT_WS(' - ', NULLIF(a.account_code,''), $n) as name")])->all();
+    }
 
     private static function people(string $col): array
     {
@@ -69,7 +77,7 @@ class SalesReports
         return ['years' => range(2020, 2030), 'shops' => ShopLabel::list($u), 'marketplaces' => DB::table('cat_marketplaces')->whereIn('id', Perm::mine(DB::table('t_branches'), 'id')->where('fk_id_ent', $ent)->select('fk_id_marketplace'))->orderBy('marketplace_short')->get(['id', DB::raw("COALESCE(NULLIF(marketplace_short,''), NULLIF(marketplace_descr,''), CONCAT('Marketplace ', id)) as name")])->all(),
             'vendors' => $acc(DB::table('t_sales')->where('fk_id_ent', $ent)->where('fk_id_vendor', '>', 0)->distinct()->select('fk_id_vendor')), 'vendor_inventory' => $acc(DB::table('t_product_vendors')->where('fk_id_ent', $ent)->where('fk_id_vendor', '>', 0)->distinct()->select('fk_id_vendor')),
             'companies' => DB::table('t_enterprise')->whereIn('id', DB::table('t_branches')->where('fk_id_ent', $ent)->whereNotNull('fk_id_company')->distinct()->select('fk_id_company'))->orWhere('id', $ent)->orderBy('ent_name')->get(['id', 'ent_name as name'])->all(),
-            'owners' => self::people('fk_id_owner'), 'vas' => self::people('fk_id_seller')];
+            'owners' => self::people('fk_id_owner'), 'vas' => self::vas()];
     }
 
     // ---------- R-A_SALES-50: Annual Sale Report ----------

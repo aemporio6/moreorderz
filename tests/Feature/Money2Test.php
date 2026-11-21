@@ -62,6 +62,20 @@ class Money2Test extends TestCase
         $this->assertSame([1, 34.5, 0.0], [count($m['rows']), $m['total']['profit'], $m['books']['difference']]);
     }
 
+    public function test_confirm_takes_stock_for_refunded_lines_exactly_as_the_rule_says(): void
+    {
+        // the rule's three lines: total 0 + Carrier → not deducted; total 0 + Product_Carrier → deducted (write-off); total 5.00 + Carrier → deducted
+        $a = $this->confirmed('RF-A', 1); $b = $this->confirmed('RF-B', 1); $c = $this->confirmed('RF-C', 1); $d = $this->confirmed('RF-D', 2);
+        $ref = fn (int $id, float $total, string $nature) => DB::table('t_sales')->where('id', $id)->update(['status' => 'Refunded', 'total_amount' => $total, 'total_amount_gbp' => $total, 'refund_loss_nature' => $nature]);
+        $ref($a, 0, 'Carrier'); $ref($b, 0, 'Product_Carrier'); $ref($c, 5.00, 'Carrier'); $left = fn () => (int) DB::table('fin_lots')->where('fk_id_product', $this->p)->sum('qty_left'); $before = $left();
+        Sales::confirmMonth($this->shop, '2026-09', true);
+        $this->assertSame([0, 1, 1, 1], array_map(fn ($id) => (int) DB::table('t_sales')->where('id', $id)->value('f_stock_deducted'), [$a, $b, $c, $d])); $this->assertSame($before - 4, $left());      // 1 + 1 + 2 units left stock; the returned one did not
+        $this->assertSame(['Refunded', 'Refunded', 'Refunded', 'Confirmed'], array_map(fn ($id) => DB::table('t_sales')->where('id', $id)->value('status'), [$a, $b, $c, $d]));
+        $reason = fn (int $id) => DB::table('fin_lot_consumption')->where('fk_id_sale', $id)->pluck('reason')->unique()->values()->all();
+        $this->assertSame([[], ['WRITE_OFF'], ['SALE'], ['SALE']], [$reason($a), $reason($b), $reason($c), $reason($d)]);      // the lost product is marked as a write-off in the lot ledger
+        $this->assertSame(45.0, Ledger::balance(1, '1100', null, $this->shop));      // revenue = what is left of the totals: 0 + 0 + 5 + 40
+    }
+
     public function test_refund_proposal_accept_books_the_refund_and_reject_needs_a_reason(): void
     {
         $a = $this->confirmed('ORD-1', 1); $b = $this->confirmed('ORD-2', 1);

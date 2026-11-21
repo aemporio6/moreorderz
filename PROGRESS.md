@@ -458,3 +458,10 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - Not built yet (honest): refunds per SKU from the money-file readers (they give them per order), Outside matched from a bank line, the proposal chip on the sale line, the grid on the batch view.
 - Tests: 321 pass; new `RefundProposalsTest` (3).
 - Register after this batch: BUILT 355 of 1,433 (25 %); Sales 87 of 155 (56 %) – no line closed in this batch.
+
+### Batch 7e-15 (21 Nov 2026)
+- **R-A_SALES-27 completed**: `SaleLines::expectedCost` – a variation child (`f_parent = 3`) reads `t_variation_marketplace_prices` / `t_variation_marketplace_shipping` (key = the child's product id), not the parent-type tables.
+- **R-A_SALES-33 completed**: `StockService::consumeForSale` takes the option `reason`; Month Confirm passes `WRITE_OFF` for a full refund whose loss nature contains "Product", so the lot ledger (`fin_lot_consumption.reason`) shows the write-off. New end-to-end test of Confirm with the rule's three refunded lines.
+- **R-A_SALES-50 completed**: `SalesImport::vaAccount(shop, day)` and `vaShops(va, day)` – the VA is the holder of the shop assignment role VA / SELLER on that day; the shop's seller field is only the fallback. Used by the batch (`vaOf`), the shop label (`ShopLabel::list`), the annual report's VA filter and its VA list.
+- Tests: 324 pass (3 new).
+- Register after this batch: BUILT 363 of 1,433 (25 %); Sales 92 of 155 (59 %).

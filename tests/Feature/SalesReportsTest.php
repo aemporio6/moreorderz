@@ -52,6 +52,18 @@ class SalesReportsTest extends TestCase
         $this->getJson('/api/shops/labels?active_only=1')->assertOk()->assertJsonCount(1, 'shops');
     }
 
+    public function test_the_va_of_a_shop_comes_from_the_shop_assignment_role(): void
+    {
+        $this->world(); $new = DB::table('t_account')->insertGetId($this->fill('t_account', ['fk_id_ent' => 1, 'account_code' => 'VA-9', 'first_name' => 'Nadia', 'sur_name' => 'New', 'f_active' => 1]));
+        DB::table('t_account_job_history')->insert($this->fill('t_account_job_history', ['fk_id_account' => $new, 'fk_id_marketplace' => $this->mp, 'd_job_start_date' => '2020-01-01', 'share_percentage' => 12]));
+        DB::table('t_account_branches')->insert($this->fill('t_account_branches', ['fk_id_branch' => $this->shop, 'fk_id_account' => $new, 'role_code' => 'VA', 'd_from' => '2026-01-01', 'f_active' => 1]));
+        $l = ShopLabel::list($this->owner)[0]; $this->assertSame(['Nadia New', $new, 12.0], [$l['va'], $l['va_id'], $l['va_pct']]);      // the assignment wins over the shop's seller field
+        $b = $this->batch($this->shop, 7, 0, 12); $this->line($this->shop, $b, '2026-07-05', 100, 60, 40);
+        $this->assertSame(100.0, (float) SalesReports::annual(['year' => 2026, 'va' => $new], $this->owner)['total']['sale']); $this->assertSame(0.0, (float) SalesReports::annual(['year' => 2026, 'va' => $this->va], $this->owner)['total']['sale']);      // the VA filter follows the assignment
+        $this->assertContains('VA-9 - Nadia New', array_column(json_decode(json_encode(SalesReports::filterLists($this->owner)['vas']), true), 'name'));
+        DB::table('t_account_branches')->where('fk_id_branch', $this->shop)->update(['d_to' => '2026-06-30']); $this->assertSame('Vera Seller', ShopLabel::list($this->owner, ['today' => '2026-07-10'])[0]['va']);      // assignment ended: the seller field is the fallback
+    }
+
     public function test_annual_report_with_the_example_of_the_rule(): void
     {
         $this->world(); $b = $this->batch($this->shop, 7, 40, 10); $this->line($this->shop, $b, '2026-07-05', 2000, 1100, 900, 3); $this->line($this->shop, $b, '2026-07-20', 100, 200, -100, 1);

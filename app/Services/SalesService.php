@@ -173,7 +173,8 @@ class SalesService
                         if ($miss > 0) { DB::table('wh_reservations')->where('fk_id_sale', $s->id)->whereIn('status', ['OPEN', 'ALLOCATED', 'PICKED'])->update(['status' => 'SHIPPED', 'release_reason' => 'Booked as shipped at Month Confirm', 'updated_at' => now()]);
                             foreach (self::shelfBins((int) $s->fk_product_id, $ent, $miss) as [$loc, $q]) StockService::transfer($ent, (int) $s->fk_product_id, $q, $loc, $shipped, 'Backfill at Month Confirm', $rule + ['source_type' => 'SHIP', 'source_id' => $s->id]);
                             $upd['qty_shipped'] = (int) $s->qty_shipped + $miss; }
-                        $c = StockService::consumeForSale($ent, (int) $s->id, (int) $s->fk_product_id, (int) $s->qty, $shipped, $rule['owner'], ['date' => $postDate]);
+                        $lost = (float) $s->total_amount <= 0 && str_contains((string) $s->refund_loss_nature, 'Product');      // a full refund where the product is lost: consumed and marked as a write-off in the lot ledger (R-A_SALES-33)
+                        $c = StockService::consumeForSale($ent, (int) $s->id, (int) $s->fk_product_id, (int) $s->qty, $shipped, $rule['owner'], ['date' => $postDate] + ($lost ? ['reason' => 'WRITE_OFF'] : []));
                         $upd += ['f_stock_deducted' => 1, 'cost_gbp' => $c['cost'], 'wh_status' => 'SHIPPED']; $units += (int) $s->qty; $cogs += $c['cost'];
                     } else $upd += ['f_stock_deducted' => 0];
                 }

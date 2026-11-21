@@ -53,7 +53,8 @@ class SaleLines
     {
         $pid = (int) $product->id;
         // today's carrier and packing of the product for this marketplace, else the product's own
-        $ship = DB::table('t_product_marketplace_shipping')->where(['fk_id_product' => $pid, 'fk_id_marketplace' => $marketplaceId])->first();
+        $child = (int) ($product->f_parent ?? 0) === 3;      // a variation child has its own price and shipping tables per marketplace
+        $ship = $child ? DB::table('t_variation_marketplace_shipping')->where(['fk_id_variation' => $pid, 'fk_id_marketplace' => $marketplaceId])->first() : DB::table('t_product_marketplace_shipping')->where(['fk_id_product' => $pid, 'fk_id_marketplace' => $marketplaceId])->first();
         $svc = (int) (($ship->fk_id_car_pkg_svc ?? 0) ?: ($product->fk_id_car_pkg_svc ?? 0)); $pack = (int) (($ship->fk_id_packing ?? 0) ?: ($product->fk_id_packing ?? 0));
         $carToday = self::carrierRate($svc, $ent, $date); $packToday = self::packingRate($pack, $date);      // carrier and packing rates carry a start date: the order date decides
         $log = fn (?int $mp) => DB::table('t_product_inventory_change_log')->where(['fk_product_id' => $pid, 'change_type' => 'price_change'])->when($mp !== null, fn ($q) => $q->where('fk_id_marketplace', $mp), fn ($q) => $q->where(fn ($w) => $w->whereNull('fk_id_marketplace')->orWhere('fk_id_marketplace', 0)));
@@ -62,7 +63,7 @@ class SaleLines
         if ($p = $cover($log($marketplaceId))) { $src = 'period'; $period = $p; $raw = (float) $p->new_raw_price; $sale = (float) $p->new_price; }
         elseif ($p = $cover($log(null))) { $src = 'legacy_period'; $period = $p; $raw = (float) $p->new_raw_price; $sale = (float) $p->new_price; }
         elseif (($p = $log($marketplaceId)->orderBy('from_date')->orderBy('id')->first()) && $date < $p->from_date && (float) $p->old_price > 0) { $src = 'period_old'; $period = $p; $raw = (float) $p->old_raw_price; $sale = (float) $p->old_price; }
-        elseif (($c = DB::table('t_product_marketplace_prices')->where(['fk_id_product' => $pid, 'fk_id_marketplace' => $marketplaceId])->first()) && ((float) $c->raw_price > 0 || (float) $c->sale_price > 0)) { $src = 'current'; $raw = (float) $c->raw_price; $sale = (float) $c->sale_price; }
+        elseif (($c = $child ? DB::table('t_variation_marketplace_prices')->where(['fk_id_variation' => $pid, 'fk_id_marketplace' => $marketplaceId])->first() : DB::table('t_product_marketplace_prices')->where(['fk_id_product' => $pid, 'fk_id_marketplace' => $marketplaceId])->first()) && ((float) $c->raw_price > 0 || (float) $c->sale_price > 0)) { $src = 'current'; $raw = (float) $c->raw_price; $sale = (float) $c->sale_price; }
         else { $src = 'product'; $raw = (float) ($product->raw_price ?? 0); $sale = (float) ($product->sale_price ?? 0); }
         // carrier and packing split
         if (in_array($src, ['current', 'product'], true)) { $car = $carToday; $pk = $packToday; }

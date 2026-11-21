@@ -177,11 +177,22 @@ class SalesImport
     }
 
     /** The VA of the shop and the VA % of the job-history row valid on the period end of the batch – frozen on the batch at import (R-A_SALES-31, R-C-40). */
+    /** Who is the VA of a shop on a day: the person holding the shop assignment role VA (alias SELLER) valid on that day (R-C-41). 0 = no assignment row: the caller falls back to the shop's seller field. */
+    public static function vaAccount(int $shopId, string $day): int
+    {
+        return (int) DB::table('t_account_branches')->where('fk_id_branch', $shopId)->whereIn('role_code', ['VA', 'SELLER'])->where(fn ($w) => $w->whereNull('f_active')->orWhere('f_active', 1))->where(fn ($w) => $w->whereNull('d_from')->orWhere('d_from', '<=', $day))->where(fn ($w) => $w->whereNull('d_to')->orWhere('d_to', '>=', $day))->orderByDesc('d_from')->orderByDesc('id')->value('fk_id_account');
+    }
+
+    /** The shops a person is the VA of on a day (assignment role first, seller field where a shop has no assignment). */
+    public static function vaShops(int $va, string $day): array
+    {
+        $out = []; foreach (DB::table('t_branches')->where('fk_id_ent', Context::ent())->get(['id', 'fk_id_seller']) as $b) { $a = self::vaAccount((int) $b->id, $day); if (($a ?: (int) $b->fk_id_seller) === $va) $out[] = (int) $b->id; } return $out;
+    }
+
     public static function vaOf(object $shop, int $month, int $year): array
     {
         $end = date('Y-m-t', mktime(0, 0, 0, $month, 1, $year));
-        // who is the VA: the person holding the shop assignment role VA (alias SELLER) valid on the period end; the shop's seller field is only the fallback (R-C-41)
-        $va = (int) DB::table('t_account_branches')->where('fk_id_branch', $shop->id)->whereIn('role_code', ['VA', 'SELLER'])->where(fn ($w) => $w->whereNull('f_active')->orWhere('f_active', 1))->where(fn ($w) => $w->whereNull('d_from')->orWhere('d_from', '<=', $end))->where(fn ($w) => $w->whereNull('d_to')->orWhere('d_to', '>=', $end))->orderByDesc('d_from')->orderByDesc('id')->value('fk_id_account');
+        $va = self::vaAccount((int) $shop->id, $end);
         if (! $va) $va = (int) ($shop->fk_id_seller ?? 0); if (! $va) return ['va_share_percentage' => 0];
         $row = DB::table('t_account_job_history')->where('fk_id_account', $va)->where('fk_id_marketplace', (int) $shop->fk_id_marketplace)->where(fn ($w) => $w->whereNull('d_job_start_date')->orWhere('d_job_start_date', '<=', $end))
             ->where(fn ($w) => $w->whereNull('d_end_date')->orWhere('d_end_date', '>=', $end))->orderByDesc('d_job_start_date')->orderByDesc('id')->first();

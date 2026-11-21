@@ -112,7 +112,7 @@ class StockService
                 $mv = self::move($ent, $productId, 'sale_out', -$pk['qty'], $locId, $pk['lot'], $pk['owner'], $pk['cost'], 'SALE', $saleId);
                 DB::table('fin_lot_consumption')->insert([
                     'period_id' => (int) ($opt['period_id'] ?? 0), 'settlement_line_id' => (int) ($opt['settlement_line_id'] ?? 0), 'lot_id' => $pk['lot'], 'sku' => (string) $p->SKU_VENDOR,
-                    'qty' => $pk['qty'], 'unit_cost_gbp' => $pk['cost'], 'fk_id_sale' => $saleId, 'fk_id_owner' => $pk['owner'], 'fk_id_movement' => $mv, 'consumed_on' => $date, 'reason' => 'SALE',
+                    'qty' => $pk['qty'], 'unit_cost_gbp' => $pk['cost'], 'fk_id_sale' => $saleId, 'fk_id_owner' => $pk['owner'], 'fk_id_movement' => $mv, 'consumed_on' => $date, 'reason' => $opt['reason'] ?? 'SALE',
                 ]);
                 $total += $pk['qty'] * $pk['cost'];
                 $rows[] = ['lot' => $pk['lot'], 'qty' => $pk['qty'], 'unit_cost' => $pk['cost'], 'owner' => $pk['owner']];

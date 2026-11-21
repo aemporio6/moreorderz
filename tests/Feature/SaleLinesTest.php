@@ -67,6 +67,16 @@ class SaleLinesTest extends TestCase
         $this->assertStringContainsString('Sold at 10.00, listed at 12.99', (string) DB::table('tasks')->where('rule_code', 'SAL_PRICE_MISMATCH')->value('title'));
     }
 
+    public function test_a_variation_child_reads_its_own_marketplace_price_and_shipping(): void
+    {
+        $this->world(); $row = (array) DB::table('t_product_vendors')->where('id', $this->product)->first(); unset($row['id']); foreach (array_keys($row) as $k) { if (strtolower($k) === 'sku_vendor') $row[$k] = 'BOWL-01-RED'; if (strtolower($k) === 'f_parent') $row[$k] = 3; if (strtolower($k) === 'f_id_parent') $row[$k] = $this->product; }
+        $child = DB::table('t_product_vendors')->insertGetId($row); $c = DB::table('t_product_vendors')->where('id', $child)->first();
+        DB::table('t_product_marketplace_prices')->insert($this->fill('t_product_marketplace_prices', ['fk_id_product' => $child, 'fk_id_marketplace' => $this->mp, 'raw_price' => 9.99, 'sale_price' => 19.99]));      // a row in the parent-type table must not be read for a child
+        DB::table('t_variation_marketplace_prices')->insert($this->fill('t_variation_marketplace_prices', ['fk_id_variation' => $child, 'fk_id_marketplace' => $this->mp, 'raw_price' => 3.30, 'sale_price' => 7.00]));
+        $x = SaleLines::expectedCost($c, $this->mp, '2026-07-10', 1); $this->assertSame(['current', 3.3, 7.0], [$x['cost_source'], $x['raw'], $x['sale']]);
+        $p = DB::table('t_product_vendors')->where('id', $this->product)->first(); $this->assertSame('product', SaleLines::expectedCost($p, $this->mp, '2026-07-10', 1)['cost_source']);      // the parent itself is not affected
+    }
+
     /** A Pending own-stock line: total 12.99, raw 6.00, carrier 2.00, packing 0.25 (the figures of the rule's tests). */
     private function line(int $qty = 1, float $rate = 12.99): int
     {
