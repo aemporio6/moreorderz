@@ -166,6 +166,16 @@ class WorkController extends Controller
     // ---- bulk actions: preview → apply → Undo ----
     public function bulkActions(Request $r, string $key) { Rights::check('VIEW', $key); return \App\Services\BulkJobs::actions($key, $r->user()); }
 
+    /** R-D-68: move the records that use a list item to another item (then it can be deleted). GET = the other items. */
+    public function bulkReassign(Request $r, string $key)
+    {
+        try {
+            if ($r->isMethod('get')) return ['targets' => \App\Services\ListDefaults::targets($key, (int) $r->query('from'))];
+            $d = $r->validate(['from' => 'required|integer', 'to' => 'required|integer']);
+            return \App\Services\ListDefaults::reassign($key, (int) $d['from'], (int) $d['to'], $r->user());
+        } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+    }
+
     public function bulk(Request $r, string $key)
     {
         $d = $r->validate(['action' => 'required|in:SET,DELETE,RESTORE', 'ids' => 'present|array', 'ids.*' => 'integer', 'field' => 'nullable|string|max:80', 'value' => 'nullable', 'apply' => 'nullable|boolean']);

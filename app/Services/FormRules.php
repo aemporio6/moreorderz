@@ -33,7 +33,9 @@ class FormRules
         if (Registry::table($formKey) === 't_account' && ($old['record_status'] ?? null) === 'DRAFT') $data['record_status'] = 'ACTIVE';      // the final Save of a draft person (R-C-20 / R-C-9)
         $code = Registry::table($formKey) === 't_account' ? AccountCode::check($formKey, $data, $old, $id) : [];      // R-C-4 one account-code rule
         $inherit = SourcingInherit::check((string) Registry::table($formKey), $data, $old);      // R-B_SOURCING-21 supplier / SKU of the cycle steps
-        return $code + $inherit + OwnItems::check($formKey, $data, $old, $id) + self::checkForm($formKey, $data, $old, $id, $already);      // R-C-20: an own item must be the person's own
+        $def = [];      // R-D-68: the default item of a list is never switched off
+        if ($id && array_key_exists('f_active', $data) && ! (int) $data['f_active'] && (int) ($old['f_active'] ?? 1) && ($t = Registry::table($formKey)) && ($m = ListDefaults::protect($t, $id, (string) ($old[Registry::labelColumn($t) ?: 'id'] ?? $id)))) $def = ['f_active' => str_replace('cannot be deleted', 'cannot be switched off', $m)];
+        return $def + $code + $inherit + OwnItems::check($formKey, $data, $old, $id) + self::checkForm($formKey, $data, $old, $id, $already);      // R-C-20: an own item must be the person's own
     }
 
     /**
@@ -58,7 +60,7 @@ class FormRules
         if ($table === 't_src_documents') return self::document($data, $old, $already);      // R-B_SOURCING-47 / 49
         if ($table === 'fin_categories') return self::finCategory($data, $old, $id);
         if ($table === 't_src_landed_cost') return self::landedManual($data, $old, $id);      // R-B_SOURCING-43 manual landed line      // form standard: money categories get a form
-        if ($table === 't_product_vendors') return ProductFamily::check($data, $old, $id) + SkuCheck::onSave($data, $old, $id) + self::productCodes($data, $old);      // R-D-1 family coding / checks, R-D-2 exact SKU in the company
+        if ($table === 't_product_vendors') return CentralInventory::check($data, $old, $id) + ProductFamily::check($data, $old, $id) + ProductStockFlag::formCheck($data, $old, $id) + SkuCheck::onSave($data, $old, $id) + self::productCodes($data, $old);      // R-D-10, R-D-3, R-D-7      // R-D-1 family coding / checks, R-D-2 exact SKU in the company
         if (in_array($table, ['t_src_products', 't_product_vendors'], true)) return self::productCodes($data, $old);
         if ($table === 'cat_ip_burgers') return self::isp($data);
         if ($table === 't_account_job_history') return self::jobHistory($data, $old, $id);

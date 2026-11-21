@@ -79,6 +79,7 @@ class PermCatalogue
         'orders.trackingUpload' => ['Tracking upload', 'Orders and dispatch', ['OWNER', 'MANAGER', 'WAREHOUSE', 'TL', 'VA']],
         'products.investors' => ['Product investors and the investor id mapping', 'Products', ['OWNER', 'FINANCE']],
         'products.hide' => ['Hide and restore products', 'Products', ['OWNER', 'MANAGER']],
+        'products.edit_central' => ['Edit company-owned (central) inventory products – old "Local Inventory"', 'Products', ['OWNER', 'MANAGER']],      // R-D-10
         'products.delete' => ['Delete products (recycle bin)', 'Products', ['OWNER']],
         'products.marketplaceFields' => ['Marketplace field builder', 'Products', ['OWNER', 'MANAGER']],
         'products.marketplaceValues' => ['Marketplace field values of a product', 'Products', ['OWNER', 'MANAGER', 'TL', 'VA']],

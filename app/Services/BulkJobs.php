@@ -99,7 +99,8 @@ class BulkJobs
             foreach ($ids as $id) {
                 $r = $rows[$id] ?? null; if (! $r) { $out[] = ['id' => $id, 'label' => "#$id", 'skip' => 'Not found, or not one of your records.']; continue; }
                 $old = $r->$col; $same = (string) ($old ?? '') === (string) ($value ?? '') || (is_numeric($old) && is_numeric($value) && (float) $old === (float) $value);
-                $out[] = ['id' => $id, 'label' => self::labelOf($table, $r, $id), 'old' => $old, 'new' => $value, 'old_label' => $show($old), 'new_label' => $show($value), 'skip' => $same ? 'Already has this value.' : null];
+                $def = $col === 'f_active' && ! (int) $value ? ListDefaults::protect($table, (int) $id, self::labelOf($table, $r, $id)) : null;      // R-D-68: the default is never switched off
+                $out[] = ['id' => $id, 'label' => self::labelOf($table, $r, $id), 'old' => $old, 'new' => $value, 'old_label' => $show($old), 'new_label' => $show($value), 'skip' => $same ? 'Already has this value.' : ($def ? str_replace('cannot be deleted', 'cannot be switched off', $def) : null)];
             }
             $title = 'Update selected row(s)'; $head = $f['label'];
         } else {
@@ -110,7 +111,8 @@ class BulkJobs
             foreach ($ids as $id) {
                 $r = $rows[$id] ?? null; if (! $r) { $out[] = ['id' => $id, 'label' => "#$id", 'skip' => 'Not found, or not one of your records.']; continue; }
                 $skip = (int) $r->$col === $to ? ($action === 'DELETE' ? 'Already deleted.' : 'Is not deleted.') : null;
-                if (! $skip && $action === 'DELETE' && ($used = self::usedBy($table, $id))) $skip = 'Not deleted – used by ' . implode(', ', array_map(fn ($x) => $x['count'] . ' ' . self::lower($x['title']), array_slice($used, 0, 3))) . (count($used) > 3 ? ' and more' : '') . '.';
+                if (! $skip && $action === 'DELETE') $skip = ListDefaults::protect($table, (int) $id, self::labelOf($table, $r, $id));      // R-D-68: the default item stays
+                if (! $skip && $action === 'DELETE' && ($used = self::usedBy($table, $id))) $skip = ListDefaults::inUse($table, $used);      // with Reassign (R-D-68)
                 $out[] = ['id' => $id, 'label' => self::labelOf($table, $r, $id), 'old' => (int) $r->$col, 'new' => $to, 'old_label' => $action === 'DELETE' ? 'In use' : 'Deleted', 'new_label' => $action === 'DELETE' ? 'Deleted' : 'In use', 'skip' => $skip, 'used' => $used ?? []];
                 unset($used);
             }

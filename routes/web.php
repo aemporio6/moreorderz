@@ -64,6 +64,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('tasks/{id}/stuck', [WorkController::class, 'taskStuck'])->whereNumber('id');
         Route::get('bulk/{key}', [WorkController::class, 'bulkActions']);
         Route::post('bulk/{key}', [WorkController::class, 'bulk']);
+        Route::match(['get', 'post'], 'bulk/{key}/reassign', [WorkController::class, 'bulkReassign']);
         Route::post('bulk-jobs/{id}/undo', [WorkController::class, 'bulkUndo'])->whereNumber('id');
         Route::get('bulk-jobs', [WorkController::class, 'bulkHistory']);
         Route::get('bell', [WorkController::class, 'bell']);
@@ -182,6 +183,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('products/{id}/visibility', [StockController::class, 'visibilitySave'])->whereNumber('id');
         Route::post('products/{id}/hide', [StockController::class, 'productHide'])->whereNumber('id');
         Route::post('products/{id}/delete', [StockController::class, 'productDelete'])->whereNumber('id');
+        Route::match(['get', 'post'], 'products/{id}/duplicate', [StockController::class, 'productDuplicate'])->whereNumber('id');
         Route::post('products/{id}/restore', [StockController::class, 'productRestore'])->whereNumber('id');
         Route::get('mp-fields', [\App\Http\Controllers\MarketplaceFieldController::class, 'index']);
         Route::get('mp-fields/name', [\App\Http\Controllers\MarketplaceFieldController::class, 'name']);

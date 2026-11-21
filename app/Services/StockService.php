@@ -439,7 +439,8 @@ class StockService
     private static function refreshCache(int $productId): void
     {
         $units = self::balance($productId);
-        DB::table('t_product_vendors')->where('id', $productId)->update(['stock' => $units, 'f_out_of_stock' => $units <= 0 ? 1 : 0]);
+        DB::table('t_product_vendors')->where('id', $productId)->update(['stock' => $units]);
+        ProductStockFlag::apply($productId);      // R-D-7: out of stock from the available quantity (manual tick = override), listings too, events
     }
 
     private static function product(int $id, int $ent): object

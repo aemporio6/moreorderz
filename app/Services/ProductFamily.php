@@ -41,6 +41,10 @@ class ProductFamily
         $wasChild = (int) ($old['f_parent'] ?? 0) === self::CHILD || ! empty($old['f_id_parent']);
         if (array_key_exists('f_parent', $data) && ! $wasChild) {
             $code = self::familyCode((int) (bool) $data['f_parent']);
+            // R-D-3: a saved parent with active children never goes back to Alone; a parent needs its group / family name
+            if ($code['f_parent'] === self::ALONE && $id && (int) ($old['f_parent'] ?? 0) === self::PARENT
+                && ($n = DB::table('t_product_vendors')->where('f_id_parent', $id)->where('f_active', 1)->count()) > 0) $e['f_family'] = "$n " . ($n === 1 ? 'child' : 'children') . ' – move or delete them first';
+            if ($code['f_parent'] === self::PARENT && trim((string) (array_key_exists('f_group_name', $data) ? $data['f_group_name'] : ($old['f_group_name'] ?? ''))) === '') $e['f_group_name'] = 'Give the group / family name of the parent.';
             $data = array_merge($data, $code);
             if ($code['f_parent'] === self::ALONE) $data['f_group_name'] = null;      // Alone clears the group name
         } elseif ($wasChild) unset($data['f_parent']);      // a child stays a child

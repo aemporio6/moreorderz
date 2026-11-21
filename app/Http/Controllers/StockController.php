@@ -138,6 +138,15 @@ class StockController extends Controller
 
     /** Hide, delete, restore (R-D-9). */
     public function productHide(Request $r, int $id) { \App\Services\Perm::need($r->user(), 'products.hide'); return $this->run(fn () => \App\Services\ProductArchive::hide($id, (string) $r->input('reason'), $r->user())); }
+    /** R-D-8 duplicate product: GET = the suggested next free SKU, POST = make the copy. */
+    public function productDuplicate(Request $r, int $id)
+    {
+        if ($r->isMethod('get')) { $sku = \Illuminate\Support\Facades\DB::table('t_product_vendors')->where('id', $id)->where('fk_id_ent', Context::ent())->value('SKU_VENDOR') ?? abort(404);
+            return ['sku' => $sku, 'suggest' => \App\Services\ProductCopy::suggest((int) Context::ent(), $sku), 'children' => \Illuminate\Support\Facades\DB::table('t_product_vendors')->where('f_id_parent', $id)->where('f_active', 1)->count()]; }
+        $d = $r->validate(['sku' => 'nullable|string|max:60', 'variations' => 'nullable|boolean']);
+        return $this->run(fn () => \App\Services\ProductCopy::duplicate($id, (string) ($d['sku'] ?? ''), (bool) ($d['variations'] ?? false), $r->user()));
+    }
+
     public function productDelete(Request $r, int $id) { \App\Services\Perm::need($r->user(), 'products.delete'); return $this->run(fn () => \App\Services\ProductArchive::delete($id, $r->user())); }
     public function productRestore(Request $r, int $id) { \App\Services\Perm::need($r->user(), 'products.hide'); if (\Illuminate\Support\Facades\DB::table('t_product_vendors')->where('id', $id)->value('row_state') === 'DELETED') \App\Services\Perm::need($r->user(), 'products.delete'); return $this->run(fn () => \App\Services\ProductArchive::restore($id, $r->user())); }
     public function productBin(Request $r) { \App\Services\Perm::need($r->user(), 'products.hide'); return ['rows' => \App\Services\ProductArchive::bin((int) Context::ent()), 'can_delete' => \App\Services\Perm::has($r->user(), 'products.delete')]; }
