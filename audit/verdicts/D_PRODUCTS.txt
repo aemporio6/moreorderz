@@ -6,7 +6,7 @@
 6|M||variations panel + child-SKU search not built
 7|P|f_out_of_stock|out-of-stock flag read by stock; automatic set / clear events not built
 8|M||duplicate product action not built
-9|M||hide / soft delete / restore not built
+9|B|class ProductArchive|Hide = row state HIDDEN with a reason (family), saved view "Hidden products" with Restore; Delete = soft delete of the family into mo_recycle_bin in one batch (children's variation marketplace rows too), answer "Deleted SKU + n child SKU(s)", one Restore brings all back; blocked by stock / open lot / open PO line / any sale → "Archive instead"; rights products.hide / products.delete (ProductArchiveTest)
 10|M||central inventory right (products.edit_central) not built
 11|F|form:t_product_vendor|supplier / cost fields on the form; landing price inherit rule partly (lot cost)
 12|F|form:t_product_vendor|form only

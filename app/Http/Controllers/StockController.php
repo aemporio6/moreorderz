@@ -52,6 +52,11 @@ class StockController extends Controller
         if (! $r->has('per')) $f += ['per' => $v['per'], 'set' => $v['set'], 'status' => $v['status'], 'mp' => $v['mp'] ?? null, 'q' => $v['q'] ?? ''];      // the person's default view
         return \App\Services\ProductsList::page((int) Context::ent(), $f, $r->user());
     }
+    /** Hide, delete, restore (R-D-9). */
+    public function productHide(Request $r, int $id) { \App\Services\Perm::need($r->user(), 'products.hide'); return $this->run(fn () => \App\Services\ProductArchive::hide($id, (string) $r->input('reason'), $r->user())); }
+    public function productDelete(Request $r, int $id) { \App\Services\Perm::need($r->user(), 'products.delete'); return $this->run(fn () => \App\Services\ProductArchive::delete($id, $r->user())); }
+    public function productRestore(Request $r, int $id) { \App\Services\Perm::need($r->user(), 'products.hide'); if (\Illuminate\Support\Facades\DB::table('t_product_vendors')->where('id', $id)->value('row_state') === 'DELETED') \App\Services\Perm::need($r->user(), 'products.delete'); return $this->run(fn () => \App\Services\ProductArchive::restore($id, $r->user())); }
+    public function productBin(Request $r) { \App\Services\Perm::need($r->user(), 'products.hide'); return ['rows' => \App\Services\ProductArchive::bin((int) Context::ent()), 'can_delete' => \App\Services\Perm::has($r->user(), 'products.delete')]; }
     public function productsView(Request $r) { return \App\Services\ProductsList::saveView($r->user(), $r->all()); }
     public function productsExport(Request $r, string $format)
     {

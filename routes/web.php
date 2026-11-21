@@ -151,6 +151,10 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('ledger', [AdminController::class, 'ledger']);
         Route::get('stock/on-hand', [StockController::class, 'onHand']);
         Route::get('products', [StockController::class, 'products']);
+        Route::get('products/bin', [StockController::class, 'productBin']);
+        Route::post('products/{id}/hide', [StockController::class, 'productHide'])->whereNumber('id');
+        Route::post('products/{id}/delete', [StockController::class, 'productDelete'])->whereNumber('id');
+        Route::post('products/{id}/restore', [StockController::class, 'productRestore'])->whereNumber('id');
         Route::get('mp-fields', [\App\Http\Controllers\MarketplaceFieldController::class, 'index']);
         Route::get('mp-fields/name', [\App\Http\Controllers\MarketplaceFieldController::class, 'name']);
         Route::post('mp-fields', [\App\Http\Controllers\MarketplaceFieldController::class, 'save']);

@@ -76,6 +76,8 @@ class PermCatalogue
         'orders.labels' => ['Labels', 'Orders and dispatch', ['OWNER', 'MANAGER', 'WAREHOUSE', 'TL']],
         'orders.saveTrackingLayout' => ['Save tracking layout', 'Orders and dispatch', ['OWNER', 'MANAGER']],
         'orders.trackingUpload' => ['Tracking upload', 'Orders and dispatch', ['OWNER', 'MANAGER', 'WAREHOUSE', 'TL', 'VA']],
+        'products.hide' => ['Hide and restore products', 'Products', ['OWNER', 'MANAGER']],
+        'products.delete' => ['Delete products (recycle bin)', 'Products', ['OWNER']],
         'products.marketplaceFields' => ['Marketplace field builder', 'Products', ['OWNER', 'MANAGER']],
         'products.marketplaceValues' => ['Marketplace field values of a product', 'Products', ['OWNER', 'MANAGER', 'TL', 'VA']],
         'partners.EDIT' => ['Add and change', 'Partners', ['OWNER']],

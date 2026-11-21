@@ -70,7 +70,7 @@ class ProductsList
     public static function saveView(object $u, array $d): array
     {
         $v = ['per' => in_array((int) ($d['per'] ?? 20), self::SIZES, true) ? (int) $d['per'] : 20, 'set' => ($d['set'] ?? '') === 'pricing' ? 'pricing' : 'default',
-            'status' => in_array($d['status'] ?? 'active', ['active', 'inactive', 'all'], true) ? $d['status'] : 'active', 'mp' => isset($d['mp']) && ctype_digit((string) $d['mp']) ? (int) $d['mp'] : null,
+            'status' => in_array($d['status'] ?? 'active', ['active', 'inactive', 'all', 'hidden', 'deleted'], true) ? $d['status'] : 'active', 'mp' => isset($d['mp']) && ctype_digit((string) $d['mp']) ? (int) $d['mp'] : null,
             'q' => mb_substr(trim((string) ($d['q'] ?? '')), 0, 100), 'hidden' => array_values(array_intersect((array) ($d['hidden'] ?? []), array_keys(self::DEFAULT_COLS + self::PRICING_COLS)))];
         DB::table('t_user_column_prefs')->updateOrInsert(['fk_id_user' => $u->id, 'page_key' => self::PAGE], ['prefs_json' => json_encode($v), 'hidden_columns' => '', 'updated_at' => now()]);
         return ['message' => 'Saved as your default view', 'view' => $v];
@@ -80,7 +80,8 @@ class ProductsList
     {
         $q = DB::table('t_product_vendors as p')->where('p.fk_id_ent', $ent)->where(fn ($w) => $w->whereNull('p.f_id_parent')->orWhere('p.f_id_parent', 0))->whereNull('p.fk_id_merged_into');
         $st = $f['status'] ?? 'active';
-        if ($st === 'active') $q->where('p.f_active', 1); elseif ($st === 'inactive') $q->where('p.f_active', 0);
+        if ($st === 'active') $q->where('p.f_active', 1); elseif ($st === 'inactive') $q->where('p.f_active', 0)->where('p.row_state', 'ACTIVE');
+        elseif ($st === 'hidden') $q->where('p.row_state', 'HIDDEN'); elseif ($st === 'deleted') $q->where('p.row_state', 'DELETED'); else $q->where('p.row_state', '<>', 'DELETED');      // R-D-9: "Hidden products" saved view; the recycle bin
         if (($t = trim((string) ($f['q'] ?? ''))) !== '') { $like = '%' . addcslashes($t, '%_\\') . '%'; $q->where(fn ($w) => $w->where('p.product_name_vendor', 'like', $like)->orWhere('p.SKU_VENDOR', 'like', $like)->orWhere('p.ean', 'like', $like)->orWhere('p.id', ctype_digit(ltrim($t, 'MP-')) ? (int) ltrim($t, 'MP-') : -1)); }
         return $q;
     }
@@ -126,7 +127,7 @@ class ProductsList
                 'sku' => trim((string) $p->SKU_VENDOR) . ' · MP-' . $id, 'owner' => count($owners) > 1 ? 'Multiple' : ($owners[0] ?? ''), 'owners' => $owners,
                 'type' => self::type((int) ($inv[$id] ?? 0), $modes, $mp), 'pills' => $mps->map(fn ($m) => ['id' => (int) $m->id, 'name' => $m->name, 'visible' => isset($modes[(int) $m->id]), 'mode' => $modes[(int) $m->id] ?? null])->all(),
                 'qty' => (int) $p->stock, 'cover' => $cov['status'], 'cover_basis' => $cov['basis'], 'wac' => $money ? ($wac[$id]['wac'] ?? null) : null, 'wac_tip' => $money && isset($wac[$id]) ? 'WAC = £' . number_format($wac[$id]['total'], 2) . ' / ' . $wac[$id]['qty'] : null,
-                'listings' => (int) ($lst[$id] ?? 0) ?: 'none', 'active' => (bool) $p->f_active, 'row_status' => $status, 'colour' => self::ROW_STATUS[$status][1]];
+                'listings' => (int) ($lst[$id] ?? 0) ?: 'none', 'active' => (bool) $p->f_active, 'state' => $p->row_state ?? 'ACTIVE', 'hidden_reason' => $p->hidden_reason ?? null, 'row_status' => $status, 'colour' => self::ROW_STATUS[$status][1]];
             if ($pricing) {
                 $r = ['fk_id_marketplace' => $mp, 'raw_price' => (float) ($pr[$id]->raw_price ?? $p->raw_price ?? 0), 'sale_price' => (float) ($pr[$id]->sale_price ?? $p->sale_price ?? 0), 'marketplace_fee' => (float) ($pr[$id]->marketplace_fee ?? 0),
                     'fk_id_car_pkg_svc' => $sh[$id]->fk_id_car_pkg_svc ?? $p->fk_id_car_pkg_svc, 'fk_id_packing' => $sh[$id]->fk_id_packing ?? $p->fk_id_packing, 'packing_fee' => (float) ($sh[$id]->packing_fee ?? 0), 'storage_fee' => (float) ($sh[$id]->storage_fee ?? 0)];
