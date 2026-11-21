@@ -318,6 +318,45 @@ class SalesImport
         } catch (\Throwable $e) { DB::rollBack(); throw $e; }
     }
 
+    // ---------- R-A_SALES-11: the out-of-period question again at Month Close ----------
+    /** Lines of the shop's import of this month that are dated outside it and not answered yet. */
+    public static function outOfPeriod(int $shopId, string $month): array
+    {
+        [$y, $m] = array_map('intval', explode('-', $month)); $b = self::batchOf($shopId, $m, $y, 'Normal'); $mn = self::monthName($m, $y);
+        if (! $b) return ['count' => 0, 'kept' => 0, 'lines' => [], 'batch' => null];
+        $q = DB::table('t_sales')->where('fk_id_import', $b->id);
+        $lines = (clone $q)->where('f_out_of_period', 1)->orderBy('d_order')->limit(50)->get(['id', 'order_no', 'sku', 'd_order', 'total_amount', 'status'])->map(fn ($l) => (array) $l)->all(); $n = (clone $q)->where('f_out_of_period', 1)->count();
+        return ['count' => $n, 'kept' => (clone $q)->where('f_out_of_period', 2)->count(), 'lines' => $lines, 'batch' => (int) $b->id, 'text' => $n ? "$n line(s) of the $mn import are dated outside $mn" : null,
+            'options' => [['keep', "Keep them in $mn"], ['move', 'Move them to their own month batch']]];
+    }
+
+    /** The answer, with a reason: keep (the lines stay in this month and are not asked about again) or move (each Pending line goes to the batch of its own month, while that month can still take lines). */
+    public static function answerOutOfPeriod(int $shopId, string $month, string $mode, string $reason, ?object $u): array
+    {
+        Perm::need($u, 'orders.saleImport'); if (! Perm::shopAllowed($u, $shopId)) abort(403, "You don't have rights for this shop.");
+        if (! in_array($mode, ['keep', 'move'], true)) throw new \InvalidArgumentException('Choose: keep them in this month, or move them to their own month.');
+        if (mb_strlen(trim($reason)) < 3) throw new \InvalidArgumentException('Write the reason.');
+        return DB::transaction(function () use ($shopId, $month, $mode, $reason, $u) {
+            $o = self::outOfPeriod($shopId, $month); if (! $o['count']) throw new \InvalidArgumentException('There is no line dated outside this month that still waits for an answer.');
+            $ent = (int) Context::ent(); $shop = DB::table('t_branches')->where('id', $shopId)->first(); $who = $u ? ($u->display_name ?: $u->login_id) : 'system'; $key = uniqid('op'); $moved = 0; $kept = 0; $stuck = [];
+            foreach (DB::table('t_sales')->where('fk_id_import', $o['batch'])->where('f_out_of_period', 1)->lockForUpdate()->get() as $s) {
+                $own = substr((string) $s->d_order, 0, 7); $new = ['f_out_of_period' => 2]; $what = 'kept in ' . self::monthName((int) substr($month, 5, 2), (int) substr($month, 0, 4));
+                if ($mode === 'move') {
+                    $om = (int) substr($own, 5, 2); $oy = (int) substr($own, 0, 4); $ob = self::batchOf($shopId, $om, $oy, 'Normal');
+                    if ($s->status !== 'Pending' || (int) $s->f_locked || ($ob && $ob->status !== 'Pending') || Ledger::periodLocked($ent, $own)) { $stuck[] = $s->order_no; continue; }      // its own month is confirmed / closed, or the line itself is
+                    $target = $ob ? (int) $ob->id : (int) DB::table('t_sale_imports')->insertGetId(RecordService::fillNotNull('t_sale_imports', ['fk_id_ent' => $ent, 'fk_id_branch' => $shopId, 'fk_id_marketplace' => $shop->fk_id_marketplace, 'import_nature' => 'Normal', 'file_name' => 'moved at Month Close', 'period_month' => $om, 'period_year' => $oy, 'marketplace_fee' => 0, 'status' => 'Pending', 'imported_by' => $u->id ?? null, 'imported_at' => now()] + self::vaOf($shop, $om, $oy)));
+                    $new = ['f_out_of_period' => 0, 'fk_id_import' => $target]; $what = 'moved to the ' . self::monthName($om, $oy) . ' import'; $moved++;
+                    DB::table('t_sale_imports')->where('id', $target)->increment('saved_rows'); DB::table('t_sale_imports')->where('id', $o['batch'])->where('saved_rows', '>', 0)->decrement('saved_rows');
+                } else $kept++;
+                DB::table('t_sales')->where('id', $s->id)->update($new + ['updated_at' => now()]);
+                DB::table('t_sale_change_log')->insert(['fk_id_sale' => $s->id, 'save_key' => $key, 'action' => 'Out of period', 'field_name' => 'f_out_of_period', 'field_label' => 'Dated outside the month', 'old_value' => 'not answered', 'new_value' => mb_substr("$what: " . trim($reason), 0, 250), 'fk_id_user' => $u->id ?? null, 'changed_by' => $who, 'changed_at' => now()]);
+            }
+            DB::table('t_sale_imports')->where('id', $o['batch'])->update(['out_of_period_rows' => DB::table('t_sales')->where('fk_id_import', $o['batch'])->where('f_out_of_period', '>=', 1)->count()]);
+            Audit::log('t_sale_imports', $o['batch'], 'UPDATE', ['out_of_period' => $mode, 'moved' => $moved, 'kept' => $kept, 'not_moved' => count($stuck)], trim($reason), $ent);
+            return ['message' => ($mode === 'move' ? "$moved line(s) moved to their own month." : "$kept line(s) kept in this month.") . ($stuck ? ' ' . count($stuck) . ' line(s) could not be moved because their own month (or the line) is already confirmed: ' . implode(', ', array_slice($stuck, 0, 10)) . '. Answer "keep" for them.' : ''), 'moved' => $moved, 'kept' => $kept, 'not_moved' => $stuck];
+        });
+    }
+
     // ---------- R-A_SALES-17: daily / period totals (shops without order files) ----------
     private static function totalsCsv(string $path): array
     {

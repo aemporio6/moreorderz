@@ -273,6 +273,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('sales/{id}/margin-accept', [OrdersController::class, 'saleMarginAccept'])->whereNumber('id');
         Route::get('sales/ds-conflicts', [OrdersController::class, 'saleDsConflicts']);
         Route::post('sales/{id}/ds-pick', [OrdersController::class, 'saleDsPick'])->whereNumber('id');
+        Route::post('sales/out-of-period', [OrdersController::class, 'saleOutOfPeriod']);
         Route::post('sales/rematch', [OrdersController::class, 'saleRematch']);
         Route::get('sales/not-matched.csv', [OrdersController::class, 'saleNotMatchedCsv']);
         Route::get('sales/{id}/match', [OrdersController::class, 'saleMatch'])->whereNumber('id');

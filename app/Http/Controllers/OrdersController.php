@@ -399,4 +399,6 @@ class OrdersController extends Controller
 
     public function saleDsConflicts(Request $r) { $this->can($r, 'orders.SEE'); return \App\Services\DsMatch::conflicts($this->saleFilters($r), $r->user()); }
     public function saleDsPick(Request $r, int $id) { return $this->run(fn () => \App\Services\DsMatch::pick($id, (int) $r->input('item'), $r->user())); }
+
+    public function saleOutOfPeriod(Request $r) { return $this->run(fn () => \App\Services\SalesImport::answerOutOfPeriod((int) $r->input('shop'), (string) $r->input('month'), (string) $r->input('mode'), (string) $r->input('reason'), $r->user())); }
 }

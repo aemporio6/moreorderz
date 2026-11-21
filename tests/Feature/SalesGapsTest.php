@@ -108,4 +108,32 @@ class SalesGapsTest extends TestCase
         $this->assertSame(['ship_name' => 'Jane Buyer', 'ship_address' => '•••', 'ship_phone' => '••••••555'], \App\Services\Vault::maskRow('drp_items', $row));
         $this->assertTrue(\App\Services\Vault::isMasked('•••')); $this->assertSame(['x' => 1], \App\Services\Vault::maskRow('t_sales', ['x' => 1]));
     }
+
+    public function test_the_out_of_period_question_returns_at_month_close_with_a_reason(): void
+    {
+        $this->world(); $r = $this->import([['P-1', '30/06/2026', 'Ann', '', 'S1', 'T', '1', '9'], ['P-2', '29/06/2026', 'Bob', '', 'S2', 'T', '1', '9'], ['P-3', '02/07/2026', 'Cy', '', 'S3', 'T', '1', '9']]);
+        $o = SalesImport::outOfPeriod($this->shop, '2026-07'); $this->assertSame([2, '2 line(s) of the July 2026 import are dated outside July 2026'], [$o['count'], $o['text']]);
+        $page = \App\Services\CloseService::page(1, $this->shop, '2026-07'); $this->assertSame(2, $page['out_of_period']['count']);      // the Month Close page asks
+        try { SalesImport::answerOutOfPeriod($this->shop, '2026-07', 'keep', ' ', $this->owner); $this->fail('no error'); } catch (\InvalidArgumentException $e) { $this->assertSame('Write the reason.', $e->getMessage()); }
+        // keep: stays in July, flagged as answered, not asked again, still found by the "Out of period" preset
+        $id1 = (int) DB::table('t_sales')->where('order_no', 'P-1')->value('id'); DB::table('t_sales')->where('order_no', 'P-2')->update(['f_out_of_period' => 0]);
+        $a = SalesImport::answerOutOfPeriod($this->shop, '2026-07', 'keep', 'marketplace reports by payment date', $this->owner); $this->assertSame(1, $a['kept']); $this->assertSame(2, (int) DB::table('t_sales')->where('id', $id1)->value('f_out_of_period'));
+        $this->assertSame(0, SalesImport::outOfPeriod($this->shop, '2026-07')['count']); $this->assertSame(1, SaleLines::list(['batch' => $r['batch'], 'show' => 'out'], $this->owner)['total']);
+        $this->assertStringContainsString('kept in July 2026: marketplace reports by payment date', collect(SaleLines::history($id1))->pluck('new_value')->implode('|'));
+        // move: the line goes to the batch of its own month
+        DB::table('t_sales')->where('order_no', 'P-2')->update(['f_out_of_period' => 1]); $m = SalesImport::answerOutOfPeriod($this->shop, '2026-07', 'move', 'belongs to June', $this->owner); $this->assertSame(1, $m['moved']);
+        $june = SalesImport::batchOf($this->shop, 6, 2026, 'Normal'); $this->assertSame([(int) $june->id, 0], [(int) DB::table('t_sales')->where('order_no', 'P-2')->value('fk_id_import'), (int) DB::table('t_sales')->where('order_no', 'P-2')->value('f_out_of_period')]);
+        $this->postJson('/api/sales/out-of-period', ['shop' => $this->shop, 'month' => '2026-07', 'mode' => 'keep', 'reason' => 'again'])->assertStatus(422);      // nothing waits any more
+    }
+
+    public function test_the_va_share_is_its_own_line_on_the_month_close_page(): void
+    {
+        $this->world(); DB::table('t_account_job_history')->insert($this->fill('t_account_job_history', ['fk_id_account' => $this->va, 'fk_id_marketplace' => $this->mp, 'd_job_start_date' => '2020-01-01', 'share_percentage' => 10]));
+        $r = $this->import([['V-1', '05/07/2026', 'Ann', '', 'S1', 'T', '1', '9']]); DB::table('t_sales')->where('order_no', 'V-1')->update(['sale_source' => 'active', 'profit' => 900, 'buy_amount' => 100, 'total_amount' => 1000]);
+        $l = \App\Services\CloseService::page(1, $this->shop, '2026-07')['va_share']; $this->assertSame(['Vera Seller', 10.0, 90.0, false, null], [$l['va'], $l['pct'], $l['amount'], $l['approved'], $l['payable']]); $this->assertStringContainsString('no VA statement yet', $l['source']);
+        $s = \App\Services\VaStatements::generate($this->shop, '2026-07', 0, null, $this->owner); \App\Services\VaStatements::approve($s['id'], $this->owner);
+        $l = \App\Services\VaStatements::closeLine($this->shop, '2026-07'); $this->assertSame([90.0, true, 'payable, not paid yet'], [$l['amount'], $l['approved'], $l['payable']]);
+        \App\Services\VaStatements::bankPaid(1, 'VA_SHARE_PAYOUT', $this->va, 90.00, 77); $this->assertTrue(\App\Services\VaStatements::closeLine($this->shop, '2026-07')['paid']);
+        @unlink(storage_path('app/' . $s['file'])); @rmdir(dirname(storage_path('app/' . $s['file']))); $this->assertNull(\App\Services\VaStatements::closeLine($this->shop, '2025-01'));
+    }
 }

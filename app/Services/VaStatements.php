@@ -155,6 +155,19 @@ class VaStatements
         return (int) $c->id;
     }
 
+    /** The VA share of a shop + month as its own line of the Month Close page: the approved statement when there is one, else what the import says for now; and whether it is paid. */
+    public static function closeLine(int $shopId, string $month): ?array
+    {
+        $ent = (int) Context::ent(); [$y, $m] = array_map('intval', explode('-', $month));
+        $st = DB::table('va_statements')->where('fk_id_ent', $ent)->where('fk_id_branch', $shopId)->where('period_month', $month . '-01')->whereIn('status', ['APPROVED', 'WAITING'])->orderByRaw("status = 'APPROVED' DESC")->orderByDesc('version_no')->first();
+        $b = SalesImport::batchOf($shopId, $m, $y, 'Normal'); if (! $st && ! $b) return null; if ($b) SalesReports::syncShares((int) $b->id);
+        $va = (int) ($st->fk_id_va ?? $b->fk_id_va_account ?? 0); $acc = $va ? DB::table('t_account')->where('id', $va)->first() : null;
+        $pay = $va ? DB::table('fin_cash_commitments')->where('dedupe_key', "VA_SHARE:$va:$shopId:$month")->first() : null;
+        return ['va' => $acc ? trim($acc->first_name . ' ' . $acc->sur_name) : null, 'pct' => (float) ($st->va_share_pct ?? $b->va_share_percentage ?? 0), 'amount' => (float) ($st->va_share_amount ?? DB::table('t_sale_imports')->where('id', $b->id)->value('va_share_amount') ?? 0),
+            'source' => $st ? ($st->status === 'APPROVED' ? "VA statement version {$st->version_no}, approved" : "VA statement version {$st->version_no}, waits for the Owner") : 'from the sales import – no VA statement yet', 'approved' => $st && $st->status === 'APPROVED',
+            'payable' => $pay ? ($pay->status === 'PAID' ? 'paid (bank line matched)' : 'payable, not paid yet') : null, 'paid' => $pay && $pay->status === 'PAID', 'note' => 'Paid through bank category "VA share payout". The payout closes the payable; it does not come off the profit a second time.', 'link' => '#/va-statements'];
+    }
+
     /** The list: newest month first. A VA sees only his own, approved statements. */
     public static function list(?object $u, array $f = []): array
     {

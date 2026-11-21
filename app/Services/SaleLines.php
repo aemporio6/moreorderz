@@ -381,7 +381,7 @@ class SaleLines
         if (! empty($f['status']) && in_array($f['status'], ['Pending', 'Confirmed', 'Refunded', 'Cancelled'], true)) $q->where('s.status', $f['status']);
         if (! empty($f['type']) && $f['type'] !== 'summary') $q->where('s.sale_source', ['inventory' => 'active', 'ds' => 'ds', 'nm' => 'unmatched'][$f['type']] ?? 'active');
         if (($f['show'] ?? '') === 'loss') $q->where('s.profit', '<', 0);
-        if (($f['show'] ?? '') === 'out') $q->where('s.f_out_of_period', 1);
+        if (($f['show'] ?? '') === 'out') $q->where('s.f_out_of_period', '>=', 1);      // 1 = not answered yet, 2 = kept with a reason
         if (($f['show'] ?? '') === 'nocost') $q->whereIn('s.cost_source', ['current', 'product']);
         if (! empty($f['visibility']) && in_array($f['visibility'], ['POOL', 'PRIVATE'], true)) $q->where('s.visibility_mode', $f['visibility']);
         if (! empty($f['company'])) { $c = (int) $f['company']; $q->where(fn ($w) => $w->where('s.fk_id_company', $c)->orWhere(fn ($x) => $x->where(fn ($y) => $y->whereNull('s.fk_id_company')->orWhere('s.fk_id_company', 0))->whereIn('s.fk_id_branch', DB::table('t_branches')->where('fk_id_company', $c)->select('id')))); }
@@ -427,7 +427,7 @@ class SaleLines
         $strip = SaleView::strip($q, (bool) $base['rights']['see_cost']);
         // counts for the presets, under the same scope but without the "show" / type choice
         $g = $f; unset($g['show'], $g['type'], $g['status']); $cq = self::filtered($g, $u);
-        $counts = (array) (clone $cq)->selectRaw("SUM(s.profit < 0) loss, SUM(s.f_out_of_period = 1) `out`, SUM(s.cost_source IN ('current','product')) nocost, SUM(s.sale_source = 'unmatched') nm, SUM(s.sale_source = 'ds') ds, SUM(s.status = 'Refunded') refunded")->first();
+        $counts = (array) (clone $cq)->selectRaw("SUM(s.profit < 0) loss, SUM(s.f_out_of_period >= 1) `out`, SUM(s.cost_source IN ('current','product')) nocost, SUM(s.sale_source = 'unmatched') nm, SUM(s.sale_source = 'ds') ds, SUM(s.status = 'Refunded') refunded")->first();
         $rows = $q->leftJoin('t_branches as b', 'b.id', '=', 's.fk_id_branch')->leftJoin('t_carrier_pkg_svc as cv', 'cv.id', '=', 's.fk_id_car_pkg_svc')->leftJoin('t_carriers as cc', 'cc.id', '=', 'cv.fk_id_carrier')->leftJoin('t_packings as pk', 'pk.id', '=', 's.fk_id_packing')->leftJoin('t_enterprise as co', 'co.id', '=', DB::raw('COALESCE(NULLIF(s.fk_id_company,0), b.fk_id_company, s.fk_id_ent)'))
             ->orderByDesc('s.d_order')->orderByDesc('s.id')->offset(($page - 1) * $per)->limit($per)
             ->get(['s.id', 's.fk_id_branch', 's.fk_id_import', 's.order_no', 's.d_order', 's.cust_name', 's.cust_contacts', 's.sku', 's.product_info', 's.qty', 's.sale_rate', 's.total_amount', 's.raw_price', 's.carrier_rate', 's.packing_rate', 's.buy_rate', 's.buy_amount', 's.profit', 's.d_buy', 's.product_url',
