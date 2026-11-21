@@ -18,8 +18,8 @@ use Picqer\Barcode\BarcodeGeneratorPNG;
  */
 class PrintService
 {
-    public const KINDS = ['PACKING_SLIP' => 'PARCEL', 'PICK_SHEET' => 'PICK_TASK', 'MANIFEST' => 'HANDOVER', 'LOCATION' => 'LOCATION', 'PO' => 'PO', 'CARTON_MARK' => 'CARTON', 'FBA_CARTON' => 'FBA_SHIPMENT', 'FBA_ITEM' => 'FBA_SHIPMENT', 'FBA_PACKLIST' => 'FBA_SHIPMENT', 'TEST' => 'PRINTER'];
-    public const KIND_NAMES = ['PACKING_SLIP' => 'Packing slip', 'PICK_SHEET' => 'Pick sheet', 'MANIFEST' => 'Handover sheet', 'LOCATION' => 'Bin labels', 'PO' => 'Purchase order', 'CARTON_MARK' => 'Carton marks', 'FBA_CARTON' => 'Inbound carton labels', 'FBA_ITEM' => 'Marketplace item labels', 'FBA_PACKLIST' => 'Inbound picking & packing list', 'TEST' => 'Test page'];
+    public const KINDS = ['PACKING_SLIP' => 'PARCEL', 'PICK_SHEET' => 'PICK_TASK', 'MANIFEST' => 'HANDOVER', 'LOCATION' => 'LOCATION', 'PO' => 'PO', 'CARTON_MARK' => 'CARTON', 'FBA_CARTON' => 'FBA_SHIPMENT', 'FBA_ITEM' => 'FBA_SHIPMENT', 'FBA_PACKLIST' => 'FBA_SHIPMENT', 'GRN' => 'GRN', 'GRN_LABEL' => 'GRN', 'TEST' => 'PRINTER'];
+    public const KIND_NAMES = ['PACKING_SLIP' => 'Packing slip', 'PICK_SHEET' => 'Pick sheet', 'MANIFEST' => 'Handover sheet', 'LOCATION' => 'Bin labels', 'PO' => 'Purchase order', 'CARTON_MARK' => 'Carton marks', 'FBA_CARTON' => 'Inbound carton labels', 'FBA_ITEM' => 'Marketplace item labels', 'FBA_PACKLIST' => 'Inbound picking & packing list', 'GRN' => 'Goods receipt note', 'GRN_LABEL' => 'GRN carton labels', 'TEST' => 'Test page'];
     public const REASONS = ['DAMAGED_LABEL' => 'Label damaged', 'PRINTER_JAM' => 'Printer jam', 'WRONG_PRINTER' => 'Wrong printer', 'CARRIER_CHANGED' => 'Carrier changed',
         'ADDRESS_CHANGED' => 'Address changed', 'LOCATION_CHANGED' => 'Location changed', 'VOIDED_REPLACED' => 'Voided and replaced', 'LOST' => 'Lost', 'OTHER' => 'Other'];
     private const SCOPES = ['USER' => 1, 'WORKSTATION' => 2, 'LOCATION' => 3, 'COMPANY' => 4];
@@ -48,6 +48,8 @@ class PrintService
             ['FBA_CARTON_FLOW', 'Inbound carton label (FBA / 3PL), one per carton', 'FBA_CARTON', 'FLOW', 96, 136, null],
             ['FBA_ITEM_FLOW', 'Marketplace item label, one per unit', 'FBA_ITEM', 'FLOW', 50, 25, null],
             ['FBA_PACKLIST_A4', 'Inbound picking & packing list A4', 'FBA_PACKLIST', 'A4', 210, 297, null],
+            ['GRN_A4', 'Goods receipt note A4 (grn_a4)', 'GRN', 'A4', 210, 297, null],
+            ['GRN_LABEL_100X150', 'GRN carton label 100 × 150 (grn_label_100x150)', 'GRN_LABEL', 'FLOW', 96, 136, null],
         ];
         foreach ($tpl as [$code, $name, $kind, $format, $w, $h, $layout]) {
             if (DB::table('label_templates')->where('code', $code)->exists()) continue;
@@ -64,7 +66,7 @@ class PrintService
             }
         }
         // a kind added later (carton marks) takes the packing-slip route of the setup when it has none
-        foreach (['CARTON_MARK' => 'PACKING_SLIP', 'FBA_CARTON' => 'PACKING_SLIP', 'FBA_ITEM' => 'PACKING_SLIP', 'FBA_PACKLIST' => 'PICK_SHEET'] as $kind => $like) if (! DB::table('print_routes')->where('job_kind', $kind)->exists() && ($r = DB::table('print_routes')->where('job_kind', $like)->where('fk_id_ent', 0)->first())) {
+        foreach (['CARTON_MARK' => 'PACKING_SLIP', 'FBA_CARTON' => 'PACKING_SLIP', 'FBA_ITEM' => 'PACKING_SLIP', 'FBA_PACKLIST' => 'PICK_SHEET', 'GRN' => 'PO', 'GRN_LABEL' => 'PACKING_SLIP'] as $kind => $like) if (! DB::table('print_routes')->where('job_kind', $kind)->exists() && ($r = DB::table('print_routes')->where('job_kind', $like)->where('fk_id_ent', 0)->first())) {
             $row = (array) $r; unset($row['id']); $row['job_kind'] = $kind; DB::table('print_routes')->insert($row); }
     }
 
@@ -393,6 +395,8 @@ class PrintService
             'FBA_CARTON' => array_merge(...array_map(fn ($id) => self::pFbaCartons($ent, $id), $ids)),
             'FBA_ITEM' => array_merge(...array_map(fn ($id) => self::pFbaItems($ent, $id, $w), $ids)),
             'FBA_PACKLIST' => array_map(fn ($id) => self::pFbaPackList($ent, $id), $ids),
+            'GRN' => array_map(fn ($id) => GrnPrint::page($ent, $id), $ids),
+            'GRN_LABEL' => array_merge(...array_map(fn ($id) => GrnPrint::labels($ent, $id), $ids)),
             'LOCATION' => self::pBins($ent, $ids, $tpl, $w, $h, $copies, $x['start_cell']),
         };
         if ($kind !== 'LOCATION' && $copies > 1) { $one = $pages; for ($c = 1; $c < $copies; $c++) $pages = array_merge($pages, $one); }

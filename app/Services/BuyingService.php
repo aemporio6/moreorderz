@@ -307,7 +307,7 @@ class BuyingService
     public static function postGrn(int $grnId): array
     {
         CycleAlerts::touched();      // sourcing alerts run again after this save (R-B_SOURCING-26)
-        return DB::transaction(function () use ($grnId) {
+        $res = DB::transaction(function () use ($grnId) {
             $g = DB::table('t_src_grn')->where('id', $grnId)->where('fk_id_ent', Context::ent())->lockForUpdate()->first() ?? throw new \RuntimeException('GRN not found.');
             if ($g->posting_status === 'POSTED') throw new \RuntimeException("GRN {$g->grn_number} is already posted. Stock is never received twice.");
             $ent = (int) $g->fk_id_ent;
@@ -338,6 +338,9 @@ class BuyingService
             Audit::log('t_src_grn', $grnId, 'APPROVE', ['posted' => true, 'value' => $res['value']], null, $ent);
             return $res + ['advance_used' => $used, 'po_status' => $allIn ? 'RECEIVED' : $po->status];
         });
+        // R-F_SETUP-13: the GRN PDF is made when the GRN is posted (screen, WhatsApp or mobile) and kept in the cycle's documents; a PDF problem never undoes the posting
+        try { $res['grn_pdf'] = GrnPrint::store((int) Context::ent(), $grnId)['file']; } catch (\Throwable $e) { report($e); $res['grn_pdf'] = null; }
+        return $res;
     }
 
     // ---------------------------------------------------------------- landed cost

@@ -119,6 +119,8 @@ class BuyingController extends Controller
     public function shipmentPoSave(Request $r, int $id) { $this->can($r, 'buying.BUY'); return $this->run(fn () => \App\Services\ShipmentLinks::save((int) Context::ent(), $id, $r->only(['po', 'planned', 'actual', 'reason']))); }
     public function shipmentPoRemove(Request $r, int $id, int $po) { $this->can($r, 'buying.BUY'); return $this->run(fn () => \App\Services\ShipmentLinks::remove((int) Context::ent(), $id, $po)); }
     public function cycleOverview(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\CycleAlerts::overview((int) Context::ent(), $id, $r->user())); }
+    /** R-F_SETUP-13: the GRN PDF (made again, kept in the cycle's documents). Labels go through the print routes (kind GRN_LABEL). */
+    public function grnPdf(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(function () use ($id) { $x = \App\Services\GrnPrint::store((int) Context::ent(), $id); return response($x['body'], 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="' . $x['file'] . '"']); }); }
     /** R-F_SETUP-2 Cycle Journey / R-F_SETUP-12 Cycle Summary: JSON, or ?pdf=1 for the PDF. */
     public function journey(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(function () use ($r, $id) { $money = \App\Services\Perm::has($r->user(), 'buying.MONEY'); if (! $r->boolean('pdf')) return \App\Services\CycleReports::journey((int) Context::ent(), $id, $money);
         $x = \App\Services\CycleReports::journeyPdf((int) Context::ent(), $id, $money); return response($x['body'], 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="' . $x['name'] . '"']); }); }
