@@ -27,9 +27,9 @@ class SaleLines
     }
 
     // ---------- R-A_SALES-27: expected cost of an own-stock line on its order date ----------
-    public static function carrierRate(?int $presetId, int $ent): float
+    public static function carrierRate(?int $presetId, int $ent, ?string $date = null): float
     {
-        return $presetId ? (float) (self::presets($ent)->where('cv.id', $presetId)->value('cv.rate') ?? 0) : 0.0;
+        return $presetId ? Carriers::rateOn('CARRIER', $presetId, $date, (float) (self::presets($ent)->where('cv.id', $presetId)->value('cv.rate') ?? 0)) : 0.0;      // the rate of that date
     }
 
     /** Carrier presets (carrier × package × service with a rate) of the company. The old tool's view of them is not used – it is rebuilt from the tables here. */
@@ -43,9 +43,9 @@ class SaleLines
         return $id ? self::presets($ent)->where('cv.id', $id)->first(['cv.id', 'cv.pkg_svc_name', 'cv.rate', 'cv.fk_id_carrier', 'c.carrier_name']) : null;
     }
 
-    public static function packingRate(?int $packingId): float
+    public static function packingRate(?int $packingId, ?string $date = null): float
     {
-        return $packingId ? (float) (DB::table('t_packings')->where('id', $packingId)->value('packing_rate') ?? 0) : 0.0;
+        return $packingId ? Carriers::rateOn('PACKING', $packingId, $date, (float) (DB::table('t_packings')->where('id', $packingId)->value('packing_rate') ?? 0)) : 0.0;
     }
 
     /** [raw, sale, fk_id_car_pkg_svc, carrier_rate, fk_id_packing, packing_rate, cost_source, fk_id_price_period] */
@@ -55,7 +55,7 @@ class SaleLines
         // today's carrier and packing of the product for this marketplace, else the product's own
         $ship = DB::table('t_product_marketplace_shipping')->where(['fk_id_product' => $pid, 'fk_id_marketplace' => $marketplaceId])->first();
         $svc = (int) (($ship->fk_id_car_pkg_svc ?? 0) ?: ($product->fk_id_car_pkg_svc ?? 0)); $pack = (int) (($ship->fk_id_packing ?? 0) ?: ($product->fk_id_packing ?? 0));
-        $carToday = self::carrierRate($svc, $ent); $packToday = self::packingRate($pack);
+        $carToday = self::carrierRate($svc, $ent, $date); $packToday = self::packingRate($pack, $date);      // carrier and packing rates carry a start date: the order date decides
         $log = fn (?int $mp) => DB::table('t_product_inventory_change_log')->where(['fk_product_id' => $pid, 'change_type' => 'price_change'])->when($mp !== null, fn ($q) => $q->where('fk_id_marketplace', $mp), fn ($q) => $q->where(fn ($w) => $w->whereNull('fk_id_marketplace')->orWhere('fk_id_marketplace', 0)));
         $cover = fn ($q) => $q->where('from_date', '<=', $date)->where(fn ($w) => $w->whereNull('to_date')->orWhere('to_date', '0000-00-00')->orWhere('to_date', '>=', $date))->orderByDesc('from_date')->orderByDesc('id')->first();
         $src = null; $raw = 0.0; $sale = 0.0; $period = null;
@@ -175,12 +175,17 @@ class SaleLines
     public static function carrierOptions(object $s): array
     {
         $ent = (int) $s->fk_id_ent;
-        $svc = self::presets($ent)->orderBy('c.carrier_name')->orderBy('cv.pkg_svc_name')->get(['cv.id', 'cv.pkg_svc_name', 'cv.rate', 'cv.fk_id_carrier', 'c.carrier_name'])
-            ->map(fn ($r) => ['id' => (int) $r->id, 'key' => (string) $r->id, 'label' => $r->carrier_name . '-' . $r->pkg_svc_name . ((float) $r->rate > 0 ? '' : ' (no rate set)'), 'rate' => (float) $r->rate, 'carrier' => (int) $r->fk_id_carrier, 'has_rate' => (float) $r->rate > 0])->all();
+        $day = (string) $s->d_order; $mp = (int) $s->fk_id_marketplace;      // rates of the order date; services offered on this marketplace
+        $svc = self::presets($ent)->leftJoin('t_carrier_services as sv', 'sv.id', '=', 'cv.fk_id_car_service')->where(fn ($w) => $w->where('cv.f_active', 1)->orWhere('cv.id', (int) $s->fk_id_car_pkg_svc))->orderBy('c.carrier_name')->orderBy('cv.pkg_svc_name')->get(['cv.id', 'cv.pkg_svc_name', 'cv.rate', 'cv.fk_id_carrier', 'c.carrier_name', 'sv.offered_on'])
+            ->filter(fn ($r) => (int) $r->id === (int) $s->fk_id_car_pkg_svc || Carriers::offered($r->offered_on, $mp))
+            ->map(function ($r) use ($day) { $rate = Carriers::rateOn('CARRIER', (int) $r->id, $day, (float) $r->rate); return ['id' => (int) $r->id, 'key' => (string) $r->id, 'label' => $r->carrier_name . '-' . $r->pkg_svc_name . ($rate > 0 ? '' : ' (no rate set)'), 'rate' => $rate, 'carrier' => (int) $r->fk_id_carrier, 'has_rate' => $rate > 0]; })->values()->all();
         if ($s->fk_id_car_pkg_svc && ! in_array((int) $s->fk_id_car_pkg_svc, array_column($svc, 'id'), true)) $svc[] = ['id' => (int) $s->fk_id_car_pkg_svc, 'key' => (string) $s->fk_id_car_pkg_svc, 'label' => 'Current carrier service (no longer in the list)', 'rate' => (float) $s->carrier_rate, 'carrier' => 0, 'has_rate' => true];
         $packs = DB::table('t_packings')->whereIn('fk_id_ent', [0, $ent])->where(fn ($w) => $w->where('f_active', 1)->orWhere('id', (int) $s->fk_id_packing))->orderBy('packing_name')->get()
-            ->map(fn ($p) => ['id' => (int) $p->id, 'label' => $p->packing_name . '-£' . self::money((float) $p->packing_rate) . ($p->f_active ? '' : ' (inactive)'), 'rate' => (float) $p->packing_rate])->all();
-        $cheapest = collect($svc)->where('rate', '>', 0)->sortBy('rate')->first();
+            ->map(function ($p) use ($day) { $rate = Carriers::rateOn('PACKING', (int) $p->id, $day, (float) $p->packing_rate); return ['id' => (int) $p->id, 'label' => $p->packing_name . '-£' . self::money($rate) . ($p->f_active ? '' : ' (inactive)'), 'rate' => $rate]; })->all();
+        // suggestion: the cheapest service whose package takes the product's weight and size (else simply the cheapest with a rate)
+        $prod = (int) $s->fk_product_id ? DB::table('t_product_vendors')->where('id', $s->fk_product_id)->first(['weight', 'unit_gross_weight', 'dimensions']) : null; $dims = $prod ? array_map('floatval', array_slice(preg_split('/[^\d.]+/', (string) $prod->dimensions, -1, PREG_SPLIT_NO_EMPTY), 0, 3)) + [0, 0, 0] : [0, 0, 0];
+        $fit = $prod ? Carriers::cheapest((float) (($prod->unit_gross_weight ?: $prod->weight) ?: 0) * max(1, (int) $s->qty), (float) $dims[0], (float) $dims[1], (float) $dims[2], $mp, $day) : null;
+        $cheapest = $fit && in_array($fit['id'], array_column($svc, 'id'), true) ? $fit : collect($svc)->where('rate', '>', 0)->sortBy('rate')->first();
         return ['services' => $svc, 'packings' => array_merge([['id' => 0, 'label' => 'No packing', 'rate' => 0.0]], $packs), 'cheapest' => $cheapest['id'] ?? null,
             'formula' => 'Buy Amount = raw × qty + carrier + packing (carrier and packing once per line). Profit = Total − Buy Amount.'];
     }
@@ -197,7 +202,7 @@ class SaleLines
             if (! $svc && $svcId !== (int) $s->fk_id_car_pkg_svc) throw new \InvalidArgumentException('That carrier service was not found.');
             $pack = $packId ? DB::table('t_packings')->where('id', $packId)->whereIn('fk_id_ent', [0, (int) $s->fk_id_ent])->first() : null;
             if ($packId && ! $pack) throw new \InvalidArgumentException('That packing was not found.');
-            $car = $svc ? (float) $svc->rate : (float) $s->carrier_rate; $pk = $pack ? (float) $pack->packing_rate : 0.0;
+            $car = $svc ? Carriers::rateOn('CARRIER', $svcId, (string) $s->d_order, (float) $svc->rate) : (float) $s->carrier_rate; $pk = $pack ? Carriers::rateOn('PACKING', $packId, (string) $s->d_order, (float) $pack->packing_rate) : 0.0;      // the rates of the line's own date
             $x = self::calc((float) $s->total_amount, (float) $s->raw_price, (int) $s->qty, $car, $pk);
             $name = fn ($v, float $rate) => $v ? ($v->carrier_name . '-' . $v->pkg_svc_name) . ' (£' . self::money($rate) . ')' : 'None';
             $oldSvc = self::preset((int) $s->fk_id_car_pkg_svc, (int) $s->fk_id_ent); $oldPack = $s->fk_id_packing ? DB::table('t_packings')->where('id', $s->fk_id_packing)->first() : null;

@@ -251,6 +251,10 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('print-routes', [PrintController::class, 'route']);
         Route::get('orders', [OrdersController::class, 'board']);
         Route::get('sales', [OrdersController::class, 'saleLines']);
+        Route::get('carriers/matrix', [OrdersController::class, 'carrierMatrix']);
+        Route::get('carriers/cheapest', [OrdersController::class, 'carrierCheapest']);
+        Route::get('carriers/rates/{kind}/{id}', [OrdersController::class, 'carrierRateHistory'])->where('kind', 'carrier|packing')->whereNumber('id');
+        Route::post('carriers/{what}', [OrdersController::class, 'carrierSave'])->where('what', 'carrier|package|service|packing|preset|preset-delete|rate');
         Route::get('shop-reminders', [OrdersController::class, 'shopReminders']);
         Route::post('shop-reminders', [OrdersController::class, 'shopReminderSave']);
         Route::post('shop-reminders/template', [OrdersController::class, 'shopReminderTemplate']);

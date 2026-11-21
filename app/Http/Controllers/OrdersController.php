@@ -385,4 +385,15 @@ class OrdersController extends Controller
     public function shopReminderSave(Request $r) { return $this->run(fn () => \App\Services\ShopReminders::save($r->only(['shop', 'month', 'year', 'type', 'text']), (int) $r->input('id') ?: null, $r->user())); }
     public function shopReminderDo(Request $r, int $id, string $what) { return $this->run(fn () => match ($what) { 'resolve' => \App\Services\ShopReminders::resolve($id, $r->user()), 'revert' => \App\Services\ShopReminders::revert($id, $r->user()), default => \App\Services\ShopReminders::remove($id, $r->user()) }); }
     public function shopReminderTemplate(Request $r) { return $this->run(fn () => $r->boolean('remove') ? \App\Services\ShopReminders::removeTemplate((int) $r->input('id'), $r->user()) : \App\Services\ShopReminders::saveTemplate($r->only(['shop', 'type', 'text', 'due_day', 'f_active']), (int) $r->input('id') ?: null, $r->user())); }
+
+    // ---------- carrier cost model and preset matrix (R-A_SALES-69, 70) ----------
+    public function carrierMatrix(Request $r) { $this->can($r, 'orders.SEE'); return \App\Services\Carriers::matrix($r->user(), $r->only(['carrier'])); }
+    public function carrierSave(Request $r, string $what)
+    {
+        return $this->run(function () use ($r, $what) { $id = (int) $r->input('id') ?: null; $d = $r->except(['id']); $u = $r->user();
+            return match ($what) { 'carrier' => \App\Services\Carriers::saveCarrier($d, $id, $u), 'package' => \App\Services\Carriers::savePackage($d, $id, $u), 'service' => \App\Services\Carriers::saveService($d, $id, $u), 'packing' => \App\Services\Carriers::savePacking($d, $id, $u),
+                'preset' => \App\Services\Carriers::savePreset($d, $id, $u), 'preset-delete' => \App\Services\Carriers::deletePreset((int) $id, $u), 'rate' => \App\Services\Carriers::setRate(strtoupper((string) $r->input('kind')), (int) $id, $r->input('rate'), $r->input('valid_from'), $u) }; });
+    }
+    public function carrierRateHistory(Request $r, string $kind, int $id) { $this->can($r, 'orders.SEE'); return ['rows' => \App\Services\Carriers::history(strtoupper($kind), $id)]; }
+    public function carrierCheapest(Request $r) { $this->can($r, 'orders.SEE'); return ['best' => \App\Services\Carriers::cheapest((float) $r->query('weight', 0), (float) $r->query('l', 0), (float) $r->query('w', 0), (float) $r->query('h', 0), (int) $r->query('marketplace') ?: null)]; }
 }
