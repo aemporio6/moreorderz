@@ -41,7 +41,7 @@ class StockService
                     'received_date' => $date, 'qty' => $qty, 'qty_left' => $qty, 'unit_cost_gbp' => $cost, 'created_at' => now(),
                     'lot_code' => Numbering::next('LOT', $ent, $date), 'fk_id_product' => $p->id, 'fk_id_owner' => $l['owner'] ?? null,
                     'fk_id_cycle' => $l['cycle_id'] ?? null, 'landed_status' => $l['landed_status'] ?? 'PROVISIONAL',
-                    'visibility' => $l['visibility'] ?? (($p->e_product_type ?? 'pool') === 'private' ? 'PRIVATE' : 'POOL'),
+                    'visibility' => $l['visibility'] ?? ProductVisibility::lotDefault((int) $p->id, isset($l['location']) ? (int) $l['location'] : null) ?? (($p->e_product_type ?? 'pool') === 'private' ? 'PRIVATE' : 'POOL'),      // R-D-20
                 ]);
                 $good = $qty - $dmg;
                 if ($good > 0) {

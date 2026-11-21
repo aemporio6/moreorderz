@@ -157,6 +157,7 @@
       if (r.startsWith('#/variations/')) return await pageVariations(+r.split('/')[2]);
       if (r.startsWith('#/due')) return await pageDue();
       if (r === '#/products' || r.startsWith('#/products?')) return await pageProducts();
+      if ((mt = r.match(/^#\/visibility\/(\d+)/))) return await pageVisibility(+mt[1]);
       if (r.startsWith('#/mp-fields')) return await pageMpFields(+((r.match(/mp=(\d+)/) || [])[1] || 0));
       if ((mt = r.match(/^#\/mp-values\/(\d+)/))) return await pageMpValues(+mt[1], +((r.match(/tab=(\d+)/) || [])[1] || 0));
       if (r.startsWith('#/my-account')) return await pageMyAccount(Object.fromEntries(new URLSearchParams(r.split('?')[1] || '')));
@@ -1334,6 +1335,31 @@
   function dupLive(supEl, refEl, outEl, cycle) { let t; const run = () => { clearTimeout(t); t = setTimeout(async () => { const sup = supEl ? +supEl.value : 0, ref = refEl.value.trim(); outEl.textContent = ''; if ((supEl && !sup) || !ref) return;
       try { const r = await api('buying/duplicate-check?' + new URLSearchParams({ supplier: sup || '', ref, cycle: cycle || '' })); if (!r.ok) outEl.innerHTML = `${esc(r.message)} · <a href="#/cycle/${r.existing.id}">open</a>`; } catch (x) { } }, 400); };
     refEl.addEventListener('input', run); supEl && supEl.addEventListener('change', run); }
+  // ---------- visibility per marketplace × shop (R-D-20) ----------
+  async function pageVisibility(id) {
+    busy(true); let d; try { d = await api(`products/${id}/visibility`); } finally { busy(false); }
+    const ro = d.can_edit ? '' : 'disabled';
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Visibility · ${esc(d.sku || '#' + id)}</h1><div class="sub">Per marketplace: sold there or not; Pool = every active shop of that marketplace, Private = only the ticked shops.</div></div>
+      <div class="actions"><a class="btn" href="#/stock/product/${id}">Back to product</a></div></div>
+      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>Marketplace</th><th>Sold there</th><th>Mode</th><th>Shops</th></tr></thead><tbody>
+      ${d.marketplaces.map(m => `<tr data-vm="${m.id}"><td><b>${esc(m.name)}</b><div class="small muted" data-vsum>${esc(m.summary)}</div></td>
+        <td><label class="chk"><input type="checkbox" data-von ${m.on ? 'checked' : ''} ${ro}> on</label></td>
+        <td><select data-vmode ${ro}><option value="POOL" ${m.mode === 'POOL' ? 'selected' : ''}>Pool</option><option value="PRIVATE" ${m.mode === 'PRIVATE' ? 'selected' : ''}>Private</option></select></td>
+        <td data-vshops>${m.shops.length ? `<div class="small"><a href="#" data-vall>Select all</a> · <a href="#" data-vnone>Unselect all</a> · <span data-vcount></span></div>${m.shops.map(sh => `<label class="chk" style="display:block"><input type="checkbox" data-vshop="${sh.id}" ${m.ticked.includes(sh.id) ? 'checked' : ''} ${ro}> ${esc(sh.label)}</label>`).join('')}` : '<span class="small muted">No active shop</span>'}</td></tr>`).join('')}</tbody></table></div>
+      <div class="small" id="vWarn" style="color:var(--warn,#b7791f);margin-top:8px"></div>${d.can_edit ? '<div style="margin-top:10px"><button class="btn primary" id="vSave">Save visibility</button></div>' : ''}</div>`;
+    const paint = tr => { const on = $('[data-von]', tr).checked, priv = $('[data-vmode]', tr).value === 'PRIVATE'; $('[data-vmode]', tr).disabled = !on || !d.can_edit; const box = $('[data-vshops]', tr); box.style.opacity = on && priv ? 1 : .35;
+      $$('[data-vshop]', tr).forEach(x => x.disabled = !(on && priv) || !d.can_edit); const c = $('[data-vcount]', tr); if (c) c.textContent = $$('[data-vshop]', tr).filter(x => x.checked).length + ' shop(s) selected'; };
+    $$('[data-vm]').forEach(tr => { paint(tr);
+      $('[data-von]', tr).onchange = e => { if (!e.target.checked) $$('[data-vshop]', tr).forEach(x => x.checked = false); paint(tr); };
+      $('[data-vmode]', tr).onchange = e => { const n = $$('[data-vshop]', tr).filter(x => x.checked).length;
+        if (e.target.value === 'POOL' && n) { e.target.value = 'PRIVATE'; const m = modal('Switch to Pool', '', `<p>This will clear the ${n} selected shop(s).</p>`, '<button class="btn" id="vpNo">Keep Private</button><button class="btn primary" id="vpYes">Switch to Pool</button>', false);
+          $('#vpNo', m.ov).onclick = m.close; $('#vpYes', m.ov).onclick = () => { $('[data-vmode]', tr).value = 'POOL'; $$('[data-vshop]', tr).forEach(x => x.checked = false); paint(tr); m.close(); }; return; }
+        paint(tr); };
+      $$('[data-vshop]', tr).forEach(x => x.onchange = () => paint(tr));
+      const a = $('[data-vall]', tr), n = $('[data-vnone]', tr); if (a) a.onclick = e => { e.preventDefault(); if (!d.can_edit) return; $$('[data-vshop]', tr).forEach(x => x.checked = true); paint(tr); }; if (n) n.onclick = e => { e.preventDefault(); if (!d.can_edit) return; $$('[data-vshop]', tr).forEach(x => x.checked = false); paint(tr); }; });
+    if ($('#vSave')) $('#vSave').onclick = async () => { const tab = {}; $$('[data-vm]').forEach(tr => tab[tr.dataset.vm] = { on: $('[data-von]', tr).checked, mode: $('[data-vmode]', tr).value, shops: $$('[data-vshop]', tr).filter(x => x.checked).map(x => +x.dataset.vshop) });
+      try { const r = await api(`products/${id}/visibility`, { method: 'POST', body: { tab } }); toast(r.message); $('#vWarn').textContent = r.warnings.join(' '); } catch (e) { toast(Object.values(e.errors || {}).flat().join(' ') || e.message, 'err'); } };
+  }
   // ---------- marketplace field builder (R-A_SALES-67) ----------
   async function pageMpFields(mp) {
     busy(true); let d; try { d = await api('mp-fields' + (mp ? '?mp=' + mp : '')); } finally { busy(false); }
@@ -2336,7 +2362,7 @@
     busy(true); let d, o; try { d = await api('stock/product/' + id); o = (await api('stock/on-hand')).rows.find(r => r.id === id) || {}; } finally { busy(false); }
     const cost = d.rows.length && d.rows[0].unit_cost_gbp !== undefined;
     $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/stock">Stock on hand</a> ›</div><h1>${esc(o.sku || 'Product ' + id)}</h1><div class="sub">${esc(o.name || '')}</div></div>
-      <div class="actions"><a class="btn" href="#/rec/${esc(S.boot.product_form)}/${id}">Product record</a><a class="btn" href="#/stock/ledger?product=${id}">Ledger of this product</a><a class="btn" href="#/mp-values/${id}">Marketplace fields</a><button class="btn" data-sa="transfer">${ic('truck')} Move</button><button class="btn" data-sa="adjust">${ic('wand')} Adjust</button></div></div>
+      <div class="actions"><a class="btn" href="#/rec/${esc(S.boot.product_form)}/${id}">Product record</a><a class="btn" href="#/stock/ledger?product=${id}">Ledger of this product</a><a class="btn" href="#/mp-values/${id}">Marketplace fields</a><a class="btn" href="#/visibility/${id}">Visibility</a><button class="btn" data-sa="transfer">${ic('truck')} Move</button><button class="btn" data-sa="adjust">${ic('wand')} Adjust</button></div></div>
       <div class="kpis"><div class="card kpi"><div class="bar"></div><div class="lbl">Units in stock</div><div class="val">${d.units}</div></div><div class="card kpi"><div class="bar"></div><div class="lbl">Can be sold</div><div class="val">${d.available}</div><div class="foot">sellable places, minus reserved</div></div></div>
       <div class="card" style="margin-top:14px"><div class="card-h"><h3>Where the units are · oldest lot first (sold first)</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Location</th><th>Lot</th><th>Received</th><th>Owner</th><th>Pool / private</th>${cost ? '<th class="num">Cost</th>' : ''}<th class="num">Units</th></tr></thead>
       <tbody>${d.rows.map(r => `<tr><td>${esc(r.location)}${r.kind ? ` <span class="small muted">${esc(r.kind.toLowerCase().replace(/_/g, ' '))}</span>` : ''}</td><td>${esc(r.lot_code)}</td><td>${esc(r.received_date)}</td><td>${esc(r.owner || 'Company')}</td><td>${esc(r.visibility || '')}</td>${cost ? `<td class="num">${(+r.unit_cost_gbp).toFixed(4)}${r.landed_status === 'PROVISIONAL' ? ' <span class="chip warn plain" title="Landed cost is not final yet">prov.</span>' : ''}</td>` : ''}<td class="num">${r.qty}</td></tr>`).join('')}</tbody></table>${d.rows.length ? '' : '<div class="empty">No units in stock.</div>'}</div></div>`;

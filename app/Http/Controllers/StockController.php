@@ -52,6 +52,16 @@ class StockController extends Controller
         if (! $r->has('per')) $f += ['per' => $v['per'], 'set' => $v['set'], 'status' => $v['status'], 'mp' => $v['mp'] ?? null, 'q' => $v['q'] ?? ''];      // the person's default view
         return \App\Services\ProductsList::page((int) Context::ent(), $f, $r->user());
     }
+    /** Visibility per marketplace × shop (R-D-20). */
+    public function visibility(Request $r, int $id) { \App\Services\Perm::need($r->user(), 'form:product_visibility:VIEW'); return \App\Services\ProductVisibility::get((int) Context::ent(), $id) + ['can_edit' => \App\Services\Perm::has($r->user(), 'form:product_visibility:EDIT'), 'sku' => \Illuminate\Support\Facades\DB::table('t_product_vendors')->where('id', $id)->value('SKU_VENDOR')]; }
+    public function visibilitySave(Request $r, int $id)
+    {
+        \App\Services\Perm::need($r->user(), 'form:product_visibility:EDIT');
+        try { return \App\Services\ProductVisibility::save((int) Context::ent(), $id, (array) $r->input('tab', []), $r->user()); }
+        catch (\App\Services\ValidationErrors $e) { return response()->json(['message' => $e->getMessage(), 'errors' => array_map(fn ($m) => [$m], $e->errors)], 422); }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+    }
+
     /** Hide, delete, restore (R-D-9). */
     public function productHide(Request $r, int $id) { \App\Services\Perm::need($r->user(), 'products.hide'); return $this->run(fn () => \App\Services\ProductArchive::hide($id, (string) $r->input('reason'), $r->user())); }
     public function productDelete(Request $r, int $id) { \App\Services\Perm::need($r->user(), 'products.delete'); return $this->run(fn () => \App\Services\ProductArchive::delete($id, $r->user())); }

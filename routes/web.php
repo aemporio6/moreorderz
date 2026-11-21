@@ -152,6 +152,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('stock/on-hand', [StockController::class, 'onHand']);
         Route::get('products', [StockController::class, 'products']);
         Route::get('products/bin', [StockController::class, 'productBin']);
+        Route::get('products/{id}/visibility', [StockController::class, 'visibility'])->whereNumber('id');
+        Route::post('products/{id}/visibility', [StockController::class, 'visibilitySave'])->whereNumber('id');
         Route::post('products/{id}/hide', [StockController::class, 'productHide'])->whereNumber('id');
         Route::post('products/{id}/delete', [StockController::class, 'productDelete'])->whereNumber('id');
         Route::post('products/{id}/restore', [StockController::class, 'productRestore'])->whereNumber('id');

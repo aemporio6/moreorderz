@@ -564,3 +564,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-50 (21 Nov): WhatsApp inbound commands R-G_CORE-52 + task state table R-G_CORE-1 + Done gate R-G_CORE-5 + rework R-G_CORE-9 BUILT. +7 register lines (523). 406 tests.
 - 7e-51 (21 Nov): profit seen every way R-FIN-74 BUILT (lot / batch / investor / share views, equal totals, Profit by on close screen). +4 register lines (527). 407 tests.
 - 7e-52 (21 Nov): hide / delete / restore products R-D-9 BUILT (recycle bin, Archive instead). +3 register lines (530). 408 tests.
+- 7e-53 (21 Nov): visibility per marketplace × shop R-D-20 BUILT (Pool / Private matrix, upsert, lot default). +3 register lines (533). 409 tests.
