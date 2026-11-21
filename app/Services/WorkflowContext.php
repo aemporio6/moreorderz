@@ -140,7 +140,7 @@ class WorkflowContext
         $next = self::next($form, $cycle); if (! $next) return ['next' => null, 'message' => 'This was the last step of the cycle.'];
         $pre = self::prefill($next['form'], $cycle, $ctx); $ex = self::existing($next['form'], $pre);
         $parentLabel = ! empty($pre['fk_id_po']) ? 'This PO' : (! empty($pre['fk_id_shipment']) ? 'This shipment' : (! empty($pre['fk_id_grn']) ? 'This GRN' : 'This cycle'));
-        return ['next' => $next, 'preset' => $pre, 'locked' => array_keys($pre), 'context' => $ctx, 'existing' => $ex,
+        return ['next' => $next, 'preset' => $pre, 'locked' => Choices::get('SAVE_NEXT_LOCK', (int) (DB::table('t_src_cycles')->where('id', $cycle)->value('fk_id_ent') ?: 0) ?: null) === '1' ? array_keys($pre) : [] /* Settings › Choices */, 'context' => $ctx, 'existing' => $ex,
             'existing_text' => $ex ? "$parentLabel already has " . count($ex) . ' ' . $next['label'] . (count($ex) === 1 ? ' record' : ' records') . ' (' . implode(', ', array_column(array_slice($ex, 0, 3), 'label')) . ').' : null];
     }
 }

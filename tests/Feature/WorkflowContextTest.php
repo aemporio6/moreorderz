@@ -38,6 +38,9 @@ class WorkflowContextTest extends TestCase
         $this->assertSame($cy, $n['preset']['fk_id_cycle']);
         $this->assertContains('fk_id_po', $n['locked']);
         $this->assertSame([], $n['existing']);
+        \App\Services\Choices::set('SAVE_NEXT_LOCK', '0', 1);      // owner rule: Settings › Choices – filled but free to change
+        $this->assertSame([[], $po], [$this->postJson('/api/cycle/next', ['form' => 't_src_po', 'id' => $po])->assertOk()->json('locked'), $this->postJson('/api/cycle/next', ['form' => 't_src_po', 'id' => $po])->json('preset.fk_id_po')]);
+        \App\Services\Choices::set('SAVE_NEXT_LOCK', '1', 1);
         $this->assertSame($po, WorkflowContext::get($cy, $this->owner->id)['po'], 'the context is kept server-side per cycle and user');
         $this->assertSame([], WorkflowContext::get($cy, $this->owner->id + 999), 'not for another user');
 

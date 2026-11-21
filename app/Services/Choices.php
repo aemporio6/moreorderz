@@ -98,6 +98,12 @@ class Choices
         'CHANNELS_SELF_EDIT' => ['My alerts: may a person change his own quiet hours, time zone, digest time and WhatsApp / e-mail switches?', 'Recommended: Yes – each person knows when he sleeps and where he is; the weekly task limit stays with Partners and Managers.', '1', [
             '1' => ['Yes', 'Suggested.'], '0' => ['No, only Partners and Managers', 'A person sees his own settings but cannot change them.']]],
         'CHANNEL_SWITCH_ROLES' => ['Who may switch WhatsApp or e-mail alerts off for somebody else?', 'Recommended: Owner and Partner – a switched-off person misses task alerts, so it is a Partner\'s decision.', 'OWNER,PARTNER', []],
+        'SAVE_NEXT_LOCK' => ['Sourcing cycle "Save & Next": the parent fields carried to the next step (cycle, PO, shipment, GRN) are …', 'Recommended: locked – the next record cannot be saved under the wrong PO by mistake; the lock icon still opens one field when it is really needed.', '1', [
+            '1' => ['locked (the lock icon opens one)', 'Suggested.'], '0' => ['filled but free to change', 'Faster when people often change the parent.']]],
+        'PRIVATE_RULE' => ['Stock health: a product counts as Private when it is private …', 'Recommended: on any marketplace × shop – one private shop already means the units are kept for someone, so they must not be sold from the pool.', 'ANY', [
+            'ANY' => ['on any marketplace × shop', 'Suggested (K5).'], 'ALL' => ['on every marketplace × shop it is listed on', 'Private only when it is never pool anywhere.']]],
+        'FREE_CASH_COMMITTED' => ['Free cash (alert FA1): which supplier payments are taken off the bank?', 'Free cash = bank − supplier payments still open − approved withdrawals. Recommended: every open payment – money promised to suppliers is not free.', 'ALL_OPEN', [
+            'ALL_OPEN' => ['every open supplier payment', 'Suggested.'], 'DUE_30' => ['only payments due in the next 30 days', 'Later payments are left out (more free cash shown).'], 'DUE_7' => ['only payments due in the next 7 days', '']]],
         'HIDDEN_MARGIN_ROLES' => ['Owner Home › Invoicing / Profit: who sees the row "Hidden margin"?', 'Recommended: Owner only – a partner\'s share is worked out on the net profit, so the margin kept by the company stays with the Owner.', 'OWNER', []],
     ];
 

@@ -72,7 +72,7 @@ class FinanceAlerts
     {
         $bank = round(array_sum(array_map(fn ($x) => (float) $x['books_base'], MoneyService::banks($ent))), 2); $today = date('Y-m-d');
         $sched = 0.0;
-        foreach (DB::table('t_src_payment_terms as t')->join('t_src_po as p', 'p.id', '=', 't.fk_id_po')->where('t.fk_id_ent', $ent)->where('t.f_active', 1)->where('t.remaining_amount', '>', 0)->whereIn('p.status', ['CONFIRMED', 'SHIPPED', 'RECEIVED'])->get(['t.remaining_amount', 'p.fk_id_currency']) as $t)
+        foreach (DB::table('t_src_payment_terms as t')->join('t_src_po as p', 'p.id', '=', 't.fk_id_po')->where('t.fk_id_ent', $ent)->where('t.f_active', 1)->where('t.remaining_amount', '>', 0)->whereIn('p.status', ['CONFIRMED', 'SHIPPED', 'RECEIVED'])->when(($cm = Choices::get('FREE_CASH_COMMITTED', $ent)) !== 'ALL_OPEN', fn ($q) => $q->where(fn ($w) => $w->whereNull('t.due_date')->orWhere('t.due_date', '<=', date('Y-m-d', strtotime($today . ($cm === 'DUE_7' ? ' +7 days' : ' +30 days'))))))->get(['t.remaining_amount', 'p.fk_id_currency']) as $t)
             $sched += (float) $t->remaining_amount * Fx::rate(Fx::code($t->fk_id_currency, $ent), $today, $ent);
         $wd = 0.0;
         foreach (DB::table('fin_withdrawals')->where('company_id', $ent)->where('status', 'APPROVED')->get(['amount', 'currency']) as $w) $wd += Fx::toBase((float) $w->amount, $w->currency ?: Fx::base($ent), $today, $ent);

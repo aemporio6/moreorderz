@@ -51,6 +51,8 @@ class StockHealth
     public static function split(int $ent): array
     {
         $priv = "EXISTS (SELECT 1 FROM t_product_visibility v WHERE v.fk_id_product = p.id AND UPPER(v.visibility_mode) = 'PRIVATE')";
+        if (Choices::get('PRIVATE_RULE', $ent) === 'ALL') $priv .= " AND NOT EXISTS (SELECT 1 FROM t_product_visibility v2 WHERE v2.fk_id_product = p.id AND UPPER(v2.visibility_mode) <> 'PRIVATE')";      // Settings › Choices: private everywhere
+        $priv = "($priv)";
         $pool = "EXISTS (SELECT 1 FROM t_product_visibility v WHERE v.fk_id_product = p.id AND UPPER(v.visibility_mode) = 'POOL')";
         $sum = fn ($w) => (int) self::base($ent)->where('p.stock', '>', 0)->whereRaw($w)->sum('p.stock');
         return ['private' => $sum($priv), 'pool' => $sum("$pool AND NOT $priv"), 'total' => (int) self::base($ent)->where('p.stock', '>', 0)->sum('p.stock')];

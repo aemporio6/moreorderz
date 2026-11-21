@@ -2,7 +2,7 @@
 
 > **Owner rule 22 Nov 03:47:** no more questions. Every suggestion below is accepted as the default and built that way, and each one becomes a setting with options (dropdown / yes-no) and a "Recommended: … because …" help, so it can be changed later. This page is now a record only.
 
-> Already settings: B1 (Rights › SOURCING › see_money), B4 (Choices › Who sees every product?), B11 (Alerts › finance rules › roles), B18 (Rights › buying.LANDED_FINAL), B21 (Alerts › Thresholds › rule_snooze_days), B3 and B5 (Choices, 7e-127). B8, B15, B19 settings since 7e-128. B22, B24 settings since 7e-129. Being turned into settings next: B6, B7, B9, B10, B12, B14, B25 and the MR lines.
+> Already settings: B1 (Rights › SOURCING › see_money), B4 (Choices › Who sees every product?), B11 (Alerts › finance rules › roles), B18 (Rights › buying.LANDED_FINAL), B21 (Alerts › Thresholds › rule_snooze_days), B3 and B5 (Choices, 7e-127). B8, B15, B19 settings since 7e-128. B22, B24 settings since 7e-129. B7, B9, B12 settings since 7e-130. Being turned into settings next: B6, B10, B14, B25 and the MR lines.
 
 
 Updated 21 Nov 2026 (batch 7e-101). How to answer: write **OK** next to a line to keep the suggested default, or write your own answer. Nothing here stops the building – every line already runs with the suggested default – except part A.
@@ -38,12 +38,12 @@ Updated 21 Nov 2026 (batch 7e-101). How to answer: write **OK** next to a line t
 | B4 ✔ | R-D-21 / R-D-17 | Every product is seen by Owner, Manager and the ADMN-SUPER role; everybody else is limited (owner: "yes" again 22 Nov 03:39) | Choices › Who sees every product? |
 | B5 ✔ | R-F_SETUP-29 | The row Hidden margin is shown to the Owner only (partners do not see it) (owner: "yes" again 22 Nov 03:44) | **setting: Choices › who sees the row "Hidden margin"** (multiple, All, + Add a role; recommended Owner only) – 7e-127 |
 | B6 ✔ | R-F_SETUP-27 | A custom period with From after To is swapped | — |
-| B7 | R-B_SOURCING-18 | Parent fields carried by Save & Next are locked; the unlock icon changes them | — |
+| B7 | R-B_SOURCING-18 | Parent fields carried by Save & Next are locked; the unlock icon changes them | **setting: Choices › Save & Next parent fields are …** (locked / free; recommended locked) – 7e-130 |
 | B8 | R-B_SOURCING-4 | A repeated cycle takes the last agreed price (latest PO line, else the supplier's RFQ final price, else the old target) | **setting: Choices › Repeat a sourcing cycle: the target price** (recommended: last agreed price) – 7e-128 |
-| B9 | R-F_SETUP-28 | A product counts as Private when it is private on any marketplace × shop | — |
+| B9 | R-F_SETUP-28 | A product counts as Private when it is private on any marketplace × shop | **setting: Choices › a product counts as Private when it is private …** (on any / on every marketplace × shop; recommended any) – 7e-130 |
 | B10 | Form standard | Every dropdown has + Add, except 67 fixed lists whose values the program uses (statuses, modes like FIFO / FBA) and 6 lists only the system makes (sales orders, bank statements, printer drivers, device slots) – these show the reason instead (docs/FORM_STANDARD_AUDIT.md) | the developer adds a value to a fixed list |
 | B11 | R-FIN-66 | Finance alerts go to the **Owner** only at first. FA3 (no settlement), FA4 (no bank lines) and FA9 (supplier payment due) send WhatsApp only, because their tasks already come from the existing rules; FA7 (slow / dead stock) makes a task only (one per SKU, no WhatsApp flood). You change roles and channels on the Finance alerts screen | — |
-| B12 | R-FIN-66 FA1 | Free cash = bank − supplier payments still open − approved withdrawals. The unpaid tax reserve is not taken off yet because the system does not keep it as its own figure | — |
+| B12 | R-FIN-66 FA1 | Free cash = bank − supplier payments still open − approved withdrawals. The unpaid tax reserve is not taken off yet because the system does not keep it as its own figure | **setting: Choices › Free cash: which supplier payments are taken off** (every open / due in 30 days / due in 7 days; recommended every open) – 7e-130 |
 | B13 | R-FIN-3 | Partners who already had a login keep working: the system ticked all six onboarding items for them once (new partners must complete all six) | — |
 | B14 | R-FIN-54 | "Stock days" = stock on hand ÷ units sold per day in the chosen dates. The list uses order dates (the same figures as Profit by SKU), not settlement end dates | — |
 | B15 | R-FIN-51 | A location counts as "at FBA" when its kind is FBA / FC / AMAZON / MARKETPLACE / 3PL, or when an inbound shipment was sent to it. Give your fulfilment-centre locations one of these kinds | **setting: Choices › a location counts as "at Amazon" when its kind is …** (multiple + All; recommended Marketplace fulfilment, Third-party warehouse, FBA, 3PL – the old fixed list missed the real kind names MARKETPLACE_FULFILMENT / THREE_PL) – 7e-128 |
