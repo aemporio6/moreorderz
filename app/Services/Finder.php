@@ -211,7 +211,7 @@ class Finder
     {
         $code = trim($code); $ent = (int) Context::ent(); if ($code === '') return null;
         if (Perm::has($u, 'stock.SEE') || Perm::has($u, 'orders.SEE')) {
-            $p = DB::table('t_product_vendors')->where('fk_id_ent', $ent)->where(fn ($w) => $w->where('SKU_VENDOR', $code)->orWhere('ean', $code)->orWhere('upc', $code))->first(['id', 'SKU_VENDOR', 'product_name_vendor']);
+            $p = DB::table('t_product_vendors')->where('fk_id_ent', $ent)->where(fn ($w) => $w->where('SKU_VENDOR', $code)->orWhere('ean', $code)->orWhere('upc', $code))->tap(fn ($x) => ProductScope::apply($x, $u))->first(['id', 'SKU_VENDOR', 'product_name_vendor']);
             if ($p) return ['kind' => 'record', 'title' => $p->SKU_VENDOR . ' · ' . $p->product_name_vendor, 'sub' => 'Product', 'url' => Perm::has($u, 'stock.SEE') ? "#/stock/product/{$p->id}" : '#/rec/' . RecordService::formOfTable('t_product_vendors') . "/{$p->id}"];
         }
         if (Perm::has($u, 'orders.SEE')) {
@@ -311,7 +311,8 @@ class Finder
         $ent = Context::ent(); $digits = preg_replace('/\D+/', '', $q); $shops = Perm::shops($u); $amount = self::amountRange($q); $cols = ['title', 'subtitle', 'url', 'department', 'search_text', 'entity', 'entity_id'];
         $base = fn () => DB::table('sys_search_index')
             ->when($ent, fn ($x) => $x->where(fn ($w) => $w->where('fk_id_ent', $ent)->orWhere('fk_id_ent', 0)))
-            ->when($shops !== null, fn ($x) => $x->where(fn ($w) => $w->whereNull('fk_id_branch')->orWhere('fk_id_branch', 0)->orWhereIn('fk_id_branch', $shops)));
+            ->when($shops !== null, fn ($x) => $x->where(fn ($w) => $w->whereNull('fk_id_branch')->orWhere('fk_id_branch', 0)->orWhereIn('fk_id_branch', $shops)))
+            ->tap(fn ($x) => ProductScope::applyIndex($x, $u));      // R-D-21: a hidden product is not found
         $rows = $base()->where(function ($w) use ($words, $alts, $digits, $amount, $q) {
             $w->where(function ($a) use ($words, $alts) {
                 foreach ($words as $x) $a->where(function ($b) use ($x, $alts) {

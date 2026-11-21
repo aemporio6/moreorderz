@@ -293,7 +293,8 @@ class RecordService
     /** Company filter: a user only sees rows of the company he works in (plus shared rows). */
     private static function scope($q, string $table): void
     {
-        Perm::scopeQuery($q, $table, \Illuminate\Support\Facades\Auth::user(), $table);
+        if ($table === ProductScope::TABLE) ProductScope::apply($q, \Illuminate\Support\Facades\Auth::user(), $table);      // R-D-21 who sees which product (instead of the product's own shop column)
+        else Perm::scopeQuery($q, $table, \Illuminate\Support\Facades\Auth::user(), $table);
         $ent = Context::ent();
         if (! $ent) return;
         if (Registry::hasColumn($table, 'fk_id_ent')) $q->where(fn ($w) => $w->where("$table.fk_id_ent", $ent)->orWhere("$table.fk_id_ent", 0)->orWhereNull("$table.fk_id_ent"));

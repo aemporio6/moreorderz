@@ -610,3 +610,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-96 (21 Nov): company form Director 1 contact pickers cascade R-F_SETUP-36 and director picker = Owner / Director / Partner R-F_SETUP-38 BUILT. +3 register lines (659). 481 tests.
 - 7e-97 (21 Nov): "already exists" guard on Next R-B_SOURCING-19 (rule example test) and the floating step pager R-B_SOURCING-20 BUILT. +3 register lines (662). 483 tests.
 - 7e-98 (21 Nov): Inventory Management health card R-F_SETUP-28 BUILT (six rows, each a filtered product list; mismatch task also checks the location qty). +1 register line (663). 486 tests.
+- 7e-99 (21 Nov): product row scope R-D-21 and super roles by code R-D-17 BUILT (list, search, export, record, dropdowns, top search). +4 register lines (667). 488 tests.

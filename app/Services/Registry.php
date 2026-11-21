@@ -160,6 +160,7 @@ class Registry
             $x = DB::table($table)->select($pk . ' as id', $alt ? DB::raw("COALESCE(NULLIF($lc, ''), $alt) as lbl") : $lc . ' as lbl');
             if ($q) $alt ? $x->where(fn ($w) => $w->where($lc, 'like', "%$q%")->orWhere($alt, 'like', "%$q%")) : $x->where($lc, 'like', "%$q%");
             $x->orderBy($lc);
+            if ($table === ProductScope::TABLE) ProductScope::apply($x, \Illuminate\Support\Facades\Auth::user(), $table);      // R-D-21: product dropdowns too
         }
         if ($ent && self::hasColumn($table, 'fk_id_ent')) $x->where(fn ($w) => $w->where('fk_id_ent', $ent)->orWhere('fk_id_ent', 0)->orWhereNull('fk_id_ent'));
         if (self::hasColumn($table, 'f_active')) $x->where('f_active', 1);

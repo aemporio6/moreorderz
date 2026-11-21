@@ -102,9 +102,10 @@ class ProductsList
         return ['message' => 'Saved as your default view', 'view' => $v];
     }
 
-    private static function query(int $ent, array $f)
+    private static function query(int $ent, array $f, ?object $u = null)
     {
         $q = DB::table('t_product_vendors as p')->where('p.fk_id_ent', $ent)->where(fn ($w) => $w->whereNull('p.f_id_parent')->orWhere('p.f_id_parent', 0))->whereNull('p.fk_id_merged_into');
+        ProductScope::apply($q, $u, 'p');      // R-D-21 who sees which product (list, search box, export)
         $st = $f['status'] ?? 'active';
         if ($st === 'active') $q->where('p.f_active', 1); elseif ($st === 'inactive') $q->where('p.f_active', 0)->where('p.row_state', 'ACTIVE');
         elseif ($st === 'hidden') $q->where('p.row_state', 'HIDDEN'); elseif ($st === 'deleted') $q->where('p.row_state', 'DELETED'); else $q->where('p.row_state', '<>', 'DELETED');      // R-D-9: "Hidden products" saved view; the recycle bin
@@ -117,7 +118,7 @@ class ProductsList
     public static function page(int $ent, array $f, ?object $u): array
     {
         $per = in_array((int) ($f['per'] ?? 20), self::SIZES, true) ? (int) $f['per'] : 20; $page = max(1, (int) ($f['page'] ?? 1)); $mp = ! empty($f['mp']) ? (int) $f['mp'] : null;
-        $base = self::query($ent, $f); $total = (clone $base)->count(); $pages = max(1, (int) ceil($total / $per)); $page = min($page, $pages);
+        $base = self::query($ent, $f, $u); $total = (clone $base)->count(); $pages = max(1, (int) ceil($total / $per)); $page = min($page, $pages);
         $rows = (clone $base)->orderByDesc('p.id')->offset(($page - 1) * $per)->limit($per)->get(['p.*']);
         $out = self::build($ent, $rows, $mp, ($f['set'] ?? 'default') === 'pricing', $u);
         $a = $total ? ($page - 1) * $per + 1 : 0; $b = min($total, $page * $per);
@@ -187,7 +188,7 @@ class ProductsList
         $pricing = ($f['set'] ?? '') === 'pricing'; $mp = ! empty($f['mp']) ? (int) $f['mp'] : null; $hidden = (array) ($f['hidden'] ?? self::view($u)['hidden']);
         $cols = array_diff_key(self::DEFAULT_COLS + ($pricing ? self::PRICING_COLS : []), array_flip(array_merge($hidden, ['image'])));
         if (! ($u && Perm::has($u, 'stock.prices'))) $cols = array_diff_key($cols, array_flip(['wac', 'raw', 'vat', 'postage', 'packing_rate', 'fee', 'final_sale', 'cost', 'margin', 'margin_pct']));
-        $rows = self::query($ent, $f)->orderByDesc('p.id')->limit(5000)->get(['p.*']); $data = [];
+        $rows = self::query($ent, $f, $u)->orderByDesc('p.id')->limit(5000)->get(['p.*']); $data = [];
         foreach ($rows->chunk(200) as $c) $data = array_merge($data, self::build($ent, $c->values(), $mp, $pricing, $u));
         $grid = array_map(fn ($r) => array_map(fn ($k) => self::text($r, $k), array_keys($cols)), $data); $head = array_values($cols);
         $name = 'products_' . date('Y-m-d_His');
