@@ -1,0 +1,7 @@
+$u = DB::table('t_users')->where('login_id', 'uicheck@demo.test')->value('id');
+echo "user $u\n";
+if ($u) { DB::table('sys_audit_log')->where('id', '>', 232)->where(fn($w) => $w->where('user_id', $u)->orWhere(fn($x) => $x->where('table_name', 't_users')->where('record_id', $u)))->delete();
+ foreach (['tm_notifications' => 'user_id', 'sys_workflow_context' => 'user_id', 't_user_column_prefs' => 'fk_id_user'] as $t => $c) DB::table($t)->where($c, $u)->delete();
+ DB::table('sys_settings')->where('updated_by', $u)->delete(); DB::table('sys_workflow_state')->where('done_by', $u)->delete(); DB::table('t_src_cycles')->whereIn('id', [3, 4])->update(['skipped_steps' => 'rfq,samples,production,qc,shipment,freight,customs,landed_cost']); if (Schema::hasTable('mo_user_roles')) DB::table('mo_user_roles')->where('user_id', $u)->delete(); DB::table('t_users')->where('id', $u)->delete(); }
+echo 'audit>232 ', DB::table('sys_audit_log')->where('id', '>', 435)->count(), ' err ', DB::table('sys_error_log')->count(), ' cycles ', DB::table('t_src_cycles')->whereIn('id', [3,4])->pluck('skipped_steps')->implode(' / '), "\n";
+$tids = DB::table('tasks')->where('id', '>', 33)->pluck('id')->all(); foreach (['task_checklist','task_comments','task_evidence','task_helpers','task_history','task_scores','task_watchers'] as $tt) DB::table($tt)->whereIn('task_id', $tids ?: [0])->delete(); DB::table('tasks')->whereIn('id', $tids ?: [0])->delete(); DB::table('t_user_column_prefs')->whereNotIn('fk_id_user', DB::table('t_users')->pluck('id'))->delete();
