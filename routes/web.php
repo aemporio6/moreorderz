@@ -166,6 +166,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('stock/counts/{id}/{step}', [StockController::class, 'countStep'])->whereNumber('id')->whereIn('step', ['submit', 'approve', 'post', 'cancel']);
         Route::get('prices/{productId}', [StockController::class, 'prices'])->whereNumber('productId');
         Route::post('prices/{productId}', [StockController::class, 'setPrice'])->whereNumber('productId');
+        Route::get('prices/{productId}/marketplaces', [StockController::class, 'mpPrices'])->whereNumber('productId');
+        Route::post('prices/{productId}/marketplace/{mp}', [StockController::class, 'mpPriceSave'])->whereNumber('productId')->whereNumber('mp');
         Route::post('stock/bins', [StockController::class, 'bins']);
         Route::get('buying', [BuyingController::class, 'dashboard']);
         Route::get('buying/pick', [BuyingController::class, 'pick']);

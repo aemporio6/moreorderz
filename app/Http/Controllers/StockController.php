@@ -211,6 +211,9 @@ class StockController extends Controller
             'reasons' => DB::table('cat_price_change_reasons')->where('f_active', 1)->get(['id', 'reason_name as name'])];
     }
 
+    public function mpPrices(Request $r, int $productId) { abort_unless(DB::table('t_product_vendors')->where('id', $productId)->where('fk_id_ent', Context::ent())->exists(), 404); return \App\Services\ProductPrices::page($productId, $r->user()); }
+    public function mpPriceSave(Request $r, int $productId, int $mp) { return $this->run(fn () => \App\Services\ProductPrices::save($productId, $mp, $r->all(), $r->user())); }
+
     public function setPrice(Request $r, int $productId)
     {
         $this->can($r, 'stock.setPrice');

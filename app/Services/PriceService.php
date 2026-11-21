@@ -13,7 +13,7 @@ class PriceService
 {
     public static function set(int $productId, int $marketplaceId, float $rawPrice, float $salePrice, string $fromDate, ?int $reasonId = null, array $extra = []): int
     {
-        if ($salePrice < 0 || $rawPrice < 0) throw new \InvalidArgumentException('A price cannot be negative.');
+        if ($salePrice < 0) throw new \InvalidArgumentException('A price cannot be negative.');      // Raw may be negative (a rebate): the Sale is clamped at 0 (R-D-22)
         return DB::transaction(function () use ($productId, $marketplaceId, $rawPrice, $salePrice, $fromDate, $reasonId, $extra) {
             $q = fn () => DB::table('t_product_inventory_change_log')->where(['fk_product_id' => $productId, 'fk_id_marketplace' => $marketplaceId, 'change_type' => 'price_change']);
             if ($q()->where('from_date', $fromDate)->exists()) throw new \RuntimeException("A price already starts on $fromDate for this marketplace. Change that one or pick another date.");

@@ -19,7 +19,7 @@
 19|B|function available|on hand / sellable / available from the one stock service; pipeline never in stock
 20|F|form:product_visibility|form only; visibility per marketplace x shop not enforced
 21|M||"who sees which product" row scope not built
-22|F|form:product_mp_price|form only; Sale = Raw + carrier + packing formula / price guard not built
+22|B|class ProductPrices|each marketplace row holds Raw, Sale, List and Fee (2 dp, upsert on product + marketplace) with carrier preset, packing, packing fee and storage fee (R-D-23); Sale = max(0, Raw + carrier preset rate + packing rate) read from the numeric rate fields (today's rate), worked out again only when Raw, Carrier or Packing changes – never on opening, a typed Sale stays; the form line "Sale = Raw £r + Carrier £c + Packing £p", "Fee £f · Margin after fees £m (m%)" (margin = Sale − Fee − FIFO cost − packing fee − storage fee) and "Carrier £x | Packing £y"; a preset with rate 0 or no preset gives the "rate not set" warning; every change of Raw or Sale opens a price period (R-D-30, same day: one period, newest wins); price guard: Sale < FIFO cost + fee + packing fee + storage fee + PRICE_TARGET_MARGIN (default 0) → warning on save and task PRICE_BELOW_FLOOR (closes when above); a listing's price is offered from the Sale of its shop's marketplace. Rule test passes (Raw 5 + 2.85 + 0.40 → 8.25; manual 8.99 kept on reopen; Raw −10 with rates 2 → 0.00); clicked in a browser. The preset default per marketplace / shop group is R-D-65's
 23|F|form:product_mp_shipping|form only; 3PL fees defaults / PRD_FEE_MISSING not built
 24|M||primary marketplace read view not built
 25|M||ownership type chip not built

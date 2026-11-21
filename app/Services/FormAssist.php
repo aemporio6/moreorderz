@@ -126,6 +126,11 @@ class FormAssist
         if (! $f || $f['secret'] || ! $f['column_name'] || in_array($f['type'], ['file', 'check', 'textarea'], true) || str_starts_with((string) $f['default_rule'], 'numbering:')) return [];
         if ($table && Vault::maskRow($table, [$f['column_name'] => 'x'])[$f['column_name']] !== 'x') return [];
         $out = []; $add = function ($v, string $why) use (&$out) { $v = (string) $v; if ($v !== '' && ! isset($out[$v]) && count($out) < 2) $out[$v] = $why; };
+        // a listing's price: the Sale of the product on the marketplace of the listing's shop (R-D-22)
+        if ((string) $f['default_rule'] === 'linked:product.sale_price' && ($prod = (int) ($form['product'] ?? $form['fk_id_product'] ?? 0)) && ($shop = (int) ($form['shop'] ?? $form['fk_id_branch'] ?? 0))) {
+            $mp = (int) DB::table('t_branches')->where('id', $shop)->value('fk_id_marketplace'); $v = $mp ? DB::table('t_product_marketplace_prices')->where('fk_id_product', $prod)->where('fk_id_marketplace', $mp)->value('sale_price') : null;
+            if ($v !== null && (float) $v > 0) $add(number_format((float) $v, 2, '.', ''), 'the Sale of this product on the shop\'s marketplace');
+        }
         // linked: the record picked in another field of this form has a column of the same name (product → its supplier, its HS code …)
         foreach (Registry::fields($formKey) as $p) {
             $pv = $form[$p['field_name']] ?? null; if (! $pv || $p['field_name'] === $name || ! ($pt = self::sourceTable($p)) || ! Schema::hasTable($pt)) continue;
