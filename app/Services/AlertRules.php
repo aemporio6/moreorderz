@@ -77,6 +77,16 @@ class AlertRules
         'weekly_report_pdf' => ['1', 'NUMBER', 'Weekly report with A4 PDF (1 = yes, 0 = no)', 'Attach the A4 PDF to N14.'],
         'digest_send_empty' => ['1', 'NUMBER', 'Send an empty digest (1 = yes, 0 = no)', 'Send N13 even when the person has nothing waiting.'],
         'due_move_limit' => ['2', 'NUMBER', 'Due date moves before Partner', 'The next move of a due date needs a Partner.'],
+        'score_on_time' => ['40', 'NUMBER', 'Score: on time points', 'Task score (R-G_CORE-8): points for a task approved on or before its due day.'],
+        'score_late_per_day' => ['5', 'NUMBER', 'Score: minus per late day', 'On-time points lost per day late.'],
+        'score_proof' => ['20', 'NUMBER', 'Score: proof points', 'Points when the task has at least one photo or file (a voice note does not count).'],
+        'score_q_excellent' => ['40', 'NUMBER', 'Score: quality Excellent', 'Quality points for Excellent.'],
+        'score_q_good' => ['30', 'NUMBER', 'Score: quality Good', 'Quality points for Good (also rule tasks closed by the system).'],
+        'score_q_ok' => ['20', 'NUMBER', 'Score: quality OK', 'Quality points for OK.'],
+        'score_q_poor' => ['10', 'NUMBER', 'Score: quality Poor', 'Quality points for Poor.'],
+        'score_rework' => ['10', 'NUMBER', 'Score: minus per rework', 'Points lost for each time the task was sent back.'],
+        'score_band_good' => ['80', 'NUMBER', 'Score: green from', 'A score from this value is green (good).'],
+        'score_band_mid' => ['65', 'NUMBER', 'Score: amber from', 'A score from this value (below green) is amber; below it red.'],
     ];
 
     /** Write the catalogue, its English texts and the threshold defaults. Existing on/off, channels and edited texts are kept. */

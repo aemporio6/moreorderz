@@ -554,3 +554,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-40 (21 Nov): VA share – the one definition R-C-40 BUILT (shop row wins, No VA share set chip, per-line commission, salary GBP, Team engagements report). +6 register lines. 390 tests.
 - 7e-41 (21 Nov): dependent dropdowns of the person forms R-C-21 BUILT (all chains, golden test per chain). +4 register lines. 393 tests.
 - 7e-42 (21 Nov): products list R-D-35 BUILT with Cover R-D-37 and WAC R-D-38; Type chip R-D-25 partial. +7 register lines. 395 tests.
+- 7e-43 (21 Nov): who may approve R-G_CORE-7, task score R-G_CORE-8, thresholds R-G_CORE-51 BUILT. +5 register lines. 397 tests.

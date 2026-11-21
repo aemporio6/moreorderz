@@ -56,6 +56,7 @@ class TaskEngine
         if (! $t) return false;
         DB::table('tasks')->where('id', $t->id)->update(['status' => 'DONE', 'done_at' => now(), 'last_update_at' => now()]);
         self::history($t->id, 'AUTO_CLOSED', $why);
+        TaskScore::system((int) $t->id);      // closed by the system: scored as GOOD (R-G_CORE-8 / 25)
         return true;
     }
 
@@ -88,6 +89,7 @@ class TaskEngine
         foreach ($q->get(['id']) as $t) {
             DB::table('tasks')->where('id', $t->id)->update(['status' => 'DONE', 'done_at' => now(), 'last_update_at' => now()]);
             self::history($t->id, 'AUTO_CLOSED', 'Problem is gone');
+            TaskScore::system((int) $t->id);
             $closed++;
         }
         return ['opened' => $opened, 'closed' => $closed];
