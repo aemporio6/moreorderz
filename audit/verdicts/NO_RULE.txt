@@ -135,7 +135,7 @@ MR-0116|F|form:t_account_address|the person sub-lists exist as forms
 MR-0120|N||process rule
 MR-0121|P|class BuyingService|buying chain idea -> PO -> pay -> ship -> GRN -> landed cost; cartons, production, allocations, transfers, documents as forms only
 MR-0122|P|class StockService|stock, lots, prices, counts built; product master tabs, variations, duplicate, alerts page not built
-MR-0123|P|class SaleLines|sales list + columns, edit / refund / carrier per sale, sale log, delete with Undo, reminders, annual + detailed reports, month confirm built; bulk delete with preview, daily order entry screen, health view not built
+MR-0123|P|class SaleLines|sales list + columns, edit / refund / carrier per sale, sale log, delete with Undo, bulk delete with preview, reminders, annual + detailed reports, month confirm, account health view built; daily order entry screen (R-A_SALES-75) and custom export templates not built
 MR-0124|F|form:t_account|person master and sub-lists as forms; vault built
 MR-0125|P|class MoneyService|bank, expenses, approvals, money files, close, partners built; alerts, old invoicing not built
 MR-0126|P|class TaskEngine|tasks list + rule tasks; most task features not built
@@ -323,7 +323,7 @@ MR-0242|B|class VaStatements|the shop + month payslip is the VA statement: compu
 MR-0243|P|class SaleLines|sales listing, edit, refund, delete line / month with Undo, annual + detailed reports built; manual order entry is the New order form; bulk delete with preview / approval not built
 MR-0244|F|form:t_sale_order_reminders|form only
 MR-0246|B|class SalesImport|generic sales import with pre-checks that stop the import, listing, edit, refund, drop-shipping match, month confirm – all built and tested
-MR-0247|F|form:t_shop_feedback|form only
+MR-0247|B|class ShopHealth|seller metrics per shop and month as a KPI row with history (who entered what); values bound in queries (no SQL built from the request); rights by code orders.healthOwn / orders.healthAny, not by a role number
 MR-0248|P|tracking-upload|orders by file / hand with tracking upload layouts; the TikTok wizard screens not built
 MR-0249|B|form:card_categories|standard form + list with role rights and history
 MR-0250|B|form:card_providers|standard form + list with role rights and history

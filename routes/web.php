@@ -299,6 +299,9 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('sales/export', [OrdersController::class, 'saleExport']);
         Route::get('sales/unlock', [OrdersController::class, 'saleUnlockInfo']);
         Route::post('sales/unlock', [OrdersController::class, 'saleUnlock']);
+        Route::get('shop-health', [OrdersController::class, 'shopHealth']);
+        Route::post('shop-health', [OrdersController::class, 'shopHealthSave']);
+        Route::get('shop-health/{shop}/trend', [OrdersController::class, 'shopHealthTrend'])->whereNumber('shop');
         Route::get('ds-orders', [OrdersController::class, 'dsOrders']);
         Route::get('ds-orders/{id}', [OrdersController::class, 'dsOrder'])->whereNumber('id');
         Route::get('ds-orders/{id}/sales', [OrdersController::class, 'dsOrderSales'])->whereNumber('id');

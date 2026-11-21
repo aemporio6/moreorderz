@@ -431,6 +431,11 @@ class OrdersController extends Controller
     public function dsOrderSales(Request $r, int $id) { return $this->run(fn () => \App\Services\DsOrders::saleChoices($id, (string) $r->query('q'), $r->user())); }
     public function dsOrderDelete(Request $r, int $id) { return $this->run(fn () => \App\Services\DsOrders::delete($id, $r->user())); }
 
+    // ---------- account health per shop and month (R-A_SALES-73 / 74) ----------
+    public function shopHealth(Request $r) { return $this->run(fn () => \App\Services\ShopHealth::page($r->only(['year', 'month', 'marketplace', 'va', 'shop']), $r->user())); }
+    public function shopHealthSave(Request $r) { return $this->run(fn () => \App\Services\ShopHealth::save((int) $r->input('shop'), (int) $r->input('year'), (int) $r->input('month'), (string) $r->input('field'), $r->input('value'), $r->user())); }
+    public function shopHealthTrend(Request $r, int $shop) { return $this->run(fn () => \App\Services\ShopHealth::trend($shop, (int) $r->query('year', date('Y')), $r->user())); }
+
     // ---------- marketplace master, its questions, the checklist per shop (R-A_SALES-68) ----------
     public function marketplaces(Request $r) { $this->can($r, 'orders.SEE'); return \App\Services\Marketplaces::list($r->user()); }
     public function marketplaceSave(Request $r) { return $this->run(fn () => \App\Services\Marketplaces::save($r->except(['id']), (int) $r->input('id') ?: null, $r->user())); }

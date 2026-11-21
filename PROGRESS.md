@@ -396,3 +396,16 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - Not built yet (honest): inventory-sharing screen (R-D-94), edit of a drop-shipping order by hand, one shared reader for every import type (R-D-74), alias lists compared with the Field Registry (R-D-75).
 - Tests: 308 pass; new `DsOrdersTest` (4).
 - Register after this batch: BUILT 340 of 1,433 (24 %); Sales 75 of 155 (48 %).
+
+### Batch 7e-10 (21 Nov 2026)
+- **Account health** (R-A_SALES-73 / 74): service `ShopHealth`, screen `#/shop-health` (menu 6.8; button to Shop reminders and back), endpoints `api/shop-health*`, tables `mo_shop_health` + `mo_shop_health_log` (migration `000032`).
+  - A seller sees the active shops where he is seller or owner; opening the page makes the 12 month rows of the year.
+  - Positive feedback weeks are typed as the running total of the month and stored as the increment (10 then 25 → 10 and 15).
+  - Future months are locked ("Wait for August to come."). Only digits and a dot are accepted.
+  - The metric columns, their limits and which direction is good come from the health metrics of the shop's marketplace profile (`mp_profile_health_metrics`); TDR / LDR / CCWSR are only the fallback when a shop has no profile.
+  - Seller levels: setting `HEALTH_LEVELS_PROFILE_<profile id>` (JSON), else `HEALTH_LEVELS`, else Top Rated / Above Standard / Below Standard.
+  - A metric past its red limit, or a level below last month's, opens task `HEALTH_ALERT` (one per shop + metric + month); it closes by itself when the value is fine again.
+  - Right `orders.healthAny` (TL, manager, owner): totals boxes, filters marketplace → VA → shop → year → month, "Add feedback" for one VA, trend of 12 months and "who entered what".
+- Not built yet (honest): filling the values from a marketplace API (the rule says "later").
+- Tests: 311 pass; new `ShopHealthTest` (3).
+- Register after this batch: BUILT 345 of 1,433 (24 %); Sales 80 of 155 (52 %).
