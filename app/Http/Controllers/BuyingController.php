@@ -119,6 +119,12 @@ class BuyingController extends Controller
     public function shipmentPoSave(Request $r, int $id) { $this->can($r, 'buying.BUY'); return $this->run(fn () => \App\Services\ShipmentLinks::save((int) Context::ent(), $id, $r->only(['po', 'planned', 'actual', 'reason']))); }
     public function shipmentPoRemove(Request $r, int $id, int $po) { $this->can($r, 'buying.BUY'); return $this->run(fn () => \App\Services\ShipmentLinks::remove((int) Context::ent(), $id, $po)); }
     public function cycleOverview(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\CycleAlerts::overview((int) Context::ent(), $id, $r->user())); }
+    /** R-F_SETUP-3 / 4 / 9: landed cost per cycle, outstanding supplier payments, PO payment position (money: buying.MONEY). */
+    public function repLanded(Request $r, int $id) { $this->can($r, 'buying.MONEY'); return $this->run(fn () => \App\Services\SourcingReports::landed((int) Context::ent(), $id)); }
+    public function repOutstanding(Request $r) { $this->can($r, 'buying.MONEY'); return $this->run(fn () => \App\Services\SourcingReports::outstanding((int) Context::ent(), $r->only(['supplier', 'cycle', 'ageing', 'currency']))); }
+    public function poPosition(Request $r, int $id) { $this->can($r, 'buying.MONEY'); return $this->run(fn () => \App\Services\SourcingReports::poPosition((int) Context::ent(), $id)); }
+    public function linkTerm(Request $r, int $id) { $this->can($r, 'buying.PAY'); return $this->run(fn () => \App\Services\SourcingReports::linkPayment((int) Context::ent(), $id, (int) $r->input('term'))); }
+
     /** R-F_SETUP-1 hub pickers (company scope, R-F_SETUP-17): active cycles newest first, searched on code / product / SKU; POs on number or code, of the chosen cycle. */
     public function pickCycles(Request $r)
     {
