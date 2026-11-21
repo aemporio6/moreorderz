@@ -341,6 +341,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('money/export/valuation', [MoneyController::class, 'exportValuation']);
         Route::get('money/report-board', [MoneyController::class, 'reportBoard']);
         Route::get('money/alerts', [MoneyController::class, 'alerts']);
+        Route::get('money/product-profit', [MoneyController::class, 'productProfit']);
+        Route::match(['get', 'post'], 'money/stock-snapshot', [MoneyController::class, 'stockSnapshot']);
         Route::post('money/alerts/run', [MoneyController::class, 'alertsRun']);
         Route::post('money/alerts/{code}', [MoneyController::class, 'alertRule'])->where('code', 'FA[0-9]+');
         Route::get('expenses', [MoneyController::class, 'expenses']);

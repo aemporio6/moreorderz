@@ -618,3 +618,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-104 (21 Nov): Finance – R-FIN-29 / 30 / 26 / 31 BUILT, R-FIN-32 lock + run log (P). +5 register lines (684). 510 tests.
 - 7e-105 (21 Nov): Finance – R-FIN-33 / 36 / 25 / 18 BUILT (year export with proof links, valuation on a past date, report status board, reinvest to spec). +5 register lines (689). 514 tests.
 - 7e-106 (21 Nov): Finance – R-FIN-66 / 67 / 16 / 3 BUILT (ten alerts + screen, annualised return, partner onboarding gate). +5 register lines (694). 519 tests.
+- 7e-107 (22 Nov): Finance – R-FIN-51 / 54 / 50 / 32 BUILT (stock snapshot, products & stock list, monthly summary + missing-report task, nightly / monthly jobs). +7 register lines (701). 523 tests.

@@ -40,6 +40,8 @@ Updated 21 Nov 2026 (batch 7e-101). How to answer: write **OK** next to a line t
 | B11 | R-FIN-66 | Finance alerts go to the **Owner** only at first. FA3 (no settlement), FA4 (no bank lines) and FA9 (supplier payment due) send WhatsApp only, because their tasks already come from the existing rules; FA7 (slow / dead stock) makes a task only (one per SKU, no WhatsApp flood). You change roles and channels on the Finance alerts screen | — |
 | B12 | R-FIN-66 FA1 | Free cash = bank − supplier payments still open − approved withdrawals. The unpaid tax reserve is not taken off yet because the system does not keep it as its own figure | — |
 | B13 | R-FIN-3 | Partners who already had a login keep working: the system ticked all six onboarding items for them once (new partners must complete all six) | — |
+| B14 | R-FIN-54 | "Stock days" = stock on hand ÷ units sold per day in the chosen dates. The list uses order dates (the same figures as Profit by SKU), not settlement end dates | — |
+| B15 | R-FIN-51 | A location counts as "at FBA" when its kind is FBA / FC / AMAZON / MARKETPLACE / 3PL, or when an inbound shipment was sent to it. Give your fulfilment-centre locations one of these kinds | — |
 
 ## C. Suggested defaults written in the specification (220 lines)
 

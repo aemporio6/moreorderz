@@ -416,7 +416,8 @@ class MoneyService
             else TaskEngine::close('FIN_BANK_STALE', [$b->id], 'Bank lines are up to date');
         }
         foreach (\App\Services\Perm::mine(DB::table('mo_settlements as m'), 'm.fk_id_branch')->join('t_branches as s', 's.id', '=', 'm.fk_id_branch')->where('m.fk_id_ent', $ent)->where('s.f_active', 1)->groupBy('s.id', 's.shop_name')->selectRaw('s.id, s.shop_name, MAX(m.statement_date) last')->get() as $s) {
-            if ($s->last < date('Y-m-d', strtotime("-$sd day"))) { TaskEngine::open('FIN_SETTLEMENT_OVERDUE', [$s->id], "No money file for {$s->shop_name} since {$s->last} – load the marketplace's file", ['ent' => $ent, 'module' => 't_branches', 'record_id' => $s->id, 'fix_url' => '#/settlements']); $n['shop']++; }
+            if ($s->last < date('Y-m-d', strtotime("-$sd day")) && TaskEngine::isOpen('FIN_REPORT_MISSING', [$s->id])) TaskEngine::close('FIN_SETTLEMENT_OVERDUE', [$s->id], 'The shop has its period task FIN_REPORT_MISSING');      // R-FIN-50: one task per shop, not two
+            elseif ($s->last < date('Y-m-d', strtotime("-$sd day"))) { TaskEngine::open('FIN_SETTLEMENT_OVERDUE', [$s->id], "No money file for {$s->shop_name} since {$s->last} – load the marketplace's file", ['ent' => $ent, 'module' => 't_branches', 'record_id' => $s->id, 'fix_url' => '#/settlements']); $n['shop']++; }
             else TaskEngine::close('FIN_SETTLEMENT_OVERDUE', [$s->id], 'Money file is up to date');
         }
         return $n;

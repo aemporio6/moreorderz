@@ -30,11 +30,18 @@ class JobLog
         }
     }
 
+    /**
+     * R-FIN-32 nightly finance job (00:30): the stock snapshot of the day (R-FIN-51). GRN → lots needs no sync (a GRN post is the only lot maker,
+     * R-FIN-53) and product periods are not stored (the profit list is built live, R-FIN-54), so the snapshot is the whole nightly plan.
+     */
+    public static function financeNightly(int $ent): int { return StockSnapshot::build($ent); }
+
     /** Hourly finance jobs (minute 0): auto-match every bank account, the unmatched / stale tasks, rates that answer FX tasks. */
     public static function financeHourly(int $ent): int
     {
         $n = 0;
         foreach (DB::table('fin_bank_accounts')->where('company_id', $ent)->where('is_active', 1)->pluck('id') as $b) $n += MoneyService::autoMatch($ent, (int) $b);
+        $n += FinanceMonthly::missingTasks($ent);      // R-FIN-50 FIN_REPORT_MISSING per shop (before the general stale check, so a shop gets one task)
         MoneyService::unmatchedTasks($ent); MoneyService::staleTasks($ent); $n += FxMissing::sweep();
         $a = FinanceAlerts::run($ent); $n += $a['raised'] + $a['resolved'];      // R-FIN-66 the ten finance alerts
         return $n;

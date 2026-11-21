@@ -134,6 +134,26 @@ class MoneyController extends Controller
     /** R-FIN-25 report status board per shop × report type. */
     public function reportBoard(Request $r) { $this->can($r, 'money.SEE'); return \App\Services\FinanceExports::board((int) Context::ent()); }
 
+    /** R-FIN-54 Products & stock profit list. */
+    public function productProfit(Request $r)
+    {
+        $this->can($r, 'money.SEE');
+        $d = $r->validate(['from' => 'nullable|date', 'to' => 'nullable|date', 'q' => 'nullable|string|max:80', 'losing' => 'nullable|boolean', 'cost_missing' => 'nullable|boolean', 'sort' => 'nullable|string|max:20']);
+        return \App\Services\ProductProfitList::list((int) Context::ent(), array_filter($d, fn ($v) => $v !== null && $v !== ''));
+    }
+
+    /** R-FIN-51 stock snapshot of a date (built when that day has none yet); POST rebuilds it (Owner / Finance). */
+    public function stockSnapshot(Request $r)
+    {
+        $this->can($r, 'money.SEE');
+        $d = $r->validate(['date' => 'nullable|date|before_or_equal:today']); $date = $d['date'] ?? date('Y-m-d');
+        if ($r->isMethod('post')) {
+            abort_unless(in_array($r->user()->role_code, ['OWNER', 'FINANCE'], true), 403, 'Only the Owner or Finance rebuilds a snapshot.');
+            \App\Services\StockSnapshot::build((int) Context::ent(), $date);
+        }
+        return \App\Services\StockSnapshot::view((int) Context::ent(), $date);
+    }
+
     /** R-FIN-67 alerts screen: rules (Owner switches), open alerts, messages sent. */
     public function alerts(Request $r)
     {
