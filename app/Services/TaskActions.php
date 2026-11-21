@@ -321,6 +321,110 @@ class TaskActions
                 'reason' => (string) DB::table('task_history')->where('task_id', $t->id)->where('new_value', 'CANCELLED')->orderByDesc('id')->value('reason')])->values()->all();
     }
 
+    /* ---------- R-G_CORE-6 proof switch ---------- */
+
+    public static function proofOff(int $id, object $u, string $reason): string
+    {
+        $t = self::task($id); self::open($t);
+        if (! self::boss($u)) throw new \InvalidArgumentException('Refused: only a Partner or Manager may switch "evidence required" off.');
+        if (trim($reason) === '') throw new \InvalidArgumentException('Refused: give a reason for switching evidence off.');
+        if (! (int) $t->evidence_required) throw new \InvalidArgumentException('Refused: proof is already off.');
+        DB::table('tasks')->where('id', $id)->update(['evidence_required' => 0, 'evidence_waived_by' => $u->id, 'evidence_waived_at' => now(), 'last_update_at' => now()]);
+        self::hist($id, (int) $u->id, 'evidence_required', '1', '0', trim($reason));
+        return 'Proof switched off.';
+    }
+
+    public static function proofOn(int $id, object $u): string
+    {
+        $t = self::task($id); self::open($t);
+        if (! self::boss($u)) throw new \InvalidArgumentException('Refused: only a Partner or Manager can require proof again.');
+        DB::table('tasks')->where('id', $id)->update(['evidence_required' => 1, 'evidence_waived_by' => null, 'evidence_waived_at' => null, 'last_update_at' => now()]);
+        self::hist($id, (int) $u->id, 'evidence_required', '0', '1', null);
+        return 'Proof is required again.';
+    }
+
+    /* ---------- the work on the task page: checklist, proof, comments (R-G_CORE-41 tabs) ---------- */
+
+    private static function contributor(object $t, object $u): bool
+    {
+        return TaskFlow::mayWork($t, $u) || (int) $t->assigned_by_user_id === (int) $u->id || DB::table('task_helpers')->where('task_id', $t->id)->where('user_id', $u->id)->exists();
+    }
+
+    public static function tick(int $itemId, object $u, bool $done): string
+    {
+        $c = DB::table('task_checklist')->where('id', $itemId)->first() ?? throw new \InvalidArgumentException('Checklist item not found.');
+        $t = self::task((int) $c->task_id); self::open($t);
+        if (! self::contributor($t, $u)) throw new \InvalidArgumentException('Refused: only the people working on the task can tick its checklist.');
+        DB::table('task_checklist')->where('id', $itemId)->update(['is_done' => $done ? 1 : 0, 'done_by' => $done ? $u->id : null, 'done_at' => $done ? now() : null]);
+        self::hist((int) $t->id, (int) $u->id, 'checklist', $done ? '0' : '1', $done ? '1' : '0', mb_substr((string) $c->text, 0, 200));
+        return $done ? 'Ticked.' : 'Unticked.';
+    }
+
+    public static function comment(int $id, object $u, string $text): string
+    {
+        $t = self::task($id);
+        if (! TaskFlow::canSee($t, $u)) throw new \InvalidArgumentException('Task not found.');
+        if (trim($text) === '') throw new \InvalidArgumentException('Write the comment first.');
+        DB::table('task_comments')->insert(['task_id' => $id, 'at' => now(), 'user_id' => $u->id, 'text' => mb_substr(trim($text), 0, 2000), 'via' => 'APP']);
+        DB::table('tasks')->where('id', $id)->update(['last_update_at' => now()]);
+        return 'Comment added.';
+    }
+
+    /** Proof by the web / phone camera: a file (photo, PDF, office), a link or a reference. */
+    public static function addProof(int $id, object $u, ?\Illuminate\Http\UploadedFile $file, ?string $link, ?string $ref, ?string $note = null): string
+    {
+        $t = self::task($id); self::open($t);
+        if (! self::contributor($t, $u)) throw new \InvalidArgumentException('Refused: only the people working on the task can add proof.');
+        $row = ['task_id' => $id, 'uploaded_by' => $u->id, 'via' => 'APP', 'note' => $note ? mb_substr($note, 0, 255) : null, 'created_at' => now()];
+        if ($file) {
+            $ext = strtolower($file->getClientOriginalExtension());
+            if (! in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'heic', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt'], true)) throw new \InvalidArgumentException('Proof must be a photo, PDF or office file.');
+            if ($file->getSize() > 10 * 1024 * 1024) throw new \InvalidArgumentException('The file is larger than 10 MB.');
+            $path = $file->storeAs('task_evidence/' . $id, date('Ymd_His') . '_' . preg_replace('/[^\w.\-]+/', '_', $file->getClientOriginalName()), 'local');
+            $row += ['type' => in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'heic'], true) ? 'PHOTO' : 'FILE', 'file_path' => $path, 'file_name' => mb_substr($file->getClientOriginalName(), 0, 190), 'mime' => $file->getClientMimeType()];
+        } elseif ($link && trim($link) !== '') {
+            if (! filter_var(trim($link), FILTER_VALIDATE_URL)) throw new \InvalidArgumentException('The link must start with https://');
+            $row += ['type' => 'LINK', 'url' => mb_substr(trim($link), 0, 500)];
+        } elseif ($ref && trim($ref) !== '') $row += ['type' => 'REFERENCE', 'reference_id' => mb_substr(trim($ref), 0, 120)];
+        else throw new \InvalidArgumentException('Add a file, a link or a reference.');
+        DB::table('task_evidence')->insert(RecordService::fillNotNull('task_evidence', $row));
+        DB::table('tasks')->where('id', $id)->update(['last_update_at' => now()]);
+        self::hist($id, (int) $u->id, 'evidence', null, $row['type'], $row['file_name'] ?? $row['url'] ?? $row['reference_id'] ?? null);
+        return 'Proof added.';
+    }
+
+    /* ---------- R-G_CORE-41 the task record page ---------- */
+
+    public static function page(int $id, object $u): array
+    {
+        $t = self::task($id);
+        if (! TaskFlow::canSee($t, $u)) throw new \Symfony\Component\HttpKernel\Exception\HttpException(404, 'Task not found.');
+        $p = self::panel($id, $u); $partner = self::partner($u); $name = fn ($x) => $x ? self::name((int) $x) : null;
+        $row = TaskLists::decorate(DB::table('tasks as t')->leftJoin('t_users as u', 'u.id', '=', 't.owner_user_id')->leftJoin('task_categories as c', 'c.id', '=', 't.category_id')->where('t.id', $id)->get(['t.*', 'u.display_name as owner', 'c.name as category']), $u)[0];
+        $stale = (int) AlertRules::threshold('stale_days') ?: 7; $banners = [];
+        if (in_array($t->status, TaskFlow::OPEN, true) && strtotime((string) ($t->last_update_at ?: $t->created_at)) < time() - $stale * 86400) $banners[] = ['STALE', "No update for more than $stale days."];
+        if (str_contains((string) $t->flags, 'REPEAT_BLOCKED')) $banners[] = ['REPEAT_BLOCKED', 'The next repeat of this task was not created because this one is still open. Close it and the next one appears.'];
+        if ($p['waits_for'] && $p['waits_for']['blocked']) $banners[] = ['BLOCKED', "Blocked: waits for {$p['waits_for']['ref']} {$p['waits_for']['title']}. No reminders until it is approved."];
+        if ($t->status === 'STUCK') $banners[] = ['STUCK', 'Stuck since ' . substr((string) $t->stuck_since, 0, 10) . ' on ' . (Guide::STUCK_ON[$t->stuck_on_type] ?? 'something') . ': ' . ($t->stuck_on_type === 'USER' ? $name($t->stuck_on_id) : $t->stuck_on_text)];
+        if ($t->parent_task_id) $banners[] = ['SUBTASK', 'This is a subtask of ' . TaskFlow::ref((int) $t->parent_task_id) . ' – the parent is done when all its subtasks are approved.'];
+        if ($t->owner_user_id && ($a = TaskOwner::absent((int) $t->owner_user_id))) { $c = TaskOwner::usable((int) $t->owner_user_id); $banners[] = ['ABSENT', self::name((int) $t->owner_user_id) . ' is away until ' . ($a->to_date ?: 'further notice') . ($c && $c !== (int) $t->owner_user_id ? ' – ' . self::name($c) . ' covers.' : ' and has no cover.')]; }
+        $repeat = $t->repeat_type && $t->repeat_type !== 'NONE' ? 'Repeats ' . strtolower($t->repeat_type) . ($t->repeat_n ? " every {$t->repeat_n}" : '') . ($t->repeat_until ? ' until ' . $t->repeat_until : '') : null;
+        $ev = DB::table('task_evidence')->where('task_id', $id)->orderBy('id')->get()->map(fn ($e) => ['id' => (int) $e->id, 'type' => $e->type, 'name' => $e->file_name ?: $e->url ?: $e->reference_id ?: $e->note, 'url' => $e->url, 'at' => (string) $e->created_at, 'by' => $name($e->uploaded_by), 'hidden' => $e->hidden_at ? 'hidden: ' . $e->hidden_reason : null]);
+        $hist = DB::table('task_history as h')->leftJoin('t_users as x', 'x.id', '=', 'h.user_id')->where('h.task_id', $id)->orderByDesc('h.id')->limit(200)->get(['h.at', 'h.field', 'h.old_value', 'h.new_value', 'h.reason', 'x.display_name as by']);
+        $can = $p['can'] + ['proof_off' => self::boss($u) && in_array($t->status, TaskFlow::OPEN, true) && (int) $t->evidence_required, 'proof_on' => self::boss($u) && in_array($t->status, TaskFlow::OPEN, true) && ! (int) $t->evidence_required,
+            'work' => in_array($t->status, TaskFlow::OPEN, true) && self::contributor($t, $u)];
+        return ['task' => $row, 'panel' => $p, 'can' => $can, 'banners' => array_map(fn ($b) => ['code' => $b[0], 'text' => $b[1]], $banners),
+            'facts' => array_filter(['Reference' => $t->reference_id, 'Assigned by (approver)' => $name($t->assigned_by_user_id) ?: 'System', 'Helpers' => implode(', ', $row['helpers']) ?: null, 'Link' => $row['linked'],
+                'Marketplace' => $t->marketplace, 'Product' => $t->product_id ? '#' . $t->product_id : null, 'Amount £' => $partner && $t->amount_gbp !== null ? number_format((float) $t->amount_gbp, 2) : null,
+                'Confidential' => (int) $t->is_confidential ? 'Yes' : null, 'Repeat' => $repeat,
+                'Proof required' => (int) $t->evidence_required ? 'Yes' : 'No' . ($t->evidence_waived_at ? ' (switched off ' . date('d M H:i', strtotime((string) $t->evidence_waived_at)) . ')' : ''),
+                'Blocked by' => $p['waits_for'] && $p['waits_for']['blocked'] ? $p['waits_for']['ref'] : null], fn ($v) => $v !== null && $v !== ''),
+            'score' => $t->status === 'APPROVED' && $t->score !== null ? ['final' => (float) $t->score, 'band' => TaskScore::band((float) $t->score)] : ($t->status === 'DONE' ? ['preview' => TaskScore::parts($t, 'GOOD')] : null),
+            'checklist' => DB::table('task_checklist')->where('task_id', $id)->orderBy('sort')->get(['id', 'text', 'is_done', 'done_at']),
+            'proof' => $ev, 'comments' => DB::table('task_comments as c')->leftJoin('t_users as x', 'x.id', '=', 'c.user_id')->where('c.task_id', $id)->orderBy('c.id')->get(['c.id', 'c.at', 'c.text', 'c.via', 'x.display_name as by']),
+            'history' => $hist, 'stuck_on' => Guide::STUCK_ON, 'qualities' => array_keys(TaskScore::QUALITY)];
+    }
+
     /* ---------- the panel of one task ---------- */
 
     public static function panel(int $id, object $u): array

@@ -116,6 +116,7 @@ class WorkController extends Controller
         return $d + ['scope' => $scope, 'to_approve' => $toApprove, 'my_score' => \App\Services\TaskScore::person((int) $u->id), 'qualities' => array_keys(\App\Services\TaskScore::QUALITY), 'stuck_on_me' => DB::table('tasks')->where('status', 'STUCK')->where('stuck_on_type', 'USER')->where('stuck_on_id', $u->id)->count(),
             'stuck_on' => \App\Services\Guide::STUCK_ON, 'people' => DB::table('t_users')->where('f_active', 1)->where('id', '<>', $u->id)->orderBy('display_name')->get(['id', DB::raw('COALESCE(display_name, login_id) as name')]),
             'snoozes' => in_array($u->role_code, ['OWNER', 'PARTNER', 'MANAGER'], true) ? \App\Services\TaskActions::snoozes((int) Context::ent()) : [], 'bulk' => in_array($u->role_code, \App\Services\TaskScore::BOSS, true) ? \App\Services\TaskBulk::ACTIONS : null, 'can_end_snooze' => in_array($u->role_code, ['OWNER', 'PARTNER'], true),
+            'shops' => DB::table('t_branches')->where('fk_id_ent', Context::ent())->where('f_active', 1)->orderBy('shop_name')->get(['id', DB::raw("TRIM(CONCAT_WS(' ', shop_no, shop_name)) as name")]),
             'boss' => $L::boss($u), 'all_people' => DB::table('t_users')->where('f_active', 1)->orderBy('display_name')->get(['id', DB::raw('COALESCE(display_name, login_id) as name')])];
     }
 
@@ -168,6 +169,20 @@ class WorkController extends Controller
         return response($csv, 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => 'attachment; filename="message_log_' . date('Ymd_Hi') . '.csv"']); }
     public function taskMessages(Request $r, int $id) { return \App\Services\MessageLog::forTask($id, $r->user(), $r->integer('page') ?: 1); }
     public function recordMessages(Request $r, string $key, int $id) { Rights::check('VIEW', $key); return \App\Services\MessageLog::forRecord((string) \App\Services\Registry::table($key), $id, $r->user(), $r->integer('page') ?: 1); }
+    /** R-G_CORE-41 task page, R-G_CORE-6 proof switch, checklist / proof / comments on the web, R-G_CORE-34 task CSV import. */
+    public function taskPage(Request $r, int $id) { return \App\Services\TaskActions::page($id, $r->user()); }
+    public function taskProofOff(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskActions::proofOff($id, $r->user(), (string) $r->input('reason'))); }
+    public function taskProofOn(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskActions::proofOn($id, $r->user())); }
+    public function taskComment(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskActions::comment($id, $r->user(), (string) $r->input('text'))); }
+    public function taskProof(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskActions::addProof($id, $r->user(), $r->file('file'), $r->input('link'), $r->input('reference'), $r->input('note'))); }
+    public function taskTick(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskActions::tick($id, $r->user(), $r->boolean('done'))); }
+    public function taskImportTemplate() { return response(\App\Services\TaskImport::template(), 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => 'attachment; filename="tasks_import_template.csv"']); }
+    public function taskImport(Request $r)
+    {
+        $f = $r->file('file'); if (! $f) return response()->json(['message' => 'Choose the CSV file first.'], 422);
+        return $this->act(fn () => \App\Services\TaskImport::run($r->user(), $f->getClientOriginalName(), (string) file_get_contents($f->getRealPath()), $r->boolean('apply'), $r->boolean('notify')));
+    }
+    public function taskImportUndo(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskImport::undo($id, $r->user())); }
     public function taskBulkUndo(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskBulk::undo($id, $r->user())); }
 
     /** Approve / send back (R-G_CORE-7) and the score preview (R-G_CORE-8). */

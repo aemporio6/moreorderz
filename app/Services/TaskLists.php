@@ -176,19 +176,20 @@ class TaskLists
         $count = fn (string $chip) => (clone self::query($u, $chip, $f))->reorder()->count('t.id');
         $tz = new \DateTimeZone((string) (Settings::get('COMPANY_TIMEZONE', (int) Context::ent(), 'Europe/London') ?: 'Europe/London'));
         $monday = (new \DateTimeImmutable('monday this week', $tz))->setTime(0, 0)->setTimezone(new \DateTimeZone(date_default_timezone_get()))->format('Y-m-d H:i:s');
-        $closed = self::base()->where('t.status', 'APPROVED')->where('t.approved_at', '>=', $monday)->when(! empty($f['person']), fn ($w) => $w->where('t.owner_user_id', (int) $f['person']))->pluck('t.id');
+        $sf = fn ($q) => $q->when(! empty($f['shop']), fn ($w) => $w->whereIn('t.linked_module', ['t_branches', 'SHOP'])->where('t.linked_record_id', (int) $f['shop']))->when(! empty($f['person']), fn ($w) => $w->where('t.owner_user_id', (int) $f['person']));
+        $closed = $sf(self::base())->where('t.status', 'APPROVED')->where('t.approved_at', '>=', $monday)->pluck('t.id');
         $noProof = $closed->filter(fn ($id) => ! DB::table('task_evidence')->where('task_id', $id)->whereNull('hidden_at')->whereIn('type', TaskFlow::COUNTING)->exists())->count();
         $avg = DB::table('task_scores')->where('closed_at', '>=', now()->subDays(30))->avg('score');
         $today = TaskHealth::today();
         $people = [];
-        foreach (self::base()->whereNotNull('t.owner_user_id')->whereIn('t.status', [...self::OPEN, 'DONE'])->get(['t.owner_user_id', 't.status', 't.due_at', 'u.display_name'])->groupBy('owner_user_id') as $uid => $ts) {
+        foreach ($sf(self::base())->whereNotNull('t.owner_user_id')->whereIn('t.status', [...self::OPEN, 'DONE'])->get(['t.owner_user_id', 't.status', 't.due_at', 'u.display_name'])->groupBy('owner_user_id') as $uid => $ts) {
             $sc = DB::table('task_scores')->where('user_id', $uid)->where('closed_at', '>=', now()->subDays(30))->avg('score');
             $people[] = ['id' => (int) $uid, 'name' => $ts->first()->display_name, 'open' => $ts->whereIn('status', self::OPEN)->count(),
                 'late' => $ts->filter(fn ($t) => in_array($t->status, self::OPEN, true) && $t->due_at && substr((string) $t->due_at, 0, 10) < $today)->count(),
                 'waiting' => $ts->where('status', 'DONE')->count(), 'score' => $sc !== null ? (int) round($sc) : null, 'away' => (bool) TaskOwner::absent((int) $uid)];
         }
         usort($people, fn ($a, $b) => [$b['late'], $b['open'], $a['name']] <=> [$a['late'], $a['open'], $b['name']]);
-        $mods = self::base()->whereIn('t.status', self::OPEN)->selectRaw("COALESCE(t.linked_module, 'NOT LINKED') m, COUNT(*) open, SUM(t.due_at IS NOT NULL AND DATE(t.due_at) < ?) late", [$today])->groupBy('m')->orderByDesc('open')->get()
+        $mods = $sf(self::base())->whereIn('t.status', self::OPEN)->selectRaw("COALESCE(t.linked_module, 'NOT LINKED') m, COUNT(*) open, SUM(t.due_at IS NOT NULL AND DATE(t.due_at) < ?) late", [$today])->groupBy('m')->orderByDesc('open')->get()
             ->map(fn ($r) => ['module' => $r->m, 'open' => (int) $r->open, 'late' => (int) $r->late])->all();
         $dq = DB::table('tasks')->whereIn('rule_code', ['TASK_NO_DUE', 'TASK_NOT_LINKED'])->whereIn('status', self::OPEN)->pluck('title')->all();      // made by the nightly job
         return ['tiles' => ['open' => $count('open'), 'late' => $count('late'), 'stuck' => $count('stuck'), 'today' => $count('today'), 'waiting' => $count('waiting'), 'nodue' => $count('nodue'),

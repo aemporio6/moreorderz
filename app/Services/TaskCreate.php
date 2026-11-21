@@ -110,6 +110,14 @@ class TaskCreate
         $parent = ! empty($d['parent']) ? TaskActions::parentFor((int) $d['parent'], $ent) : null;      // R-G_CORE-12: one level, under an open parent, its link copied
         if ($parent && ! $mod && $parent->linked_module) { $mod = $parent->linked_module; $rec = $parent->linked_record_id ? (int) $parent->linked_record_id : null; }
 
+        // R-G_CORE-6: proof is ON by default; only a boss switches it off (with a reason); amount and "confidential" are a Partner's – a value from anyone else refuses the whole save
+        $boss = in_array($u->role_code ?? '', TaskScore::BOSS, true); $system = ! empty($d['system']);
+        $evidence = array_key_exists('evidence', $d) && $d['evidence'] !== null && $d['evidence'] !== '' ? (bool) $d['evidence'] : true;
+        if (! $evidence && ! $system && ! $boss) throw new \InvalidArgumentException('Refused: only a Partner or Manager may switch "evidence required" off.');
+        if (! $evidence && ! $system && trim((string) ($d['evidence_reason'] ?? '')) === '') throw new \InvalidArgumentException('Refused: give a reason for switching evidence off.');
+        $partner = in_array($u->role_code ?? '', ['OWNER', 'PARTNER'], true);
+        if (isset($d['amount']) && $d['amount'] !== '' && $d['amount'] !== null && ! $partner && ! $system) throw new \InvalidArgumentException('Refused: only a Partner may enter an amount.');
+        if (! empty($d['confidential']) && ! $partner && ! $system) throw new \InvalidArgumentException('Refused: only a Partner may mark a task confidential.');
         $warn = []; $hist = null; $realOwner = $owner;
         if ($a = TaskOwner::absent($owner)) {
             $cover = TaskOwner::usable($owner);
@@ -118,11 +126,14 @@ class TaskCreate
                 $warn[] = "Owner is absent - task given to $cn."; $hist = "created during absence of $on ({$a->from_date} to " . ($a->to_date ?: 'open') . ')';
             } else $warn[] = 'Owner is absent and has no cover.';
         }
-        return DB::transaction(function () use ($ent, $d, $u, $title, $pr, $cat, $realOwner, $due, $mod, $rec, $dep, $warn, $hist, $parent) {
+        return DB::transaction(function () use ($ent, $d, $u, $title, $pr, $cat, $realOwner, $due, $mod, $rec, $dep, $warn, $hist, $parent, $evidence, $system) {
             $id = (int) DB::table('tasks')->insertGetId(RecordService::fillNotNull('tasks', ['fk_id_ent' => $ent, 'title' => $title, 'description' => trim((string) ($d['detail'] ?? '')) ?: null, 'category_id' => $cat,
                 'owner_user_id' => $realOwner, 'assigned_by_user_id' => (int) $u->id, 'priority' => $pr, 'status' => 'TODO',      // a task that waits for another stays TODO; N10 tells the owner when it is approved
                 'created_at' => now(), 'due_at' => $due . ' 23:59:59', 'source' => 'MANUAL', 'linked_module' => $mod, 'linked_record_id' => $rec, 'depends_on_task_id' => $dep, 'parent_task_id' => $parent ? (int) $parent->id : null, 'reference_id' => $parent->reference_id ?? null,
-                'evidence_required' => ! empty($d['evidence']) ? 1 : 0, 'last_update_at' => now()]));
+                'evidence_required' => $evidence ? 1 : 0, 'evidence_waived_by' => $evidence ? null : (int) $u->id, 'evidence_waived_at' => $evidence ? null : now(),
+                'amount_gbp' => isset($d['amount']) && $d['amount'] !== '' && $d['amount'] !== null ? round((float) $d['amount'], 2) : null, 'is_confidential' => ! empty($d['confidential']) ? 1 : 0, 'last_update_at' => now()]));
+            if (! $evidence) DB::table('task_history')->insert(['task_id' => $id, 'at' => now(), 'user_id' => (int) $u->id, 'field' => 'evidence_required', 'old_value' => '1', 'new_value' => '0',
+                'reason' => $system ? 'set by System' : 'switched off at create by ' . ($u->role_code ?? '') . ': ' . mb_substr(trim((string) $d['evidence_reason']), 0, 200)]);
             foreach (array_values(array_filter(array_map('trim', preg_split('/\R/', (string) ($d['checklist'] ?? ''))))) as $n => $line)
                 DB::table('task_checklist')->insert(['task_id' => $id, 'text' => mb_substr($line, 0, 255), 'sort' => $n + 1, 'is_done' => 0]);
             DB::table('task_history')->insert(['task_id' => $id, 'at' => now(), 'user_id' => (int) $u->id, 'field' => 'status', 'old_value' => null, 'new_value' => 'TODO', 'reason' => 'Created by hand']);
@@ -130,7 +141,7 @@ class TaskCreate
             $l = self::load($realOwner);
             if ($l['open'] > $l['limit']) $warn[] = DB::table('t_users')->where('id', $realOwner)->value('display_name') . " now has {$l['open']} open tasks (limit {$l['limit']}).";
             Audit::log('tasks', $id, 'INSERT', ['title' => $title, 'owner' => $realOwner, 'due' => $due], null, $ent);
-            TaskFlow::announce($id);      // R-G_CORE-3 / N1
+            if (empty($d['quiet'])) TaskFlow::announce($id);      // R-G_CORE-3 / N1 (a quiet CSV import tells nobody now – R-G_CORE-34)
             return ['id' => $id, 'ref' => 'T-' . str_pad((string) $id, 4, '0', STR_PAD_LEFT), 'warnings' => $warn, 'message' => 'Task created.'];
         });
     }

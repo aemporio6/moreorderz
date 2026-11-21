@@ -533,6 +533,15 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('tasks/dashboard', [WorkController::class, 'tasksDashboard']);
         Route::get('tasks/attention', [WorkController::class, 'tasksAttention']);
         Route::get('tasks/export', [WorkController::class, 'tasksExport']);
+        Route::get('tasks/{id}/page', [WorkController::class, 'taskPage'])->whereNumber('id');
+        Route::post('tasks/{id}/proof-off', [WorkController::class, 'taskProofOff'])->whereNumber('id');
+        Route::post('tasks/{id}/proof-on', [WorkController::class, 'taskProofOn'])->whereNumber('id');
+        Route::post('tasks/{id}/comment', [WorkController::class, 'taskComment'])->whereNumber('id');
+        Route::post('tasks/{id}/proof', [WorkController::class, 'taskProof'])->whereNumber('id');
+        Route::post('task-checklist/{id}/tick', [WorkController::class, 'taskTick'])->whereNumber('id');
+        Route::get('task-import/template', [WorkController::class, 'taskImportTemplate']);
+        Route::post('task-import', [WorkController::class, 'taskImport']);
+        Route::post('task-import/{id}/undo', [WorkController::class, 'taskImportUndo'])->whereNumber('id');
         Route::get('tasks/new', [WorkController::class, 'taskForm']);
         Route::get('tasks/new/prefill', [WorkController::class, 'taskPrefill']);
         Route::get('tasks/new/records', [WorkController::class, 'taskRecords']);
