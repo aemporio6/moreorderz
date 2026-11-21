@@ -192,7 +192,8 @@ class MoneyService
             Ledger::post($ent, $l->txn_date, $isCost ? 'EXPENSE' : 'BANK_LINE', $isCost ? $expId : (int) $l->id, [$bankLine, ...$other], ['memo' => $memo, 'currency' => $l->currency, 'allow_no_ref' => $noRef]);
             DB::table('fin_bank_transactions')->where('id', $l->id)->update(['category_code' => $cat->code, 'branch_id' => $d['branch'] ?? null]);
             self::link($l, $isCost ? 'EXPENSE' : 'CATEGORY', $isCost ? $expId : (int) $l->id, 'BY_HAND', 'MANUAL');
-            return ['line' => (int) $l->id, 'account' => $acc, 'expense' => $expId];
+            $paid = $in ? null : VaStatements::bankPaid($ent, $cat->code, (int) ($d['party'] ?? 0) ?: null, $base, (int) $l->id);      // a VA share / salary payout closes its payable
+            return ['line' => (int) $l->id, 'account' => $acc, 'expense' => $expId, 'payable_closed' => $paid];
         });
     }
 

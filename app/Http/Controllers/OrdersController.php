@@ -366,4 +366,17 @@ class OrdersController extends Controller
     public function saleReportDownload(Request $r, string $report, string $format) { return $this->run(function () use ($r, $report, $format) { $this->can($r, 'orders.saleReports'); $x = \App\Services\SalesReports::download($report, $format, $this->reportFilters($r), $r->user()); return response($x['body'], 200, ['Content-Type' => $x['type'], 'Content-Disposition' => 'attachment; filename="' . $x['name'] . '"']); }); }
     public function saleRefreshVa(Request $r, int $id) { return $this->run(fn () => \App\Services\SalesReports::refreshVa($id, (string) $r->input('reason'), $r->user())); }
     public function saleMarginAccept(Request $r, int $id) { return $this->run(fn () => \App\Services\DsMatch::acceptMargin($id, (string) $r->input('note'), $r->user())); }
+
+    // ---------- VA statement per shop + month (R-A_SALES-65) ----------
+    public function vaStatements(Request $r) { $this->can($r, 'orders.SEE'); return \App\Services\VaStatements::list($r->user(), $r->only(['shop', 'all'])); }
+    public function vaStatementPreview(Request $r) { return $this->run(function () use ($r) { $this->can($r, 'orders.vaStatement'); return \App\Services\VaStatements::preview((int) $r->query('shop'), (string) $r->query('month'), (float) $r->query('expenses', 0)); }); }
+    public function vaStatementMake(Request $r) { return $this->run(fn () => \App\Services\VaStatements::generate((int) $r->input('shop'), (string) $r->input('month'), $r->input('expenses'), $r->input('detail'), $r->user())); }
+    public function vaStatementApprove(Request $r, int $id) { return $this->run(fn () => \App\Services\VaStatements::approve($id, $r->user())); }
+    public function vaStatementReject(Request $r, int $id) { return $this->run(fn () => \App\Services\VaStatements::reject($id, (string) $r->input('reason'), $r->user())); }
+    public function vaStatementPdf(Request $r, int $id)
+    {
+        $this->can($r, 'orders.SEE'); $row = collect(\App\Services\VaStatements::list($r->user(), ['all' => 1])['rows'])->firstWhere('id', $id) ?? abort(404);      // only what this person may see
+        $s = DB::table('va_statements')->where('id', $id)->first(); $path = storage_path('app/' . $s->pdf_file); if (! $s->pdf_file || ! is_file($path)) $path = storage_path('app/' . \App\Services\VaStatements::pdf($id));
+        return response(file_get_contents($path), 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="' . \App\Services\VaStatements::fileName($s) . '"']);
+    }
 }

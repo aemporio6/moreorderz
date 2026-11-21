@@ -160,6 +160,8 @@ class Perm
         $c['orders.dsRematch'] = ['Run Re-match of not matched lines against drop shipping orders', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
         $c['orders.dsLink'] = ['Link or unlink a drop shipping item by hand (with a reason)', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL']];
         $c['orders.dsSeeContact'] = ['See the address and phone of a drop shipping order unmasked', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL']];
+        $c['orders.vaStatement'] = ['Make the VA statement of a shop and month', 'Orders and dispatch', ['OWNER', 'MANAGER', 'FINANCE', 'TL']];
+        $c['orders.vaStatementApprove'] = ['Approve or send back a VA statement', 'Orders and dispatch', ['OWNER']];
         $c['orders.saleReports'] = ['See the Annual and the Detailed sale report', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'FINANCE']];
         $c['orders.saleExport'] = ['Export the sales list (PDF, Word, Excel, CSV)', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'FINANCE']];
         $c['orders.saleUnlock'] = ['Unlock a confirmed month of sales (with a reason)', 'Orders and dispatch', ['OWNER']];

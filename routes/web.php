@@ -251,6 +251,12 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('print-routes', [PrintController::class, 'route']);
         Route::get('orders', [OrdersController::class, 'board']);
         Route::get('sales', [OrdersController::class, 'saleLines']);
+        Route::get('va-statements', [OrdersController::class, 'vaStatements']);
+        Route::get('va-statements/preview', [OrdersController::class, 'vaStatementPreview']);
+        Route::post('va-statements', [OrdersController::class, 'vaStatementMake']);
+        Route::post('va-statements/{id}/approve', [OrdersController::class, 'vaStatementApprove'])->whereNumber('id');
+        Route::post('va-statements/{id}/reject', [OrdersController::class, 'vaStatementReject'])->whereNumber('id');
+        Route::get('va-statements/{id}/pdf', [OrdersController::class, 'vaStatementPdf'])->whereNumber('id');
         Route::get('shops/labels', [OrdersController::class, 'shopLabels']);
         Route::get('sales/reports/annual', [OrdersController::class, 'saleReportAnnual']);
         Route::get('sales/reports/detailed', [OrdersController::class, 'saleReportDetailed']);
