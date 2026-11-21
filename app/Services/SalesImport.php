@@ -288,7 +288,7 @@ class SalesImport
         if ($w && empty($d['sure'])) return ['name_mismatch' => $w, 'message' => implode('. ', $w) . '. Tick "I\'m sure" to continue.'];
         $warnings = array_merge($warnings, $w); $sellerSeen = $sel['shop'] && (int) $sel['shop']->id === (int) $shop->id ? "Seller id {$sel['value']} in the file matches shop $label ✓" : null;
 
-        if ($old && empty($d['replace'])) {
+        if ($old && empty($d['replace']) && ! (int) ($old->f_daily ?? 0)) {      // a batch made only for daily lines is merged, not replaced: no question
             $deducted = DB::table('t_sales')->where('fk_id_import', $old->id)->where('f_stock_deducted', 1)->count(); $by = DB::table('t_users')->where('id', $old->imported_by)->value('display_name');
             return ['confirm_overwrite' => ['batch' => $old->id, 'lines' => (int) $old->saved_rows, 'file' => $old->file_name, 'imported_at' => $old->imported_at ? date('d-m-Y H:i', strtotime((string) $old->imported_at)) : '', 'imported_by' => $by, 'deducted' => $deducted,
                 'title' => 'Replace existing sales?', 'text' => "{$old->saved_rows} sale line(s) from {$old->file_name}, imported " . ($old->imported_at ? date('d-m-Y H:i', strtotime((string) $old->imported_at)) : '') . ($by ? " by $by" : ''),
@@ -303,7 +303,7 @@ class SalesImport
             $replaced = 0; $diff = null; $oldKeys = [];
             if ($old) {      // replace: the old batch is undone first, in the same transaction
                 foreach (DB::table('t_sales')->where('fk_id_import', $old->id)->lockForUpdate()->get() as $s) { $oldKeys[mb_strtolower($s->order_no . '|' . $s->sku)] = [(float) $s->total_amount, (int) $s->qty]; $replaced++;
-                    if (self::fromIntake($s, $old)) { DB::table('t_sales')->where('id', $s->id)->update(['fk_id_import' => 0]); continue; }
+                    if ((int) ($old->f_daily ?? 0) || self::fromIntake($s, $old) || DB::table('mo_sale_fulfilment')->where('fk_id_sale', $s->id)->exists()) { DB::table('t_sales')->where('id', $s->id)->update(['fk_id_import' => 0]); $replaced--; continue; }      // daily lines are never removed by a replace (R-A_SALES-84)
                     DB::table('mo_recycle_bin')->insert(['fk_id_ent' => $ent, 'table_name' => 't_sales', 'row_id' => $s->id, 'label' => mb_substr("Order {$s->order_no} · {$s->sku}", 0, 255), 'group_key' => "batch:{$old->id}", 'row_json' => json_encode((array) $s), 'deleted_by' => $u->id ?? null, 'deleted_at' => now(), 'note' => 'Overwritten by a new import of the same month']);
                     if ($s->sale_source === 'active') DispatchService::release((int) $s->id, 'Overwritten by a new import of the same month'); }
                 DB::table('t_sales')->where('fk_id_import', $old->id)->delete(); DB::table('t_sale_import_errors')->where('fk_id_import', $old->id)->delete(); DB::table('t_sale_imports')->where('id', $old->id)->delete();
@@ -355,7 +355,8 @@ class SalesImport
                 if ($product) { $line = array_merge($line, SaleLines::intakeCost($product, $shop, $date, $qty, (float) $rate, (float) $total, $ent), ['d_buy' => $product->d_purchase_date ?? null, 'product_url' => isset($product->url_ebay) ? mb_substr((string) $product->url_ebay, 0, 500) : null, 'fk_id_vendor' => (int) ($product->fk_id_vendor ?? 0) ?: null]);
                     if ($line['cost_source'] === 'current') $st['cost_current']++; if ($line['cost_source'] === 'product') $st['cost_product']++; }
                 if ($dup && ! (int) $dup->fk_id_import) {      // daily intake line: the monthly file is merged into it, the line is not replaced
-                    if ($dup->status === 'Pending' && ! (int) $dup->f_locked) DB::table('t_sales')->where('id', $dup->id)->update(array_intersect_key($line, array_flip(['fk_id_import', 'qty', 'sale_rate', 'total_amount', 'total_amount_gbp', 'cust_name', 'cust_contacts', 'product_info', 'f_out_of_period', 'raw_csv', 'batch_row_no'])) + ['updated_at' => now()]);
+                    if ($dup->status === 'Pending' && ! (int) $dup->f_locked) { DB::table('t_sales')->where('id', $dup->id)->update(array_intersect_key($line, array_flip(['fk_id_import', 'qty', 'sale_rate', 'total_amount', 'total_amount_gbp', 'cust_name', 'cust_contacts', 'product_info', 'f_out_of_period', 'raw_csv', 'batch_row_no', 'raw_price', 'buy_rate', 'buy_amount', 'profit'])) + ['f_not_in_file' => 0, 'updated_at' => now()]);      // money and quantity from the file; tracking, label, postcode, channel and selling location stay
+                    DB::table('mo_sale_fulfilment')->where('fk_id_sale', $dup->id)->update(['merged_file' => mb_substr($fileName, 0, 255)]); Audit::log('t_sales', (int) $dup->id, 'UPDATE', ['note' => "merged with monthly file $fileName"], null, $ent); }
                     else DB::table('t_sales')->where('id', $dup->id)->update(['fk_id_import' => $target]);
                     $id = (int) $dup->id; $st['merged']++;
                 } else {
@@ -388,6 +389,10 @@ class SalesImport
                 $diff = ['added' => $added, 'removed' => $removed, 'changed' => $changed, 'net' => count($newKeys) - count($oldKeys)]; $warnings[] = "$replaced previous line(s) for this month were replaced"; }
             if ($st['cost_current']) $warnings[] = "{$st['cost_current']} line(s) used the current marketplace price (no price history for that date)";
             if ($st['cost_product']) $warnings[] = "{$st['cost_product']} line(s) used the product's main price (no marketplace price set)";
+            // a daily line that is not in the monthly file: kept, flagged and listed – never deleted (R-A_SALES-84)
+            $notIn = $totals ? collect() : DB::table('mo_sale_fulfilment as x')->join('t_sales as s', 's.id', '=', 'x.fk_id_sale')->where('s.fk_id_branch', $shop->id)->whereBetween('s.d_order', [$from, $to])->where('s.fk_id_import', 0)->get(['s.id', 's.order_no', 's.sku']);
+            if ($notIn->isNotEmpty()) { DB::table('t_sales')->whereIn('id', $notIn->pluck('id'))->update(['fk_id_import' => $batch, 'f_not_in_file' => 1]); $st['not_in_file'] = $notIn->count();
+                $warnings[] = $notIn->count() . ' daily line(s) are not in the monthly file and were kept: ' . $notIn->take(10)->map(fn ($x) => $x->order_no . (str_starts_with((string) $x->sku, 'NOSKU-') ? '' : ' · ' . $x->sku))->implode(', ') . '. Refund or delete them by hand if they were cancelled.'; }
             if ($st['merged']) $warnings[] = "{$st['merged']} line(s) were already in the tool from the daily orders and were merged, not doubled";
             if ($st['moved']) $warnings[] = "{$st['moved']} line(s) dated outside $mn were moved to the batch of their own month";
             $inBatch = $st['saved'] - $st['moved'];

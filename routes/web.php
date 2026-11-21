@@ -305,6 +305,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('fulfilment', [OrdersController::class, 'fulfilment']);
         Route::post('fulfilment', [OrdersController::class, 'fulfilmentSave']);
         Route::post('fulfilment/bulk', [OrdersController::class, 'fulfilmentBulk']);
+        Route::post('fulfilment/close-daily', [OrdersController::class, 'fulfilmentCloseDaily']);
         Route::post('fulfilment/{id}', [OrdersController::class, 'fulfilmentSave'])->whereNumber('id');
         Route::get('sale-cases', [OrdersController::class, 'saleCases']);
         Route::get('sale-cases/types', [OrdersController::class, 'saleCaseTypes']);

@@ -460,6 +460,7 @@ class OrdersController extends Controller
             $x = \App\Services\Fulfilment::export($this->fulfilFilters($r), $r->user()); return response($x['body'], 200, ['Content-Type' => 'text/csv; charset=UTF-8', 'Content-Disposition' => 'attachment; filename="' . $x['name'] . '"']); });
     }
     public function fulfilmentSave(Request $r, ?int $id = null) { return $this->run(fn () => \App\Services\Fulfilment::save($r->all(), $id, $r->user())); }
+    public function fulfilmentCloseDaily(Request $r) { return $this->run(fn () => \App\Services\Fulfilment::closeDaily((int) $r->input('shop'), (int) $r->input('month'), (int) $r->input('year'), $r->user(), $r->boolean('overwrite'))); }
     public function fulfilmentBulk(Request $r) { return $this->run(fn () => \App\Services\Fulfilment::bulk((array) $r->input('ids', []), (string) $r->input('action'), $r->user(), $r->input('status'))); }
 
     // ---------- marketplace master, its questions, the checklist per shop (R-A_SALES-68) ----------

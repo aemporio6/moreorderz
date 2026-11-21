@@ -498,3 +498,16 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - **Bug fixed**: the Import sales screen did not open at all ("Cannot access 'feeHint' before initialization") since commit `65c75aa` (fee hint from the money report). Found by the browser check of this batch; the function now comes before its first use.
 - Tests: 330 pass (new `SalesRightsTest` 2; 1 new import test; 1 new report test).
 - Register after this batch: BUILT 372 of 1,433 (26 %); Sales 95 of 155 (61 %) – the 5 new lines are outside Sales.
+
+### Batch 7e-19 (21 Nov 2026)
+- **Browser sweep**: 18 screens built or changed since 7e-1 opened once with a temporary Owner (Sales, Import sales, both reports, VA statements, Shop reminders, Account health, Cases, Fulfilment, Carriers, Marketplaces, DS upload, DS orders, Refunds, Permissions, Month close, Orders to dispatch, Health). No page error on any of them.
+- **R-A_SALES-84** (daily orders and the monthly merge, still PARTIAL), migration `000039`:
+  - A daily order goes into the batch of its shop + order month at once; when there is no batch yet a system batch "Daily orders" (`t_sale_imports.f_daily = 1`) is made. A month already confirmed is refused on the order date.
+  - Monthly import: a daily-only batch is merged into without the "Replace?" question; the file's money and quantity go onto the daily line, its tracking / label / postcode / channel stay, the line keeps its id and gets "merged with monthly file …" in its history.
+  - A daily line that the file does not have is kept, attached to the batch, flagged `t_sales.f_not_in_file` ("Not in the monthly file" on the Sales list) and named on the import result. A replace never removes daily lines.
+  - `Fulfilment::closeDaily(shop, month, year)` – "Close daily orders" on #/fulfilment (TL / Owner): each line takes SALE + SHIPPING of its order from the money report (`fin_settlement_lines`), per SKU when the order has several lines; lines without money stay without price and are listed; a price typed by hand since the last run is kept unless the person chooses to overwrite.
+  - Confirm message is now the rule's: 'n line(s) have no price yet. Run "Close daily orders" after the money report is imported.'
+  - Deleting the last daily line of a system batch removes the empty batch.
+- Not built yet (honest): upload of the profile's daily orders report into this queue (R-A_SALES-78 / 79); Month Close FILES_PRESENT checks only the money file, not the orders file.
+- Tests: 332 pass (2 new in `FulfilmentTest` with both examples of the rule).
+- Register after this batch: BUILT 372 of 1,433 (26 %); Sales 95 of 155 (61 %) – no line closed (rule 84 stays PARTIAL).

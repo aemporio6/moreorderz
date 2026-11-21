@@ -87,7 +87,8 @@ class Fulfilment
         $name = $x['buyer_full_name'] ?: trim($x['buyer_first_name'] . ' ' . $x['buyer_last_name']); $ship = trim($x['recipient_first_name'] . ' ' . $x['recipient_last_name']) ?: $name; $addr = implode(', ', array_filter([$x['address_1'], $x['address_2'], $x['address_3']]));
         return DB::transaction(function () use ($d, $id, $old, $u, $mg, $shopId, $no, $date, $qty, $l, $w, $h, $g, $cc, $x, $sku, $name, $ship, $addr) {
             if (! $old) { if (DB::table('t_sales')->where('fk_id_ent', Context::ent())->where('fk_id_branch', $shopId)->where('order_no', $no)->where('sku', $sku)->exists()) throw \Illuminate\Validation\ValidationException::withMessages(['order_no' => "Order $no with this SKU is already saved for this shop."]);
-                $r = SalesService::intake($shopId, [['order_no' => $no, 'd_order' => $date, 'sku' => $sku, 'qty' => $qty, 'sale_rate' => 0, 'cust_name' => $name, 'cust_contacts' => trim($x['buyer_email'] . ' ' . $x['buyer_phone']), 'product_info' => $x['item_name'], 'ship_to_name' => $ship, 'ship_to_phone' => $x['recipient_phone'] ?: $x['buyer_phone'], 'ship_to_address' => $addr, 'ship_to_city' => trim((string) ($d['city'] ?? '')), 'ship_to_postcode' => mb_strtoupper(trim((string) ($d['postcode'] ?? ''))), 'ship_to_country_code' => $cc]], ['no_zero_task' => true]);
+                $batch = self::dailyBatch($shopId, $date, $u);      // the line goes into the batch of its shop + order month, made when the first line arrives (R-A_SALES-84)
+                $r = SalesService::intake($shopId, [['order_no' => $no, 'd_order' => $date, 'sku' => $sku, 'qty' => $qty, 'sale_rate' => 0, 'cust_name' => $name, 'cust_contacts' => trim($x['buyer_email'] . ' ' . $x['buyer_phone']), 'product_info' => $x['item_name'], 'ship_to_name' => $ship, 'ship_to_phone' => $x['recipient_phone'] ?: $x['buyer_phone'], 'ship_to_address' => $addr, 'ship_to_city' => trim((string) ($d['city'] ?? '')), 'ship_to_postcode' => mb_strtoupper(trim((string) ($d['postcode'] ?? ''))), 'ship_to_country_code' => $cc]], ['no_zero_task' => true, 'batch' => $batch]);
                 $id = (int) $r['ids'][0]; DB::table('mo_sale_fulfilment')->insert($x + ['fk_id_sale' => $id, 'fk_id_ent' => (int) Context::ent(), 'f_done' => 0, 'created_by' => $u->id, 'created_at' => now()]); }      // new rows are Pending
             else DB::table('mo_sale_fulfilment')->where('fk_id_sale', $id)->update($x + ['updated_at' => now()]);
             $upd = ['parcel_l_cm' => $l, 'parcel_w_cm' => $w, 'parcel_h_cm' => $h, 'parcel_weight_g' => (int) round($g), 'ship_to_country_code' => $cc];
@@ -113,7 +114,8 @@ class Fulfilment
             if ($action !== 'delete') throw new \InvalidArgumentException('Unknown action.'); $n = 0; $kept = [];
             foreach ($rows as $r) { if ($r->status !== 'Pending' || (int) $r->f_locked) { $kept[] = $r->order_no; continue; } $s = DB::table('t_sales')->where('id', $r->id)->first();
                 DB::table('mo_recycle_bin')->insert(['fk_id_ent' => (int) $s->fk_id_ent, 'table_name' => 't_sales', 'row_id' => (int) $s->id, 'label' => mb_substr("Fulfilment order {$s->order_no}", 0, 255), 'group_key' => 'ful-' . $s->id . '-' . time(), 'row_json' => json_encode(['sale' => (array) $s, 'fulfilment' => (array) DB::table('mo_sale_fulfilment')->where('fk_id_sale', $s->id)->first()]), 'deleted_by' => $u->id, 'deleted_at' => now(), 'note' => 'Deleted in the fulfilment queue']);
-                DispatchService::release((int) $s->id, 'Fulfilment order deleted'); DB::table('mo_sale_fulfilment')->where('fk_id_sale', $s->id)->delete(); DB::table('t_sales')->where('id', $s->id)->delete(); Audit::log('t_sales', (int) $s->id, 'DELETE', ['fulfilment order' => $s->order_no]); $n++; }
+                DispatchService::release((int) $s->id, 'Fulfilment order deleted'); DB::table('mo_sale_fulfilment')->where('fk_id_sale', $s->id)->delete(); DB::table('t_sales')->where('id', $s->id)->delete(); Audit::log('t_sales', (int) $s->id, 'DELETE', ['fulfilment order' => $s->order_no]); $n++;
+                if ($s->fk_id_import && DB::table('t_sale_imports')->where('id', $s->fk_id_import)->where('f_daily', 1)->exists() && ! DB::table('t_sales')->where('fk_id_import', $s->fk_id_import)->exists()) DB::table('t_sale_imports')->where('id', $s->fk_id_import)->delete(); }      // an empty system batch of daily orders goes with its last line
             return ['message' => "$n order(s) deleted." . ($kept ? ' Kept because they are confirmed: ' . implode(', ', $kept) . '.' : ''), 'deleted' => $n, 'kept' => $kept];
         });
     }
@@ -141,10 +143,53 @@ class Fulfilment
         return ['name' => 'TikTokSale_' . date('YmdHis', $now ? strtotime($now) : time()) . '.csv', 'body' => $body, 'rows' => $n];      // 24-hour clock in the name (the old 12-hour name was a bug)
     }
 
+    /** The batch of a shop + month for its daily lines: the batch of the monthly file when it exists, else a system batch "Daily orders" made now. */
+    public static function dailyBatch(int $shopId, string $date, ?object $u): int
+    {
+        $m = (int) substr($date, 5, 2); $y = (int) substr($date, 0, 4); $b = SalesImport::batchOf($shopId, $m, $y, 'Normal');
+        if ($b) { if ($b->status !== 'Pending') throw \Illuminate\Validation\ValidationException::withMessages(['d_order' => SalesImport::monthName($m, $y) . ' of this shop is confirmed. Choose a date in an open month.']); return (int) $b->id; }
+        $shop = DB::table('t_branches')->where('id', $shopId)->first();
+        return (int) DB::table('t_sale_imports')->insertGetId(RecordService::fillNotNull('t_sale_imports', ['fk_id_ent' => (int) Context::ent(), 'fk_id_branch' => $shopId, 'fk_id_marketplace' => (int) $shop->fk_id_marketplace, 'import_nature' => 'Normal', 'file_name' => 'Daily orders', 'f_daily' => 1, 'period_month' => $m, 'period_year' => $y, 'marketplace_fee' => 0, 'fee_source' => 'typed', 'status' => 'Pending', 'imported_by' => $u->id ?? null] + SalesImport::vaOf($shop, $m, $y)));
+    }
+
+    /** Daily-only profile (no monthly orders file): the system batch of the daily lines counts as the orders file. */
+    public static function dailyOnly(object $shop): bool { return (bool) ($shop->fk_id_mp_profile ? DB::table('mp_profiles')->where('id', $shop->fk_id_mp_profile)->value('f_daily_only') : false); }
+
+    /**
+     * "Close daily orders" (TL / Owner, per shop + month): each daily line takes its sale amount from the money report line of the same order (+ SKU) – SALE and SHIPPING of that order.
+     * Lines with no money line stay without price and are listed. A line whose price was changed by hand after the last run is not changed unless $overwrite.
+     */
+    public static function closeDaily(int $shopId, int $month, int $year, ?object $u, bool $overwrite = false): array
+    {
+        Perm::need($u, 'orders.fulfilManage'); $shop = DB::table('t_branches')->where('id', $shopId)->where('fk_id_ent', Context::ent())->first() ?? throw new \InvalidArgumentException('Shop not found.');
+        if (! Perm::shopAllowed($u, $shopId)) abort(403, "You don't have rights for this shop."); $mn = SalesImport::monthName($month, $year); $b = SalesImport::batchOf($shopId, $month, $year, 'Normal');
+        if ($b && $b->status !== 'Pending') throw new \InvalidArgumentException("$mn of this shop is confirmed: Close daily orders cannot run again.");
+        $from = sprintf('%04d-%02d-01', $year, $month); $to = date('Y-m-t', strtotime($from));
+        $lines = DB::table('mo_sale_fulfilment as x')->join('t_sales as s', 's.id', '=', 'x.fk_id_sale')->where('s.fk_id_branch', $shopId)->whereBetween('s.d_order', [$from, $to])->where('s.status', 'Pending')->orderBy('s.d_order')->orderBy('s.id')->get(['s.*', 'x.closed_price', 'x.closed_at']);
+        if ($lines->isEmpty()) throw new \InvalidArgumentException("Shop " . SalesImport::label($shop) . " has no daily orders in $mn.");
+        $money = DB::table('fin_settlement_lines')->where('branch_id', $shopId)->whereIn('bucket', ['SALE', 'SHIPPING'])->whereIn('order_id', $lines->pluck('order_no')->unique()->values())->get(['order_id', 'sku', 'amount']);
+        $byOrder = $money->groupBy(fn ($r) => mb_strtolower((string) $r->order_id)); $per = $lines->groupBy(fn ($l) => mb_strtolower((string) $l->order_no)); $filled = 0; $noMoney = []; $kept = []; $batch = $b ? (int) $b->id : self::dailyBatch($shopId, $from, $u);
+        DB::transaction(function () use ($lines, $byOrder, $per, $overwrite, $batch, $u, &$filled, &$noMoney, &$kept) {
+            foreach ($lines as $l) {
+                $rows = $byOrder[mb_strtolower((string) $l->order_no)] ?? collect(); $sku = mb_strtolower((string) $l->sku);
+                $own = $rows->filter(fn ($r) => trim((string) $r->sku) !== '' && mb_strtolower((string) $r->sku) === $sku);
+                $amount = $own->isNotEmpty() ? $own->sum('amount') : (($per[mb_strtolower((string) $l->order_no)]->count() === 1 && $rows->isNotEmpty() && $rows->every(fn ($r) => trim((string) $r->sku) === '' || mb_strtolower((string) $r->sku) === $sku)) ? $rows->sum('amount') : null);      // the order's money goes to its only line; with several lines only per SKU
+                if ($amount === null || $amount <= 0) { $noMoney[] = $l->order_no . (str_starts_with((string) $l->sku, 'NOSKU-') ? '' : ' · ' . $l->sku); continue; }
+                $byHand = $l->closed_at !== null && round((float) $l->total_amount, 2) !== round((float) $l->closed_price, 2) && (float) $l->total_amount > 0;      // typed by hand after the last run
+                if ($byHand && ! $overwrite) { $kept[] = $l->order_no; continue; }
+                $amount = round((float) $amount, 2); $rate = $l->qty > 0 ? round($amount / $l->qty, 2) : $amount; $upd = ['sale_rate' => $rate, 'total_amount' => $amount, 'total_amount_gbp' => $amount, 'fk_id_import' => $batch, 'updated_at' => now()];
+                if ($l->fk_product_id && (float) $l->raw_price > 0) { $x = SaleLines::calc($amount, (float) $l->raw_price, (int) $l->qty, (float) $l->carrier_rate, (float) $l->packing_rate); $upd += ['buy_rate' => $x['product_cost'], 'buy_amount' => $x['buy_amount'], 'profit' => $x['profit']]; }
+                DB::table('t_sales')->where('id', $l->id)->update($upd); DB::table('mo_sale_fulfilment')->where('fk_id_sale', $l->id)->update(['closed_price' => $amount, 'closed_at' => now()]); Audit::log('t_sales', (int) $l->id, 'UPDATE', ['total_amount' => [(float) $l->total_amount, $amount], 'by' => 'Close daily orders']); $filled++;
+            }
+        });
+        $n = count($noMoney); $msg = "$mn: $filled line(s) got their price from the money report" . ($n ? ", $n line(s) have no money line yet" : '') . ($kept ? ', ' . count($kept) . ' line(s) changed by hand after the last run were not changed' : '') . '.';
+        return ['message' => $msg, 'filled' => $filled, 'no_price' => $noMoney, 'kept' => $kept, 'ask_overwrite' => (bool) $kept, 'daily_only' => self::dailyOnly($shop)];
+    }
+
     /** Month Confirm is refused while a fulfilment order of that shop and month has no sale price yet. */
     public static function confirmBlock(int $branchId, string $month): ?string
     {
         $n = DB::table('mo_sale_fulfilment as x')->join('t_sales as s', 's.id', '=', 'x.fk_id_sale')->where('s.fk_id_branch', $branchId)->whereRaw("DATE_FORMAT(s.d_order,'%Y-%m') = ?", [$month])->where('s.status', 'Pending')->where('s.total_amount', '<=', 0)->count();
-        return $n ? "$n fulfilment order(s) of this month have no sale price yet. Load the money report of the shop (or type the prices on the Sales page), then confirm." : null;
+        return $n ? "$n line(s) have no price yet. Run \"Close daily orders\" after the money report is imported." : null;
     }
 }

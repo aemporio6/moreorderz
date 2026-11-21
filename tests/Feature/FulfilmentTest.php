@@ -62,8 +62,42 @@ class FulfilmentTest extends TestCase
         $x = Fulfilment::export([], $this->tl, '2026-07-10 15:04:05'); $this->assertSame('TikTokSale_20260710150405.csv', $x['name']); $lines = array_map(fn ($l) => str_getcsv($l, ',', '"', ''), array_filter(explode("\n", $x['body'])));
         $this->assertSame(Fulfilment::EXPORT_HEAD, $lines[0]); $this->assertCount(25, $lines[1]); $this->assertSame(['TT-1', '10/07/2026', 'PC-1', 'Phone case', '2', 'Ann', 'Lee', '', '07700900123'], array_slice($lines[1], 0, 9)); $this->assertSame(['Leeds', '', 'LS1 1AA', 'United Kingdom', 'GB', '25', '20', '2', '150', 'Royal Mail-Tracked 48'], array_slice($lines[1], 15));
         $this->assertSame('0 7700 900123', Fulfilment::phone('+44 (7700) 900123', 'GB', 'OLD')); $this->assertSame('07700900123', Fulfilment::phone('+44 (7700) 900123', 'GB', 'NATIONAL')); $this->assertSame('+33612345678', Fulfilment::phone('+33 6 12 34 56 78', 'GB', 'NATIONAL')); $this->assertSame('07700900123', Fulfilment::phone('07700 900123', 'GB', 'NATIONAL'));
-        $this->actingAs($this->owner); try { \App\Services\SalesService::confirmMonth($this->shop, '2026-07'); $this->fail(); } catch (\RuntimeException $e) { $this->assertStringContainsString('1 fulfilment order(s) of this month have no sale price yet', $e->getMessage()); }
+        $this->actingAs($this->owner); try { \App\Services\SalesService::confirmMonth($this->shop, '2026-07'); $this->fail(); } catch (\RuntimeException $e) { $this->assertStringContainsString('1 line(s) have no price yet. Run "Close daily orders" after the money report is imported.', $e->getMessage()); }
         $this->actingAs($this->va); $this->assertSame(1, Fulfilment::export([], $this->va)['rows']); $this->actingAs($this->va2); $this->assertSame(0, Fulfilment::export([], $this->va2)['rows']);      // the export keeps the seller's scope
         $this->actingAs($this->va); $this->postJson('/api/fulfilment', ['shop' => $this->shop, 'order_no' => '', 'd_order' => ''])->assertStatus(422)->assertJsonValidationErrors(['order_no', 'd_order']); $this->getJson('/api/fulfilment?q=x')->assertStatus(422)->assertJsonPath('message', 'Please select an option first');
+    }
+
+    /** The rule's first example: 101T (daily-only profile) – 3 daily orders, the money report prices 2 → Close daily orders fills 2, Confirm refused for the third. */
+    public function test_close_daily_orders_fills_prices_from_the_money_report(): void
+    {
+        $this->world(); $prof = DB::table('mp_profiles')->insertGetId(RecordService::fillNotNull('mp_profiles', ['fk_id_ent' => 1, 'code' => 'TT_' . uniqid(), 'name' => 'TikTok', 'f_daily_only' => 1, 'f_active' => 1, 'created_at' => now()])); DB::table('t_branches')->where('id', $this->shop)->update(['fk_id_mp_profile' => $prof, 'shop_no' => '101T']);
+        foreach (['T-1', 'T-2', 'T-3'] as $n) $this->order(['order_no' => $n, 'd_order' => '2026-11-02', 'sku' => 'S-' . $n]);
+        $b = DB::table('t_sale_imports')->where('fk_id_branch', $this->shop)->where('period_month', 11)->get(); $this->assertCount(1, $b); $this->assertSame([1, 'Daily orders'], [(int) $b[0]->f_daily, $b[0]->file_name]);      // one batch for the shop + month, made with the first line
+        $this->assertSame(3, DB::table('t_sales')->where('fk_id_import', $b[0]->id)->count());
+        foreach ([['T-1', 'SALE', 12.00], ['T-1', 'SHIPPING', 2.00], ['T-2', 'SALE', 8.50]] as [$o, $k, $a]) DB::table('fin_settlement_lines')->insert(RecordService::fillNotNull('fin_settlement_lines', ['batch_id' => 1, 'company_id' => 1, 'branch_id' => $this->shop, 'settlement_id' => 'ST-N', 'order_id' => $o, 'amount_type' => $k, 'amount' => $a, 'bucket' => $k, 'row_hash' => sha1($o . $k)]));
+        try { Fulfilment::closeDaily($this->shop, 11, 2026, $this->va); $this->fail(); } catch (\Throwable $e) { $this->assertTrue(true); }      // TL / Owner only
+        $this->actingAs($this->tl); $r = Fulfilment::closeDaily($this->shop, 11, 2026, $this->tl); $this->assertSame(2, $r['filled']); $this->assertSame(['T-3 · S-T-3'], $r['no_price']); $this->assertTrue($r['daily_only']);
+        $this->assertSame([14.0, 8.5, 0.0], DB::table('t_sales')->whereIn('order_no', ['T-1', 'T-2', 'T-3'])->orderBy('order_no')->pluck('total_amount')->map(fn ($x) => (float) $x)->all());
+        $this->actingAs($this->owner); try { \App\Services\SalesService::confirmMonth($this->shop, '2026-11'); $this->fail(); } catch (\RuntimeException $e) { $this->assertSame('1 line(s) have no price yet. Run "Close daily orders" after the money report is imported.', $e->getMessage()); }
+        // run again: a price typed by hand since the last run is not changed without asking
+        DB::table('t_sales')->where('order_no', 'T-2')->update(['total_amount' => 9.99]); $this->actingAs($this->tl); $r = Fulfilment::closeDaily($this->shop, 11, 2026, $this->tl);
+        $this->assertSame([['T-2'], true], [$r['kept'], $r['ask_overwrite']]); $this->assertSame(9.99, (float) DB::table('t_sales')->where('order_no', 'T-2')->value('total_amount'));
+        Fulfilment::closeDaily($this->shop, 11, 2026, $this->tl, true); $this->assertSame(8.5, (float) DB::table('t_sales')->where('order_no', 'T-2')->value('total_amount'));
+    }
+
+    /** The rule's second example: eBay shop – 5 daily lines, the monthly file has 4 of them + 1 new → 4 merged (tracking kept), 1 added, 1 flagged "Not in the monthly file", none deleted. */
+    public function test_the_monthly_file_merges_into_the_daily_lines_and_deletes_none(): void
+    {
+        $this->world(); $mp = (int) DB::table('t_branches')->where('id', $this->shop)->value('fk_id_marketplace');
+        foreach (['E-1', 'E-2', 'E-3', 'E-4', 'E-5'] as $n) $ids[$n] = $this->order(['order_no' => $n, 'd_order' => '2026-11-03', 'sku' => 'SKU-' . $n])['id'];
+        $this->actingAs($this->tl); Fulfilment::save(['d_order' => '2026-11-03', 'tracking_no' => 'TRK-1', 'carrier_service' => 'Royal Mail-Tracked 48', 'done' => 1], $ids['E-1'], $this->tl);
+        $this->actingAs($this->owner); \App\Services\SalesImport::saveColumns($mp, 'SALE', ['order_no' => 'Order', 'order_date' => 'Date', 'sku' => 'SKU', 'qty' => 'Qty', 'sale_rate' => 'Price', 'total_amount' => 'Total']);
+        $p = tempnam(sys_get_temp_dir(), 'mf'); file_put_contents($p, "Order,Date,SKU,Qty,Price,Total\nE-1,03/11/2026,SKU-E-1,2,5.00,10.00\nE-2,03/11/2026,SKU-E-2,2,5.00,10.00\nE-3,03/11/2026,SKU-E-3,2,5.00,10.00\nE-4,03/11/2026,SKU-E-4,2,5.00,10.00\nN-6,04/11/2026,SKU-N-6,1,7.00,7.00\n");
+        $r = \App\Services\SalesImport::run($p, '301T_nov26.csv', filesize($p), ['nature' => 'Normal', 'marketplace' => $mp, 'shop' => $this->shop, 'month' => 11, 'year' => 2026, 'fee' => '0', 'sure' => 1], $this->owner, true); @unlink($p);
+        $this->assertArrayNotHasKey('confirm_overwrite', $r);      // the batch of the daily lines is merged into, not replaced
+        $this->assertSame([4, 1], [$r['stats']['merged'], $r['stats']['not_in_file']]); $this->assertStringContainsString('1 daily line(s) are not in the monthly file and were kept: E-5 · SKU-E-5', implode(' ', $r['warnings']));
+        $e1 = DB::table('t_sales')->where('id', $ids['E-1'])->first(); $this->assertSame([10.0, 'TRK-1', 'Royal Mail-Tracked 48', (int) $r['batch']], [(float) $e1->total_amount, $e1->tracking_no, $e1->carrier_service_text, (int) $e1->fk_id_import]);      // money from the file, tracking kept, same line id
+        $this->assertSame(6, DB::table('t_sales')->where('fk_id_branch', $this->shop)->count()); $this->assertSame(1, (int) DB::table('t_sales')->where('id', $ids['E-5'])->value('f_not_in_file')); $this->assertSame(0, DB::table('mo_recycle_bin')->where('table_name', 't_sales')->count());      // none deleted
+        $this->assertSame('301T_nov26.csv', DB::table('mo_sale_fulfilment')->where('fk_id_sale', $ids['E-1'])->value('merged_file'));
     }
 }
