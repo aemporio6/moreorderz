@@ -100,4 +100,5 @@ How to work each step: build → test → change the verdict lines in `audit/ver
 | 7e-41 | Dependent dropdowns of the person forms R-C-21 BUILT (Chains: networks, addresses, 6 questions, bank accounts, PayPal debit cards, shops, free slots, owner companies; own lists per person) | done | 486/1433 | 393 tests |
 | 7e-42 | Products list R-D-35 BUILT + Cover R-D-37 / WAC R-D-38 BUILT, Type chip R-D-25 P (ProductsList, #/products, pricing set, exports, per-user view) | done | 493/1433 | 395 tests |
 | 7e-43 | Who may approve R-G_CORE-7 + task score R-G_CORE-8 + thresholds R-G_CORE-51 BUILT (TaskScore, To approve tab, person score) | done | 498/1433 | 397 tests |
-| 7e-44 | NEXT → recount; 3-line closers (R-FIN-19, R-G_CORE-94, R-A_SALES-67, R-C-22, R-G_CORE-83, R-D-58, R-H-49 …); rest of Sourcing 39 / 28 | todo | | |
+| 7e-44 | Security questions per provider R-C-22 BUILT (lists A–Z / marketplace Z–A, no question twice, NULL when empty, Questions set n/6 card) | done | 501/1433 | 398 tests |
+| 7e-45 | NEXT → recount; 3-line closers (R-FIN-19, R-G_CORE-94, R-A_SALES-67, R-G_CORE-83, R-D-58, R-H-49 …); rest of Sourcing 39 / 28 | todo | | |

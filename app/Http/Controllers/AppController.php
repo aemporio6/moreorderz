@@ -135,6 +135,8 @@ class AppController extends Controller
     }
 
     /** Job history of a person (R-C-39): newest first, renewal amber within 30 days. */
+    public function securityHealth(\Illuminate\Http\Request $r, int $id) { Rights::check('VIEW', 't_account'); return ['rows' => \App\Services\SecurityQuestions::health($id)]; }
+
     public function jobs(\Illuminate\Http\Request $r, int $id)
     {
         Rights::check('VIEW', 't_account_job_history');

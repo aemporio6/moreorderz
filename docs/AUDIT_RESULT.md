@@ -11,13 +11,13 @@ Every line of MASTER_REGISTER_v1.7 (1,547 lines) checked against the code. BUILT
 | Sales | 155 | 98 | 31 | 15 | 11 | 0 | 8 | 63 % |
 | Tasks | 122 | 20 | 60 | 15 | 27 | 0 | 4 | 16 % |
 | Products | 101 | 35 | 17 | 26 | 23 | 0 | 5 | 35 % |
-| Accounts/People | 97 | 21 | 17 | 44 | 15 | 0 | 3 | 22 % |
+| Accounts/People | 97 | 24 | 17 | 41 | 15 | 0 | 3 | 25 % |
 | Setup | 87 | 45 | 18 | 13 | 11 | 0 | 10 | 52 % |
 | Labels/Printing | 44 | 19 | 14 | 6 | 5 | 0 | 2 | 43 % |
 | Security | 28 | 12 | 12 | 1 | 3 | 0 | 8 | 43 % |
 | Reports | 25 | 6 | 7 | 0 | 12 | 0 | 3 | 24 % |
 | Migration | 9 | 4 | 3 | 0 | 2 | 0 | 8 | 44 % |
-| **All** | **1433** | **498** | **484** | **193** | **258** | **0** | **114** | **35 %** |
+| **All** | **1433** | **501** | **484** | **190** | **258** | **0** | **114** | **35 %** |
 
 FORM ONLY = the form and its list exist and save (with rights and history), but the rule's own logic is not built.
 PARTIAL = part of the rule works; the note in `audit/REGISTER_AUDIT.csv` says what is missing.

@@ -57,8 +57,10 @@ class Chains
         // security questions of the bank / provider / marketplace … chosen
         if (preg_match('/^fk_question_id[1-6]$/', $name) && isset(self::QUESTION_OWNER[$formKey])) {
             [$type, $ownerField] = self::QUESTION_OWNER[$formKey]; $owner = self::pv($parents, $fields, $ownerField);
-            if ($owner === null) return ['options' => [], 'narrowed_by' => [$ownerField], 'hint' => 'Choose the ' . str_replace(['fk_', '_id', '_'], ['', '', ' '], $ownerField) . ' first.'];
-            return ['options' => $map(self::like(DB::table('sys_security_questions')->where('owner_type', $type)->where('owner_id', (int) $owner)->where('f_active', 1), $q, 'question')->orderBy('id')->get(['id', 'question as lbl'])), 'narrowed_by' => [$ownerField]];
+            $shared = in_array($type, ['PAYPAL', 'COMPANIES_HOUSE'], true);      // PayPal (set 1) and Company House links (set 2): one shared list (owner 0), the chosen item's own list first
+            if ($owner === null && ! $shared) return ['options' => [], 'narrowed_by' => [$ownerField], 'hint' => 'Choose the ' . str_replace(['fk_', '_id', '_'], ['', '', ' '], $ownerField) . ' first.'];
+            $x = DB::table('sys_security_questions')->where('owner_type', $type)->where('f_active', 1)->whereIn('owner_id', $shared ? array_unique([0, (int) $owner]) : [(int) $owner]);
+            return ['options' => $map(self::like($x, $q, 'question')->orderBy('question', $type === 'MARKETPLACE' ? 'desc' : 'asc')->get(['id', 'question as lbl'])), 'narrowed_by' => [$ownerField]];      // A–Z; marketplace Z–A (old)
         }
         // mobile: networks of the country
         if ($formKey === 't_account_mobile' && $col === 'fk_id_mobile_network') {

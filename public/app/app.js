@@ -1296,7 +1296,7 @@
     $('#rDel').onclick = () => bulkRun(key, 'DELETE', [id], null, null, () => pageRecord(key, id));
     $('#rEdit').onclick = () => openForm(key, id, { onSaved: () => pageRecord(key, id) });
     if ($('#rMarks')) $('#rMarks').onclick = () => printNow('CARTON_MARK', [id]);
-    if (tab === 'details' && (S.boot.person_forms || []).includes(key)) jobsCard(id);
+    if (tab === 'details' && (S.boot.person_forms || []).includes(key)) { jobsCard(id); securityCard(id); }
     $$('#main [data-tab]').forEach(b => b.onclick = () => { S.recTab = b.dataset.tab; pageRecord(key, id); });
   }
 
@@ -2298,6 +2298,14 @@
       { name: 'from_date', label: 'From', type: 'date', required: true, value: S.boot.today }, { name: 'reason', label: 'Reason', options: opt(d.reasons, x => [x.id, x.name]) }], async v => { const r = await api('prices/' + pid, { method: 'POST', body: v }); pagePrices(pid); return r; });
   }
   // ---------- job history of a person (R-C-39): a sub-list, newest first ----------
+  // ---------- security questions per kit item (R-C-22): "Questions set n/6" ----------
+  async function securityCard(pid) {
+    let d; try { d = await api(`people/${pid}/security-questions`); } catch (e) { return; }
+    const host = document.createElement('div'); host.className = 'card'; host.style.marginTop = '12px'; $('#main').appendChild(host);
+    host.innerHTML = `<div class="card-h"><h3>Security questions</h3><span class="small muted">6 pairs per kit item (3 on an e-mail); answers are kept as secrets</span></div>${d.rows.length ? `<div class="tbl-wrap"><table class="t"><thead><tr><th>Kit item</th><th>Which</th><th>Questions</th><th></th></tr></thead><tbody>
+      ${d.rows.map(r => `<tr><td>${esc(r.kind)}</td><td>${esc(r.label)}</td><td><span class="chip ${r.complete ? 'done' : r.set ? 'warn' : 'err'}">${esc(r.text)}</span></td><td><button class="btn sm" data-sqe="${r.form}:${r.id}">Edit</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No kit items with security questions yet.</div>'}`;
+    $$('[data-sqe]', host).forEach(b => b.onclick = () => { const [f, id] = b.dataset.sqe.split(':'); openForm(f, +id, { onSaved: () => { host.remove(); securityCard(pid); } }); });
+  }
   async function jobsCard(pid) {
     let d; try { d = await api(`people/${pid}/jobs`); } catch (e) { return; }
     const host = document.createElement('div'); host.className = 'card'; host.style.marginTop = '12px'; $('#main').appendChild(host); const dt = x => x ? x.split('-').reverse().join('-') : '';

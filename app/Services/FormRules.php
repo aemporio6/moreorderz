@@ -38,6 +38,7 @@ class FormRules
         if ($table === 't_src_cycles' || $table === 't_src_po') return self::srcDuplicate($table, $data, $old, $id);
         if ($table === 't_src_po_lines') return self::poLine($data, $old);
         if ($table === 't_product_marketplace_shipping') return self::mpFees($data, $old);
+        if (isset(SecurityQuestions::KIT[$table]) && ($e = SecurityQuestions::check($table, $data, $old))) return $e;      // R-C-22
         if ($formKey !== 'cat_company_house') return [];
         $strict = self::strict($formKey); $e = []; $val = fn (string $c) => array_key_exists($c, $data) ? $data[$c] : ($old[$c] ?? null);
         if (isset($data['company_name']) && is_string($data['company_name']) && $data['company_name'] !== '') $data['company_name'] = mb_strtoupper(mb_substr($data['company_name'], 0, 1)) . mb_substr($data['company_name'], 1);
