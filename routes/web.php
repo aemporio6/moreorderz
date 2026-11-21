@@ -251,6 +251,10 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('print-routes', [PrintController::class, 'route']);
         Route::get('orders', [OrdersController::class, 'board']);
         Route::get('sales', [OrdersController::class, 'saleLines']);
+        Route::get('shop-reminders', [OrdersController::class, 'shopReminders']);
+        Route::post('shop-reminders', [OrdersController::class, 'shopReminderSave']);
+        Route::post('shop-reminders/template', [OrdersController::class, 'shopReminderTemplate']);
+        Route::post('shop-reminders/{id}/{what}', [OrdersController::class, 'shopReminderDo'])->whereNumber('id')->where('what', 'resolve|revert|remove');
         Route::get('va-statements', [OrdersController::class, 'vaStatements']);
         Route::get('va-statements/preview', [OrdersController::class, 'vaStatementPreview']);
         Route::post('va-statements', [OrdersController::class, 'vaStatementMake']);

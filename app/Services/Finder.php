@@ -19,6 +19,7 @@ class Finder
         ['Annual sale report', 'annual sale report year month by month va share store share net profit', '#/sales-annual', 'orders.saleReports'],
         ['Detailed sale report', 'detailed sale report shops months grid yearly', '#/sales-detailed', 'orders.saleReports'],
         ['VA statements', 'va statement payslip seller share month approve', '#/va-statements', 'orders.SEE'],
+        ['Shop reminders', 'shop monthly reminders pending resolved template invoice', '#/shop-reminders', 'orders.SEE'],
         ['New order', 'enter order add sale', '#/orders?do=new', 'orders.ENTER'],
         ['Load order file', 'import orders upload ebay temu amazon csv', '#/orders?do=file', 'orders.ENTER'],
         ['Make pick list', 'picking pick sheet warehouse', '#/orders?do=pick', 'orders.WAREHOUSE'],

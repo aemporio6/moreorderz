@@ -379,4 +379,10 @@ class OrdersController extends Controller
         $s = DB::table('va_statements')->where('id', $id)->first(); $path = storage_path('app/' . $s->pdf_file); if (! $s->pdf_file || ! is_file($path)) $path = storage_path('app/' . \App\Services\VaStatements::pdf($id));
         return response(file_get_contents($path), 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="' . \App\Services\VaStatements::fileName($s) . '"']);
     }
+
+    // ---------- shop monthly reminders (R-A_SALES-72) ----------
+    public function shopReminders(Request $r) { $this->can($r, 'orders.SEE'); return \App\Services\ShopReminders::list($r->user(), $r->only(['shop'])); }
+    public function shopReminderSave(Request $r) { return $this->run(fn () => \App\Services\ShopReminders::save($r->only(['shop', 'month', 'year', 'type', 'text']), (int) $r->input('id') ?: null, $r->user())); }
+    public function shopReminderDo(Request $r, int $id, string $what) { return $this->run(fn () => match ($what) { 'resolve' => \App\Services\ShopReminders::resolve($id, $r->user()), 'revert' => \App\Services\ShopReminders::revert($id, $r->user()), default => \App\Services\ShopReminders::remove($id, $r->user()) }); }
+    public function shopReminderTemplate(Request $r) { return $this->run(fn () => $r->boolean('remove') ? \App\Services\ShopReminders::removeTemplate((int) $r->input('id'), $r->user()) : \App\Services\ShopReminders::saveTemplate($r->only(['shop', 'type', 'text', 'due_day', 'f_active']), (int) $r->input('id') ?: null, $r->user())); }
 }

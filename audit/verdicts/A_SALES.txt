@@ -62,14 +62,14 @@
 62|M||eBay file vs sales 3 lists not built
 63|M||Amazon purchase audit not built
 64|M||GD supplier audit not built
-65|F|form:va_statement|form only; VA statement calculation / PDF / approval not built
+65|P|class VaStatements|header shop / VA / period; sale, buy, fee read-only from the import, after-fee profit, VA % and share of the batch, typed expenses + detail, net to store; choice VA_EXPENSES_BEFORE_SHARE (per shop); saved with a version, PDF va_statement_<shop>_<YYYY-MM>.pdf, Owner approval with event VA_STATEMENT_APPROVED, statement to the VA by WhatsApp / e-mail; one salary payable per VA × job row × month (job-row £ rate first), VA share payable closed by a bank line of category VA_SHARE_PAYOUT that goes to the payable account. Both rule examples tested (70 / 580 and 65 / 585). Missing: the VA share as its own Month Close line; VA from the shop assignment role
 66|P|function saveColumns|three mapping sets per marketplace with the rule's cleaning (trim, empties, case-insensitive de-dup); Sale Columns drive the import. 5-matching set is read by the drop-shipping match; extra columns built (R-A_SALES-45). Missing: the DS Columns set is saved but the supplier-file upload that reads it belongs to the Products rules (R-D-73 …); per-field notes
 67|F|form:marketplace_field|form only; field builder not built
 68|F|form:cat_marketplace|form + list; ISO checks, questions checklist not built
 69|F|form:t_carrier_pkg_svc|forms + lists; effective-dated rates not built
 70|M||preset matrix with gaps not built
 71|F|form:customer_case|form only; case flow / dedupe / SLA not built
-72|F|form:t_branch_reminders|form only; recurring monthly tasks not built
+72|B|class ShopReminders|shop, month, year, type, description all required; PENDING → Resolve → RESOLVED → Revert; Pending newest first, Resolved oldest first, text cut to 250, the list stays on its tab; scope = the person's shops; monthly templates per type make the reminder and a task on the 1st of each month with Resolve / Reopen. Tested with the rule's example (task on 01-12-2026, due 05-12)
 73|F|form:t_shop_feedback|form only; health grid, increments, alerts not built
 74|M||admin / TL health view not built
 75|F|form:daily_order_entry|form only (orders come by file / API / New order); status + tracking flow partly in Dispatch

@@ -317,3 +317,12 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - **Partly built, said honestly**: 50 and 31 use the shop's seller as the VA (the spec's shop assignment role is not built yet).
 - Tests: 269 pass (5,242 checks); new `tests/Feature/SalesReportsTest.php` (5) with the rules' examples. Browser checked.
 - Register after this batch: BUILT 288 of 1,433 (20 %); Sales 39 of 155 (25 %).
+
+## Sales batch 5, part 2 – VA statement and shop reminders (21 Nov 2026)
+- **VA statement per shop + month** (R-A_SALES-65) – `app/Services/VaStatements.php`, screen `#/va-statements` (menu 10.6), migration `000026`. After-fee profit = sale − buy − fee; VA share = VA % × after-fee profit; net to store = after-fee profit − VA share − expenses. Fee, VA and VA % come from the sales import; only expenses + detail are typed. Choice "VA statement: expenses before or after the VA share" (per shop).
+  - Flow: Make a statement (live preview) → saved as a new version with its PDF `va_statement_<shop>_<YYYY-MM>.pdf` (old versions and files stay) → the Owner approves or sends back with a reason → event `VA_STATEMENT_APPROVED`, the statement goes to the VA by WhatsApp / e-mail (template `VA_STATEMENT` – must also be approved at Meta under this name).
+  - Payables for Finance (`fin_cash_commitments`): the VA share of the shop + month, and **one** salary per VA × job-history row × month (a second approval updates it, never adds one). A bank line categorised "VA share payout" for that person closes the payable and is booked to the payable account, not to cost.
+  - A VA login sees only his own approved statements. New rights `orders.vaStatement` (Owner, Manager, Finance, TL), `orders.vaStatementApprove` (Owner).
+- **Shop monthly reminders** (R-A_SALES-72) – `app/Services/ShopReminders.php`, screen `#/shop-reminders` (menu 6.8), migration `000027` (`mo_reminder_templates`, rule `SHOP_REMINDER`). Pending / Resolved lists, Resolve / Revert / Edit / Remove; **Monthly templates**: on the 1st of each month the night job makes the reminder for the shop (or every active shop) with a task due on the template's day; resolving the reminder closes the task, reverting opens it again.
+- **Partly built, said honestly**: 65 – the VA share is not yet its own line on the Month Close page; the VA is the shop's seller (the shop assignment role of the spec is not built).
+- Tests: 274 pass (5,346 checks); new `VaStatementTest` (3) and `ShopRemindersTest` (2) with the rules' examples. Browser checked.
