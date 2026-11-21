@@ -49,6 +49,7 @@ class Chains
 
     public static function options(string $formKey, array $f, array $parents, ?string $q): ?array
     {
+        if (($dp = DirectorPickers::options($formKey, (string) $f['field_name'], $parents, $q)) !== null) return $dp;      // R-F_SETUP-36: Director 1's own addresses / e-mails / mobiles
         $fields = Registry::fields($formKey); $name = $f['field_name']; $col = (string) $f['column_name'];
         $src = (string) $f['source']; [$kind, $arg] = array_pad(explode(':', $src, 2), 2, '');
         $person = self::pv($parents, $fields, 'fk_id_account');

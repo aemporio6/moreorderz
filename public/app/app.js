@@ -3856,7 +3856,7 @@
       if (f.numbered && !id && !v) return `<input id="${idn}" data-f="${f.name}" type="text" value="" placeholder="Given by the system when saved" autocomplete="off">`;
       if (f.has_options) { const multi = f.type === 'multiselect', vals = multi ? String(v).split(',').filter(x => x !== '') : (v !== '' && String(v) !== '0' ? [String(v)] : []);
         return `<div class="selwrap"><div class="mo-dd" data-dd="${f.name}" style="position:relative;flex:1;min-width:0"><div data-ddbox tabindex="${f.readonly ? -1 : 0}" id="${idn}" style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;min-height:38px;padding:4px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface,#fff);cursor:${f.readonly ? 'not-allowed' : 'pointer'};${f.readonly ? 'opacity:.6' : ''}">
-          ${vals.length ? vals.map(x => multi ? `<span class="chip accent plain">${esc((labels[f.name] || {})[x] ?? x)} <a href="#" data-ddx="${esc(x)}">✕</a></span>` : `<span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc((labels[f.name] || {})[x] ?? x)}</span>`).join('') : '<span class="muted" style="flex:1">Choose…</span>'}
+          ${vals.length ? vals.map(x => multi ? `<span class="chip accent plain">${esc((labels[f.name] || {})[x] ?? x)} <a href="#" data-ddx="${esc(x)}">✕</a></span>` : `<span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc((labels[f.name] || {})[x] ?? x)}</span>`).join('') : `<span class="muted" style="flex:1">${esc(f.placeholder || 'Choose…')}</span>`}
           ${vals.length && !f.readonly && !multi ? '<a href="#" data-ddclr title="Clear" class="muted">✕</a>' : ''}<span class="muted" style="margin-left:auto">▾</span></div></div>
           ${(f.add_form || f.add_inline) && !f.readonly ? `<button type="button" class="addbtn" data-add="${esc(f.name)}" title="Add a new one – it is saved to its list and selected here">${ic('plus')}<span>Add</span></button>` : ''}</div>`; }
       if (f.type === 'textarea') return `<textarea id="${idn}" data-f="${f.name}" rows="3" ${ro}>${esc(v)}</textarea>`;
@@ -3892,7 +3892,7 @@
     async function openDd(f) { closeDd(); const host = $(`[data-dd="${f.name}"]`, ov); if (!host || f.readonly) return; const multi = f.type === 'multiselect';
       const p = document.createElement('div'); ddOpen = p; p.style.cssText = 'position:absolute;z-index:80;left:0;right:0;top:calc(100% + 2px);background:var(--surface,#fff);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.18);padding:6px';
       p.innerHTML = `<input class="q" data-ddq placeholder="Type to search…" style="width:100%;margin-bottom:4px" autocomplete="off">${multi ? '<div class="small" style="display:flex;gap:12px;padding:2px 6px"><a href="#" data-ddall>All</a><a href="#" data-ddnone>None</a><span style="flex:1"></span><a href="#" data-dddone>Done</a></div>' : ''}<div data-ddl style="max-height:240px;overflow:auto"><div class="small muted" style="padding:8px">Loading…</div></div>`;
-      host.appendChild(p); const qi = $('[data-ddq]', p), list = $('[data-ddl]', p); let opts = [], recent = [], cur = 0, seq = 0, tm;
+      host.appendChild(p); const qi = $('[data-ddq]', p), list = $('[data-ddl]', p); let opts = [], recent = [], cur = 0, seq = 0, tm, hint = '';
       const picked = () => String(val[f.name] ?? '').split(',').filter(x => x !== '');
       const choose = v => { const o = opts.find(x => x[0] === v); if (o) (labels[f.name] = labels[f.name] || {})[v] = o[1];
         if (multi) { const s = new Set(picked()); s.has(v) ? s.delete(v) : s.add(v); typed.add(f.name); change(f.name, [...s].join(',')); render(); redrawBox(); }
@@ -3900,13 +3900,13 @@
       const redrawBox = () => { const box = $('[data-ddbox]', host), tmp = document.createElement('div'); tmp.innerHTML = input(f); box.innerHTML = $('[data-ddbox]', tmp).innerHTML; };
       const render = () => { const pk = picked(), t = qi.value.trim(); const rows = recent.length && !t ? opts.filter(o => recent.includes(o[0])).concat(opts.filter(o => !recent.includes(o[0]))) : opts; cur = Math.min(cur, Math.max(0, rows.length - 1));
         list.innerHTML = (rows.length ? rows.map((o, i) => `<div data-ddv="${esc(o[0])}" style="display:flex;gap:8px;align-items:center;padding:6px 8px;border-radius:6px;cursor:pointer;${i === cur ? 'background:rgba(15,118,110,.10)' : ''}">${multi ? `<input type="checkbox" ${pk.includes(o[0]) ? 'checked' : ''} tabindex="-1">` : ''}<span style="flex:1">${esc(o[1])}</span>${recent.includes(o[0]) && !t ? '<span class="small muted">used lately</span>' : pk.includes(o[0]) && !multi ? ic('check') : ''}</div>`).join('')
-          : `<div class="small muted" style="padding:8px">${t ? `Nothing called “${esc(t)}”.` : `No ${esc(f.label.toLowerCase())} yet${f.add_form || f.add_inline ? ' – press Add.' : '.'}`}</div>`)
+          : `<div class="small muted" style="padding:8px">${t ? `Nothing called “${esc(t)}”.` : hint ? esc(hint) : `No ${esc(f.label.toLowerCase())} yet${f.add_form || f.add_inline ? ' – press Add.' : '.'}`}</div>`)
           + ((f.add_form || f.add_inline) && t && !rows.some(o => o[1].toLowerCase() === t.toLowerCase()) ? `<div data-ddadd style="padding:6px 8px;border-top:1px solid var(--line);cursor:pointer;color:var(--accent)">${ic('plus')} Add “${esc(t)}”</div>` : '');
         $$('[data-ddv]', list).forEach(e => e.onmousedown = ev => { ev.preventDefault(); choose(e.dataset.ddv); });
         if ($('[data-ddadd]', list)) $('[data-ddadd]', list).onmousedown = ev => { ev.preventDefault(); const t2 = qi.value.trim(); closeDd(); addNew(f, t2); };
         const c = $$('[data-ddv]', list)[cur]; c && c.scrollIntoView({ block: 'nearest' }); };
       const load = async () => { const my = ++seq, qs = new URLSearchParams(); if (qi.value.trim()) qs.set('q', qi.value.trim()); Object.entries(parentsOf()).forEach(([k, v]) => { if (k !== f.name) qs.set(`parent[${k}]`, v); });
-        try { const r = await api(`options/${key}/${f.name}?` + qs); if (my !== seq || ddOpen !== p) return; opts = r.options; recent = r.recent || []; opts.forEach(([v, l]) => { (labels[f.name] = labels[f.name] || {})[v] = l; }); render(); } catch (e) { list.innerHTML = `<div class="small muted" style="padding:8px">${esc(e.message)}</div>`; } };
+        try { const r = await api(`options/${key}/${f.name}?` + qs); if (my !== seq || ddOpen !== p) return; opts = r.options; recent = r.recent || []; hint = r.hint || ''; opts.forEach(([v, l]) => { (labels[f.name] = labels[f.name] || {})[v] = l; }); render(); } catch (e) { list.innerHTML = `<div class="small muted" style="padding:8px">${esc(e.message)}</div>`; } };
       qi.oninput = () => { clearTimeout(tm); cur = 0; tm = setTimeout(load, 180); };
       qi.onkeydown = e => { const n = $$('[data-ddv]', list).length;
         if (e.key === 'ArrowDown') { e.preventDefault(); cur = Math.min(n - 1, cur + 1); render(); } else if (e.key === 'ArrowUp') { e.preventDefault(); cur = Math.max(0, cur - 1); render(); }
@@ -3925,8 +3925,8 @@
       // the full form of the thing, with what we know already filled in; it comes back selected (forms stack)
       const preset = { ...(f.add_preset || {}) }; const ent = flds.find(x => x.col === 'fk_id_ent'); if (ent && !empty(ent.name)) preset.fk_id_ent = val[ent.name]; if (text) preset.__label = text;
       if (String(f.source || '').startsWith('own:t_account_')) {      // R-C-20: the sub-list form opens for the same person; a person not saved yet is saved as a draft first
-        const pf = flds.find(x => x.col === 'fk_id_account');
-        if (pf) { if (empty(pf.name)) return toast('Choose the person first.', 'err'); preset.fk_id_account = val[pf.name]; }
+        const pf = flds.find(x => x.col === 'fk_id_account') || (f.person_field && flds.find(x => x.name === f.person_field));      // R-F_SETUP-36: Director 1's own sub-list
+        if (pf) { if (empty(pf.name)) return toast(f.person_field ? `Choose ${pf.label} first.` : 'Choose the person first.', 'err'); preset.fk_id_account = val[pf.name]; }
         else if (def.table === 't_account') { if (!id) { try { const r = await api(`record/${key}/draft`, { method: 'POST', body: { values: val } }); id = r.id; toast(r.message); } catch (e) { return toast(e.message, 'err'); } } preset.fk_id_account = id; }
       }
       openForm(f.add_form, null, { preset, onSaved: r => { (labels[f.name] = labels[f.name] || {})[String(r.id)] = r.label || String(r.id); typed.add(f.name); change(f.name, f.type === 'multiselect' ? String(val[f.name] || '').split(',').filter(x => x !== '').concat([String(r.id)]).join(',') : String(r.id)); redrawField(f); toast('Added and selected'); afterPick(f); } }); }

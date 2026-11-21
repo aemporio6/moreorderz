@@ -90,7 +90,8 @@ class Registry
                 'default_why' => self::defaultWhy($f),
                 'has_options' => in_array($f['type'], ['select', 'multiselect'], true),
                 'numbered' => str_starts_with((string) $f['default_rule'], 'numbering:'),
-                'add_preset' => str_starts_with((string) $f['source'], 'ref:') ? ['fk_reference_id' => DB::table('cat_references')->where('ref_code', substr($f['source'], 4))->value('id')] : null,
+                'add_preset' => str_starts_with((string) $f['source'], 'ref:') ? ['fk_reference_id' => DB::table('cat_references')->where('ref_code', substr($f['source'], 4))->value('id')] : DirectorPickers::addPreset($formKey, (string) $f['field_name']),
+                'placeholder' => DirectorPickers::placeholder($formKey, (string) $f['field_name']), 'person_field' => DirectorPickers::personField($formKey, (string) $f['field_name']),
             ];
         }
         ksort($sections);
@@ -145,9 +146,10 @@ class Registry
         if (! Schema::hasTable($table)) return [];
         $pk = self::pk($table);
         if ($table === 't_account') {
-            $label = DB::raw("TRIM(CONCAT_WS(' ', NULLIF(first_name,''), NULLIF(sur_name,''))) as lbl");
+            $mid = self::hasColumn($table, 'middle_name') ? "NULLIF(middle_name,''), " : '';      // label first + middle + surname (R-F_SETUP-38)
+            $label = DB::raw("TRIM(CONCAT_WS(' ', NULLIF(first_name,''), {$mid}NULLIF(sur_name,''))) as lbl");
             $x = DB::table($table)->select($pk . ' as id', $label);
-            if ($q) $x->whereRaw("CONCAT_WS(' ', first_name, sur_name) like ?", ["%$q%"]);
+            if ($q) $x->whereRaw("CONCAT_WS(' ', first_name, " . ($mid ? 'middle_name, ' : '') . "sur_name) like ?", ["%$q%"]);
             if ($loginOnly) $x->where('f_login', 1);
             $x->where(fn ($w) => $w->whereNull('record_status')->orWhere('record_status', '<>', 'DRAFT'));      // a draft person never appears in pickers of other forms (R-C-20)
             if ($onlyIds !== null) $x->whereIn($pk, $onlyIds);

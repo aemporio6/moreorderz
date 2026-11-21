@@ -65,7 +65,7 @@ class FormRules
         if ($strict && round($sum, 2) > 100 && ! array_intersect(['director_1_share', 'director_2_share', 'director_3_share'], array_keys($e))) $e['director_1_share'] = 'Director shares add up to ' . rtrim(rtrim(number_format($sum, 2, '.', ''), '0'), '.') . ' % – must not exceed 100 %.';
         if ($strict) foreach (self::COMPANY_REQUIRED as $c) { $v = $val($c); if (($v === null || $v === '') && ! isset($already[$c]) && ! isset($e[$c])) $e[$c] = (Registry::labelOf('cat_company_house', $c) ?? $c) . ' is required.'; }
         $iso = $val('iso_code'); if ($strict && is_string($iso) && $iso !== '' && ! isset($e['iso_code']) && self::isoTaken($iso, $id)) $e['iso_code'] = 'This ISO code already exists. Please add another';
-        return $e;
+        return $e + DirectorPickers::check($data, $old);      // R-F_SETUP-36: the four pickers hold Director 1's own items
     }
 
     /**
