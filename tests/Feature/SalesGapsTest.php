@@ -97,4 +97,15 @@ class SalesGapsTest extends TestCase
         $this->assertSame('2 sale line(s) still not matched – 101A: 2', DB::table('tm_notifications')->where('user_id', $u)->orderByDesc('id')->value('text'));
         DB::table('t_sales')->update(['sale_source' => 'active']); DB::table('tm_notifications')->delete(); $this->assertSame(0, DsMatch::digest());      // nothing left → nothing sent
     }
+
+    public function test_supplier_address_and_phone_are_masked_on_the_drop_shipping_list_record_and_export(): void
+    {
+        $this->world(); $plat = DB::table('drp_platforms')->insertGetId($this->fill('drp_platforms', ['platform_name' => 'Ali', 'f_active' => 1, 'created_at' => now()]));
+        DB::table('drp_items')->insert($this->fill('drp_items', ['fk_id_ent' => 1, 'fk_platform' => $plat, 'fk_id_marketplace' => $this->mp, 'fk_id_branch' => $this->shop, 'dup_key' => 'k1', 'order_no' => 'S-1', 'd_order' => '2026-07-04', 'item_title' => 'Thing', 'qty' => 1, 'total_cost' => 4, 'currency' => 'GBP', 'ship_name' => 'Jane Buyer', 'ship_address' => '5 Oak Road', 'ship_city' => 'Derby', 'ship_postcode' => 'DE1 1AA', 'ship_phone' => '07700900555']));
+        $row = ['ship_name' => 'Jane Buyer', 'ship_address' => '5 Oak Road', 'ship_phone' => '07700900555'];
+        $this->assertSame($row, \App\Services\Vault::maskRow('drp_items', $row));      // the Owner sees them
+        $va = \App\Models\User::find(DB::table('t_users')->insertGetId($this->fill('t_users', ['fk_id_ent' => 1, 'login_id' => 'va2@demo.test', 'display_name' => 'V', 'role_code' => 'VA', 'f_active' => 1]))); $this->actingAs($va); \App\Services\Perm::flush();
+        $this->assertSame(['ship_name' => 'Jane Buyer', 'ship_address' => '•••', 'ship_phone' => '••••••555'], \App\Services\Vault::maskRow('drp_items', $row));
+        $this->assertTrue(\App\Services\Vault::isMasked('•••')); $this->assertSame(['x' => 1], \App\Services\Vault::maskRow('t_sales', ['x' => 1]));
+    }
 }

@@ -335,3 +335,13 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - New right `setup.carriers` (Owner, Manager). Everyone with order access may look.
 - **Partly built, said honestly**: 70 – the cheapest suggestion is not yet inside the label-buying flow.
 - Tests: 277 pass; new `tests/Feature/CarriersTest.php` (3) with the rules' examples. Browser checked with a made-up carrier (removed again).
+
+## Sales batch 5, part 4 – small parts that complete six rules (21 Nov 2026)
+- **Schema self-check** (R-A_SALES-13): the refusal now names the migration files in the order they must run; `app/Services/SchemaCheck.php` + System › Health show per module which migrations did not run and what a module misses (green line when all is up to date).
+- **Date format** (8): the import shows "Order Date read as day/month/yyyy", remembers it per marketplace, and warns when a file is written another way or in two ways (`Parse::dateFormat`).
+- **Daily totals apart** (17): summary lines never count inside the order lines – own Type chip "Daily totals" in the list, own block in the Annual report. **Found and fixed**: the unique key of an import batch was shop + month only, so a totals file and an order file of the same month could not both exist; the key now includes the kind (migration `000029`).
+- **Equal matches** (21): when two supplier orders match a line equally well the others are kept on the line; button "Equal matches" on Sales lines lists them and "Use this one" moves the line (cost and profit follow), "Keep" closes the question.
+- **Daily digest** (25): every morning each shop VA gets "n sale line(s) still not matched – 101A: 2, …" on the bell and by WhatsApp (template `NOT_MATCHED_DIGEST`), once a day.
+- **Masking** (26): supplier address (•••) and phone (••••••123) are masked on the drop-shipping list, record page and exports for people without the right `orders.dsSeeContact`; a masked value is never saved back over the real one.
+- Tests: 283 pass (5,445 checks); new `tests/Feature/SalesGapsTest.php` (6).
+- Register after this batch: BUILT 300 of 1,433 (21 %); Sales 44 of 155 (28 %).

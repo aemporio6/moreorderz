@@ -94,6 +94,11 @@ class Vault
     /** What a screen shows for a row: every secret masked (also old rows not yet sealed), for every role. */
     public static function maskRow(string $table, array $row): array
     {
+        // supplier orders (drop shipping): the delivery address and phone are hidden unless the person may see contacts (R-A_SALES-26) – on lists, record pages and exports alike
+        if ($table === 'drp_items' && ! Perm::has(\Illuminate\Support\Facades\Auth::user(), 'orders.dsSeeContact') && \Illuminate\Support\Facades\Auth::check()) {
+            if (isset($row['ship_address']) && trim((string) $row['ship_address']) !== '' && ! self::isMasked($row['ship_address'])) $row['ship_address'] = '•••';
+            if (isset($row['ship_phone']) && trim((string) $row['ship_phone']) !== '' && ! self::isMasked($row['ship_phone'])) $row['ship_phone'] = DsMatch::maskPhone((string) $row['ship_phone']);
+        }
         foreach (self::kinds($table) as $col => $kind) {
             if (! array_key_exists($col, $row) || $row[$col] === null || $row[$col] === '' || self::isMasked($row[$col])) continue;
             $row[$col] = $kind === 'NEVER' ? null : (self::maskFor($table, $col, (string) $row[$col], $kind) ?? self::MASK);

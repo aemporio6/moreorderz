@@ -150,6 +150,7 @@ class RecordService
         }
         if ($errors) throw ValidationException::withMessages($errors);
 
+        if ($table === 'drp_items') foreach (['ship_address', 'ship_phone'] as $mc) if (isset($data[$mc]) && Vault::isMasked($data[$mc])) unset($data[$mc]);      // a masked value shown to the person is never saved back over the real one
         $vault = Vault::prepare($table, $data, $id);   // secrets go to the vault, card numbers keep 4 digits, CVV / PIN are dropped
         try {
             $res = self::write($table, $pk, $id, $data, $old, $formKey, $opt);
