@@ -236,7 +236,8 @@ class DsMatch
             if (isset($a['assign'][$l->id])) {
                 $it = $byId[$a['assign'][$l->id]['item']]; $f = $a['assign'][$l->id]['fields']; $cur = strtoupper(trim((string) $it->currency)) ?: Fx::base($ent); $date = (string) ($it->d_order ?: $l->d_order);
                 $buy = Fx::toBase((float) $it->total_cost, $cur, $date, $ent); $total = (float) $l->total_amount; if ($cur !== Fx::base($ent)) $costCur[$cur] = 1;
-                $upd = ['sale_source' => 'ds', 'fk_drp_item' => $it->id, 'ds_match_count' => $f['n'], 'ds_match_json' => json_encode($f), 'ds_note' => '', 'sale_rate' => $total, 'buy_rate' => 0, 'buy_amount' => $buy, 'profit' => round($total - $buy, 2), 'd_buy' => $date, 'cost_source' => 'dropship', 'raw_price' => 0, 'carrier_rate' => 0, 'packing_rate' => 0, 'updated_at' => now()];
+                $tied = array_values(array_diff(collect($a['conflicts'])->firstWhere('line', (int) $l->id)['items'] ?? [], [(int) $it->id]));      // other supplier orders with the same score: kept for a manual pick
+                $upd = ['sale_source' => 'ds', 'fk_drp_item' => $it->id, 'ds_match_count' => $f['n'], 'ds_match_json' => json_encode($f + ($tied ? ['tied' => $tied] : [])), 'ds_note' => '', 'sale_rate' => $total, 'buy_rate' => 0, 'buy_amount' => $buy, 'profit' => round($total - $buy, 2), 'd_buy' => $date, 'cost_source' => 'dropship', 'raw_price' => 0, 'carrier_rate' => 0, 'packing_rate' => 0, 'updated_at' => now()];
                 DB::table('t_sales')->where('id', $l->id)->where('status', 'Pending')->where('sale_source', 'unmatched')->update($upd); $out['matched']++; self::marginTask((int) $l->id);
                 if ($log) { $key = uniqid('rm'); $who = $u ? ($u->display_name ?: $u->login_id) : 'system'; $m = fn ($v) => number_format((float) $v, 2, '.', '');
                     foreach ([['sale_source', 'Inventory', 'Not matched', 'Drop shipping (' . ($plat[$it->fk_platform] ?? 'platform') . ')'], ['fk_drp_item', 'Drop shipping item', '', "#{$it->id} - {$f['n']} of 5 columns matched"], ['buy_amount', 'Buy Amount', $m($l->buy_amount), $m($buy)], ['profit', 'Profit (recalculated)', $m($l->profit), $m($total - $buy)]] as [$fn, $fl, $old, $new])
@@ -282,6 +283,60 @@ class DsMatch
         if (! $ids) return ['message' => 'There are no Pending not matched lines in this view.', 'matched' => 0, 'total' => 0, 'still' => 0];
         $r = self::locked(fn () => DB::transaction(fn () => self::run($ids, $shopId, $month, $year, null, true, $u)));
         return ['message' => "{$r['matched']} of " . count($ids) . " not matched line(s) are now matched to drop shipping items. {$r['still']} still not matched.", 'matched' => $r['matched'], 'total' => count($ids), 'still' => $r['still'], 'warnings' => $r['warnings']];
+    }
+
+    // ---------- R-A_SALES-21: lines where two supplier orders had the same score – a person picks ----------
+    /** Drop shipping lines (Pending) whose match was a tie, each with the other candidates that are still free. */
+    public static function conflicts(array $f, ?object $u): array
+    {
+        $see = $u && Perm::has($u, 'orders.dsSeeContact'); $out = [];
+        foreach (SaleLines::query($f, $u)->where('s.sale_source', 'ds')->where('s.status', 'Pending')->where('s.ds_match_json', 'like', '%"tied"%')->orderBy('s.id')->limit(500)->get(['s.id', 's.order_no', 's.cust_name', 's.qty', 's.total_amount', 's.fk_drp_item', 's.ds_match_count', 's.ds_match_json', 's.fk_id_branch']) as $s) {
+            $ids = array_map('intval', (array) (json_decode((string) $s->ds_match_json, true)['tied'] ?? [])); $free = DB::table('drp_items')->whereIn('id', $ids)->whereNotIn('id', DB::table('t_sales')->whereNotNull('fk_drp_item')->select('fk_drp_item'))->get();
+            if ($free->isEmpty()) continue; $cur = DB::table('drp_items')->where('id', $s->fk_drp_item)->first();
+            $row = fn ($i) => $i ? ['id' => (int) $i->id, 'order_no' => $i->order_no, 'date' => $i->d_order, 'name' => $i->ship_name, 'postcode' => $i->ship_postcode, 'phone' => $see ? (string) $i->ship_phone : self::maskPhone($i->ship_phone), 'title' => mb_substr((string) $i->item_title, 0, 80), 'qty' => (int) $i->qty, 'cost' => (float) $i->total_cost] : null;
+            $out[] = ['sale' => (int) $s->id, 'order_no' => $s->order_no, 'buyer' => $s->cust_name, 'qty' => (int) $s->qty, 'total' => (float) $s->total_amount, 'n' => (int) $s->ds_match_count, 'current' => $row($cur), 'others' => $free->map($row)->all()];
+        }
+        return ['rows' => $out, 'can_pick' => $u && Perm::has($u, 'orders.dsLink'), 'note' => 'These lines matched two or more supplier orders equally well. The tool took the first; pick another one if it is the right order.'];
+    }
+
+    /** Manual pick: the line takes another supplier order of its tie. $itemId = 0 keeps the current one and closes the question. */
+    public static function pick(int $saleId, int $itemId, ?object $u): array
+    {
+        Perm::need($u, 'orders.dsLink');
+        return self::locked(fn () => DB::transaction(function () use ($saleId, $itemId, $u) {
+            $s = DB::table('t_sales')->where('id', $saleId)->where('fk_id_ent', Context::ent())->lockForUpdate()->first() ?? abort(404, 'Sale line not found.');
+            if (! Perm::shopAllowed($u, (int) $s->fk_id_branch)) abort(403, "You don't have rights for this shop.");
+            if ($s->sale_source !== 'ds' || $s->status !== 'Pending' || (int) $s->f_locked) throw new \InvalidArgumentException('Only a Pending drop shipping line can be changed.');
+            $j = (array) json_decode((string) $s->ds_match_json, true); $tied = array_map('intval', (array) ($j['tied'] ?? [])); $who = $u->display_name ?: $u->login_id;
+            if ($itemId === 0 || $itemId === (int) $s->fk_drp_item) { unset($j['tied']); DB::table('t_sales')->where('id', $saleId)->update(['ds_match_json' => json_encode($j + ['picked' => true])]); return ['message' => 'Kept. The line is not asked about again.']; }
+            if (! in_array($itemId, $tied, true)) throw new \InvalidArgumentException('That supplier order is not one of the equal matches of this line.');
+            $it = DB::table('drp_items')->where('id', $itemId)->where('fk_id_branch', $s->fk_id_branch)->first() ?? throw new \InvalidArgumentException('Drop shipping item not found for this shop.');
+            if ($o = DB::table('t_sales')->where('fk_drp_item', $itemId)->first()) throw new \InvalidArgumentException("This drop shipping item is already linked to order {$o->order_no}.");
+            $f = self::score(self::saleSide($s), $it); $cur = strtoupper(trim((string) $it->currency)) ?: Fx::base(); $buy = Fx::toBase((float) $it->total_cost, $cur, (string) ($it->d_order ?: $s->d_order), (int) $s->fk_id_ent); $total = (float) $s->total_amount;
+            DB::table('t_sales')->where('id', $saleId)->update(['fk_drp_item' => $it->id, 'ds_match_count' => $f['n'], 'ds_match_json' => json_encode($f + ['picked' => true]), 'buy_amount' => $buy, 'profit' => round($total - $buy, 2), 'd_buy' => $it->d_order, 'f_edited' => 1, 'updated_at' => now()]);
+            DB::table('t_sale_change_log')->insert(['fk_id_sale' => $saleId, 'save_key' => uniqid('pk'), 'action' => 'Pick drop shipping item', 'field_name' => 'fk_drp_item', 'field_label' => 'Drop shipping item', 'old_value' => '#' . $s->fk_drp_item, 'new_value' => "#{$it->id} (picked by hand between equal matches)", 'fk_id_user' => $u->id ?? null, 'changed_by' => $who, 'changed_at' => now()]);
+            self::marginTask($saleId);
+            return ['message' => "The line now uses drop shipping item #{$it->id}."];
+        }));
+    }
+
+    // ---------- R-A_SALES-25: every morning each shop VA gets the list of the lines still not matched ----------
+    /** One message per person per day (bell always; WhatsApp when the person has a number). Returns the number of people told. */
+    public static function digest(): int
+    {
+        $by = [];
+        foreach (DB::table('t_sales as s')->join('t_branches as b', 'b.id', '=', 's.fk_id_branch')->where('s.sale_source', 'unmatched')->where('s.status', 'Pending')->where('b.f_active', 1)->whereNotNull('b.fk_id_seller')->where('b.fk_id_seller', '>', 0)
+            ->groupBy('b.id', 'b.shop_no', 'b.fk_id_seller', 'b.fk_id_ent')->selectRaw('b.id, b.shop_no, b.fk_id_seller va, b.fk_id_ent ent, COUNT(*) n')->get() as $r) { $by[$r->va]['ent'] = (int) $r->ent; $by[$r->va]['shops'][] = "{$r->shop_no}: {$r->n}"; $by[$r->va]['n'] = ($by[$r->va]['n'] ?? 0) + (int) $r->n; }
+        $told = 0;
+        foreach ($by as $va => $d) {
+            $acc = DB::table('t_account')->where('id', $va)->first(); if (! $acc) continue; $text = "{$d['n']} sale line(s) still not matched – " . implode(', ', $d['shops']);
+            $user = $acc->login_id ? DB::table('t_users')->where('login_id', $acc->login_id)->where('f_active', 1)->first() : null; $done = false;
+            if ($user && ! DB::table('tm_notifications')->where('user_id', $user->id)->where('text', 'like', '%still not matched%')->where('created_at', '>=', today())->exists()) { Notify::push((int) $user->id, 'TASK', $text, '#/sales'); $done = true; }
+            if (($p = Connect\Messenger::whatsappOf((int) $va)) && ! DB::table('wa_outbound')->where('template_code', 'NOT_MATCHED_DIGEST')->where('fk_id_account', $va)->where('queued_at', '>=', today())->exists()) {
+                Connect\Messenger::queueWa((int) $d['ent'], (int) $va, $p, 'NOT_MATCHED_DIGEST', ['name' => trim($acc->first_name . ' ' . $acc->sur_name), 'count' => $d['n'], 'shops' => implode(', ', $d['shops']), 'link' => rtrim((string) config('app.url'), '/') . '/#/sales']); $done = true; }
+            if ($done) $told++;
+        }
+        return $told;
     }
 
     // ---------- R-A_SALES-26: the explanation, with the supplier side masked ----------

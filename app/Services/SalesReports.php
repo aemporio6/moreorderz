@@ -41,9 +41,9 @@ class SalesReports
     }
 
     // ---------- shared: the lines of a year under the report filters ----------
-    private static function lines(int $year, array $f, ?object $u)
+    private static function lines(int $year, array $f, ?object $u, bool $summary = false)
     {
-        $q = DB::table('t_sales as s')->where('s.fk_id_ent', Context::ent())->whereBetween('s.d_order', ["$year-01-01", "$year-12-31"])->where('s.sale_source', '<>', 'summary'); Perm::mine($q, 's.fk_id_branch');
+        $q = DB::table('t_sales as s')->where('s.fk_id_ent', Context::ent())->whereBetween('s.d_order', ["$year-01-01", "$year-12-31"])->where('s.sale_source', $summary ? '=' : '<>', 'summary'); Perm::mine($q, 's.fk_id_branch');
         if (! empty($f['marketplace'])) $q->where('s.fk_id_marketplace', (int) $f['marketplace']);
         if (! empty($f['shop'])) $q->where('s.fk_id_branch', (int) $f['shop']);
         if (! empty($f['vendor'])) $q->where('s.fk_id_vendor', (int) $f['vendor']);                                                                                                        // project / vendor of the line
@@ -79,6 +79,11 @@ class SalesReports
         // fee and saved VA share: the batches of each month that hold lines of the filter (each batch once)
         $bq = DB::table('t_sale_imports')->where('fk_id_ent', Context::ent())->where('period_year', $year)->whereIn('id', self::lines($year, $f, $u)->where('s.fk_id_import', '>', 0)->distinct()->select('s.fk_id_import'));
         $bat = $bq->groupBy('period_month')->selectRaw('period_month m, COALESCE(SUM(marketplace_fee),0) fee, COALESCE(SUM(va_share_amount),0) va, COUNT(DISTINCT va_share_percentage) kinds, MAX(va_share_percentage) pct')->get()->keyBy('m');
+        // daily totals of shops without order files are never mixed into the order lines: shown apart
+        $sum = self::lines($year, $f, $u, true)->groupByRaw('MONTH(s.d_order)')->selectRaw('MONTH(s.d_order) m, COALESCE(SUM(s.total_amount),0) sale, COALESCE(SUM(s.buy_amount),0) buy, COALESCE(SUM(s.qty),0) qty, COALESCE(SUM(s.profit),0) profit')->get()->keyBy('m'); $summary = ['rows' => [], 'total' => ['sale' => 0.0, 'buy' => 0.0, 'qty' => 0, 'profit' => 0.0]];
+        for ($m = 1; $m <= 12; $m++) { $x = $sum[$m] ?? null; $r = ['m' => $m, 'month' => self::MONTHS[$m - 1], 'sale' => round((float) ($x->sale ?? 0), 2), 'buy' => round((float) ($x->buy ?? 0), 2), 'qty' => (int) ($x->qty ?? 0), 'profit' => round((float) ($x->profit ?? 0), 2)]; if (! $money) unset($r['buy'], $r['profit']); $summary['rows'][] = $r;
+            foreach (['sale', 'buy', 'qty', 'profit'] as $k) $summary['total'][$k] = $k === 'qty' ? $summary['total'][$k] + (int) ($x->qty ?? 0) : round($summary['total'][$k] + (float) ($x->$k ?? 0), 2); }
+        if (! $money) unset($summary['total']['buy'], $summary['total']['profit']); $summary['any'] = $summary['total']['sale'] != 0 || $summary['total']['qty'] != 0; $summary['note'] = 'Daily totals of shops without order files ("summary" lines). They are not part of the figures above.';
         $rows = []; $tot = ['month' => 'Year Total', 'sale' => 0.0, 'buy' => 0.0, 'qty' => 0, 'fee' => 0.0, 'profit' => 0.0, 'after_fee' => 0.0, 'va_share' => 0.0, 'store_share' => 0.0, 'net' => 0.0, 'loss' => 0.0]; $pcts = [];
         for ($m = 1; $m <= 12; $m++) {
             $l = $by[$m] ?? null; $b = $bat[$m] ?? null; $profit = round((float) ($l->profit ?? 0), 2); $fee = round((float) ($b->fee ?? 0), 2); $after = round($profit - $fee, 2); $va = round((float) ($b->va ?? 0), 2);
@@ -90,7 +95,7 @@ class SalesReports
         }
         $shop = ! empty($f['shop']) ? collect(ShopLabel::list($u))->firstWhere('id', (int) $f['shop']) : null;
         $out = ['year' => $year, 'rows' => $rows, 'total' => $tot, 'basis' => self::BASIS, 'va_label' => count($pcts) === 1 && array_key_first($pcts) !== 'mixed' ? 'VA Share [' . rtrim(rtrim(number_format((float) array_key_first($pcts), 2, '.', ''), '0'), '.') . ' %]' : 'VA Share',
-            'shop' => $shop, 'va' => $shop ? ['name' => $shop['va'], 'pct' => $shop['va_pct'], 'store_pct' => $shop['va_pct'] === null ? null : round(100 - $shop['va_pct'], 2)] : null, 'filter' => array_filter($f), 'see_cost' => $money];
+            'summary' => $summary, 'shop' => $shop, 'va' => $shop ? ['name' => $shop['va'], 'pct' => $shop['va_pct'], 'store_pct' => $shop['va_pct'] === null ? null : round(100 - $shop['va_pct'], 2)] : null, 'filter' => array_filter($f), 'see_cost' => $money];
         if (! $money) { foreach ($out['rows'] as &$r) $r = array_intersect_key($r, array_flip(['m', 'month', 'sale', 'qty'])); $out['total'] = array_intersect_key($tot, array_flip(['month', 'sale', 'qty'])); }
         return $out;
     }

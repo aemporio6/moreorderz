@@ -396,4 +396,7 @@ class OrdersController extends Controller
     }
     public function carrierRateHistory(Request $r, string $kind, int $id) { $this->can($r, 'orders.SEE'); return ['rows' => \App\Services\Carriers::history(strtoupper($kind), $id)]; }
     public function carrierCheapest(Request $r) { $this->can($r, 'orders.SEE'); return ['best' => \App\Services\Carriers::cheapest((float) $r->query('weight', 0), (float) $r->query('l', 0), (float) $r->query('w', 0), (float) $r->query('h', 0), (int) $r->query('marketplace') ?: null)]; }
+
+    public function saleDsConflicts(Request $r) { $this->can($r, 'orders.SEE'); return \App\Services\DsMatch::conflicts($this->saleFilters($r), $r->user()); }
+    public function saleDsPick(Request $r, int $id) { return $this->run(fn () => \App\Services\DsMatch::pick($id, (int) $r->input('item'), $r->user())); }
 }

@@ -159,6 +159,7 @@ class AdminController extends Controller
     {
         $this->owner($r);
         return [
+            'schema' => \App\Services\SchemaCheck::missing(),
             'events' => DB::table('sys_events')->selectRaw('status, COUNT(*) n')->groupBy('status')->pluck('n', 'status'),
             'failed' => DB::table('sys_events')->where('status', 'FAILED')->orderByDesc('id')->limit(50)->get(['id', 'event_code', 'entity', 'entity_id', 'attempts', 'last_error', 'created_at']),
             'recent' => DB::table('sys_events')->orderByDesc('id')->limit(30)->get(['id', 'event_code', 'entity', 'entity_id', 'status', 'created_at']),

@@ -22,6 +22,20 @@ class Parse
     private const FORMATS = ['Y-m-d', 'Y/m/d', 'j-M-y', 'j-M-Y', 'M-j-y', 'M-j-Y', 'j M Y', 'j M y', 'M j Y', 'M j, Y', 'j F Y', 'F j, Y', 'F j Y', 'D, j M Y', 'D j M Y'];
 
     /** A date as Y-m-d · '' when the cell is empty ("null", "0", "-") · false when the format is not known. UK day-first for a/b/y. */
+    /** How a date text is written, in words a person understands (for "Order Date read as …"). */
+    public static function dateFormat(mixed $v): string
+    {
+        $s = trim((string) $v); if ($s === '') return '';
+        if (preg_match('/^\d{5}(\.\d+)?$/', $s)) return 'Excel day number';
+        if (preg_match('#^\d{4}[/\-.]\d{1,2}[/\-.]\d{1,2}#', $s)) return 'year-month-day';
+        if (preg_match('#^(\d{1,2})([/\-.])(\d{1,2})\2(\d{2}|\d{4})\b#', $s, $m)) return ((int) $m[3] > 12 ? 'month' . $m[2] . 'day' : 'day' . $m[2] . 'month') . $m[2] . (strlen($m[4]) === 2 ? 'yy' : 'yyyy');
+        if (preg_match('/^\d{1,2}(st|nd|rd|th)?[\s\-.][A-Za-z]{3,9}[\s\-.,]+\d{2,4}/', $s)) return 'day month-name year';
+        if (preg_match('/^[A-Za-z]{3,9}[,\s]+\d{1,2}(st|nd|rd|th)?\s+[A-Za-z]{3,9}/', $s)) return 'weekday, day month-name year';
+        if (preg_match('/^[A-Za-z]{3,9}[\s\-.]+\d{1,2}(st|nd|rd|th)?[,\s\-.]+\d{2,4}/', $s)) return 'month-name day year';
+        if (preg_match('/^\d{1,2}[\s\-.][A-Za-z]{3,9}$/', $s)) return 'day month-name (this year)';
+        return 'other';
+    }
+
     public static function date(mixed $v): string|false
     {
         $s = trim(preg_replace('/[\x00-\x1F\x7F]+/', ' ', (string) $v)); if ($s === '' || in_array(strtolower($s), ['null', '0', '-'], true)) return '';

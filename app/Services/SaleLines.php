@@ -374,11 +374,12 @@ class SaleLines
     {
         $ent = (int) Context::ent();
         $q = DB::table('t_sales as s')->where('s.fk_id_ent', $ent)->where('s.sale_source', '<>', 'history'); Perm::mine($q, 's.fk_id_branch');
+        if (($f['type'] ?? '') === 'summary') $q->where('s.sale_source', 'summary'); elseif (empty($f['batch'])) $q->where('s.sale_source', '<>', 'summary');      // daily totals are shown apart, never inside the order lines
         if (! empty($f['batch'])) $q->where('s.fk_id_import', (int) $f['batch']);
         else { $q->where('s.fk_id_marketplace', (int) $f['marketplace']); if (! empty($f['from'])) $q->where('s.d_order', '>=', $f['from']); if (! empty($f['to'])) $q->where('s.d_order', '<=', $f['to']); }
         if (! empty($f['shop'])) $q->where('s.fk_id_branch', (int) $f['shop']);
         if (! empty($f['status']) && in_array($f['status'], ['Pending', 'Confirmed', 'Refunded', 'Cancelled'], true)) $q->where('s.status', $f['status']);
-        if (! empty($f['type'])) $q->where('s.sale_source', ['inventory' => 'active', 'ds' => 'ds', 'nm' => 'unmatched'][$f['type']] ?? 'active');
+        if (! empty($f['type']) && $f['type'] !== 'summary') $q->where('s.sale_source', ['inventory' => 'active', 'ds' => 'ds', 'nm' => 'unmatched'][$f['type']] ?? 'active');
         if (($f['show'] ?? '') === 'loss') $q->where('s.profit', '<', 0);
         if (($f['show'] ?? '') === 'out') $q->where('s.f_out_of_period', 1);
         if (($f['show'] ?? '') === 'nocost') $q->whereIn('s.cost_source', ['current', 'product']);

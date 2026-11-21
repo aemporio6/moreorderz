@@ -51,19 +51,32 @@ class SalesImport
     public const NEEDS = ['t_sales' => ['fk_id_import', 'sale_source', 'raw_csv', 'f_out_of_period', 'cost_source', 'batch_row_no'], 't_sale_imports' => ['period_month', 'period_year', 'saved_rows', 'replaced_rows', 'stats_json'], 't_sale_import_errors' => ['fk_id_import', 'row_no', 'reason'],
         'marketplace_sale_columns' => ['sale_field', 'csv_columns'], 'mo_sku_aliases' => ['alias_key'], 'mo_recycle_bin' => ['group_key']];
 
-    /** Missing tables / columns the importer needs: ['table x', 'column y.z'] – empty when the database is up to date. */
-    public static function selfCheck(): array
+    /** Which file brings a table / column (so the message can say what to run). */
+    public const FILES = ['t_sales' => 'database/schema/baseline.sql (php artisan mo:install)', 't_sale_imports' => 'database/schema/baseline.sql (php artisan mo:install)', 't_sale_import_errors' => 'database/schema/baseline.sql (php artisan mo:install)', 'marketplace_sale_columns' => 'database/schema/baseline.sql (php artisan mo:install)',
+        't_sales.sale_source' => '2026_11_12_000008_mo_sales_history.php', 't_sales.cost_source' => '2026_11_21_000022_sales_lines.php', 'mo_recycle_bin' => '2026_11_21_000022_sales_lines.php', 'mo_sku_aliases' => '2026_11_21_000023_sales_import.php', 't_sale_imports.replaced_rows' => '2026_11_21_000023_sales_import.php', 't_sale_imports.stats_json' => '2026_11_21_000023_sales_import.php'];
+
+    /** Missing tables / columns the importer needs: ['table x', 'column y.z'] – empty when the database is up to date. $has = a probe for tests: fn (table, ?column) => bool. */
+    public static function selfCheck(?callable $has = null): array
     {
-        $miss = [];
-        try { foreach (self::NEEDS as $t => $cols) { if (! Schema::hasTable($t)) { $miss[] = "table $t"; continue; } foreach ($cols as $c) if (! Schema::hasColumn($t, $c)) $miss[] = "column $t.$c"; } }
+        $has ??= fn (string $t, ?string $c = null) => $c === null ? Schema::hasTable($t) : Schema::hasColumn($t, $c); $miss = [];
+        try { foreach (self::NEEDS as $t => $cols) { if (! $has($t)) { $miss[] = "table $t"; continue; } foreach ($cols as $c) if (! $has($t, $c)) $miss[] = "column $t.$c"; } }
         catch (\Throwable $e) { return []; }      // the check never blocks when the schema cannot be read
         return $miss;
     }
 
-    public static function selfCheckMessage(): ?string
+    /** The missing items grouped by the file that brings them, in the order the files must run. */
+    public static function selfCheckFiles(?callable $has = null): array
     {
-        $m = self::selfCheck();
-        return $m ? 'The database is not up to date for the sales module. Run the migrations (php artisan migrate) – missing: ' . implode(', ', $m) . '.' : null;
+        $by = [];
+        foreach (self::selfCheck($has) as $m) { $key = preg_replace('/^(table|column) /', '', $m); $by[self::FILES[$key] ?? self::FILES[explode('.', $key)[0]] ?? 'the newest migrations (php artisan migrate)'][] = $m; }
+        ksort($by); $base = array_filter($by, fn ($k) => str_starts_with($k, 'database/schema'), ARRAY_FILTER_USE_KEY);
+        return $base + array_diff_key($by, $base);
+    }
+
+    public static function selfCheckMessage(?callable $has = null): ?string
+    {
+        $f = self::selfCheckFiles($has); if (! $f) return null;
+        return 'The database is not up to date for the sales module. Run these files, in this order (php artisan migrate runs them for you): ' . implode('; ', array_map(fn ($file, $m) => $file . ' (missing: ' . implode(', ', $m) . ')', array_keys($f), $f)) . '.';
     }
 
     // ---------- R-A_SALES-3: shop + month from the file name ----------
@@ -207,7 +220,7 @@ class SalesImport
             $batch = (int) DB::table('t_sale_imports')->insertGetId(RecordService::fillNotNull('t_sale_imports', ['fk_id_ent' => $ent, 'fk_id_branch' => $shop->id, 'fk_id_marketplace' => $shop->fk_id_marketplace, 'import_nature' => $totals ? 'Totals' : 'Normal', 'file_name' => mb_substr($fileName, 0, 255), 'period_month' => $m, 'period_year' => $y,
                 'marketplace_fee' => (float) $d['fee'], 'fee_source' => 'typed', 'status' => 'Pending', 'imported_by' => $u->id ?? null, 'imported_at' => now(), 'replaced_rows' => $replaced] + self::vaOf($shop, $m, $y)));
             $st = ['saved' => 0, 'active' => 0, 'ds' => 0, 'unmatched' => 0, 'errors' => 0, 'skipped' => 0, 'out_of_period' => 0, 'moved' => 0, 'merged' => 0, 'qty' => 0, 'sale' => 0.0, 'buy' => 0.0, 'profit' => 0.0, 'cost_current' => 0, 'cost_product' => 0, 'file_rows' => count($csv['rows'])];
-            $errors = []; $seen = []; $nosku = []; $newKeys = []; $unmatchedRows = [];
+            $errors = []; $seen = []; $nosku = []; $newKeys = []; $unmatchedRows = []; $fmts = [];
             $from = sprintf('%04d-%02d-01', $y, $m); $to = date('Y-m-t', strtotime($from)); $cur = Fx::code((int) $shop->fk_id_payout_currency ?: null, $ent);
             $err = function (int $ln, string $order, string $sku, string $why, array $row, ?int $in = null) use (&$errors, &$st, $batch) { $st['errors']++; $errors[] = ['line' => $ln, 'order_no' => $order, 'sku' => $sku, 'reason' => $why, 'batch' => $in];
                 DB::table('t_sale_import_errors')->insert(['fk_id_import' => $batch, 'row_no' => $ln, 'order_no' => mb_substr($order, 0, 100), 'sku' => mb_substr($sku, 0, 100), 'reason' => mb_substr($why, 0, 255), 'raw_csv' => json_encode($row, JSON_UNESCAPED_UNICODE), 'f_resolved' => 0, 'f_unmatched' => 0, 'created_at' => now()]); };
@@ -226,7 +239,7 @@ class SalesImport
                 if ($total === false) { $err($ln, $v['order_no'], $v['sku'], "Total Amount '{$v['total_amount']}' is not a number", $row); continue; }
                 if ($rate === null && $total === null) { $err($ln, $v['order_no'], $v['sku'], 'Sale Rate and Total Amount are both empty', $row); continue; }
                 if ($rate === null) $rate = round($total / $qty, 2); if ($total === null) $total = round($rate * $qty, 2);
-                $date = Parse::date($v['order_date']);
+                $date = Parse::date($v['order_date']); if ($date !== false && $date !== '') { $df = Parse::dateFormat($v['order_date']); $fmts[$df] = ($fmts[$df] ?? 0) + 1; }
                 if ($date === false || $date === '') { $err($ln, $v['order_no'], $v['sku'], "Order Date '{$v['order_date']}' is not a date format the system knows", $row); continue; }
                 $isNo = $v['sku'] === ''; $sku = $v['sku'];
                 if ($isNo) { $sku = self::noSku($v['order_no'], $v['product_info'], $qty, $total); $nosku[$sku] = ($nosku[$sku] ?? 0) + 1; if ($nosku[$sku] > 1) $sku .= '-' . $nosku[$sku]; }
@@ -273,6 +286,10 @@ class SalesImport
                 $now = DB::table('t_sales')->whereIn('id', array_column($unmatchedRows, 'id'))->get(['id', 'sale_source', 'ds_match_count', 'ds_note'])->keyBy('id');
                 $unmatchedRows = array_values(array_filter(array_map(fn ($r) => ($now[$r['id']]->sale_source ?? '') === 'unmatched' ? ['best' => (int) $now[$r['id']]->ds_match_count . '/5', 'why' => $now[$r['id']]->ds_note] + $r : null, $unmatchedRows)));
             }
+            // the date format that was read: shown, and remembered per marketplace so a change of format is noticed
+            arsort($fmts); $dateFormat = $fmts ? (string) array_key_first($fmts) : null; $lastFmt = (string) Settings::get('SALE_DATE_FORMAT@' . (int) $shop->fk_id_marketplace, $ent, '');
+            if ($dateFormat && count($fmts) > 1) $warnings[] = 'Order Date is written in ' . count($fmts) . ' ways in this file: ' . implode(', ', array_map(fn ($k, $n) => "$k ($n)", array_keys($fmts), $fmts));
+            if ($dateFormat && $lastFmt !== '' && $lastFmt !== $dateFormat) $warnings[] = "Order Date is read as $dateFormat; the last file of this marketplace was $lastFmt – check the dates of a few lines";
             foreach (['sale', 'buy', 'profit'] as $k) $st[$k] = round($st[$k], 2);
             if ($st['saved'] + $st['errors'] + $st['skipped'] === 0) throw new \InvalidArgumentException('The CSV has a header row but no sale rows.');
             $proofOk = $st['file_rows'] === $st['saved'] + $st['errors'] + $st['skipped'];
@@ -285,11 +302,12 @@ class SalesImport
             $inBatch = $st['saved'] - $st['moved'];
             DB::table('t_sale_imports')->where('id', $batch)->update(['total_rows' => $st['file_rows'], 'saved_rows' => $inBatch, 'error_rows' => $st['errors'], 'skipped_rows' => $st['skipped'], 'out_of_period_rows' => $st['out_of_period'], 'warnings_json' => json_encode($warnings), 'stats_json' => json_encode($st), 'updated_at' => now()]);
             $msg = "{$st['saved']} sale line(s) imported: {$st['active']} active inventory, {$st['ds']} drop shipping, {$st['unmatched']} not matched.";
-            $res = ['message' => $msg, 'batch' => $batch, 'applied' => $apply, 'shop' => $label, 'month' => $mn, 'stats' => $st + ['fee' => (float) $d['fee'], 'va_share_pct' => 0.0], 'warnings' => $warnings, 'detected' => $csv['detected'] ?? null, 'file_detected' => $fn['detected'] ?? null,
+            $res = ['message' => $msg, 'batch' => $batch, 'applied' => $apply, 'shop' => $label, 'month' => $mn, 'stats' => $st + ['fee' => (float) $d['fee'], 'va_share_pct' => 0.0], 'warnings' => $warnings, 'detected' => $csv['detected'] ?? null, 'date_format' => $dateFormat ? ['field' => 'Order Date', 'read_as' => $dateFormat, 'last' => $lastFmt ?: null, 'text' => "Order Date read as $dateFormat" . ($lastFmt && $lastFmt === $dateFormat ? ' (as last time)' : '')] : null, 'file_detected' => $fn['detected'] ?? null,
                 'proof' => ['text' => "file rows {$st['file_rows']} = saved {$st['saved']} + errors {$st['errors']} + skipped {$st['skipped']}", 'ok' => $proofOk], 'diff' => $diff, 'errors' => array_slice($errors, 0, 100), 'errors_more' => max(0, count($errors) - 100),
                 'unmatched' => $unmatchedRows, 'unmatched_more' => max(0, $st['unmatched'] - count($unmatchedRows)), 'out_of_period' => ['count' => $st['out_of_period'] + $st['moved'], 'mode' => $d['out_mode'] ?? 'keep', 'text' => ($st['out_of_period'] + $st['moved']) ? ($st['out_of_period'] + $st['moved']) . " lines dated outside $mn" : null]];
             if (! $apply) { DB::rollBack(); return $res; }
             if (! $proofOk) throw new \InvalidArgumentException('The rows of the file do not add up (' . $res['proof']['text'] . '). Nothing was imported.');
+            if ($dateFormat) Settings::set('SALE_DATE_FORMAT@' . (int) $shop->fk_id_marketplace, $dateFormat, $ent, $u->id ?? null);
             $st['unmatched'] ? TaskEngine::open('SAL_UNMATCHED', [$shop->id, $period], "{$st['unmatched']} lines of {$shop->shop_no} " . date('M Y', strtotime($from)) . ' not matched', ['ent' => $ent, 'module' => 't_branches', 'record_id' => (int) $shop->id, 'fix_url' => "#/sales-import?fix=$batch"])
                 : TaskEngine::close('SAL_UNMATCHED', [$shop->id, $period], 'All lines matched');
             TaskEngine::close('SAL_MONTH_MISSING', [$shop->id, $period], 'Imported');

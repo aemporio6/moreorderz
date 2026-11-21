@@ -33,6 +33,7 @@ class MoNightly extends Command
         $dig = \App\Services\Connect\Messenger::digests();
         $this->line("Subscriptions overdue: $subs new task(s) · task digests queued: $dig");
         \App\Services\SaleLines::purgeBin();   // the recycle bin keeps deleted sale lines for 30 days
+        $nd = \App\Services\DsMatch::digest(); if ($nd) $this->line("Not matched digest: $nd person(s) told");
         \App\Services\Carriers::applyDue();      // carrier / packing rates whose start day has come
         $sr = \App\Services\ShopReminders::monthly(); if ($sr) $this->line("Shop reminders made from templates: $sr");
         $mm = \App\Services\SalesImport::missingMonths(); if ($mm) $this->line("Months without a sales import: $mm new task(s)");
