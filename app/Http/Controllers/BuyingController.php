@@ -231,7 +231,7 @@ class BuyingController extends Controller
     public function landed(Request $r, int $id)
     {
         $this->can($r, 'buying.COST');
-        $d = $r->validate(['freight' => 'nullable|numeric|min:0', 'duty' => 'nullable|numeric|min:0', 'other' => 'nullable|numeric|min:0', 'final' => 'boolean']);
+        $d = $r->validate(['freight' => 'nullable|numeric|min:0', 'duty' => 'nullable|numeric|min:0', 'other' => 'nullable|numeric|min:0', 'final' => 'boolean', 'freight_method' => 'nullable|in:QUANTITY,VALUE,WEIGHT,CBM', 'duty_method' => 'nullable|in:QUANTITY,VALUE,WEIGHT,CBM', 'other_method' => 'nullable|in:QUANTITY,VALUE,WEIGHT,CBM', 'loss' => 'nullable|in:ABSORB,WRITE_OFF']);
         return $this->run(fn () => Buy::landedCost($id, $d) + ['message' => ! empty($d['final']) ? 'Landed cost is FINAL' : 'Landed cost saved (provisional)']);
     }
 

@@ -2653,8 +2653,12 @@
       async v => { const r = await api('shipment', { method: 'POST', body: { ...v, po: +b.dataset.ship } }); again(); return r; }));
     $$('#main [data-rcv]').forEach(b => b.onclick = () => receiveForm(+b.dataset.rcv, again));
     $$('#main [data-post]').forEach(b => b.onclick = () => act(`grn/${b.dataset.post}/post`, {}, again));
-    $$('#main [data-lc]').forEach(b => b.onclick = () => miniForm('Landed cost', 'Freight and other costs are shared by quantity, duty by value. Units already sold get their cost corrected.', [{ name: 'freight', label: 'Freight (' + S.boot.base_currency + ')', type: 'number', value: 0 }, { name: 'duty', label: 'Customs duty', type: 'number', value: poOf(+b.dataset.lc).duty_paid || 0, help: poOf(+b.dataset.lc).duty_paid ? 'Filled in from the customs entries of this PO (paid amount where paid).' : '' }, { name: 'other', label: 'Other costs', type: 'number', value: 0 },
-      { name: 'final', label: 'This is final (cannot be changed after)', type: 'check' }], async v => { const r = await api(`po/${b.dataset.lc}/landed`, { method: 'POST', body: v }); again(); return r; }));
+    $$('#main [data-lc]').forEach(b => b.onclick = () => { const M = [['', 'As set in Choices'], ['QUANTITY', 'By quantity'], ['VALUE', 'By value'], ['WEIGHT', 'By weight (cartons)'], ['CBM', 'By volume (cartons)']];      // R-B_SOURCING-44
+      miniForm('Landed cost of the cycle', 'The freight-cost rows and the customs duty of the cycle are taken by themselves (the paid amount where paid; import VAT never). Type here only what is on no row. Units already sold get their cost corrected.',
+        [{ name: 'freight', label: 'Extra freight, on no freight-cost row (' + S.boot.base_currency + ')', type: 'number', value: 0 }, { name: 'duty', label: 'Extra duty, on no customs entry', type: 'number', value: 0 }, { name: 'other', label: 'Other costs (split by value)', type: 'number', value: 0 },
+          { name: 'freight_method', label: 'Freight split', options: M }, { name: 'duty_method', label: 'Duty split', options: M }, { name: 'loss', label: 'Damaged / missing units', options: [['', 'As set in Choices'], ['ABSORB', 'Carried by the accepted units'], ['WRITE_OFF', 'Written off (stock loss + claim)']] },
+          { name: 'final', label: 'This is final (cannot be changed after)', type: 'check' }],
+        async v => { const r = await api(`po/${b.dataset.lc}/landed`, { method: 'POST', body: v }); again(); if (r.warnings && r.warnings.length) toast(r.warnings.join(' · '), 'err'); return r; }); });
   }
   async function receiveForm(shipmentId, again) {
     busy(true); let L, p; try { L = (await api(`shipment/${shipmentId}/lines`)).lines; p = await bpick(); } finally { busy(false); }

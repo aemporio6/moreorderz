@@ -331,57 +331,99 @@ class BuyingService
      * Split (R-B_SOURCING default): freight and other by quantity, duty by value, over the units received of this PO.
      * Each lot gets the new unit cost; units already sold have their cost of sale corrected; the extra cost is accrued (1210) until its bill is paid.
      */
+    /**
+     * Landed cost of a cycle (R-B_SOURCING-44 / IC-4), started from one of its POs. Products = PRODUCT lines of the cycle's POs (FEE / COST lines only through their
+     * freight-cost row, samples never), value in base at each PO's rate. Costs = the freight-cost rows (paid amount when paid), the customs duty (paid amount when paid;
+     * import VAT never) and the amounts typed for this run. LandedEngine spreads them; the lots get the unit cost and its formula; the ledger books only the difference
+     * to the run before: stock (1200) / cost of sale (5000), stock loss (5500, WRITE_OFF), the supplier for the missing units (2000), the costs on the way (1210).
+     */
     public static function landedCost(int $poId, array $d): array
     {
         return DB::transaction(function () use ($poId, $d) {
-            $po = self::po($poId, true); $ent = (int) $po->fk_id_ent;
-            $lots = DB::table('fin_lots')->where('po_id', $poId)->where('company_id', $ent)->where('source', 'GRN')->lockForUpdate()->get();
-            if ($lots->isEmpty()) throw new \RuntimeException('Nothing of this PO is received yet. Post the GRN first.');
+            $po = self::po($poId, true); $ent = (int) $po->fk_id_ent; $cyc = $po->fk_id_cycle ? DB::table('t_src_cycles')->where('id', $po->fk_id_cycle)->first() : null;
+            $pos = DB::table('t_src_po')->where('f_active', 1)->when($cyc, fn ($q) => $q->where('fk_id_cycle', $cyc->id), fn ($q) => $q->where('id', $poId))->get()->keyBy('id'); $poIds = $pos->keys()->all();
+            $hist = $cyc && strtoupper((string) $cyc->cycle_type) === 'HISTORICAL'; $final = ! empty($d['final']);
+            $lots = DB::table('fin_lots')->whereIn('po_id', $poIds)->where('company_id', $ent)->where('source', 'GRN')->lockForUpdate()->get();
             if ($lots->where('landed_status', 'FINAL')->isNotEmpty()) throw new \RuntimeException('The landed cost of this PO is already FINAL.');
-            $freight = round((float) ($d['freight'] ?? 0), 2); $duty = round((float) ($d['duty'] ?? 0), 2); $other = round((float) ($d['other'] ?? 0), 2);
-            if ($freight < 0 || $duty < 0 || $other < 0) throw new \InvalidArgumentException('Costs cannot be negative.');
-            $rate = (float) ($po->exchange_rate ?: 1);
-            $prev = DB::table('t_src_landed_cost')->where('fk_id_po', $poId)->where('f_active', 1)->whereNull('superseded_by')->orderByDesc('id')->first();
-            // product cost of each lot = PO price × rate (the provisional cost at GRN)
-            $base = []; $qtyAll = 0; $valAll = 0.0;
-            foreach ($lots as $l) {
-                $orig = (int) $l->qty + (int) DB::table('fin_lots')->where('source', 'SPLIT')->where('source_id', $l->id)->sum('qty');
-                $unit = round((float) DB::table('t_src_po_lines')->where('fk_id_po', $poId)->where('fk_id_product', $l->fk_id_product)->value('unit_price') * $rate, 4);
-                $base[$l->id] = ['qty' => $orig, 'unit' => $unit]; $qtyAll += $orig; $valAll += $orig * $unit;
+            foreach (['freight', 'duty', 'other'] as $k) if ((float) ($d[$k] ?? 0) < 0) throw new \InvalidArgumentException('Costs cannot be negative.');
+            // products of the cycle
+            $prod = [];
+            foreach (DB::table('t_src_po_lines as l')->leftJoin('t_product_vendors as p', 'p.id', '=', 'l.fk_id_product')->whereIn('l.fk_id_po', $poIds)->where('l.f_active', 1)->where(fn ($q) => $q->whereNull('l.line_type')->orWhere('l.line_type', '')->orWhere('l.line_type', 'PRODUCT'))->whereNotNull('l.fk_id_product')->get(['l.*', 'p.SKU_VENDOR']) as $l) {
+                $rate = (float) ($pos[$l->fk_id_po]->exchange_rate ?: 1); $lt = $l->line_total !== null && (float) $l->line_total != 0.0 ? (float) $l->line_total : (float) $l->qty_ordered * (float) $l->unit_price;
+                $k = (int) $l->fk_id_product; $prod[$k] ??= ['name' => $l->SKU_VENDOR ?: "#$k", 'value' => 0.0, 'ordered' => 0.0, 'gross' => 0.0, 'cbm' => 0.0, 'accepted' => 0.0, 'damaged' => 0.0, 'missing' => 0.0, 'received' => 0.0, 'has_grn' => false, 'po' => (int) $l->fk_id_po];
+                $prod[$k]['value'] += $lt * $rate; $prod[$k]['ordered'] += (float) $l->qty_ordered;
             }
-            $toStock = 0.0; $toCogs = 0.0; $n = 0; $weighted = 0.0;
+            if (! $prod) throw new \RuntimeException('This PO has no product lines.');
+            foreach ($prod as &$p) $p['value'] = round($p['value'], 2); unset($p);
+            foreach (DB::table('t_src_cartons as c')->leftJoin('t_src_cycle_products as cp', 'cp.id', '=', 'c.fk_id_cycle_product')->where('c.f_active', 1)->where(fn ($q) => $q->whereIn('c.fk_id_po', $poIds)->when($cyc, fn ($w) => $w->orWhere('c.fk_id_cycle', $cyc->id)))->get(['cp.fk_id_product', 'c.total_gross_weight', 'c.total_cbm']) as $c)
+                if (isset($prod[(int) $c->fk_id_product])) { $prod[(int) $c->fk_id_product]['gross'] += (float) $c->total_gross_weight; $prod[(int) $c->fk_id_product]['cbm'] += (float) $c->total_cbm; }
+            $grnIds = DB::table('t_src_grn as g')->leftJoin('t_src_shipments as s', 's.id', '=', 'g.fk_id_shipment')->where('g.f_active', 1)->where('g.posting_status', 'POSTED')->where(fn ($q) => $q->whereIn('s.fk_id_po', $poIds)->when($cyc, fn ($w) => $w->orWhere('g.fk_id_cycle', $cyc->id)))->distinct()->pluck('g.id')->all();
+            foreach (DB::table('t_src_grn_lines')->whereIn('fk_id_grn', $grnIds ?: [0])->get() as $g) { $k = (int) $g->fk_id_product; if (! isset($prod[$k])) continue;
+                $prod[$k]['received'] += (float) $g->received_qty; $prod[$k]['damaged'] += (float) $g->damaged_qty; $prod[$k]['missing'] += (float) $g->missing_qty; $prod[$k]['accepted'] += (float) $g->received_qty - (float) $g->damaged_qty; $prod[$k]['has_grn'] = true; }
+            // costs
+            $costs = []; $method = fn (string $kind) => match ($kind) { 'FREIGHT' => ! empty($d['freight_method']) ? LandedEngine::method($d['freight_method']) : LandedEngine::defaultMethod('FREIGHT', $ent, $hist), 'DUTY' => ! empty($d['duty_method']) ? LandedEngine::method($d['duty_method']) : LandedEngine::defaultMethod('DUTY', $ent, $hist), default => ! empty($d['other_method']) ? LandedEngine::method($d['other_method']) : 'VALUE' };
+            if ($cyc) foreach (DB::table('t_src_freight_costs')->where('fk_id_cycle', $cyc->id)->where('f_active', 1)->get() as $f) {
+                $amt = $f->pay_status === 'PAID' && $f->paid_base_amount !== null ? (float) $f->paid_base_amount : (float) $f->base_amount; if ($amt <= 0) continue;      // paid rows use what was paid (R-59)
+                $kind = $f->source_po_line_id ? 'OTHER' : LandedEngine::kindOfCostType($f->cost_type); $costs[] = [($f->cost_type ?: 'Freight') . ' ' . $f->freight_code, $amt, $hist ? 'VALUE' : $method($kind)];
+            }
+            if ($cyc) foreach (DB::table('t_src_customs')->where('fk_id_cycle', $cyc->id)->where('f_active', 1)->get() as $c) {
+                $amt = $c->pay_status === 'PAID' && $c->paid_base_amount !== null ? (float) $c->paid_base_amount : (float) $c->base_amount; if ($amt > 0) $costs[] = ['Duty ' . $c->customs_code, $amt, $hist ? 'VALUE' : $method('DUTY')];      // duty only – import VAT never
+            }
+            foreach (['freight' => ['Freight (typed)', 'FREIGHT'], 'duty' => ['Duty (typed)', 'DUTY'], 'other' => ['Other (typed)', 'OTHER']] as $k => [$label, $kind]) if (round((float) ($d[$k] ?? 0), 2) > 0) $costs[] = [$label, round((float) $d[$k], 2), $hist ? 'VALUE' : $method($kind)];
+            $loss = strtoupper((string) ($d['loss'] ?? '')) ?: (Choices::get('LC_LOSS_UNITS', $ent) ?: 'ABSORB'); if (! in_array($loss, ['ABSORB', 'WRITE_OFF'], true)) $loss = 'ABSORB';
+            $calc = LandedEngine::split($prod, $costs, $loss);
+            if ($final && array_filter($prod, fn ($p) => ! $p['has_grn'])) throw new \RuntimeException('Before every product is received the run can only be PROVISIONAL.');
+            if ($final && $cyc && array_filter(CycleAlerts::quantities((int) $cyc->id), fn ($q) => $q['chip'] === 'Mismatch')) throw new \RuntimeException('The quantity check of this cycle shows a Mismatch. Make the GRN lines add up before the landed cost is FINAL.');      // R-39
+            $prev = DB::table('t_src_landed_cost')->where('f_active', 1)->whereNull('superseded_by')->where(fn ($q) => $cyc ? $q->where('fk_id_cycle', $cyc->id) : $q->where('fk_id_po', $poId))->orderByDesc('id')->first();
+            // apply to the lots: the damaged units move to a lot of their own at no cost (their cost is carried, or written off); every unit left takes the new cost
+            $dmgLoc = StockService::systemLocation($ent, 'DAMAGED'); $toStock = 0.0; $toCogs = 0.0; $n = 0;
             foreach ($lots as $l) {
-                $b = $base[$l->id];
-                $extra = $b['qty'] > 0 ? ($qtyAll > 0 ? ($freight + $other) * $b['qty'] / $qtyAll : 0) + ($valAll > 0 ? $duty * ($b['qty'] * $b['unit']) / $valAll : 0) : 0;
-                $new = round($b['unit'] + ($b['qty'] > 0 ? $extra / $b['qty'] : 0), 4);
-                $family = DB::table('fin_lots')->where('id', $l->id)->orWhere(fn ($w) => $w->where('source', 'SPLIT')->where('source_id', $l->id))->get();      // the lot and the lots split from it
-                foreach ($family as $f) {
-                    $delta = $new - (float) $f->unit_cost_gbp;
-                    $inStock = (int) DB::table('fin_lot_balances')->where('fk_id_lot', $f->id)->sum('qty');
-                    $sold = (int) DB::table('fin_lot_consumption')->where('lot_id', $f->id)->sum('qty');
-                    $toStock += $delta * $inStock; $toCogs += $delta * $sold;
-                    DB::table('fin_lots')->where('id', $f->id)->update(['unit_cost_gbp' => $new, 'landed_status' => ! empty($d['final']) ? 'FINAL' : 'PROVISIONAL']);
-                    DB::table('fin_lot_consumption')->where('lot_id', $f->id)->update(['unit_cost_gbp' => $new]);
-                    DB::table('t_stock_movements')->where('fk_id_lot', $f->id)->update(['unit_cost_gbp' => $new]);
-                    if (! empty($d['final'])) TaskEngine::close('SRC_LOT_NO_COST', CycleAlerts::key('SRC_LOT_NO_COST', (int) $f->id), 'Landed cost is final');
+                $r = $calc['products'][(int) $l->fk_id_product] ?? null; if (! $r) continue; $new = (float) $r['unit'];
+                $dmgBal = (int) DB::table('fin_lot_balances')->where('fk_id_lot', $l->id)->where('fk_id_location', $dmgLoc)->where('qty', '>', 0)->sum('qty');
+                if ($dmgBal > 0) {
+                    $dl = DB::table('fin_lots')->insertGetId(['company_id' => $ent, 'sku' => $l->sku, 'po_id' => $l->po_id, 'source' => 'DAMAGED', 'source_id' => $l->id, 'received_date' => $l->received_date, 'qty' => $dmgBal, 'qty_left' => $dmgBal, 'unit_cost_gbp' => 0, 'created_at' => now(), 'lot_code' => mb_substr(($l->lot_code ?: 'LOT' . $l->id) . '-DMG', 0, 60),
+                        'fk_id_product' => $l->fk_id_product, 'fk_id_owner' => $l->fk_id_owner, 'fk_id_cycle' => $l->fk_id_cycle, 'landed_status' => $final ? 'FINAL' : 'PROVISIONAL', 'cost_formula' => $loss === 'WRITE_OFF' ? 'Damaged on arrival: written off' : 'Damaged on arrival: carried by the accepted units', 'cost_source' => 'DAMAGED']);
+                    DB::table('fin_lot_balances')->where('fk_id_lot', $l->id)->where('fk_id_location', $dmgLoc)->update(['fk_id_lot' => $dl]); DB::table('fin_lots')->where('id', $l->id)->update(['qty' => DB::raw("qty - $dmgBal"), 'qty_left' => DB::raw("GREATEST(qty_left - $dmgBal, 0)")]);
+                    DB::table('t_stock_movements')->where('fk_id_lot', $l->id)->where('fk_id_location', $dmgLoc)->update(['fk_id_lot' => $dl, 'unit_cost_gbp' => 0]);
+                    $toStock -= $dmgBal * (float) $l->unit_cost_gbp;
                 }
-                $weighted += $new * $b['qty']; $n++;
+                $family = DB::table('fin_lots')->where('id', $l->id)->orWhere(fn ($w) => $w->where('source', 'SPLIT')->where('source_id', $l->id))->get();      // the lot and the lots split from it (owners)
+                foreach ($family as $f) {
+                    $delta = $new - (float) $f->unit_cost_gbp; $inStock = (int) DB::table('fin_lot_balances')->where('fk_id_lot', $f->id)->sum('qty'); $sold = (int) DB::table('fin_lot_consumption')->where('lot_id', $f->id)->sum('qty');
+                    $toStock += $delta * $inStock; $toCogs += $delta * $sold;
+                    DB::table('fin_lots')->where('id', $f->id)->update(['unit_cost_gbp' => $new, 'landed_status' => $final ? 'FINAL' : 'PROVISIONAL', 'cost_formula' => mb_substr($r['formula'], 0, 2000), 'cost_source' => $final ? 'FINAL' : 'PROVISIONAL']);
+                    DB::table('fin_lot_consumption')->where('lot_id', $f->id)->update(['unit_cost_gbp' => $new]); DB::table('t_stock_movements')->where('fk_id_lot', $f->id)->update(['unit_cost_gbp' => $new]);
+                    if ($final) TaskEngine::close('SRC_LOT_NO_COST', CycleAlerts::key('SRC_LOT_NO_COST', (int) $f->id), 'Landed cost is final');
+                }
+                $n++;
             }
-            $toStock = round($toStock, 2); $toCogs = round($toCogs, 2); $total = round($toStock + $toCogs, 2);
-            if (abs($total) >= 0.01) {
-                $lines = [];
-                if (abs($toStock) >= 0.01) $lines[] = $toStock > 0 ? ['account' => '1200', 'debit' => $toStock] : ['account' => '1200', 'credit' => -$toStock];
-                if (abs($toCogs) >= 0.01) $lines[] = $toCogs > 0 ? ['account' => '5000', 'debit' => $toCogs] : ['account' => '5000', 'credit' => -$toCogs];
-                $lines[] = $total > 0 ? ['account' => '1210', 'credit' => $total] : ['account' => '1210', 'debit' => -$total];
-                Ledger::post($ent, Ledger::openDate($ent), 'LANDED_COST', $poId, $lines, ['memo' => "Landed cost {$po->po_number}: freight $freight, duty $duty, other $other"]);
-            }
-            $lc = DB::table('t_src_landed_cost')->insertGetId(['fk_id_ent' => $ent, 'lc_code' => Numbering::next('LC', $ent), 'fk_id_cycle' => $po->fk_id_cycle, 'fk_id_po' => $poId, 'product_cost' => round($valAll, 2), 'freight_cost' => $freight, 'customs_duty' => $duty,
-                'other_cost' => $other, 'freight_method' => 'QUANTITY', 'duty_method' => 'VALUE', 'total_cost' => round($valAll + $freight + $duty + $other, 2), 'accepted_qty' => $qtyAll, 'landed_cost_per_unit' => $qtyAll > 0 ? round($weighted / $qtyAll, 4) : 0,
-                'created_by' => Context::userId(), 'f_active' => 1, 'created_at' => now(), 'run_version' => ($prev->run_version ?? 0) + 1, 'landed_status' => ! empty($d['final']) ? 'FINAL' : 'PROVISIONAL']);
+            // what this run books, against what the run before booked
+            $shares = round(array_sum(array_map(fn ($r) => $r['extra'], $calc['products'])), 2); $lossTot = round(array_sum(array_map(fn ($r) => $r['loss'], $calc['products'])), 2);
+            $missBy = []; foreach ($prod as $k => $p) if ($p['has_grn'] && $p['ordered'] > 0) { $mv = round($p['value'] - $p['value'] * $p['received'] / $p['ordered'], 2); $sup = (int) $pos[$p['po']]->fk_id_supplier; $missBy[$sup] = round(($missBy[$sup] ?? 0) + $mv, 2); }
+            $missing = round(array_sum($missBy), 2); $prevMissBy = $prev && $prev->warnings && ($j = json_decode((string) $prev->warnings, true)) && isset($j['missing_by']) ? $j['missing_by'] : [];
+            $toStock = round($toStock, 2); $toCogs = round($toCogs, 2); $dLoss = round($lossTot - (float) ($prev->loss_total ?? 0), 2); $lines = [];
+            if (abs($toStock) >= 0.01) $lines[] = $toStock > 0 ? ['account' => '1200', 'debit' => $toStock] : ['account' => '1200', 'credit' => -$toStock];
+            if (abs($toCogs) >= 0.01) $lines[] = $toCogs > 0 ? ['account' => '5000', 'debit' => $toCogs] : ['account' => '5000', 'credit' => -$toCogs];
+            if (abs($dLoss) >= 0.01) $lines[] = $dLoss > 0 ? ['account' => '5500', 'debit' => $dLoss, 'memo' => 'Damaged / missing units written off'] : ['account' => '5500', 'credit' => -$dLoss];
+            $sup = 0.0; foreach ($missBy + $prevMissBy as $sid => $_) { $dm = round(($missBy[$sid] ?? 0) - (float) ($prevMissBy[$sid] ?? 0), 2); if (abs($dm) >= 0.01) { $lines[] = $dm > 0 ? ['account' => '2000', 'credit' => $dm, 'ref_id' => (int) $sid, 'memo' => 'Missing units: their value in the landed cost'] : ['account' => '2000', 'debit' => -$dm, 'ref_id' => (int) $sid]; $sup += $dm; } }
+            $rest = round($toStock + $toCogs + $dLoss - $sup, 2);      // the costs on the way (1210) close the entry – shares of this run less those booked before, and the rounding of the unit costs
+            if (abs($rest) >= 0.01) $lines[] = $rest > 0 ? ['account' => '1210', 'credit' => $rest] : ['account' => '1210', 'debit' => -$rest];
+            if (count($lines) > 1) Ledger::post($ent, Ledger::openDate($ent), 'LANDED_COST', $poId, $lines, ['memo' => "Landed cost {$po->po_number}" . ($cyc ? " (cycle {$cyc->cycle_code})" : '') . ": costs $shares, loss mode $loss"]);
+            $valAll = round(array_sum(array_column($prod, 'value')), 2); $accAll = array_sum(array_map(fn ($r) => $r['units'], $calc['products'])); $totAll = round(array_sum(array_map(fn ($r) => $r['total'], $calc['products'])), 2);
+            $sum = fn (string $w) => round(array_sum(array_map(fn ($c) => preg_match($w, $c[0]) ? $c[1] : 0, $costs)), 2);
+            $lc = DB::table('t_src_landed_cost')->insertGetId(['fk_id_ent' => $ent, 'lc_code' => Numbering::next('LC', $ent), 'fk_id_cycle' => $po->fk_id_cycle, 'fk_id_po' => $poId, 'product_cost' => $valAll, 'freight_cost' => $sum('/^(?!Duty|Other).*/'), 'customs_duty' => $sum('/^Duty/'),
+                'other_cost' => $sum('/^Other/'), 'freight_method' => $method('FREIGHT'), 'duty_method' => $method('DUTY'), 'total_cost' => $totAll, 'accepted_qty' => $accAll, 'landed_cost_per_unit' => $accAll > 0 ? round($totAll / $accAll, 4) : 0,
+                'created_by' => Context::userId(), 'f_active' => 1, 'created_at' => now(), 'run_version' => ($prev->run_version ?? 0) + 1, 'landed_status' => $final ? 'FINAL' : 'PROVISIONAL', 'loss_mode' => $loss, 'shares_total' => $shares, 'missing_value' => $missing, 'loss_total' => $lossTot,
+                'warnings' => json_encode(['warnings' => $calc['warnings'], 'missing_by' => $missBy])]);
+            foreach ($calc['products'] as $k => $r) DB::table('t_src_landed_lines')->insert(['fk_id_landed' => $lc, 'fk_id_product' => $k, 'product_value' => $r['value'], 'ordered_qty' => $prod[$k]['ordered'], 'accepted_qty' => $prod[$k]['has_grn'] ? $prod[$k]['accepted'] : $prod[$k]['ordered'], 'damaged_qty' => $prod[$k]['damaged'], 'missing_qty' => $prod[$k]['missing'],
+                'extra_cost' => $r['extra'], 'total_cost' => $r['total'], 'unit_cost' => $r['unit'], 'loss_amount' => $r['loss'], 'shares_json' => json_encode($r['shares']), 'formula' => $r['formula']]);
             if ($prev) DB::table('t_src_landed_cost')->where('id', $prev->id)->update(['superseded_by' => $lc]);
-            foreach ($lots->pluck('fk_id_product')->unique() as $pid) DB::table('t_product_vendors')->where('id', $pid)->update(['landing_price' => round((float) DB::table('fin_lots')->where('fk_id_product', $pid)->orderByDesc('received_date')->orderByDesc('id')->value('unit_cost_gbp'), 2)]);
-            EventBus::fire(! empty($d['final']) ? 'LANDED_FINAL' : 'LANDED_PROVISIONAL', 't_src_po', $poId, ['run' => $lc, 'to_stock' => $toStock, 'to_cost_of_sale' => $toCogs], $ent);
-            return ['run' => (int) $lc, 'to_stock' => $toStock, 'to_cost_of_sale' => $toCogs, 'unit_cost' => $qtyAll > 0 ? round($weighted / $qtyAll, 4) : 0.0, 'lots' => $n];
+            if ($loss === 'WRITE_OFF') foreach ($grnIds as $gid) { $cl = 0.0; foreach (DB::table('t_src_grn_lines')->where('fk_id_grn', $gid)->get() as $g) $cl += ((float) $g->damaged_qty + (float) $g->missing_qty) * (float) ($calc['products'][(int) $g->fk_id_product]['unit'] ?? 0);
+                DB::table('t_src_grn')->where('id', $gid)->update(['claim_base_amount' => round($cl, 2)]); }      // the written-off cost goes onto the supplier claim of the GRN
+            foreach (array_keys($calc['products']) as $pid) DB::table('t_product_vendors')->where('id', $pid)->update(['landing_price' => round((float) DB::table('fin_lots')->where('fk_id_product', $pid)->where('source', '<>', 'DAMAGED')->orderByDesc('received_date')->orderByDesc('id')->value('unit_cost_gbp'), 4)]);
+            EventBus::fire($final ? 'LANDED_FINAL' : 'LANDED_PROVISIONAL', 't_src_po', $poId, ['run' => $lc, 'to_stock' => $toStock, 'to_cost_of_sale' => $toCogs], $ent);
+            return ['run' => (int) $lc, 'to_stock' => $toStock, 'to_cost_of_sale' => $toCogs, 'loss' => $lossTot, 'unit_cost' => $accAll > 0 ? round($totAll / $accAll, 4) : 0.0, 'lots' => $n, 'warnings' => $calc['warnings'],
+                'products' => array_map(fn ($r) => ['unit' => $r['unit'], 'total' => $r['total'], 'loss' => $r['loss'], 'formula' => $r['formula']], $calc['products'])];
         });
     }
 

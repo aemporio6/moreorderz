@@ -538,3 +538,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-24 (21 Nov): sourcing alert registry R-B_SOURCING-26 + pipeline gaps R-17 BUILT (CycleAlerts, cycle Overview, 15-minute sweep). +13 register lines. 352 tests.
 - 7e-25 (21 Nov): due engine R-C-46 BUILT (DueEngine, Due dates screen, 11 due sources on real columns). +8 register lines. 355 tests.
 - 7e-26 (21 Nov): price per marketplace R-D-22 BUILT (ProductPrices, price guard, #/prices card). +5 register lines. 357 tests.
+- 7e-27 (21 Nov): landed-cost engine R-B_SOURCING-44 BUILT (LandedEngine, per-cycle run, ABSORB / WRITE_OFF with ledger). +6 register lines. 361 tests.

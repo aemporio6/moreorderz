@@ -134,14 +134,19 @@ class BuyingTest extends TestCase
         $this->assertSame(1, (int) DB::table('t_src_po')->where('id', $po)->value('f_paid_in_full'));
         $this->assertSame(-3930.00, Ledger::balance(1, '1000', 'BANK', $this->bank));
 
-        // landed cost: freight 495.00 (by quantity) + duty 198.00 (by value) over 990 units → +0.70 per unit
+        // landed cost (R-B_SOURCING-44, ABSORB): value 1,000 × 5.00 × 0.80 = 4,000 + freight 495 (by quantity) + duty 198 (by value) = 4,693, carried by the 980 accepted units → 4.7888;
+        // the 10 damaged units move to a lot of their own at no cost; the 10 missing units' value (40.00) is owed to the supplier (2000), the costs come off 1210
+        $sup0 = Ledger::balance(1, '2000', 'PARTY', $sup);
         $lc = Buy::landedCost($po, ['freight' => 495, 'duty' => 198, 'final' => true]);
-        $this->assertSame(4.70, $lc['unit_cost']);
-        $this->assertSame(693.00, $lc['to_stock']);
-        $lot = DB::table('fin_lots')->where('po_id', $po)->first();
-        $this->assertSame(['FINAL', 4.7], [$lot->landed_status, (float) $lot->unit_cost_gbp]);
+        $this->assertSame(4.7888, $lc['unit_cost']);
+        $this->assertSame(733.02, $lc['to_stock']);      // 980 × 0.7888 − 10 damaged × 4.00
+        $this->assertSame(-40.00, round(Ledger::balance(1, '2000', 'PARTY', $sup) - $sup0, 2));
+        $lot = DB::table('fin_lots')->where('po_id', $po)->where('source', 'GRN')->first();
+        $this->assertSame(['FINAL', 4.7888, 980], [$lot->landed_status, (float) $lot->unit_cost_gbp, (int) $lot->qty]);
+        $this->assertStringContainsString('= 4,693.00 ÷ 980 accepted (carry 20 damaged / missing) = 4.7888', $lot->cost_formula);
+        $this->assertSame([10, 0.0], [(int) DB::table('fin_lots')->where('po_id', $po)->where('source', 'DAMAGED')->value('qty'), (float) DB::table('fin_lots')->where('po_id', $po)->where('source', 'DAMAGED')->value('unit_cost_gbp')]);
         $this->assertFalse(TaskEngine::isOpen('SRC_LOT_NO_COST', \App\Services\CycleAlerts::key('SRC_LOT_NO_COST', (int) $lot->id)));
-        $this->assertSame(4653.00, Stock::value(1));                    // 990 × 4.70
+        $this->assertSame(4693.02, Stock::value(1));                    // 980 × 4.7888
         $this->assertSame(Stock::value(1), Ledger::balance(1, '1200'), 'stock value = stock account, to the penny');
         $this->assertTrue(Ledger::trialBalance(1)['balanced']);
         try { Buy::landedCost($po, ['freight' => 1]); $this->fail('final changed'); } catch (\RuntimeException $e) { $this->assertStringContainsString('already FINAL', $e->getMessage()); }
