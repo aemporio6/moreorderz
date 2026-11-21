@@ -344,4 +344,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - **Daily digest** (25): every morning each shop VA gets "n sale line(s) still not matched – 101A: 2, …" on the bell and by WhatsApp (template `NOT_MATCHED_DIGEST`), once a day.
 - **Masking** (26): supplier address (•••) and phone (••••••123) are masked on the drop-shipping list, record page and exports for people without the right `orders.dsSeeContact`; a masked value is never saved back over the real one.
 - Tests: 283 pass (5,445 checks); new `tests/Feature/SalesGapsTest.php` (6).
-- Register after this batch: BUILT 300 of 1,433 (21 %); Sales 44 of 155 (28 %).
+- Register after this batch: BUILT 301 of 1,433 (21 %); Sales 45 of 155 (29 %).
