@@ -216,9 +216,10 @@ class AlertRules
         $later = $urgent ? null : (PersonChannels::quietUntil($acc) ?? (! empty($r->wait_workday) ? PersonChannels::workdayFrom($acc) : null));
         foreach (json_decode($r->channels_json, true) ?: [] as $ch) {
             $to = null; $error = null;
-            if (in_array($ch, ['WHATSAPP', 'EMAIL'], true) && ! $r->is_locked && $acc && ! (int) ($acc->{$ch === 'WHATSAPP' ? 'wa_enabled' : 'email_enabled'} ?? 1)) continue;      // R-G_CORE-48: the person switched this channel off
-            if ($ch === 'WHATSAPP') { $to = $user->fk_id_account ? Connect\Messenger::whatsappOf((int) $user->fk_id_account) : null; if (! $to) $error = 'No WhatsApp number – add it on Alerts & Messages'; }
-            if ($ch === 'EMAIL') { $to = $user->fk_id_account ? Connect\Messenger::emailOf((int) $user->fk_id_account) : null; if (! $to) $error = 'No email on file'; }
+            $off = in_array($ch, ['WHATSAPP', 'EMAIL'], true) && ! $r->is_locked && $acc && ! (int) ($acc->{$ch === 'WHATSAPP' ? 'wa_enabled' : 'email_enabled'} ?? 1);      // R-G_CORE-48 / 46: switched off → FAILED at once with the reason
+            if ($off) { $to = null; $error = $ch === 'WHATSAPP' ? 'WhatsApp switched off for this person' : 'Email switched off for this person'; }
+            elseif ($ch === 'WHATSAPP') { $to = $user->fk_id_account ? Connect\Messenger::whatsappOf((int) $user->fk_id_account) : null; if (! $to) $error = 'No WhatsApp number – add it on Alerts & Messages'; }
+            if ($ch === 'EMAIL' && ! $off) { $to = $user->fk_id_account ? Connect\Messenger::emailOf((int) $user->fk_id_account) : null; if (! $to) $error = 'No email on file'; }
             $row = ['user_id' => $userId, 'task_id' => $taskId, 'rule_code' => $code, 'channel' => $ch, 'to_address' => $to, 'direction' => 'OUT', 'template_key' => $template ?? $r->template_key,
                 'subject' => $ch === 'EMAIL' ? mb_substr($m['subject'], 0, 200) : null, 'template_params' => json_encode($m['params']), 'event_key' => $key, 'text' => $m['text'],
                 'status' => $ch === 'INAPP' ? 'SENT' : ($error ? 'FAILED' : 'QUEUED'), 'error' => $error, 'send_after' => $ch !== 'INAPP' && ! $error && $later ? $later[0] : null, 'note' => $ch !== 'INAPP' && ! $error && $later ? $later[1] : null, 'sent_at' => $ch === 'INAPP' ? now() : null, 'failed_at' => $error ? now() : null, 'created_at' => now()];

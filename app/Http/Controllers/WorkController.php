@@ -155,6 +155,12 @@ class WorkController extends Controller
     public function taskEndSnooze(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskActions::endSnooze($id, $r->user())); }
     public function taskBulk(Request $r) { $in = $r->only(['owner', 'date', 'reason']); return $this->act(fn () => $r->boolean('apply') ? \App\Services\TaskBulk::apply($r->user(), (string) $r->input('action'), (array) $r->input('ids', []), $in) : \App\Services\TaskBulk::preview($r->user(), (string) $r->input('action'), (array) $r->input('ids', []), $in)); }
     public function taskDigestPreview(Request $r) { return $this->act(fn () => \App\Services\TaskDigest::preview($r->user(), $r->integer('user') ?: (int) $r->user()->id)); }      // R-G_CORE-45
+    /** R-G_CORE-54 message log (bosses), CSV, and the Messages tab of a task / record. */
+    public function messageLog(Request $r) { if (! \App\Services\MessageLog::boss($r->user())) abort(403, 'Only a Partner or Manager sees the whole message log.'); return \App\Services\MessageLog::rows($r->user(), $r->only(['person', 'channel', 'task', 'status', 'direction']), 25, $r->integer('page') ?: 1) + ['people' => DB::table('t_users')->where('f_active', 1)->orderBy('display_name')->get(['id', 'display_name as name'])]; }
+    public function messageLogCsv(Request $r) { try { $csv = \App\Services\MessageLog::csv($r->user(), $r->only(['person', 'channel', 'task', 'status', 'direction'])); } catch (\InvalidArgumentException $e) { abort(403, $e->getMessage()); }
+        return response($csv, 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => 'attachment; filename="message_log_' . date('Ymd_Hi') . '.csv"']); }
+    public function taskMessages(Request $r, int $id) { return \App\Services\MessageLog::forTask($id, $r->user(), $r->integer('page') ?: 1); }
+    public function recordMessages(Request $r, string $key, int $id) { Rights::check('VIEW', $key); return \App\Services\MessageLog::forRecord((string) \App\Services\Registry::table($key), $id, $r->user(), $r->integer('page') ?: 1); }
     public function taskBulkUndo(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskBulk::undo($id, $r->user())); }
 
     /** Approve / send back (R-G_CORE-7) and the score preview (R-G_CORE-8). */

@@ -72,7 +72,7 @@ class ConnectController extends Controller
     public function messages(Request $r)
     {
         $this->can($r, 'connect.messages');
-        $ent = (int) Context::ent(); $wa = DB::table('api_connections')->where('adapter', 'WHATSAPP_CLOUD')->whereIn('fk_id_ent', [$ent, 0])->first();
+        $ent = (int) Context::ent(); $wa = Messenger::waConnection($ent) ?? DB::table('api_connections')->whereIn('adapter', Messenger::WA_ADAPTERS)->whereIn('fk_id_ent', [$ent, 0])->first();
         $strip = fn ($b) => explode("\n\x1e", (string) $b, 2)[0];
         return ['whatsapp' => $wa ? ['status' => $wa->status, 'label' => $wa->label] : null, 'email' => Messenger::emailReady(),
             'wa' => DB::table('wa_outbound as o')->leftJoin('t_account as a', 'a.id', '=', 'o.fk_id_account')->whereIn('o.fk_id_ent', [$ent, 0])->orderByDesc('o.id')->limit(150)

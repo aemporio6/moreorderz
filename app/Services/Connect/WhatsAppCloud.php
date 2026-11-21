@@ -30,7 +30,7 @@ class WhatsAppCloud extends Adapter
         $to = preg_replace('/\D/', '', $phone);
         $body = ['messaging_product' => 'whatsapp', 'to' => $to, 'type' => 'template', 'template' => ['name' => strtolower($template), 'language' => ['code' => $this->cfg['language'] ?? 'en'],
             'components' => $params ? [['type' => 'body', 'parameters' => array_map(fn ($v) => ['type' => 'text', 'text' => mb_substr((string) $v, 0, 1000)], array_values($params))]] : []]];
-        $j = Api::ok($this->call('POST', $this->url('/messages'), ['headers' => ['Authorization' => 'Bearer ' . $this->s['access_token']], 'json' => $body]), 'WhatsApp send');
+        $j = Api::ok($this->call('POST', $this->url('/messages'), ['timeout' => 15, 'headers' => ['Authorization' => 'Bearer ' . $this->s['access_token']], 'json' => $body]), 'WhatsApp send');
         return (string) ($j['messages'][0]['id'] ?? throw new ApiError('WhatsApp took the message but gave no id.'));
     }
 
@@ -38,7 +38,7 @@ class WhatsAppCloud extends Adapter
     public function sendText(string $phone, string $text): string
     {
         $body = ['messaging_product' => 'whatsapp', 'to' => preg_replace('/\D/', '', $phone), 'type' => 'text', 'text' => ['body' => mb_substr($text, 0, 4000)]];
-        $j = Api::ok($this->call('POST', $this->url('/messages'), ['headers' => ['Authorization' => 'Bearer ' . $this->s['access_token']], 'json' => $body]), 'WhatsApp reply');
+        $j = Api::ok($this->call('POST', $this->url('/messages'), ['timeout' => 15, 'headers' => ['Authorization' => 'Bearer ' . $this->s['access_token']], 'json' => $body]), 'WhatsApp reply');
         return (string) ($j['messages'][0]['id'] ?? throw new ApiError('WhatsApp took the message but gave no id.'));
     }
 

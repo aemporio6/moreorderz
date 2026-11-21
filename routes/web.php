@@ -558,6 +558,10 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('tasks/{id}/close-rule', [WorkController::class, 'taskCloseRule'])->whereNumber('id');
         Route::post('tasks/{id}/end-snooze', [WorkController::class, 'taskEndSnooze'])->whereNumber('id');
         Route::get('tasks/digest-preview', [WorkController::class, 'taskDigestPreview']);
+        Route::get('messages/log', [WorkController::class, 'messageLog']);
+        Route::get('messages/log.csv', [WorkController::class, 'messageLogCsv']);
+        Route::get('tasks/{id}/messages', [WorkController::class, 'taskMessages'])->whereNumber('id');
+        Route::get('rec-messages/{key}/{id}', [WorkController::class, 'recordMessages'])->whereNumber('id');
         Route::post('tasks/bulk', [WorkController::class, 'taskBulk']);
         Route::post('tasks/bulk/{id}/undo', [WorkController::class, 'taskBulkUndo'])->whereNumber('id');
     });

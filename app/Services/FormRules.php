@@ -57,6 +57,11 @@ class FormRules
     private static function checkForm(string $formKey, array &$data, array $old, ?int $id, array $already = []): array
     {
         $table = Registry::table($formKey);
+        if ($table === 'wa_templates' && array_key_exists('params_json', $data) && trim((string) $data['params_json']) !== '') {      // R-G_CORE-53 ordered params
+            $p = json_decode((string) $data['params_json'], true);
+            if (! is_array($p) || array_values($p) !== $p || array_filter($p, fn ($x) => ! is_string($x) || ! preg_match('/^\w+$/', $x))) return ['params_json' => 'Parameters must be a list of names, e.g. ["first_name","task_ref"].'];
+            $data['params_json'] = json_encode(array_values($p));
+        }
         if ($table === 't_src_cartons') return self::cartons($data, $old);
         if ($table === 't_src_documents') return self::document($data, $old, $already);      // R-B_SOURCING-47 / 49
         if ($table === 'fin_categories') return self::finCategory($data, $old, $id);

@@ -91,9 +91,11 @@ class Messenger
     /** R-G_CORE-45: the daily digest is one engine (TaskDigest, N13 at each person's digest time) – kept here for old callers. */
     public static function digests(): int { return \App\Services\TaskDigest::run(); }
 
-    private static function waConnection(int $ent): ?object
+    /** R-G_CORE-53 provider switch: the company's WhatsApp connection – Meta (WHATSAPP_CLOUD), 360dialog (WHATSAPP_360) or the test log provider (WHATSAPP_LOG). */
+    public const WA_ADAPTERS = ['WHATSAPP_CLOUD', 'WHATSAPP_360', 'WHATSAPP_LOG'];
+    public static function waConnection(int $ent): ?object
     {
-        return DB::table('api_connections')->where('adapter', 'WHATSAPP_CLOUD')->whereIn('fk_id_ent', [$ent, 0])->whereNotIn('status', ['OFF', 'EXPIRED'])->orderByDesc('fk_id_ent')->first();
+        return DB::table('api_connections')->whereIn('adapter', self::WA_ADAPTERS)->whereIn('fk_id_ent', [$ent, 0])->whereNotIn('status', ['OFF', 'EXPIRED'])->orderByDesc('fk_id_ent')->first();
     }
 
     public static function emailReady(): bool { return ! in_array(config('mail.default'), ['log', 'array', null, ''], true) || app()->bound('mail.fake'); }
@@ -152,6 +154,7 @@ class Messenger
         foreach ($j['entry'] ?? [] as $e) foreach ($e['changes'] ?? [] as $ch) {
             foreach ($ch['value']['statuses'] ?? [] as $st) {   // delivery receipts of messages we sent
                 $map = ['delivered' => 'DELIVERED', 'read' => 'READ', 'failed' => 'FAILED'];
+                if (isset($map[$st['status'] ?? ''])) \App\Services\TmQueue::receipt((string) ($st['id'] ?? ''), $map[$st['status']], (string) ($st['errors'][0]['title'] ?? ''));      // R-G_CORE-46 forward only
                 if (isset($map[$st['status'] ?? ''])) DB::table('wa_outbound')->where('provider_msg_id', $st['id'] ?? '')->update(['status' => $map[$st['status']]] + ($st['status'] === 'failed' ? ['error' => mb_substr((string) ($st['errors'][0]['title'] ?? 'failed'), 0, 255)] : []));
             }
             foreach ($ch['value']['messages'] ?? [] as $msg) {

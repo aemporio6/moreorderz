@@ -34,6 +34,8 @@ class Connections
         'PRINT_AGENT' => ['PRINT', null, 'Print helper on the packing PC', ['agent_token' => 'Helper token (any long random word – the same one goes into the helper\'s settings)'], [], 'Prints jobs of "print helper" printers silently on the PC (tools/print-agent)', 'Built; run the helper on the PC and print the test page'],
         'PRINTNODE' => ['PRINT', null, 'PrintNode cloud printing', ['api_key' => 'PrintNode API key'], [], 'Prints jobs of "cloud" printers through PrintNode', 'Built to contract, not tested on a real account'],
         'WHATSAPP_CLOUD' => ['MESSAGING', WhatsAppCloud::class, 'WhatsApp Cloud API (Meta)', ['phone_number_id' => 'Phone number id', 'access_token' => 'Permanent access token', 'app_secret' => 'App secret (for the webhook)', 'verify_token' => 'Webhook verify token (any word you choose)'], ['version' => 'v21.0', 'language' => 'en'], 'Sends statements, approvals, task alerts; reads replies', 'Built to contract, not tested on a real number'],
+        'WHATSAPP_360' => ['MESSAGING', WhatsApp360::class, 'WhatsApp through 360dialog', ['api_key' => 'D360 API key'], ['base' => 'https://waba-v2.360dialog.io', 'language' => 'en'], 'Task and finance messages by WhatsApp (R-G_CORE-53)', 'Built to contract, not tested on a real account'],
+        'WHATSAPP_LOG' => ['MESSAGING', WhatsAppLog::class, 'WhatsApp test provider (log only)', [], [], 'Writes WhatsApp messages to the log – nothing leaves the server', 'Works today (testing)'],
     ];
 
     public static function mayManage(): bool { return Context::role() === 'OWNER'; }

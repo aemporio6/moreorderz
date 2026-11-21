@@ -69,7 +69,7 @@ class TaskChannelsTest extends TestCase
         // channel switched off → no WhatsApp row (bell still there)
         DB::table('t_account')->where('id', $va->fk_id_account)->update(['wa_enabled' => 0]);
         $o = TaskCreate::create(1, ['title' => 'Off', 'owner' => $va->id, 'due' => date('Y-m-d', strtotime('+2 days')), 'priority' => 'URGENT'], $mgr)['id'];
-        $this->assertNull($wa($o)); $this->assertSame(1, DB::table('tm_messages')->where('task_id', $o)->where('channel', 'INAPP')->count());
+        $this->assertSame(['FAILED', 'WhatsApp switched off for this person'], [$wa($o)->status, $wa($o)->error]); $this->assertSame(1, DB::table('tm_messages')->where('task_id', $o)->where('channel', 'INAPP')->count());
     }
 
     public function test_r45_digest_eight_lines_and_sent_at_local_time(): void
