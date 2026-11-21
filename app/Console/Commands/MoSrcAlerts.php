@@ -19,6 +19,7 @@ class MoSrcAlerts extends Command
             Context::set((int) $ent, null); $r = CycleAlerts::sweep((int) $ent);
             $this->line("Company $ent: opened " . array_sum(array_column($r, 'opened')) . ', closed ' . array_sum(array_column($r, 'closed')));
         }
+        $this->line('Stuck alerts (N6) queued: ' . \App\Services\AlertRules::stuckSweep());
         return 0;
     }
 }

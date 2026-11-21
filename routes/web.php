@@ -414,6 +414,10 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('returns', [OrdersController::class, 'returns']);
         Route::post('returns', [OrdersController::class, 'receiveReturn']);
         Route::get('tasks', [WorkController::class, 'tasks']);
+        Route::get('alerts', [WorkController::class, 'alerts']);
+        Route::post('alerts/rules/{code}', [WorkController::class, 'alertRule'])->where('code', '[A-Z0-9]+');
+        Route::post('alerts/texts/{key}/{lang}', [WorkController::class, 'alertText'])->where(['key' => '[a-z_]+', 'lang' => '[a-z]{2}']);
+        Route::post('alerts/thresholds/{key}', [WorkController::class, 'alertThreshold'])->where('key', '[a-z_]+');
         Route::get('due', [WorkController::class, 'due']);
         Route::post('due/{id}/done', [WorkController::class, 'dueDone'])->whereNumber('id');
         Route::post('tasks/{id}/status', [WorkController::class, 'taskStatus'])->whereNumber('id');

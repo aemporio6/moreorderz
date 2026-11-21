@@ -89,6 +89,11 @@ class WorkController extends Controller
     public function prefs(Request $r, string $page) { return \App\Services\ListExports::prefs($r->user(), $page); }
     public function savePrefs(Request $r, string $page) { \App\Services\ListExports::savePrefs($r->user(), $page, $r->all()); return ['ok' => true]; }
 
+    public function alerts(Request $r) { return \App\Services\AlertRules::page($r->user()); }
+    public function alertRule(Request $r, string $code) { return $this->alertTry(fn () => \App\Services\AlertRules::save($r->user(), $code, $r->only(['is_active', 'channels']))); }
+    public function alertText(Request $r, string $key, string $lang) { return $this->alertTry(fn () => \App\Services\AlertRules::saveText($r->user(), $key, $lang, (string) $r->input('body'), $r->input('subject'))); }
+    public function alertThreshold(Request $r, string $key) { return $this->alertTry(fn () => \App\Services\AlertRules::setThreshold($r->user(), $key, (string) $r->input('value'))); }
+    private function alertTry(\Closure $f) { try { return $f(); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
     public function due(Request $r) { return \App\Services\DueEngine::list((int) Context::ent(), $r->user(), $r->only(['chip', 'status'])); }
     public function dueDone(Request $r, int $id) { try { return \App\Services\DueEngine::done((int) Context::ent(), $id, $r->user()); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
 

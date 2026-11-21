@@ -156,6 +156,7 @@
       if ((mt = r.match(/^#\/rec\/([\w-]+)\/(\d+)/))) return await pageRecord(mt[1], +mt[2]);
       if (r.startsWith('#/variations/')) return await pageVariations(+r.split('/')[2]);
       if (r.startsWith('#/due')) return await pageDue();
+      if (r.startsWith('#/alerts')) return await pageAlerts();
       if (r.startsWith('#/tasks')) return await pageTasks(r.includes('scope=all') ? 'all' : r.includes('scope=stuck_on_me') ? 'stuck_on_me' : 'mine');
       if ((mt = r.match(/^#\/stock\/product\/(\d+)/))) return await pageStockProduct(+mt[1]);
       if (r.startsWith('#/stock/ledger')) return await pageStockLedger({ act: (r.match(/act=(\w+)/) || [])[1], product: (r.match(/product=(\d+)/) || [])[1] });
@@ -1307,6 +1308,36 @@
         <td>${DUE.status ? '' : `<button class="btn sm" data-dd="${r.id}" title="${+r.recur_months ? 'Done: the date moves on by ' + r.recur_months + ' month(s)' : 'Done: closes the item'}">Done</button>`}</td></tr>`).join('')}</tbody></table>${d.rows.length ? '' : `<div class="empty">${ic('check')}<div>Nothing due.</div></div>`}</div></div>`;
     $$('[data-chip]').forEach(b => b.onclick = () => { DUE.chip = b.dataset.chip; pageDue(); }); $('#duDone').onclick = () => { DUE.status = DUE.status ? '' : 'done'; pageDue(); };
     $$('[data-dd]').forEach(b => b.onclick = async () => { try { toast((await api(`due/${b.dataset.dd}/done`, { method: 'POST', body: {} })).message); pageDue(); } catch (e) { toast(e.message, 'err'); } });
+  }
+  // ---------- alert rules (R-G_CORE-49) and thresholds (R-G_CORE-51) ----------
+  const AL = { tab: 'rules', q: '' };
+  async function pageAlerts() {
+    busy(true); let d; try { d = await api('alerts'); } finally { busy(false); }
+    const ed = d.can_edit, q = AL.q.toLowerCase();
+    const rules = d.rules.filter(r => !q || [r.code, r.name, r.trigger_event, r.to_role_or_person, r.when_rule].join(' ').toLowerCase().includes(q));
+    const ths = d.thresholds.filter(t => !q || [t.key, t.label, t.help].join(' ').toLowerCase().includes(q));
+    const rulesTbl = `<div class="tbl-wrap"><table class="t"><thead><tr><th>Code</th><th>Rule</th><th>When</th><th>Goes to</th>${Object.entries(d.channels).map(([c, l]) => `<th style="text-align:center">${esc(l)}</th>`).join('')}<th>On</th><th>Texts</th></tr></thead><tbody>${rules.map(r => `<tr>
+      <td><b>${esc(r.code)}</b>${+r.is_locked ? ` <span class="chip plain" title="Always WhatsApp + in-app; cannot be switched off">locked</span>` : ''}</td><td>${esc(r.name)}<div class="small muted">${esc(r.trigger_event)}</div></td>
+      <td class="small">${esc(r.when_rule)}${r.escalation ? `<div class="muted">${esc(r.escalation)}</div>` : ''}${+r.skip_blocked ? '<div class="muted">Skips blocked tasks</div>' : ''}</td><td class="small">${esc(r.to_role_or_person)}</td>
+      ${Object.keys(d.channels).map(c => `<td style="text-align:center"><input type="checkbox" data-ch="${esc(r.code)}" value="${c}" ${r.channels.includes(c) ? 'checked' : ''} ${!ed || +r.is_locked ? 'disabled' : ''}></td>`).join('')}
+      <td><label class="chk"><input type="checkbox" data-on="${esc(r.code)}" ${+r.is_active ? 'checked' : ''} ${!ed || +r.is_locked ? 'disabled' : ''}> ${+r.is_active ? 'On' : 'Off'}</label></td>
+      <td style="white-space:nowrap">${r.texts.map((t, i) => `<button class="btn sm" data-tx="${esc(r.code)}:${i}" title="${esc(t.body || 'No text yet – English is used')}">${esc(t.key.replace('tm_', ''))} · ${esc(t.lang)}${t.body ? '' : ' +'}</button>`).join(' ')}</td></tr>`).join('')}</tbody></table>${rules.length ? '' : `<div class="empty">${ic('search')}<div>No rule matches.</div></div>`}</div>`;
+    const thTbl = `<div class="tbl-wrap"><table class="t"><thead><tr><th>Setting</th><th>Value</th><th>Help</th><th>Last changes</th><th></th></tr></thead><tbody>${ths.map(t => `<tr><td>${esc(t.label)}<div class="small muted">${esc(t.key)}</div></td><td><b>${esc(t.value)}</b></td><td class="small">${esc(t.help)}</td>
+      <td class="small muted">${t.history.map(h => `${esc(h.old)} → ${esc(h.new)} <span title="${esc(h.at)}">${esc(String(h.at).slice(0, 10))}</span>`).join('<br>') || '—'}</td><td>${ed ? `<button class="btn sm" data-th="${esc(t.key)}">Change</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Alerts &amp; messages</h1><div class="sub">One rule screen for every alert. A rule that is off sends nothing. MANUAL and APPROVED always go by WhatsApp + in-app. ${ed ? '' : 'Only a Partner can change rules, texts and thresholds.'}</div></div></div>
+      <div class="card"><div class="list-bar" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><div class="seg"><button type="button" class="${AL.tab === 'rules' ? 'on' : ''}" data-al="rules">Rules · ${d.rules.length}</button><button type="button" class="${AL.tab === 'th' ? 'on' : ''}" data-al="th">Thresholds · ${d.thresholds.length}</button></div>
+      <input id="alQ" placeholder="Search code, rule, receiver…" value="${esc(AL.q)}" style="margin-left:auto;min-width:220px"></div>${AL.tab === 'rules' ? rulesTbl : thTbl}</div>`;
+    $$('[data-al]').forEach(b => b.onclick = () => { AL.tab = b.dataset.al; pageAlerts(); });
+    let alT; $('#alQ').oninput = e => { clearTimeout(alT); alT = setTimeout(() => { AL.q = e.target.value; pageAlerts().then(() => { const i = $('#alQ'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }); }, 300); };
+    const saveRule = async code => { const on = $(`[data-on="${code}"]`).checked, ch = $$(`[data-ch="${code}"]`).filter(x => x.checked).map(x => x.value);
+      try { toast((await api(`alerts/rules/${code}`, { method: 'POST', body: { is_active: on ? 1 : 0, channels: ch } })).message); } catch (e) { toast(e.message, 'err'); } pageAlerts(); };
+    $$('[data-on]').forEach(x => x.onchange = () => saveRule(x.dataset.on)); $$('[data-ch]').forEach(x => x.onchange = () => saveRule(x.dataset.ch));
+    $$('[data-tx]').forEach(b => b.onclick = () => { const [code, i] = b.dataset.tx.split(':'), t = d.rules.find(r => r.code === code).texts[+i];
+      miniForm(`Text ${t.key} · ${d.langs[t.lang]}`, { html: `<div class="small muted" style="margin-top:8px">Parameters (keep all of them; click one to put it in the text): ${t.params.map(p => `<code class="copy" title="Click to copy">{${esc(p)}}</code>`).join(' ')}</div>` },
+        [{ name: 'subject', label: 'E-mail subject', value: t.subject || '' }, { name: 'body', label: 'Text', required: true, value: t.body || (t.lang !== 'en' ? (d.rules.find(r => r.code === code).texts.find(x => x.key === t.key && x.lang === 'en') || {}).body : '') }],
+        async v => { const r = await api(`alerts/texts/${t.key}/${t.lang}`, { method: 'POST', body: v }); pageAlerts(); return r; }).ov.querySelectorAll('code.copy').forEach(c => c.onclick = () => { const i = $('#mf_body'); i.setRangeText(c.textContent, i.selectionStart, i.selectionEnd, 'end'); i.focus(); navigator.clipboard && navigator.clipboard.writeText(c.textContent).catch(() => {}); }); });
+    $$('[data-th]').forEach(b => b.onclick = () => { const t = d.thresholds.find(x => x.key === b.dataset.th);
+      miniForm(t.label, t.help, [{ name: 'value', label: t.kind === 'TIME' ? 'Time (HH:MM)' : t.kind === 'DAYTIME' ? 'Day and time (e.g. MON 09:00)' : 'Number', required: true, value: t.value }], async v => { const r = await api(`alerts/thresholds/${t.key}`, { method: 'POST', body: v }); pageAlerts(); return r; }); });
   }
   // ---------- tasks ----------
   async function pageTasks(scope) {
