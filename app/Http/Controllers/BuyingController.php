@@ -132,11 +132,13 @@ class BuyingController extends Controller
         $this->can($r, 'buying.SEE'); $ent = (int) Context::ent();
         if (in_array($card, ['payments', 'investors', 'invoicing'], true) && ! \App\Services\Perm::has($r->user(), 'buying.MONEY')) abort(403, 'This card needs the right to see money.');
         $money = \App\Services\Perm::has($r->user(), 'buying.MONEY');
-        $per = in_array($card, ['investors', 'invoicing', 'team', 'buyingcard'], true) ? \App\Services\Period::forCard((int) $r->user()->id, $card, $r->query('period'), $r->query('from'), $r->query('to')) : null;      // R-F_SETUP-27
+        if ($card === 'sales' && ! \App\Services\Perm::has($r->user(), 'orders.SEE')) abort(403, 'This card needs the right to see sales.');
+        $per = in_array($card, ['investors', 'invoicing', 'team', 'buyingcard', 'sales'], true) ? \App\Services\Period::forCard((int) $r->user()->id, $card, $r->query('period'), $r->query('from'), $r->query('to')) : null;      // R-F_SETUP-27
         $fn = match ($card) {
             'contacts' => ['Contact today', fn () => \App\Services\SourcingBoard::contactToday($ent)], 'shipments' => ['Shipments on the way', fn () => \App\Services\SourcingBoard::shipments($ent, $r->boolean('all') ? 500 : 15)],
             'payments' => ['Supplier payments', fn () => \App\Services\DashCards::payments($ent)], 'needs' => ['Needs action', fn () => \App\Services\DashCards::needs($ent, $r->boolean('all'))],
             'investors' => ['Investors', fn () => \App\Services\DashCards::investors($ent, $per['from'], $per['to']) + ['period' => $per]],
+            'sales' => ['Sales', fn () => \App\Services\SalesCard::card($ent, $r->query('mp') ? (int) $r->query('mp') : null, $per['from'], $per['to'], $money) + ['period' => $per]],      // R-F_SETUP-26
             'stockhealth' => ['Inventory Management', fn () => \App\Services\StockHealth::card($ent)],      // R-F_SETUP-28
             'lots' => ['Inventory receiving', fn () => \App\Services\DashCards::lots($ent, $money)], 'glance' => ['Sourcing Management', fn () => \App\Services\DashCards::glance($ent, $money)],
             'buyingcard' => ['Buying Management', fn () => \App\Services\DashCards::buying($ent, $per['from'], $per['to'], $money) + ['period' => $per]],

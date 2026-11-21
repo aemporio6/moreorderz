@@ -393,7 +393,7 @@ class OrdersController extends Controller
 
     private function saleFilters(Request $r): array
     {
-        $f = $r->only(['marketplace', 'shop', 'batch', 'status', 'type', 'show', 'visibility', 'company', 'vendor', 'vendor_inventory', 'investor', 'ds_platform', 'carrier', 'from', 'to', 'q', 'page', 'per_page']);
+        $f = $r->only(['marketplace', 'shop', 'batch', 'status', 'type', 'show', 'visibility', 'company', 'vendor', 'vendor_inventory', 'investor', 'ds_platform', 'carrier', 'from', 'to', 'q', 'page', 'per_page', 'created_by']);
         foreach (['from', 'to'] as $k) if (! empty($f[$k]) && ! preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $f[$k])) unset($f[$k]);
         return $f;
     }

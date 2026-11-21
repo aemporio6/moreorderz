@@ -282,7 +282,8 @@
       if (r.startsWith('#/sales-annual')) return await pageSalesAnnual();
       if (r.startsWith('#/sales-detailed')) return await pageSalesDetailed();
       if (r.startsWith('#/sales-import')) return await pageSalesImport((r.match(/fix=(\d+)/) || [])[1]);
-      if (r.startsWith('#/sales')) return await pageSales((r.match(/import=(\d+)/) || [])[1]);
+      if (r.startsWith('#/sales')) { const u = new URLSearchParams(r.split('?')[1] || ''); if (u.has('marketplace') || u.has('created_by')) SL.f = { ...Object.fromEntries(['marketplace', 'created_by', 'from', 'to', 'status'].filter(k => u.get(k)).map(k => [k, u.get(k)])), per_page: 50, page: 1 };      // R-F_SETUP-26 drill from the Sales card
+        return await pageSales((r.match(/import=(\d+)/) || [])[1]); }
       if (r === '#/permissions') return await pagePermissions();
       if (r === '#/playbooks') return await pagePlaybooks();
       if (r === '#/bulk-jobs') return await pageBulkJobs();
@@ -2840,10 +2841,12 @@
   function failBox() { const b = $('#bFailed'); if (!b) return; const f = [...new Set(S.failedCards || [])].slice(0, 10);
     b.innerHTML = f.length ? `<div class="card" style="border-left:4px solid #e8a33d;margin-bottom:12px"><div class="card-b"><b>Some sections could not load</b><div class="small">${f.map(esc).join(' · ')}</div><div class="small muted">The rest of the page works. The admin has been told.</div></div></div>` : ''; }
   // R-F_SETUP-21 payments box, R-F_SETUP-20 Needs action, R-F_SETUP-22 Contact today, R-F_SETUP-23 Shipments board – each card is its own call
+  let SCMP = '';      // the Sales card's marketplace filter
   async function buyingCards(only, money = true) {
     const tone = { teal: '#d9f0ee', amber: '#fff1d6', red: '#fde2e0', grey: '#eceeec' }, chip = (t, c) => `<span class="chip" style="background:${tone[c]}">${esc(t)}</span>`;
     const load = async (key, sel, draw) => { const box = $(sel); if (!box || (only && only !== key)) return; let r;
-      try { r = await api('buying/card/' + key); } catch (e) { r = { ok: false, label: key, error: e.message }; }
+      try { r = await api('buying/card/' + key + (key === 'sales' && SCMP ? '?mp=' + SCMP : '')); } catch (e) { r = { ok: false, label: key, error: e.message }; }
+      if (key === 'sales' && !r.ok && /right to see sales/.test(r.error || '')) { box.innerHTML = ''; return; }      // no sales right: no card
       S.failedCards = (S.failedCards || []).filter(x => x !== r.label);
       if (!r.ok) { box.innerHTML = `<div class="card" data-failed="${esc(r.label)}"><div class="card-b muted">${esc(r.label)}: ${esc(r.error)} <a href="#" data-retry="${key}">Retry</a></div></div>`; S.failedCards.push(r.label); failBox(); return; }
       failBox(); draw(box, r.data); };
@@ -2857,6 +2860,11 @@
     load('lots', '#bLots', (box, d) => { const tone = { teal: '#d9f0ee', amber: '#fff1d6', red: '#fde2e0' };
       box.innerHTML = `<div class="card"><div class="card-h"><h3>${esc(d.title)}</h3></div>${d.rows.length ? `<div class="tbl-wrap"><table class="t" id="lotT"><thead><tr><th>Batch / Lot</th><th class="num">Qty accepted</th><th>Owner / Investor</th><th class="num">${esc(d.header)}</th></tr></thead><tbody>${d.rows.map(r => `<tr><td>${esc(r.batch)}<div class="small muted">${esc(r.sku || '')} · ${esc(r.lot)}${r.cycle_id ? ` · <a href="#/cycle/${r.cycle_id}">${esc(r.cycle)}</a>` : ''}</div></td><td class="num">${(+r.qty).toLocaleString()}</td><td>${esc(r.owner)}</td><td class="num">${r.cost !== undefined ? (+r.cost).toFixed(4) + ' ' : ''}<span class="chip" style="background:${tone[r.tone]}">${esc(r.chip)}</span></td></tr>`).join('')}</tbody></table></div>` : `<div class="empty">${esc(d.empty)}</div>`}</div>`; });
     perCard('buyingcard', '#oBuy', (box, d) => { box.innerHTML = `<div class="card"><div class="card-h"><h3>${esc(d.title)}</h3><span data-pslot style="margin-left:auto"></span></div>${kv([['Purchases (period)', d.purchases], ['Last purchase', d.last], ...(d.value !== undefined ? [['Buy value (period)', money2(d.value)]] : [])])}<div class="card-b"><a href="${d.link}" class="small">Open module</a></div></div>`; });
+    perCard('sales', '#oSales', (box, d) => { const li = (xs, e) => xs.length ? `<table class="t"><tbody>${xs.map(x => `<tr><td><a href="${esc(x.link)}">${esc(x.name)}</a></td><td class="num">${esc(x.figure)}</td></tr>`).join('')}</tbody></table>` : `<div class="card-b small muted">${esc(e)}</div>`;      // R-F_SETUP-26
+      box.innerHTML = `<div class="card" id="salesCard"><div class="card-h"><h3>${esc(d.title)}</h3><span style="margin-left:auto;display:inline-flex;gap:6px;flex-wrap:wrap"><select class="q" id="scMp" style="min-width:0"><option value="">All marketplaces</option>${d.marketplaces.map(m => `<option value="${m.id}" ${+d.marketplace === m.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select><span data-pslot></span></span></div>
+        <table class="t"><tbody>${d.rows.map(r => `<tr><td>${r.link ? `<a href="${r.link}">${esc(r.label)}</a>` : esc(r.label)}</td><td class="num">${esc(r.figure)}</td></tr>`).join('')}</tbody></table>
+        <div class="card-b small"><b>By channel</b></div>${li(d.by_channel, d.empty_channel)}<div class="card-b small"><b>By VA</b></div>${li(d.by_va, d.empty_va)}</div>`;
+      $('#scMp', box).onchange = e => { SCMP = e.target.value; buyingCards('sales', money); }; });
     load('stockhealth', '#oStock', (box, d) => { box.innerHTML = `<div class="card" id="stockHealth"><div class="card-h"><h3>${esc(d.title)}</h3></div><table class="t"><tbody>${d.rows.map(r => `<tr><td><a href="${r.link}">${esc(r.label)}</a></td><td class="num" style="${r.count ? 'color:#b7791f;font-weight:600' : ''}">${esc(String(r.figure))}</td></tr>`).join('')}</tbody></table><div class="card-b"><a href="${d.link}" class="small">Open module</a></div></div>`; });      // R-F_SETUP-28
     load('glance', '#oGlance', (box, d) => { box.innerHTML = `<div class="card"><div class="card-h"><h3>${esc(d.title)}</h3></div><table class="t"><tbody>${d.rows.map(r => `<tr><td><a href="${r.link}">${esc(r.label)}</a></td><td class="num">${esc(String(r.figure))}</td></tr>`).join('')}</tbody></table><div class="card-b"><a href="${d.link}" class="small">Open module</a></div></div>`; });
     perCard('team', '#bTeam', (box, d) => { box.innerHTML = `<div class="card"><div class="card-h"><h3>${esc(d.title)}</h3><span data-pslot style="margin-left:auto"></span></div>${d.rows.length ? `<div class="card-b" id="tmList">${d.rows.map(r => `<div style="padding:4px 0"><a href="${esc(r.drill)}">${esc(r.line)}</a></div>`).join('')}</div>` : `<div class="empty">${esc(d.empty)}</div>`}</div>`; });
@@ -2882,7 +2890,7 @@
     <div class="small muted" style="margin-bottom:8px">This page only reads data – nothing here changes a record. Click any cycle, tile or row to open the real screen.</div>`;
   async function pageBuyingOverview(qs) {
     $('#main').innerHTML = `${buyTabs('overview', qs)}<div class="page-head"><div><h1>Business overview</h1></div></div><div id="bFailed"></div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:12px;align-items:start"><div id="oBuy"></div><div id="oGlance"></div><div id="oStock"></div><div id="bInv"></div><div id="bInvest"></div><div id="bTeam"></div></div>`;
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:12px;align-items:start"><div id="oSales"></div><div id="oBuy"></div><div id="oGlance"></div><div id="oStock"></div><div id="bInv"></div><div id="bInvest"></div><div id="bTeam"></div></div>`;
     S.failedCards = []; const r = await api('buying?' + qs).catch(() => ({ rights: {} })); buyingCards(null, !!(r.rights || {}).money);
     $('#main').addEventListener('click', e => { const a = e.target.closest('[data-retry]'); if (!a) return; e.preventDefault(); buyingCards(a.dataset.retry, !!(r.rights || {}).money); });
   }

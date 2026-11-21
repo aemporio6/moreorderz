@@ -439,8 +439,10 @@ class SaleLines
         $q = DB::table('t_sales as s')->where('s.fk_id_ent', $ent)->where('s.sale_source', '<>', 'history'); Perm::mine($q, 's.fk_id_branch');
         if (($f['type'] ?? '') === 'summary') $q->where('s.sale_source', 'summary'); elseif (empty($f['batch'])) $q->where('s.sale_source', '<>', 'summary');      // daily totals are shown apart, never inside the order lines
         if (! empty($f['batch'])) $q->where('s.fk_id_import', (int) $f['batch']);
-        else { $q->where('s.fk_id_marketplace', (int) $f['marketplace']); if (! empty($f['from'])) $q->where('s.d_order', '>=', $f['from']); if (! empty($f['to'])) $q->where('s.d_order', '<=', $f['to']); }
+        else { if (! empty($f['marketplace']) || empty($f['created_by'])) $q->where('s.fk_id_marketplace', (int) ($f['marketplace'] ?? 0)); if (! empty($f['from'])) $q->where('s.d_order', '>=', $f['from']); if (! empty($f['to'])) $q->where('s.d_order', '<=', $f['to']); }
         if (! empty($f['shop'])) $q->where('s.fk_id_branch', (int) $f['shop']);
+        if (! empty($f['created_by'])) $q->where('s.created_by', (int) $f['created_by']);      // R-F_SETUP-26: drill from the Sales card "By VA"
+        if (($f['status'] ?? '') === 'open') $q->whereNotIn('s.status', ['Cancelled', 'Refunded']);
         if (! empty($f['status']) && in_array($f['status'], ['Pending', 'Confirmed', 'Refunded', 'Cancelled'], true)) $q->where('s.status', $f['status']);
         if (! empty($f['type']) && $f['type'] !== 'summary') $q->where('s.sale_source', ['inventory' => 'active', 'ds' => 'ds', 'nm' => 'unmatched'][$f['type']] ?? 'active');
         if (($f['show'] ?? '') === 'loss') $q->where('s.profit', '<', 0);
@@ -487,7 +489,7 @@ class SaleLines
             'self_check' => SalesImport::selfCheckMessage()];
         if (! empty($f['batch']) && ($bt = DB::table('t_sale_imports as i')->join('t_branches as b', 'b.id', '=', 'i.fk_id_branch')->where('i.id', (int) $f['batch'])->where('i.fk_id_ent', $ent)->first(['i.id', 'i.status', 'i.error_rows', 'i.period_month', 'i.period_year', 'i.fk_id_branch', 'b.shop_no', 'b.shop_name'])))
             $base['batch_info'] = ['id' => $bt->id, 'label' => 'Showing one import only: ' . $bt->shop_no . ' (' . $bt->shop_name . ') - ' . SalesImport::monthName((int) $bt->period_month, (int) $bt->period_year), 'status' => $bt->status, 'errors' => (int) $bt->error_rows, 'shop' => (int) $bt->fk_id_branch, 'month' => sprintf('%04d-%02d', $bt->period_year, $bt->period_month)];
-        if (empty($f['marketplace']) && empty($f['batch'])) return $base + ['need' => 'Select a Marketplace (and a Shop, or all shops) to show the sales.', 'rows' => [], 'total' => 0];
+        if (empty($f['marketplace']) && empty($f['batch']) && empty($f['created_by'])) return $base + ['need' => 'Select a Marketplace (and a Shop, or all shops) to show the sales.', 'rows' => [], 'total' => 0];
         if (empty($f['batch']) && empty($f['from']) && empty($f['to'])) { $f['from'] = date('Y-m-01'); $f['to'] = date('Y-m-t'); }
         $per = (int) ($f['per_page'] ?? 50); if (! in_array($per, self::PAGE_SIZES, true)) $per = 50; $page = max(1, (int) ($f['page'] ?? 1));
         if (! empty($f['_limit'])) { $per = (int) $f['_limit']; $page = 1; }      // the export takes the whole filtered list
