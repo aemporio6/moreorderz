@@ -128,8 +128,11 @@ class Registry
                 ->when($q, fn ($x) => $x->where('i.reference_name', 'like', "%$q%"))->orderBy('i.sort_no')->orderBy('i.reference_name')->limit($limit)
                 ->get(['i.id', 'i.reference_name'])->map(fn ($r) => [(string) $r->id, $r->reference_name])->all();
         }
-        if ($kind === 'party') {
-            return self::tableOptions('t_account', $ent, $q, $limit);
+        if ($kind === 'party') {      // R-C-42: active people with the active role(s), sorted by first name; while nobody carries the role yet (before the roles are filled in) every person is offered
+            $roles = array_values(array_filter(array_map('trim', explode(',', strtoupper($arg)))));
+            if (in_array('VA', $roles, true) || in_array('SELLER', $roles, true)) $roles = array_values(array_unique(array_merge($roles, ['VA', 'SELLER'])));
+            $with = $roles ? DB::table('t_account_in_types as i')->join('cat_account_types as t', 't.id', '=', 'i.fk_id_account_type')->where('i.f_active', 1)->where('t.f_active', 1)->whereIn(DB::raw('UPPER(t.role_code)'), $roles)->distinct()->pluck('i.fk_id_account')->all() : [];
+            return self::tableOptions('t_account', $ent, $q, $limit, false, $with ?: null);
         }
         if ($kind === 'table' || $kind === 'own') {
             return self::tableOptions(explode('?', $arg)[0], $ent, $q, $limit, str_contains($arg, 'login=1'));
@@ -137,7 +140,7 @@ class Registry
         return [];
     }
 
-    private static function tableOptions(string $table, ?int $ent, ?string $q, int $limit, bool $loginOnly = false): array
+    private static function tableOptions(string $table, ?int $ent, ?string $q, int $limit, bool $loginOnly = false, ?array $onlyIds = null): array
     {
         if (! Schema::hasTable($table)) return [];
         $pk = self::pk($table);
@@ -147,6 +150,8 @@ class Registry
             if ($q) $x->whereRaw("CONCAT_WS(' ', first_name, sur_name) like ?", ["%$q%"]);
             if ($loginOnly) $x->where('f_login', 1);
             $x->where(fn ($w) => $w->whereNull('record_status')->orWhere('record_status', '<>', 'DRAFT'));      // a draft person never appears in pickers of other forms (R-C-20)
+            if ($onlyIds !== null) $x->whereIn($pk, $onlyIds);
+            $x->orderBy('first_name')->orderBy('sur_name');
         } else {
             $lc = self::labelColumn($table);
             $x = DB::table($table)->select($pk . ' as id', $lc . ' as lbl');

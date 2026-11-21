@@ -143,7 +143,8 @@ class AppController extends Controller
         Rights::check('VIEW', 't_account_branch');
         return ['rows' => \App\Services\ShopAssignments::cards($id), 'roles' => \App\Services\ShopAssignments::ROLES, 'can_edit' => \App\Services\Perm::has($r->user(), 'form:t_account_branch:EDIT'),
             'marketplaces' => DB::table('cat_marketplaces')->where('f_active', 1)->orderBy('id')->get(['id', DB::raw("COALESCE(NULLIF(marketplace_short,''), marketplace_descr) as name")]),
-            'shops' => \App\Services\Perm::mine(DB::table('t_branches'), 'id')->where('f_active', 1)->orderBy('shop_no')->get(['id', 'fk_id_marketplace as mp', DB::raw("TRIM(CONCAT_WS(' ', shop_no, shop_name)) as name")])];
+            'shops' => DB::table('t_branches')->orderByDesc('f_active')->orderBy('shop_no')->get(['id', 'fk_id_marketplace as mp', 'f_active', DB::raw("TRIM(CONCAT_WS(' ', shop_no, shop_name)) as name")]),      // every shop, inactive ones greyed (R-C-42)
+            'linked' => \App\Services\ShopAssignments::linked($id)];
     }
     public function personShopSave(\Illuminate\Http\Request $r, int $id, ?int $aid = null)
     {

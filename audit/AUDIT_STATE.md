@@ -124,4 +124,5 @@ How to work each step: build → test → change the verdict lines in `audit/ver
 | 7e-65 | R-H-49 inbound shipment prep (InboundShipments: reserve, pick into cartons, FBA item / carton labels + packing list, two-step transfer, STK_FC_DIFF) → MR-0138, MR-0194, MR-1368 BUILT | done | 569 / 1,433 (40%) | 425 tests |
 | 7e-66 | R-D-46 Stock alerts page (StockAlerts: rows, counted-qty update with reason, approval, STK_LOW, Buy more / Create PO) → MR-0464, MR-0888, MR-0977 BUILT | done | 572 / 1,433 (40%) | 427 tests |
 | 7e-67 | R-D-2 SKU live check (SkuCheck: exact block with link, look-alike warning, available; 500 ms on product form + child cards; server check on save) → MR-0457, MR-0905, MR-0955 BUILT | done | 575 / 1,433 (40%) | 429 tests |
-| 7e-68 | NEXT → recount; 3-line R-B_SOURCING-51, R-H-19, R-A_SALES-87, R-FIN-22, R-FIN-47, R-G_CORE-96, R-C-42 …; rest of Sourcing 39 / 28 | todo | | |
+| 7e-68 | R-C-42 linked shops by role (Owner / Seller chips from the shops, inactive greyed; pickers every shop; party pickers by active role, first name) → MR-0449, MR-0835, MR-0864 BUILT | done | 578 / 1,433 (40%) | 431 tests |
+| 7e-69 | NEXT → recount; 3-line R-B_SOURCING-51, R-D-8, R-H-19, R-A_SALES-87, R-FIN-22, R-FIN-47, R-G_CORE-96 …; rest of Sourcing 39 / 28 | todo | | |

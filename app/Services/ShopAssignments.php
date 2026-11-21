@@ -93,6 +93,26 @@ class ShopAssignments
                 DB::raw("TRIM(CONCAT_WS(' ', o.first_name, o.sur_name)) as owner"), DB::raw("TRIM(CONCAT_WS(' ', v.first_name, v.sur_name)) as va"), 'ad.line1 as address', 'mo.mobile_no as mobile'])->map(fn ($r) => (array) $r)->all();
     }
 
+    /**
+     * Linked shops by role (R-C-42): read-only, straight from t_branches – no assignment needed, inactive shops shown greyed.
+     * OWNER = t_branches.fk_id_owner; SELLER (= VA) = VA assignments valid today (R-C-41, the one source) plus the computed cache fk_id_seller.
+     * Same card as the assignments, newest shop first, with counts for the role chips.
+     */
+    public static function linked(int $person): array
+    {
+        $day = date('Y-m-d');
+        $va = DB::table('t_account_branches')->where('fk_id_account', $person)->whereIn('role_code', ['VA', 'SELLER'])->where(fn ($w) => $w->whereNull('f_active')->orWhere('f_active', 1))
+            ->where(fn ($w) => $w->whereNull('d_from')->orWhere('d_from', '<=', $day))->where(fn ($w) => $w->whereNull('d_to')->orWhere('d_to', '>=', $day))->pluck('fk_id_branch')->all();
+        $card = fn ($q) => $q->leftJoin('cat_marketplaces as m', 'm.id', '=', 'b.fk_id_marketplace')->leftJoin('t_account as o', 'o.id', '=', 'b.fk_id_owner')->leftJoin('t_account as v', 'v.id', '=', 'b.fk_id_seller')
+            ->leftJoin('t_account_addresses as ad', 'ad.id', '=', 'b.fk_id_address')->leftJoin('t_account_mobiles as mo', 'mo.id', '=', 'b.fk_id_mobile')->orderByDesc('b.id')
+            ->get(['b.id as shop', 'b.shop_no', 'b.shop_name', 'b.f_active', DB::raw("COALESCE(NULLIF(m.marketplace_short,''), m.marketplace_descr) as marketplace"), DB::raw("TRIM(CONCAT_WS(' ', o.first_name, o.sur_name)) as owner"),
+                DB::raw("TRIM(CONCAT_WS(' ', v.first_name, v.sur_name)) as va"), 'ad.line1 as address', 'mo.mobile_no as mobile'])->map(fn ($r) => (array) $r + ['inactive' => (int) $r->f_active !== 1, 'link' => '#/rec/t_branch/' . $r->shop])->all();
+        $owner = $card(DB::table('t_branches as b')->where('b.fk_id_owner', $person));
+        $seller = $card(DB::table('t_branches as b')->where(fn ($w) => $w->whereIn('b.id', $va ?: [0])->orWhere('b.fk_id_seller', $person)));
+        return ['roles' => [['code' => 'OWNER', 'label' => 'Owner', 'count' => count($owner), 'rows' => $owner], ['code' => 'SELLER', 'label' => 'Seller', 'count' => count($seller), 'rows' => $seller]],
+            'empty' => 'No linked shop found for this role for this user.'];
+    }
+
     /** Shops of a login from assignments valid today + shops where its person is owner or seller. */
     public static function shopsOfUser(object $u): array
     {
