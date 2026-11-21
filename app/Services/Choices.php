@@ -130,6 +130,14 @@ class Choices
             '100' => ['100 lines', ''], '500' => ['500 lines', 'Suggested.'], '1000' => ['1,000 lines', ''], '5000' => ['5,000 lines', '']]],
         'SALE_EXPORT_MAX_ROWS' => ['Sales report export: Excel / CSV up to …', 'Recommended: 20,000 rows – a year of a busy shop; a bigger file is slow to open. PDF and Word keep their own smaller limits.', '20000', [
             '5000' => ['5,000 rows', ''], '20000' => ['20,000 rows', 'Suggested.'], '50000' => ['50,000 rows', ''], '100000' => ['100,000 rows', '']]],
+        'DASH_ERROR_ALERT' => ['A dashboard card that cannot load …', 'Recommended: one admin alert per card per day – enough to notice it, not one alert for every page open.', 'PER_DAY', [
+            'PER_DAY' => ['raises one admin alert per card per day', 'Suggested.'], 'OFF' => ['is only written to the error log', 'No task; System › Health still shows the error.']]],
+        'SEARCH_MIN_CHARS' => ['Search: a full search starts at …', 'Recommended: 2 characters – one letter only offers names that start with it; a full search on one letter finds almost everything.', '2', [
+            '2' => ['2 characters', 'Suggested.'], '3' => ['3 characters', 'Fewer, more exact results on a big database.']]],
+        'SEARCH_AMOUNT_TOLERANCE' => ['Search by an amount ("1,250") also finds amounts within …', 'Recommended: ± 0.5 % – rounding and small fees still match, a different payment does not.', '0.5', [
+            '0' => ['exactly that amount (± 0.01)', ''], '0.5' => ['± 0.5 %', 'Suggested.'], '1' => ['± 1 %', ''], '2' => ['± 2 %', '']]],
+        'CONTRACT_RENEWAL_DAYS' => ['Job history: a contract renewal date shows amber when it is within …', 'Recommended: 30 days – a month to talk about the new contract.', '30', [
+            '14' => ['14 days', ''], '30' => ['30 days', 'Suggested.'], '60' => ['60 days', ''], '90' => ['90 days', '']]],
         'HIDDEN_MARGIN_ROLES' => ['Owner Home › Invoicing / Profit: who sees the row "Hidden margin"?', 'Recommended: Owner only – a partner\'s share is worked out on the net profit, so the margin kept by the company stays with the Owner.', 'OWNER', []],
     ];
 

@@ -41,7 +41,7 @@ class SearchIndex
     public static function find(string $q, ?int $ent, int $limit = 20): array
     {
         $q = trim($q);
-        if (mb_strlen($q) < 2) return [];
+        if (mb_strlen($q) < Finder::minChars()) return [];      // Settings › Choices SEARCH_MIN_CHARS
         $digits = preg_replace('/\D+/', '', $q);
         return DB::table('sys_search_index')
             ->when($ent, fn ($x) => $x->where(fn ($w) => $w->where('fk_id_ent', $ent)->orWhere('fk_id_ent', 0)))

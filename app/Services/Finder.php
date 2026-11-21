@@ -64,6 +64,8 @@ class Finder
         'money' => '/bank|expense|settlement|payment|fin_|loan|budget|invoice|ledger|capital/i', 'tasks' => '/task/i',
     ];
 
+    public static function minChars(): int { return (int) Choices::get('SEARCH_MIN_CHARS', Context::ent() ? (int) Context::ent() : null) ?: 2; }
+
     public static function find(string $q, ?object $u, int $per = 6, string $scope = 'all'): array
     {
         $q = trim(mb_substr($q, 0, 80)); $scope = array_key_exists($scope, self::SCOPES) ? $scope : 'all';
@@ -71,7 +73,7 @@ class Finder
         if ($q === '') return ['q' => $q, 'groups' => self::start($u), 'scopes' => array_keys(self::SCOPES)];
         $words = array_values(array_filter(preg_split('/\s+/u', mb_strtolower($q)), fn ($w) => $w !== ''));
         [$alts, $direct] = self::synonyms($q, $words);
-        $one = mb_strlen($q) < 2;                       // one letter: only names that start with it (suggestions while typing)
+        $one = mb_strlen($q) < self::minChars();      // Settings › Choices SEARCH_MIN_CHARS                       // one letter: only names that start with it (suggestions while typing)
         $groups = [];
         $add = function (string $name, array $items) use (&$groups, $per, $scope) {
             if (is_array(self::SCOPES[$scope]) && ! in_array($name, self::SCOPES[$scope], true)) return;
@@ -301,7 +303,7 @@ class Finder
         $c = preg_replace('/[£$€\s,]|(?i:gbp|usd|eur|pkr|cny)/u', '', $q);
         if (preg_match('/^(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)$/', $c, $m)) return [min((float) $m[1], (float) $m[2]), max((float) $m[1], (float) $m[2])];
         if (! preg_match('/^\d+(?:\.\d+)?$/', $c)) return null;
-        $v = (float) $c; $d = max(0.01, $v * 0.005);
+        $v = (float) $c; $d = max(0.01, $v * ((float) Choices::get('SEARCH_AMOUNT_TOLERANCE', Context::ent() ? (int) Context::ent() : null) / 100));      /* Settings › Choices */
         return [$v - $d, $v + $d];
     }
 

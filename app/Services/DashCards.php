@@ -28,7 +28,7 @@ class DashCards
             if ($old) DB::table('sys_error_log')->where('id', $old->id)->update(['times_seen' => DB::raw('times_seen + 1'), 'last_seen' => now()]);
             else DB::table('sys_error_log')->insert(RecordService::fillNotNull('sys_error_log', ['level' => 'ERROR', 'message' => $msg, 'file' => mb_substr($e->getFile(), -250), 'line' => $e->getLine(), 'fk_id_ent' => $ent,
                 'user_id' => Context::userId(), 'url' => 'card:' . $card, 'context_json' => json_encode(['card' => $card, 'label' => $label, 'query' => $card, 'company' => $ent, 'user' => Context::userId()]), 'fingerprint' => $fp, 'times_seen' => 1, 'f_alerted' => 1, 'created_at' => now(), 'last_seen' => now()]));
-            TaskEngine::open('SYS_ERROR', ['dash', $card, $day], "A dashboard card could not load ($label)", ['ent' => $ent, 'description' => $msg]);      // one admin alert per card per day
+            if (Choices::get('DASH_ERROR_ALERT', $ent) === 'PER_DAY') TaskEngine::open('SYS_ERROR', ['dash', $card, $day], "A dashboard card could not load ($label)", ['ent' => $ent, 'description' => $msg]);      // one admin alert per card per day
             return ['card' => $card, 'label' => $label, 'ok' => false, 'error' => self::MSG];
         }
     }

@@ -60,7 +60,7 @@ Updated 21 Nov 2026 (batch 7e-101). How to answer: write **OK** next to a line t
 
 ## C. Suggested defaults written in the specification (220 lines)
 
-Each line already works with the default shown. **Classified 22 Nov (7e-132):** [S] already a setting 106 · [B] made a setting in 7e-127…134 15 · [D] design rule with no real alternative 79 · [C] real choice still fixed – being made settings in the next batches 20 (of them 8 wait for a feature that is not built yet).
+Each line already works with the default shown. **Classified 22 Nov (7e-132):** [S] already a setting 109 · [B] made a setting in 7e-127…135 19 · [D] design rule with no real alternative 79 · [C] real choice that waits for a feature not built yet 13 (each line says which feature; the switch is built together with it).
 
 
 ### Stock/Warehouse (33)
@@ -106,7 +106,7 @@ Each line already works with the default shown. **Classified 22 Nov (7e-132):** 
 | Line | Rule | Default (question) |
 |---|---|---|
 | MR-0471 | R-F_SETUP-4 | Accountancy: "Due in 7 days or less" shows amber (7-day window)? — **[B] now a setting**: Choices › Accounts & subscriptions "due soon" window (recommended 7 days) (7e-133) |
-| MR-0474 | R-F_SETUP-15 | A failing dashboard card raises one admin alert per card per day? — **[C] real choice – to become a setting**: failing card alert once a day – next batch |
+| MR-0474 | R-F_SETUP-15 | A failing dashboard card raises one admin alert per card per day? — **[B] now a setting**: Choices › failing dashboard card alert (recommended one per card per day) (7e-135) |
 | MR-0475 | R-F_SETUP-16 | Some dashboard cards are off by default for the VA, SOURCING, CS and STOCK roles? — **[S] already a setting**: Rights › dashboard cards per role |
 | MR-0476 | R-F_SETUP-21 | Sourcing dashboard "Due in 7 days" uses a 7-day window? — **[B] now a setting**: Choices › Sourcing "due soon" window (7e-132) |
 | MR-0477 | R-F_SETUP-27 | Report filter: a From date after the To date is swapped automatically? — **[B] now a setting**: Choices › Period filter From after To (7e-131) |
@@ -156,7 +156,7 @@ Each line already works with the default shown. **Classified 22 Nov (7e-132):** 
 | MR-0438 | R-B_SOURCING-46 | Landed cost re-runs by itself 5 minutes after a new freight / customs / GRN row (unless it is FINAL)? — **[B] now a setting**: Choices › Landed cost re-run (7e-128) |
 | MR-0439 | R-B_SOURCING-51 | Sourcing setting defaults: LC_OVERRIDE_APPROVAL_PCT = 10 and SRC_PAY_REMIND_DAYS = 3 (money tolerance 0.009 and QC green 95 keep the old values)? — **[S] already a setting**: setting: LC_OVERRIDE_APPROVAL_PCT, SRC_PAY_REMIND_DAYS |
 | MR-0440 | R-B_SOURCING-54 | An old entry needs supplier, order date, order reference, at least one line and an owner? — **[D] design rule (no real alternative)**: required fields of an old entry – without them it is no purchase |
-| MR-0472 | R-F_SETUP-10 | Customs stage needs the C88 / customs entry document? — **[C] real choice – to become a setting**: customs needs the C88 document (yes / no) – next batch |
+| MR-0472 | R-F_SETUP-10 | Customs stage needs the C88 / customs entry document? — **[S] already a setting**: Sourcing › document requirements (src_doc_requirements: a customs-stage C88 row; missing → task SRC_DOC_MISSING) |
 | MR-0473 | R-F_SETUP-14 | If the importing company is not VAT-registered, import VAT is added to landed cost? — **[S] already a setting**: Choices › VAT registered |
 | MR-0479 | R-F_SETUP-34 | Sourcing rule tasks run every 15 minutes and on save of the related record? — **[D] design rule (no real alternative)**: worker timing |
 | MR-0514 | R-B_SOURCING-58 (proposed – owner to confirm) | How is sample cost shared between shops? → proposed: By 90-day sales share of the product per shop (booked once as shop expense) — **[C] real choice – to become a setting**: sample cost sharing method – later batch (needs the sample cost booking) |
@@ -170,15 +170,15 @@ Each line already works with the default shown. **Classified 22 Nov (7e-132):** 
 
 | Line | Rule | Default (question) |
 |---|---|---|
-| MR-0023 | R-G_CORE-99 | Search synonyms seed (13 words incl. three Roman-Urdu words) and amount match tolerance ± 0.5 % — **[C] real choice – to become a setting**: search synonyms editable / amount tolerance – later batch |
+| MR-0023 | R-G_CORE-99 | Search synonyms seed (13 words incl. three Roman-Urdu words) and amount match tolerance ± 0.5 % — **[B] now a setting**: Choices › amount search tolerance (recommended ± 0.5 %); synonyms are an editable list (7e-135) |
 | MR-0377 | registry t_enterprise | t_enterprise form is a quick view of the company master; the tenant row mirrors the company marked f_tenant_main — **[D] design rule (no real alternative)**: data model |
 | MR-0495 | R-G_CORE-11 | Task parent / child loop check up to 10 levels? — **[D] design rule (no real alternative)**: loop check depth – safety |
 | MR-0496 | R-G_CORE-15 | Undo of a task cancel within 10 minutes? — **[B] now a setting**: Choices › Task undo minutes (7e-132) |
-| MR-0498 | R-G_CORE-31 | Search starts at 2 characters (old: 1)? — **[C] real choice – to become a setting**: search minimum characters – later batch |
+| MR-0498 | R-G_CORE-31 | Search starts at 2 characters (old: 1)? — **[B] now a setting**: Choices › search starts at … characters (recommended 2) (7e-135) |
 | MR-0500 | R-G_CORE-56 | Search: recently opened pages ranked higher, records shown after pages? — **[D] design rule (no real alternative)**: search ranking |
-| MR-0501 | R-G_CORE-59 | Opening a secret asks for 2FA once per session and again after 15 minutes idle; every open is logged? — **[C] real choice – to become a setting**: secret 2FA idle minutes – later batch |
+| MR-0501 | R-G_CORE-59 | Opening a secret asks for 2FA once per session and again after 15 minutes idle; every open is logged? — **[C] real choice – later**: the 2FA re-ask for secrets is not built yet (R-G_CORE-59 partial) – its minutes come with it |
 | MR-0503 | R-G_CORE-66 | List page sizes 25 / 50 / 100 / 250? — **[D] design rule (no real alternative)**: page sizes offered on every list |
-| MR-0504 | R-G_CORE-75 | Clean-up job nightly at 02:30 company time; import uploads kept 1 day, generated files the same day only? — **[C] real choice – to become a setting**: clean-up retention days – later batch |
+| MR-0504 | R-G_CORE-75 | Clean-up job nightly at 02:30 company time; import uploads kept 1 day, generated files the same day only? — **[S] already a setting**: Settings: retention_import_upload_days / retention_generator_days |
 | MR-0505 | R-G_CORE-83 | Shop health thresholds per marketplace (example eBay-type: defect rate ≤ 0.5 % green, ≤ 2 % amber; late shipment ≤ 3 % / ≤ 7 %)? — **[S] already a setting**: marketplace profile: shop health thresholds |
 | MR-0506 | R-G_CORE-91 | HS code is typed: digits only, 6–10 digits? — **[S] already a setting**: Choices › Typed outside codes |
 | MR-0507 | R-G_CORE-91 | ISP code is typed: letters / digits, up to 20? — **[S] already a setting**: Choices › Typed outside codes |
@@ -259,10 +259,10 @@ Each line already works with the default shown. **Classified 22 Nov (7e-132):** 
 | MR-0416 | R-A_SALES-46 | Sales report export to Excel / CSV up to 20,000 rows (old tool had only PDF and Word)? — **[B] now a setting**: Choices › sales export Excel / CSV rows (recommended 20,000) (7e-134) |
 | MR-0417 | R-A_SALES-51 | Send the annual sales report automatically on day 6 of each month by e-mail / WhatsApp? — **[C] real choice – to become a setting**: annual report send day – later batch |
 | MR-0418 | R-A_SALES-53 | Bulk delete of sales lines: Owner only, and a second approval when more than 500 lines? — **[B] now a setting**: Choices › bulk delete second person above … lines (recommended 500) (7e-134) |
-| MR-0419 | R-A_SALES-63 | Price tolerance in the sales / purchase audit = £0.01? — **[C] real choice – to become a setting**: audit price tolerance – later batch |
+| MR-0419 | R-A_SALES-63 | Price tolerance in the sales / purchase audit = £0.01? — **[C] real choice – later**: the sales / purchase audit is not built yet (R-G_CORE-81) – its tolerance comes with it |
 | MR-0420 | R-A_SALES-64 | A dropship hold order not used after 14 days raises task DS_HOLD_UNUSED (DS_HOLD_DAYS = 14)? — **[S] already a setting**: setting: DS_HOLD_DAYS |
 | MR-0421 | R-A_SALES-68 | Shop codes are upper case with 2–10 letters / digits? — **[D] design rule (no real alternative)**: shop code format |
-| MR-0422 | R-A_SALES-71 | VA reminder thread: reply-by = 1 day after the reminder? — **[C] real choice – to become a setting**: VA reminder reply-by days – later batch |
+| MR-0422 | R-A_SALES-71 | VA reminder thread: reply-by = 1 day after the reminder? — **[S] already a setting**: Settings: SALE_CASE_REPLY_DAYS |
 | MR-0516 | mp_profiles.overdue_days (005) | When is a missing month file "overdue"? → proposed: Per marketplace profile (overdue_days, proposed 5 days after month end; money files also wait money_lag_days) — **[S] already a setting**: setting: money_lag_days, overdue_days |
 | MR-1455 | R-A_SALES-86 | Refund kind "To classify" (F-17) when neither the line nor the money report has a sale amount. — **[D] design rule (no real alternative)**: refund kind rule |
 | MR-1458 | 06B IC-0.2 | Payout words (F-24): PAYOUT_RULE = PER_PAYOUT_LINE / NET_OF_RESERVE / DAILY_SWEEP; old cycle words moved to payout_cycle; example profiles: eBay-type money ROLLING, TikTok-type PER_PAYOUT and hub tot… — **[S] already a setting**: setting: PAYOUT_RULE, payout_cycle |
@@ -282,7 +282,7 @@ Each line already works with the default shown. **Classified 22 Nov (7e-132):** 
 | MR-0444 | R-C-39 | Job history: salary currency defaults to the currency of the current country (GBP last)? — **[D] design rule (no real alternative)**: sensible default, editable on the form |
 | MR-0445 | R-C-39 | Job history share %: a number from 0 to 100 in steps of 0.5? — **[D] design rule (no real alternative)**: number format |
 | MR-0446 | R-C-39 | Share % and £ rate become numbers at migration; text that is not a number becomes empty and is listed on a review report? — **[D] design rule (no real alternative)**: design / one-time project decision – no runtime alternative |
-| MR-0447 | R-C-40 | Job history: contract renewal shows amber when it is 30 days or less away? — **[C] real choice – to become a setting**: contract renewal amber days – later batch |
+| MR-0447 | R-C-40 | Job history: contract renewal shows amber when it is 30 days or less away? — **[B] now a setting**: Choices › contract renewal amber window (recommended 30 days) (7e-135) |
 | MR-0448 | R-C-41 | Shop assignment: "from" date defaults to today? — **[D] design rule (no real alternative)**: default value on the form |
 | MR-0449 | R-C-42 | Shop pickers show every shop (inactive ones greyed), without needing an assignment? — **[D] design rule (no real alternative)**: picker behaviour |
 | MR-0450 | R-C-46 | Bank card expiry reminder 30 days before (to the person, copy to Finance)? — **[S] already a setting**: People › due sources: remind days per kind |
@@ -303,7 +303,7 @@ Each line already works with the default shown. **Classified 22 Nov (7e-132):** 
 | MR-0494 | R-G_CORE-2 | New task form: offer "give it to the person with the fewest open tasks" as the owner? — **[D] design rule (no real alternative)**: offered, not forced |
 | MR-0497 | R-G_CORE-28 | Task comments up to 2,000 characters? — **[B] now a setting**: Choices › Task comment length (7e-132) |
 | MR-0499 | R-G_CORE-45 | New task form: Amount £ and Confidential for the Partner, "Tell on WhatsApp now" switched on? — **[S] already a setting**: Choices › Task proof / import tell (7e-129); amount & confidential are Partner fields |
-| MR-0502 | R-G_CORE-65 | Password reset link valid for 30 minutes? — **[C] real choice – to become a setting**: password reset link minutes – with the forgot-password screen (not built yet) |
+| MR-0502 | R-G_CORE-65 | Password reset link valid for 30 minutes? — **[C] real choice – later**: forgot-password is not built yet (R-G_CORE-65) – its link minutes come with it |
 | MR-0511 | R-G_CORE-94 | Above what amount is a money task URGENT? → proposed: £1,000 in base currency (setting TASK_URGENT_MONEY) for 6 codes — **[S] already a setting**: setting: TASK_URGENT_MONEY |
 | MR-0512 | R-G_CORE-97 | How long does "Close with reason" snooze a rule task? → proposed: 7 days (setting rule_snooze_days) — **[S] already a setting**: setting: rule_snooze_days |
 | MR-0551 | 06C §9 | WH_PARCEL_LOST as a money code → Yes: claim amount > TASK_URGENT_MONEY → URGENT (7th money code) — **[S] already a setting**: setting: TASK_URGENT_MONEY |
@@ -329,7 +329,7 @@ Each line already works with the default shown. **Classified 22 Nov (7e-132):** 
 | Line | Rule | Default (question) |
 |---|---|---|
 | MR-0041 | R-C-49 | IP_ALLOWLIST_MODE = OFF; SESSION_IDLE_MINUTES = 120 — **[S] already a setting**: setting: IP_ALLOWLIST_MODE, SESSION_IDLE_MINUTES |
-| MR-0513 | R-G_CORE-98 | How long is a 2FA check valid for sensitive actions? → proposed: 60 minutes, then asked again — **[C] real choice – to become a setting**: 2FA valid minutes for sensitive actions – later batch |
+| MR-0513 | R-G_CORE-98 | How long is a 2FA check valid for sensitive actions? → proposed: 60 minutes, then asked again — **[C] real choice – later**: the 2FA check for sensitive actions is not built yet (R-G_CORE-98) – its minutes come with it |
 | MR-1305 | 02_Decisions.md D5 | confirm in writing before Phase 2: Kept in a password manager (e.g. Bitwarden). The tool keeps only a vault_ref link — **[D] design rule (no real alternative)**: design / one-time project decision – no runtime alternative |
 | MR-1472 | 19_Old_Tool_Audit/COVERAGE_ROUND_v1.7.md §3 | agree "Supplier portal login / password, shop password-manager link" is vault only — **[D] design rule (no real alternative)**: design / one-time project decision – no runtime alternative |
 | MR-1475 | 19_Old_Tool_Audit/COVERAGE_ROUND_v1.7.md §3 | agree "CVV / PIN columns (9)" is emptied in Phase 0, dropped — **[D] design rule (no real alternative)**: design / one-time project decision – no runtime alternative |
