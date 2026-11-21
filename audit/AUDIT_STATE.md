@@ -136,4 +136,5 @@ How to work each step: build → test → change the verdict lines in `audit/ver
 | 7e-77 | R-G_CORE-72 print service: DocxWriter (no php-zip, 1 cm margins, equal widths, header repeat, refund / loss fills) for the sales list and every list export; PDF maker missing → error + Health warning → MR-0572, MR-1191, MR-1205 BUILT | done | 605 / 1,433 (42%) | 445 tests |
 | 7e-78 | R-B_SOURCING-21 supplier / SKU inherit in cycle step forms (SourcingInherit, chips, registry read-only SKU) → MR-0751, MR-0779, MR-0811 BUILT | done | 608 / 1,433 (42%) | 447 tests |
 | 7e-79 | R-A_SALES-57 Gen-1 sale ↔ buy match summary + lists (Gen1Compare, read-only legacy view) → MR-0663, MR-0713, MR-0731 BUILT | done | 611 / 1,433 (43%) | 448 tests |
-| 7e-80 | NEXT → recount; 3-line R-C-10, R-B_SOURCING-18, R-H-19, R-A_SALES-87, R-FIN-22, R-FIN-47 …; rest of Sourcing 39 / 28 | todo | | |
+| 7e-80 | R-B_SOURCING-18 Save & Next with carried context: WorkflowContext service, sys_workflow_context (migration 000084), POST cycle/next + GET cycle/{id}/context, form button + locked parents + unlock + memory prefill + existing-record dialog; PO label fallback to PO number | done | 614 / 1,433 (43%) | 450 tests |
+| 7e-81 | NEXT → recount; 3-line R-C-10, R-B_SOURCING-19 / 20, R-H-19, R-A_SALES-87, R-FIN-22, R-FIN-47 …; rest of Sourcing 39 / 28 | todo | | |

@@ -3520,6 +3520,18 @@
         m.close(); toast(r.ref + ' created.'); (r.warnings || []).forEach(w => toast(w, 'warn')); if (r.warnings && r.warnings.length) await new Promise(res => setTimeout(res, 6000)); onSaved && onSaved(r); }
       catch (e) { $m('#tnErr').textContent = e.message; } };
   }
+  // R-B_SOURCING-18: after "Save & Next" – the next step's form with the parents locked; when that step already has records for them, ask first
+  async function saveNext(key, rid, opt) {
+    let x; try { x = await api('cycle/next', { method: 'POST', body: { form: key, id: rid } }); } catch (e) { return toast(e.message, 'err'); }
+    if (!x.next) { toast(x.message || 'This was the last step.'); return opt.onSaved ? opt.onSaved({ id: rid }) : null; }
+    const open = () => openForm(x.next.form, null, { preset: x.preset, locked: x.locked, onSaved: opt.onSaved });
+    if (!(x.existing || []).length) return open();
+    const m = modal(x.next.label + ' already exists', x.existing_text, `<div class="small">${x.existing.map(e => `<div style="padding:3px 0"><a href="#" data-exo="${e.id}">${esc(e.label)}</a></div>`).join('')}</div>`,
+      `<button class="btn" id="exCancel">Cancel</button><button class="btn" id="exOpen">Open it</button><button class="btn primary" id="exNew">Create another</button>`, false);
+    $('#exCancel', m.ov).onclick = m.close; $('#exNew', m.ov).onclick = () => { m.close(); open(); };
+    $('#exOpen', m.ov).onclick = () => { m.close(); openForm(x.next.form, x.existing[0].id, { onSaved: opt.onSaved }); };
+    $$('[data-exo]', m.ov).forEach(a => a.onclick = ev => { ev.preventDefault(); m.close(); openForm(x.next.form, +a.dataset.exo, { onSaved: opt.onSaved }); });
+  }
   async function openForm(key, id, opt = {}) {
     if (key === 'task' && !id) return taskNew(opt.preset || {}, opt.onSaved);      // R-G_CORE-2: the task form with SLA prefill and pick-only links
     busy(true); let def, rec, vinfo = {};
@@ -3529,17 +3541,20 @@
     let mode = hasQuick && !opt.focus ? 'quick' : 'full', helpMode = false;
     const uid = 'f' + Math.random().toString(36).slice(2, 8), val = {}, undo = [], redo = [], typed = new Set(), labels = {}, fixes = {}, alike = {};
     flds.forEach(f => { val[f.name] = (opt.preset || {})[f.col] ?? (opt.preset || {})[f.name] ?? rec[f.name] ?? rec[f.col] ?? ''; if (id || (opt.preset || {})[f.col] != null || (opt.preset || {})[f.name] != null) typed.add(f.name); });
+    // R-B_SOURCING-18: parents carried from the step before are locked (the lock icon unlocks one); "Save & Next" opens the next step of the cycle
+    const lockSet = new Set(opt.locked || []); flds.forEach(f => { if (f.stored && (lockSet.has(f.col) || lockSet.has(f.name)) && val[f.name] !== '' && val[f.name] != null) { f._lock = true; f.readonly = true; } });
+    const cycF = flds.find(f => f.col === 'fk_id_cycle'), wf = def.workflow, cycOf = () => def.table === 't_src_cycles' ? id : (cycF ? +val[cycF.name] || null : null);
     const { ov, close } = modal((id ? 'Edit · ' : 'New · ') + def.title, id ? 'Changes are kept in the history of this record.' : 'Saved in its own module; the list opens where it went.',
       `<div class="fhost"><div class="fmbar">${hasQuick ? `<div class="seg"><button type="button" data-m="full">Full</button><button type="button" data-m="quick">Quick</button></div>` : ''}<span class="small muted" id="fInfo"></span><span style="flex:1"></span><span id="fNav" style="display:flex;gap:4px;flex-wrap:wrap"></span></div><div id="fWhy"></div><div class="fbody" id="fBody"></div>
        <details class="small muted" style="padding:8px 4px 0"><summary style="cursor:pointer">What happens when I save?</summary><ul style="margin:6px 0 0 18px;padding:0">${(def.after_save || []).map(l => `<li>${esc(l)}</li>`).join('')}</ul></details></div>`,
-      `<span class="left small muted" id="fMsg"></span><button class="btn" id="fmCancel">Cancel</button><button class="btn primary" id="fmSave" title="Ctrl+S">${ic('save')} Save</button>`);
+      `<span class="left small muted" id="fMsg"></span><button class="btn" id="fmCancel">Cancel</button>${wf && wf.next ? `<button class="btn" id="fmNext" style="display:none" title="Save, then open the next step with this record's PO / shipment / GRN … filled and locked">${ic('save')} Save &amp; Next: <span id="fmNextL">${esc(wf.next)}</span></button>` : ''}<button class="btn primary" id="fmSave" title="Ctrl+S">${ic('save')} Save</button>`);
     const bar = document.createElement('div'); bar.className = 'mo-assist';
     bar.innerHTML = (opt.fromCreate ? `<button type="button" class="btn sm" data-a="back" title="Back to the Create list (keeps your search)">← Back</button>` : '') +
       `<button type="button" class="btn sm" data-a="undo" title="Undo the last change">↶ Undo</button><button type="button" class="btn sm" data-a="redo" title="Redo">↷ Redo</button>` +
       (id ? '' : `<button type="button" class="btn sm" data-a="last" title="Fill the form with the values of the last saved one">⟲ Fill from last</button>`) + `<button type="button" class="btn sm ghost" data-a="clear" title="Empty all fields (can be undone)">Clear</button><button type="button" class="btn sm ghost" data-a="help" title="Show the help line of every field">? Help</button>`;
     $('.modal-h', ov).insertBefore(bar, $('.x', ov));
     const cond = ex => { const m = ex.match(/^([\w.]+)\s*(!=|=|>|<)\s*(.*)$/); if (!m) return true; const h = String(val[m[1].replace(/^parent\./, '')] ?? ''); return m[2] === '=' ? h === m[3] : m[2] === '!=' ? h !== m[3] : m[2] === '>' ? +h > +m[3] : +h < +m[3]; };
-    const shown = f => (mode === 'full' || f.quick || f.required) && (!f.show_if || cond(f.show_if));
+    const shown = f => (mode === 'full' || f.quick || f.required || f._lock) && (!f.show_if || cond(f.show_if));
     const empty = n => val[n] === '' || val[n] == null;
     const kids = name => flds.filter(f => (f.cascades_from || '').split(',').map(x => x.trim()).some(c => c === name || c === (flds.find(x => x.name === name) || {}).col || ((c === 'company' || c === 'companies') && (flds.find(x => x.name === name) || {}).col === 'fk_id_ent')));
     const parentsOf = () => { const p = {}; flds.forEach(f => { if (!empty(f.name) && (f.has_options || f.col === 'fk_id_ent')) p[f.name] = val[f.name]; }); return p; };
@@ -3565,7 +3580,7 @@
     function draw(errors = {}) {
       const secs = def.sections.map(s => ({ s, fs: s.fields.filter(shown) })).filter(x => x.fs.length);
       $('#fBody', ov).innerHTML = secs.map(({ s, fs }, i) => `<div class="fsec" data-sec="${i}"><div class="fsec-h"><b>${esc(s.title)}</b><span class="small muted">${fs.length} field${fs.length === 1 ? '' : 's'} · ${fs.filter(f => f.required).length} required${mode === 'quick' && s.fields.length > fs.length ? ` · <a href="#" data-more>Show all ${s.fields.length - fs.length} more</a>` : ''}</span></div><div class="form">${fs.map(f => `<div class="fld ${f.required ? 'is-req' : ''} ${errors[f.name] ? 'has-err' : ''}" data-w="${f.name}">
-          <label for="${uid}_${f.name}"><span>${esc(f.label)}</span>${f.required ? ' <span class="req">*</span>' : ''}${f.help ? `<span class="help" title="${esc(f.help)}">?</span>` : ''}${!id && f.default_why && !typed.has(f.name) && !empty(f.name) ? ` <span class="chip plain" title="Filled by itself: ${esc(f.default_why)}. Change it if it is different.">default</span>` : ''}${!empty(f.name) && !f.secret ? ` <a href="#" data-copy="${f.name}" class="small muted" title="Copy this value" tabindex="-1">copy</a>` : ''}</label>${input(f)}
+          <label for="${uid}_${f.name}"><span>${esc(f.label)}</span>${f.required ? ' <span class="req">*</span>' : ''}${f.help ? `<span class="help" title="${esc(f.help)}">?</span>` : ''}${!id && f.default_why && !typed.has(f.name) && !empty(f.name) ? ` <span class="chip plain" title="Filled by itself: ${esc(f.default_why)}. Change it if it is different.">default</span>` : ''}${f._lock ? ` <a href="#" data-unlock="${f.name}" class="small" title="Carried from the step before – click to unlock and change it" tabindex="-1">🔒 unlock</a>` : ''}${!empty(f.name) && !f.secret ? ` <a href="#" data-copy="${f.name}" class="small muted" title="Copy this value" tabindex="-1">copy</a>` : ''}</label>${input(f)}
           ${f.help ? `<div class="helptext" data-help style="display:${helpMode ? 'block' : 'none'}">${esc(f.help)}</div>` : ''}<div data-under="${f.name}">${under(f)}</div>${errors[f.name] ? `<div class="errtext">${esc(errors[f.name][0] || errors[f.name])}</div>` : ''}</div>`).join('')}</div></div>`).join('');
       $$('.seg button', ov).forEach(b => b.classList.toggle('on', b.dataset.m === mode));
       const vis = flds.filter(shown); $('#fInfo', ov).innerHTML = `<b>${vis.length}</b> fields · <b>${vis.filter(f => f.required).length}</b> required · marked <span style="color:var(--err)">*</span> · saves into <b>${esc(def.title)}</b>`;
@@ -3623,7 +3638,7 @@
       openForm(f.add_form, null, { preset, onSaved: r => { (labels[f.name] = labels[f.name] || {})[String(r.id)] = r.label || String(r.id); typed.add(f.name); change(f.name, f.type === 'multiselect' ? String(val[f.name] || '').split(',').filter(x => x !== '').concat([String(r.id)]).join(',') : String(r.id)); redrawField(f); toast('Added and selected'); afterPick(f); } }); }
     const read = el => el.type === 'checkbox' ? (el.checked ? 1 : 0) : el.value;
     const setVal = (name, v) => { val[name] = v; const f = flds.find(x => x.name === name); if (f && f.has_options) { ensureLabels(f); return redrawField(f); } const el = $(`[data-f="${name}"]`, ov); if (el) { if (el.type === 'checkbox') el.checked = !!+v; else el.value = v; } };
-    const change = (name, nw) => { const old = val[name] ?? ''; if (String(old) === String(nw)) return; undo.push({ name, old, nw }); redo.length = 0; val[name] = nw; if (flds.some(f => f.show_if && f.show_if.startsWith(name))) draw(); paint(); };
+    const change = (name, nw) => { const old = val[name] ?? ''; if (String(old) === String(nw)) return; undo.push({ name, old, nw }); redo.length = 0; val[name] = nw; if (cycF && name === cycF.name) ov.dispatchEvent(new Event('mo-cycle')); if (flds.some(f => f.show_if && f.show_if.startsWith(name))) draw(); paint(); };
     const paint = () => { const q = a => $(`[data-a=${a}]`, bar); q('undo').disabled = !undo.length; q('redo').disabled = !redo.length; if (q('last')) q('last').disabled = !lastSaved[key]; };
     // "Why can't I save?" – every required field that is still empty, with a link that goes there
     const missing = () => flds.filter(f => shown(f) && f.required && !f.readonly && !f.numbered && empty(f.name));
@@ -3678,6 +3693,7 @@
       const cp = t.closest('[data-copy]'); if (cp) { e.preventDefault(); const n = cp.dataset.copy, f = flds.find(x => x.name === n); const txt = f.has_options ? String(val[n]).split(',').map(x => (labels[n] || {})[x] ?? x).join(', ') : String(val[n] ?? ''); navigator.clipboard.writeText(txt).then(() => toast('Copied'), () => toast('Copy is not allowed by this browser', 'err')); return; }
       const st = t.closest('[data-step]'); if (st) { const n = st.dataset.step, f = flds.find(x => x.name === n), el = $(`[data-f="${n}"]`, ov); const by = +st.dataset.by, dec = (String(Math.abs(by)).split('.')[1] || '').length; let v = (+el.value || 0) + by; if (f.min !== null && f.min !== '' && v < +f.min) v = +f.min; if (f.max !== null && f.max !== '' && v > +f.max) v = +f.max; el.value = dec ? v.toFixed(dec) : String(Math.round(v * 1e6) / 1e6); typed.add(n); change(n, el.value); refreshWhy(); return; }
       const uf = t.closest('[data-unfix]'); if (uf) { e.preventDefault(); const n = uf.dataset.unfix, el = $(`[data-f="${n}"]`, ov); el.value = fixes[n]; change(n, fixes[n]); delete fixes[n]; fixes['!' + n] = 1; drawUnder(flds.find(x => x.name === n)); return; }
+      const ul = t.closest('[data-unlock]'); if (ul) { e.preventDefault(); const f = flds.find(x => x.name === ul.dataset.unlock); $$('[data-f]', ov).forEach(el => { val[el.dataset.f] = read(el); }); f._lock = false; f.readonly = false; f._unlocked = true; return draw(); }
       if (t.closest('[data-more]')) { e.preventDefault(); mode = 'full'; return draw(); }
       const x = t.closest('[data-ddx]'); if (x) { e.preventDefault(); e.stopPropagation(); const n = x.closest('[data-dd]').dataset.dd, f = flds.find(q => q.name === n); change(n, String(val[n]).split(',').filter(v => v !== x.dataset.ddx).join(',')); redrawField(f); afterPick(f); return; }
       const cl = t.closest('[data-ddclr]'); if (cl) { e.preventDefault(); e.stopPropagation(); const n = cl.closest('[data-dd]').dataset.dd, f = flds.find(q => q.name === n); change(n, ''); redrawField(f); afterPick(f); return; }
@@ -3693,15 +3709,25 @@
       refreshWhy(); paint(); };
     $$('.seg button', ov).forEach(b => b.onclick = () => { $$('[data-f]', ov).forEach(el => { val[el.dataset.f] = read(el); }); mode = b.dataset.m; draw(); });
     $('#fmCancel', ov).onclick = close;
-    $('#fmSave', ov).onclick = async () => { $$('[data-f]', ov).forEach(el => { val[el.dataset.f] = read(el); });
+    const doSave = async next => { $$('[data-f]', ov).forEach(el => { val[el.dataset.f] = read(el); });
       const miss = missing(); if (miss.length) { refreshWhy(true); $('#fMsg', ov).textContent = miss.length + ' required field(s) are empty'; return gotoField(miss[0].name); }
-      const values = {}; flds.filter(f => !f.readonly && (shown(f) || id)).forEach(f => { values[f.name] = val[f.name]; });
+      const values = {}; flds.filter(f => (!f.readonly || f._lock) && (shown(f) || id || f._lock)).forEach(f => { values[f.name] = val[f.name]; });
       busy(true);
       try { const r = await withDup(x => api(`record/${key}` + (id ? '/' + id : ''), { method: 'POST', body: { values, quick: mode === 'quick', ...x } }));
         lastSaved[key] = values; try { localStorage.setItem('mo_last_forms', JSON.stringify(lastSaved)); } catch (x) {}
-        close(); toast(r.message, 'ok', r.open_record || r.open); opt.onSaved ? opt.onSaved(r) : go(r.open); }
+        close(); toast(r.message, 'ok', r.open_record || r.open);
+        if (next) { busy(false); return saveNext(key, r.id || id, opt); }
+        opt.onSaved ? opt.onSaved(r) : go(r.open); }
       catch (e) { if (e.message === 'Not saved - duplicate.') { $('#fMsg', ov).textContent = e.message; } else if (e.status === 422) { draw(e.errors); $('#fMsg', ov).textContent = e.errors._form ? (e.errors._form[0] || e.errors._form) : Object.keys(e.errors).length + ' field(s) need attention'; if (e.errors._form) toast(e.errors._form[0] || e.errors._form, 'err'); const first = Object.keys(e.errors).find(n => $(`[data-w="${n}"]`, ov)); first && gotoField(first); } else toast(e.message, 'err'); }
       busy(false); };
+    $('#fmSave', ov).onclick = () => doSave(false);
+    if ($('#fmNext', ov)) { $('#fmNext', ov).onclick = () => doSave(true);
+      const showNext = async () => { const c = cycOf(), b = $('#fmNext', ov); if (!b) return; b.style.display = c ? '' : 'none'; if (!c) return;
+        try { const x = await api(`cycle/${c}/context?form=${encodeURIComponent(def.table)}`); if (x.next) $('#fmNextL', ov).textContent = x.next.label; else b.style.display = 'none';
+          // memory: parents of this cycle's context fill the empty ones of a new step form (linked:workflow.<x>)
+          if (!id && x.preset) Object.entries(x.preset).forEach(([c2, v]) => { const f = flds.find(q => q.col === c2); if (f && f.stored && !f.readonly && empty(f.name) && v) { typed.add(f.name); setVal(f.name, String(v)); if (f.has_options) redrawField(f); } }); } catch (e) {} };
+      showNext();
+      ov.addEventListener('mo-cycle', showNext); }
     // a name typed in the dropdown's "Add …" goes into the first name-like field of the new form
     if (opt.preset && opt.preset.__label) { const f = flds.find(x => (def.lookalike || []).includes(x.name) && !x.numbered && !x.readonly && ['text'].includes(x.type)) || flds.find(x => x.type === 'text' && !x.numbered && !x.readonly && x.required); if (f && empty(f.name)) { val[f.name] = opt.preset.__label; typed.add(f.name); } }
     draw();

@@ -235,6 +235,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('shipment/{id}/pos', [BuyingController::class, 'shipmentPoSave'])->whereNumber('id');
         Route::post('shipment/{id}/pos/{po}/remove', [BuyingController::class, 'shipmentPoRemove'])->whereNumber('id')->whereNumber('po');
         Route::get('cycle/{id}/overview', [BuyingController::class, 'cycleOverview'])->whereNumber('id');
+        Route::post('cycle/next', [BuyingController::class, 'cycleNext']);
+        Route::get('cycle/{id}/context', [BuyingController::class, 'cycleContext'])->whereNumber('id');
         Route::post('cycle/{id}/whatsapp', [BuyingController::class, 'cycleWhatsapp'])->whereNumber('id');
         Route::post('grn/{id}/claim', [BuyingController::class, 'grnClaim'])->whereNumber('id');
         Route::get('src-doc-requirements', [BuyingController::class, 'docRequirements']);

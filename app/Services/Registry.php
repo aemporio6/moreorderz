@@ -95,7 +95,7 @@ class Registry
         }
         ksort($sections);
         return ['form_key' => $formKey, 'title' => $fields[0]['form_title'], 'kind' => $fields[0]['form_kind'], 'table' => $table, 'sections' => array_values($sections),
-            'lookalike' => FormAssist::lookalikeFields($formKey), 'live' => FormRules::liveFields($formKey), 'live_typing' => FormRules::liveTyping($formKey), 'calc' => FormRules::calcFields($formKey), 'after_save' => FormAssist::afterSave($formKey)];
+            'lookalike' => FormAssist::lookalikeFields($formKey), 'live' => FormRules::liveFields($formKey), 'live_typing' => FormRules::liveTyping($formKey), 'calc' => FormRules::calcFields($formKey), 'after_save' => FormAssist::afterSave($formKey), 'workflow' => WorkflowContext::stepOf((string) $table)];
     }
 
     public static function labelOf(string $formKey, string $col): ?string { foreach (self::fields($formKey) as $f) if ($f['column_name'] === $col || $f['field_name'] === $col) return $f['label']; return null; }
@@ -154,8 +154,9 @@ class Registry
             $x->orderBy('first_name')->orderBy('sur_name');
         } else {
             $lc = self::labelColumn($table);
-            $x = DB::table($table)->select($pk . ' as id', $lc . ' as lbl');
-            if ($q) $x->where($lc, 'like', "%$q%");
+            $alt = $table === 't_src_po' && $lc === 'po_code' ? 'po_number' : null;      // a PO saved without its auto code is shown by its PO number, never as a bare id
+            $x = DB::table($table)->select($pk . ' as id', $alt ? DB::raw("COALESCE(NULLIF($lc, ''), $alt) as lbl") : $lc . ' as lbl');
+            if ($q) $alt ? $x->where(fn ($w) => $w->where($lc, 'like', "%$q%")->orWhere($alt, 'like', "%$q%")) : $x->where($lc, 'like', "%$q%");
             $x->orderBy($lc);
         }
         if ($ent && self::hasColumn($table, 'fk_id_ent')) $x->where(fn ($w) => $w->where('fk_id_ent', $ent)->orWhere('fk_id_ent', 0)->orWhereNull('fk_id_ent'));

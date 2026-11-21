@@ -201,6 +201,7 @@ class RecordService
             if ($table === 't_src_po_lines') PoLines::sync((int) $id);
             if ($table === 't_product_vendors' && $created) ProductFamily::created((int) $id, (int) ($data['fk_id_ent'] ?? $ent ?? 0));      // R-D-1: a 0.00 price row per marketplace
             if ($table === 't_account_branches') ShopAssignments::saved((int) $id, $created);      // R-C-41: event + VA cache      // FEE / COST freight-cost row, SAMPLE row, PO total (R-B_SOURCING-6)
+            if (str_starts_with($table, 't_src_') && ($uid = (int) (\Illuminate\Support\Facades\Auth::id() ?? 0))) WorkflowContext::remember($table, (int) $id, $uid);      // R-B_SOURCING-18: the cycle's carried context
             if (str_starts_with($table, 't_src_') || $table === 'fin_lots') CycleAlerts::touched();      // sourcing alerts run again after the save (R-B_SOURCING-26)
             return ['id' => $id, 'created' => $created];
         });
