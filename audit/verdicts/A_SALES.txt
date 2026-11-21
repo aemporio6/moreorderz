@@ -28,7 +28,7 @@
 28|B|function calc|one line formula (product cost = raw x qty, postage once per line, buy amount, profit) used by intake, Edit Sale and Edit Carrier / Packing, shown in the carrier dialog and on hover; both examples of the rule pass; SaleLinesTest
 29|B|consumeForSale|actual lot cost booked at Month confirm
 30|P|transferOwnership|lot owners shown; visibility per line not built
-31|P|function vaOf|VA of the shop and the VA % of the job-history row valid on the batch period end are frozen on the batch at import; strip over the whole filter per batch (after-fee, VA rounded per batch, net, mixed %) on list, batch view and export – the rule's 2-batch example is tested. Missing: va_share_amount + basis saved, Refresh VA % (Owner), VA from the shop assignment role, click a figure to list its lines, Month Close figures when closed
+31|P|function refreshVa|VA of the shop and the VA % of the job-history row valid on the batch period end frozen on the batch at import; VA share amount + basis saved on the batch (follows the lines while Pending, frozen at Confirm); Refresh VA % (Owner, reason, logged, refused when the month is closed) with the rule's message; strip over the whole filter per batch on list, batch view and export – the 2-batch example is tested. Missing: VA from the shop assignment role, click a figure to list its lines, Month Close figures when closed, VA_EXPENSES_BEFORE_SHARE on the strip
 32|B|confirmPreview|preview, shortage block, all-or-nothing confirm; cover-from-pool / transfer buttons not built
 33|P|function takesStock|built: which refunded lines take stock (the three cases of the rule pass), Month confirm follows it, task SAL_RETURN_EXPECTED on a full refund without product loss; open: an end-to-end test of Confirm with refunded lines, write-off mark in the lot ledger
 34|P|function unlockMonth|confirmed batch leaves the Imports list (status Confirmed), cannot be deleted or re-imported, lines read-only with the rule's message; Owner-only unlock (right can never be handed out) with reason, version of every line in imp_batch_effects, stock back to the lot, revenue reversed, refused when the month is closed – tested with the rule's example. Missing: refund / return / landed-cost change after Confirm booked as an adjustment line in the next open month
@@ -47,8 +47,8 @@
 47|B|function mine|shop scope per person: order board, tracking, returns, labels, profit, sales reports, settlements, refunds, month close and every shop picker show own shops only; PermissionTest
 48|B|function periods|six period chips as whole calendar months (the 29th–31st cannot skip a month), typed dates override, totals strip; "2 months ago" on 6 Nov 2026 = 1–30 Sep 2026; SaleLinesTest
 49|B|SL.y|after edit, carrier, refund or delete the list keeps its page, filters and scroll position and refreshes the rows and totals
-50|M||Annual Sale Report not built
-51|P|class ReportService|sales per month / shop reports; not the shops x months grid with PDF
+50|P|function annual|filters year 2020–2030, marketplace → shop (shop label) → the shop's VA and %, project / vendor, vendor inventory, company; always 12 months + Year Total; Sales, Buy, Qty, Fee, Profit before fee, After fee, VA share = Σ saved batch shares, Store share, Net, Loss; cost-basis label; CSV / PDF (profit green, loss red) / Excel with the rule's names and column order; 12 tiles + bar chart. Tested with the rule's example (800 / 40 / 10 % → 760 / 76 / 684). Missing: VA read from the shop assignment role (the shop's seller is used)
+51|B|function detailed|one row per shop sorted by marketplace then shop no with the shop label, Owner and VA; per month Total, Purchase, Qty, Profit + Annual; filters year, project / vendor, vendor inventory, owner, VA; PDF on the large square page, CSV, Excel; heat colours on profit; click a cell → the sales list of that shop + month. Tested: the cell equals the list's strip
 52|P|class OldImport|old sales copied as history lines; legacy profit columns / compare report per rule not built
 53|M||bulk delete with preview / approval not built
 54|M||Gen-1 SALE sheet type not built
@@ -78,7 +78,7 @@
 78|F|form:csv_generator|form only; convert tool not built
 79|M||"Update existing data" import mode not built
 80|F|form:supplier_order_history|form only; 68-column Amazon Business import not built
-81|M||standard shop label component not built
+81|B|class ShopLabel|one component: [marketplace – ]shop_no · owner (first middle surname) · company · shop_name (inactive), empty parts left out, marketplace shown when the list mixes marketplaces; sorted by marketplace then shop no; inactive kept in filters, not offered for import; cascade by marketplace; a shop carries its VA and that VA's commission %. Used by the Sales filter, the import picker and both reports. Tested with the rule's example
 82|P|class PermCatalogue|named rights for orders / dispatch exist as data and are checked on the server; open: names differ from the spec list (sale.import ...) and per-shop narrowing of the sales screens
 83|B|feeBucket|fee buckets + month totals from the money files; hub compare (SAL_HUB_MISMATCH task) not built
 84|P|fulfilment_channel|orders by file / API / hand with tracking + label; monthly merge and "Close daily orders" not built
@@ -88,5 +88,5 @@
 88|P|SAL_STOCK_SHORT|SAL_UNMATCHED, SAL_ZERO, SAL_STOCK_SHORT built; other 11 sales task codes not built
 89|F|form:crm_customer|form only; customer record page / retention job not built
 90|M||case channel / carrier facts / returns window not built
-91|M||dropship minimum margin not built
+91|B|function minMargin|choice DS_MIN_MARGIN (0, 5, 10, 12, 15, 20, 25, 30 %; 10 % suggested) with a value per shop and the shop column ds_min_margin_pct; a drop-shipping line below it opens SAL_DS_MARG, below 0 % always; "Accept the margin" with a note closes it. Tested with the rule's example
 92|B|function readTikTok|TikTok settlement workbook: layout, buckets, 4 checks – verified on 3 real files

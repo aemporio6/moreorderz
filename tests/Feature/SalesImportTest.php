@@ -243,7 +243,7 @@ class SalesImportTest extends TestCase
     public function test_rights_and_the_endpoints(): void
     {
         $this->world();
-        $this->getJson('/api/sales/import')->assertOk()->assertJsonPath('empty', 'Nothing imported yet.')->assertJsonPath('shops.0.name', '101A (Pets)');
+        $this->getJson('/api/sales/import')->assertOk()->assertJsonPath('empty', 'Nothing imported yet.')->assertJsonPath('shops.0.name', '101A · Pets');
         $this->getJson('/api/sales/import/name?name=101A_july26.csv')->assertOk()->assertJsonPath('month', 7);
         $this->getJson("/api/sales/columns/{$this->mp}")->assertOk()->assertJsonPath('columns.qty', 'Quantity');
         $this->postJson("/api/sales/columns/{$this->mp}", ['set' => 'SALE', 'columns' => ['order_no' => ' Order number ,, order number', 'order_date' => 'Sale date', 'sku' => 'Custom label', 'qty' => 'Quantity', 'sale_rate' => 'Sold for']])->assertOk();

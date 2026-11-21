@@ -407,8 +407,7 @@ class SaleLines
     {
         $ent = (int) Context::ent();
         $mps = DB::table('cat_marketplaces')->whereIn('fk_id_ent', [0, $ent])->orderBy('marketplace_short')->get(['id', DB::raw("COALESCE(NULLIF(marketplace_short,''), NULLIF(marketplace_descr,''), CONCAT('Marketplace ', id)) as name"), 'f_active']);
-        $shops = Perm::mine(DB::table('t_branches as b')->leftJoin('cat_marketplaces as m', 'm.id', '=', 'b.fk_id_marketplace'), 'b.id')->where('b.fk_id_ent', $ent)->orderBy('b.shop_no')
-            ->get(['b.id', 'b.fk_id_marketplace as marketplace', DB::raw("CONCAT(COALESCE(NULLIF(m.marketplace_short,''), m.marketplace_descr, ''), ' - ', COALESCE(b.shop_no,''), ' ', COALESCE(b.shop_name,''), IF(b.f_active = 1, '', ' (inactive)')) as name")]);
+        $shops = array_map(fn ($x) => ['id' => $x['id'], 'marketplace' => $x['marketplace'], 'name' => $x['label'], 'active' => $x['active'], 'va' => $x['va'], 'va_pct' => $x['va_pct']], ShopLabel::list($u));      // the one shop label, sorted by marketplace then shop no
         $base = ['marketplaces' => $mps, 'shops' => $shops, 'periods' => self::periods(), 'page_sizes' => self::PAGE_SIZES, 'natures' => self::NATURES, 'source_tags' => self::SOURCE_TAGS,
             'rights' => ['see_cost' => $u && Perm::has($u, 'orders.MONEY'), 'delete_month' => $u && Perm::has($u, 'orders.saleDeleteMonth'), 'export' => $u && Perm::has($u, 'orders.saleExport'), 'rematch' => $u && Perm::has($u, 'orders.dsRematch'), 'ds_link' => $u && Perm::has($u, 'orders.dsLink'), 'unlock' => $u && Perm::has($u, 'orders.saleUnlock'), 'import' => $u && Perm::has($u, 'orders.saleImport'), 'confirm' => $u && Perm::has($u, 'orders.CONFIRM')],
             'self_check' => SalesImport::selfCheckMessage()];

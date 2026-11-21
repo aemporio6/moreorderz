@@ -306,3 +306,14 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - **Partly built, said honestly**: 21 (ties are warned, no manual-pick list), 25 (no daily digest), 26 (masking not yet on the drop-shipping list / its export), 66 (the DS Columns set waits for the supplier-file upload).
 - Tests: 264 pass (5,174 checks); new `tests/Feature/DsMatchTest.php` (9) with the rules' examples (John A Smith → 4 of 5; USD 10 at 0.80 → £8.00, profit £6.99; 8 of 10 after the supplier file; `not_matched_101A_jul26_2026-08-02.csv`; ••••••123). Browser checked with made-up data.
 - Register after this batch: BUILT 281 of 1,433 (20 %); Sales 36 of 155 (23 %).
+
+## Sales batch 5, part 1 – shop label, sales reports, saved VA share, drop-shipping margin (21 Nov 2026)
+- **One shop label** (R-A_SALES-81) – `app/Services/ShopLabel.php`: `[marketplace – ]shop_no · owner · company · shop_name (inactive)`, sorted by marketplace then shop no; each shop carries its VA and that VA's commission %. Used by the Sales list filter, the import picker (active shops only) and the reports. `GET /api/shops/labels`.
+- **Annual sale report** (50) – screen `#/sales-annual` (button on Sales lines, also in search): 12 months + Year Total with Sales, Buy, Qty, Marketplace fee, Profit before fee, After fee, VA share, Store share, Net, Loss; filters year, marketplace → shop, project / vendor, vendor inventory, company; 12 tiles + bar chart; CSV / Excel / PDF with the rule's file names.
+- **Detailed sale report** (51) – screen `#/sales-detailed`: one row per shop × 12 months (total, purchase, qty, profit) + Annual; heat colours; click a cell → the sales list of that shop and month; PDF on a large square page, CSV, Excel.
+- **Saved VA share** (31): `t_sale_imports.va_share_amount` + `va_share_basis` (migration 000025). While a batch is Pending the amount follows its lines; at Month Confirm it is frozen. **Refresh VA %** (Owner, reason, logged) on the Pending imports list; refused once the month is closed. Reports read the saved amount.
+- **Drop-shipping minimum margin** (91): choice "Drop shipping: the smallest margin" (0 … 30 %, 10 % suggested) under Settings › Choices, own value per shop; a drop-shipping line below it opens task `SAL_DS_MARG` (below 0 % always); "Accept the margin…" in the line's Actions closes it with a note. New choice `VA_EXPENSES_BEFORE_SHARE` (used by the VA statement, next part).
+- New right `orders.saleReports` (Owner, Manager, TL, Finance).
+- **Partly built, said honestly**: 50 and 31 use the shop's seller as the VA (the spec's shop assignment role is not built yet).
+- Tests: 269 pass (5,242 checks); new `tests/Feature/SalesReportsTest.php` (5) with the rules' examples. Browser checked.
+- Register after this batch: BUILT 288 of 1,433 (20 %); Sales 39 of 155 (25 %).
