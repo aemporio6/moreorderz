@@ -154,6 +154,7 @@
     try {
       if ((mt = r.match(/^#\/list\/([\w-]+)(?:\?(.*))?/))) { const f = {}; new URLSearchParams(mt[2] || '').forEach((v, k) => { const m2 = k.match(/^f\[(\w+)\]$/); if (m2) f[m2[1]] = v; }); return await pageList(mt[1], { filter: f }); }
       if ((mt = r.match(/^#\/rec\/([\w-]+)\/(\d+)/))) return await pageRecord(mt[1], +mt[2]);
+      if (r.startsWith('#/due')) return await pageDue();
       if (r.startsWith('#/tasks')) return await pageTasks(r.includes('scope=all') ? 'all' : r.includes('scope=stuck_on_me') ? 'stuck_on_me' : 'mine');
       if ((mt = r.match(/^#\/stock\/product\/(\d+)/))) return await pageStockProduct(+mt[1]);
       if (r.startsWith('#/stock/ledger')) return await pageStockLedger({ act: (r.match(/act=(\w+)/) || [])[1], product: (r.match(/product=(\d+)/) || [])[1] });
@@ -1292,6 +1293,18 @@
     $$('#main [data-tab]').forEach(b => b.onclick = () => { S.recTab = b.dataset.tab; pageRecord(key, id); });
   }
 
+  // ---------- Due soon (R-C-46): every stored renewal / expiry / payment date, with its source chip ----------
+  const DUE = { chip: '', status: '' };
+  async function pageDue() {
+    busy(true); let d; try { d = await api('due?' + new URLSearchParams(DUE)); } finally { busy(false); }
+    const late = r => r.due_date < d.today;
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Due dates</h1><div class="sub">Renewals, expiries and payments kept on records. A reminder comes before the date, a task on the date; it closes when the date is moved on (or you mark it done).</div></div></div>
+      <div class="card"><div class="list-bar" style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm ${DUE.chip ? '' : 'primary'}" data-chip="">All</button>${d.chips.map(c => `<button class="btn sm ${DUE.chip === c ? 'primary' : ''}" data-chip="${esc(c)}">${esc(c)}</button>`).join('')}<span style="margin-left:auto"></span><button class="btn sm ${DUE.status ? 'primary' : ''}" id="duDone">${DUE.status ? 'Show open' : 'Show done'}</button></div>
+      <div class="tbl-wrap"><table class="t"><thead><tr><th>Due</th><th>What</th><th>Source</th><th>Owner</th><th class="num">Amount</th><th>Status</th><th></th></tr></thead><tbody>${d.rows.map(r => `<tr><td style="${late(r) && !DUE.status ? 'color:var(--err);font-weight:600' : ''}">${esc(r.due_date)}</td><td>${esc(r.title)}${r.done_how ? `<div class="small muted">${esc(r.done_how)}</div>` : ''}</td><td><span class="chip plain">${esc(r.chip || r.source_table)}</span></td><td>${esc(r.owner || '—')}</td><td class="num">${r.amount !== null ? money(r.amount) : ''}</td><td><span class="chip ${chipFor(r.status)}">${esc(r.status)}</span></td>
+        <td>${DUE.status ? '' : `<button class="btn sm" data-dd="${r.id}" title="${+r.recur_months ? 'Done: the date moves on by ' + r.recur_months + ' month(s)' : 'Done: closes the item'}">Done</button>`}</td></tr>`).join('')}</tbody></table>${d.rows.length ? '' : `<div class="empty">${ic('check')}<div>Nothing due.</div></div>`}</div></div>`;
+    $$('[data-chip]').forEach(b => b.onclick = () => { DUE.chip = b.dataset.chip; pageDue(); }); $('#duDone').onclick = () => { DUE.status = DUE.status ? '' : 'done'; pageDue(); };
+    $$('[data-dd]').forEach(b => b.onclick = async () => { try { toast((await api(`due/${b.dataset.dd}/done`, { method: 'POST', body: {} })).message); pageDue(); } catch (e) { toast(e.message, 'err'); } });
+  }
   // ---------- tasks ----------
   async function pageTasks(scope) {
     busy(true); let d; try { d = await api(`tasks?scope=${scope}`); } finally { busy(false); }

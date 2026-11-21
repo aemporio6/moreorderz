@@ -55,18 +55,11 @@ class Subscriptions
         });
     }
 
-    /** Night: a task for every active subscription whose due date has passed. */
+    /** Night: the due engine (R-C-46) reminds before the next due date and opens ACC_SUBSCRIPTION_DUE on it; paying moves the date on and closes it. Returns the tasks opened. */
     public static function nightly(): int
     {
         $n = 0;
-        foreach (DB::table('t_account_subscriptions as s')->join('t_account as a', 'a.id', '=', 's.fk_id_account')->leftJoin('cat_subscription_items as i', 'i.id', '=', 's.fk_item_id')->where('s.f_active', 1)->whereNotNull('s.next_due_date')->where('s.next_due_date', '<', date('Y-m-d'))->get(['s.id', 's.next_due_date', 'i.item_name', 'a.fk_id_ent']) as $s) {
-            if (TaskEngine::open('ACC_SUBSCRIPTION_DUE', [$s->id], 'Subscription ' . ($s->item_name ?: '#' . $s->id) . ' was due ' . $s->next_due_date . ': book the payment or switch it off', ['ent' => (int) $s->fk_id_ent, 'module' => 't_account_subscriptions', 'record_id' => $s->id, 'fix_url' => '#/subscriptions'])) $n++;
-        }
-        foreach (DB::table('tasks')->where('rule_code', 'ACC_SUBSCRIPTION_DUE')->whereNotIn('status', ['DONE', 'CANCELLED'])->get(['dedupe_key']) as $t) {
-            $sid = (int) explode(':', $t->dedupe_key)[1];
-            $s = DB::table('t_account_subscriptions')->where('id', $sid)->first();
-            if (! $s || ! $s->f_active || ! $s->next_due_date || $s->next_due_date >= date('Y-m-d')) TaskEngine::close('ACC_SUBSCRIPTION_DUE', [$sid], 'Paid or switched off');
-        }
+        foreach (DB::table('t_enterprise')->pluck('id') as $ent) $n += DueEngine::run((int) $ent, null, ['t_account_subscriptions'])['tasks'];
         return $n;
     }
 }

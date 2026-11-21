@@ -398,6 +398,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('returns', [OrdersController::class, 'returns']);
         Route::post('returns', [OrdersController::class, 'receiveReturn']);
         Route::get('tasks', [WorkController::class, 'tasks']);
+        Route::get('due', [WorkController::class, 'due']);
+        Route::post('due/{id}/done', [WorkController::class, 'dueDone'])->whereNumber('id');
         Route::post('tasks/{id}/status', [WorkController::class, 'taskStatus'])->whereNumber('id');
     });
 });

@@ -89,6 +89,9 @@ class WorkController extends Controller
     public function prefs(Request $r, string $page) { return \App\Services\ListExports::prefs($r->user(), $page); }
     public function savePrefs(Request $r, string $page) { \App\Services\ListExports::savePrefs($r->user(), $page, $r->all()); return ['ok' => true]; }
 
+    public function due(Request $r) { return \App\Services\DueEngine::list((int) Context::ent(), $r->user(), $r->only(['chip', 'status'])); }
+    public function dueDone(Request $r, int $id) { try { return \App\Services\DueEngine::done((int) Context::ent(), $id, $r->user()); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
+
     public function tasks(Request $r)
     {
         $u = $r->user();

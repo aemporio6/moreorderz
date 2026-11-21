@@ -536,3 +536,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-22 (21 Nov): marketplace profile drives the readers (R-A_SALES-87 rule test, 84 BUILT): Profiles service, migration 000041, profile-first money reader, daily orders report by profile, required-for-close, Marketplaces › Profiles editor. 343 tests.
 - 7e-23 (21 Nov): company form R-F_SETUP-35 BUILT (FormRules, registry update, Accountancy Hub values + due dates, #/acc-company). +13 register lines. 347 tests.
 - 7e-24 (21 Nov): sourcing alert registry R-B_SOURCING-26 + pipeline gaps R-17 BUILT (CycleAlerts, cycle Overview, 15-minute sweep). +13 register lines. 352 tests.
+- 7e-25 (21 Nov): due engine R-C-46 BUILT (DueEngine, Due dates screen, 11 due sources on real columns). +8 register lines. 355 tests.

@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 /** The bell: short in-app messages for one person (tm_notifications). Types: TASK, APPROVAL, FINANCE, IMPORT, ACCESS, SYSTEM. */
 class Notify
 {
-    public const TYPES = ['TASK' => 'Tasks', 'APPROVAL' => 'Approvals', 'FINANCE' => 'Finance', 'IMPORT' => 'Imports', 'ACCESS' => 'Rights', 'SYSTEM' => 'System'];
+    public const TYPES = ['TASK' => 'Tasks', 'APPROVAL' => 'Approvals', 'FINANCE' => 'Finance', 'IMPORT' => 'Imports', 'ACCESS' => 'Rights', 'DUE' => 'Due dates', 'SYSTEM' => 'System'];
 
     public static function push(int $userId, string $type, string $text, ?string $url = null, ?int $taskId = null): void
     {

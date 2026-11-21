@@ -116,7 +116,7 @@ section_no,section,item_no,screen,route,roles,forms,rules,new_or_in_design
 12,People & Accounts,12.5,Shops & seller accounts,#/list/shops,"OWNER, MANAGER",shop(Q) t_branch(C) t_branch_param(M),"R-G_CORE-76, R-C-41, R-A_SALES-81, 91",NEW
 12,People & Accounts,12.6,Account kit,#/part/4/kit,OWNER (secure),t_mobile_device(C) subscription(Q) t_account_subscription(K),"R-C-26, R-C-33, R-C-46",IN DESIGN
 12,People & Accounts,12.7,Subscriptions,#/list/subscriptions,"OWNER, FINANCE",,"R-C-33, R-G_CORE-58 row 12",NEW (view)
-12,People & Accounts,12.8,Due dates,#/list/due,"all (own), OWNER (all)",sys_due_source(C),"R-C-46, E16, R-G_CORE-104",IN DESIGN
+12,People & Accounts,12.8,Due dates,#/due,"all (own), OWNER (all)",sys_due_source(C),"R-C-46, E16, R-G_CORE-104",IN DESIGN
 12,People & Accounts,12.9,Merge duplicates,#/part/4/merge,OWNER,,"R-C-8, MERGE_PLAN",IN DESIGN
 13,Work,13.1,Tasks dashboard,#/part/4/taskdash,"OWNER, MANAGER, TL (bosses)",,"R-G_CORE-38, 39, 40, 104",IN DESIGN
 13,Work,13.2,Needs action (all tasks),#/list/tasks,all (rights decide which),task(Q) task_edit(C) task_checklist_item(K) task_watcher(K) task_comment(X) task_evidence(X) task_bulk_action(T) task_import(T),"R-G_CORE-1…37, 41, 97, IC-9, 06C",IN DESIGN
