@@ -549,3 +549,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-35 (21 Nov): duplicate guard supplier + order reference R-B_SOURCING-7 BUILT (all entry modes, live hint, Save anyway with reason in history). +4 register lines. 380 tests.
 - 7e-36 (21 Nov): PO line types R-B_SOURCING-6 BUILT (FEE / COST via freight-cost row into landed cost by value, SAMPLE rows, product-only shipping). +4 register lines. 383 tests.
 - 7e-37 (21 Nov): pack verification / weight / box / packing materials R-H-29 BUILT (scan check, Short back to picking, split parcel, box + weight suggestion, packing stock). +4 register lines. 386 tests.
+- 7e-38 (21 Nov): shipping per marketplace incl. 3PL fees R-D-23 BUILT (company tariff defaults, per order / per unit, PRD_FEE_MISSING). +4 register lines. 387 tests.

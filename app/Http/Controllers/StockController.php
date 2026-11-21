@@ -236,6 +236,8 @@ class StockController extends Controller
     public function variationRemove(Request $r, int $id, int $child) { return $this->run(fn () => \App\Services\Variations::remove($id, $child, $r->user())); }
     public function variationDuplicate(Request $r, int $id, int $child) { return $this->run(fn () => \App\Services\Variations::duplicate($id, $child, $r->user())); }
     public function mpPrices(Request $r, int $productId) { abort_unless(DB::table('t_product_vendors')->where('id', $productId)->where('fk_id_ent', Context::ent())->exists(), 404); return \App\Services\ProductPrices::page($productId, $r->user()); }
+    public function tariff(Request $r) { \App\Services\Perm::need($r->user(), 'stock.prices'); return \App\Services\ThreePlTariff::page((int) Context::ent()) + ['can_edit' => \App\Services\Perm::has($r->user(), 'stock.setPrice')]; }
+    public function tariffSave(Request $r, int $mp) { return $this->run(fn () => \App\Services\ThreePlTariff::save((int) Context::ent(), $mp, $r->only(['packing_fee', 'packing_fee_per', 'storage_fee', 'storage_fee_per']), $r->user())); }
     public function mpPriceSave(Request $r, int $productId, int $mp) { return $this->run(fn () => \App\Services\ProductPrices::save($productId, $mp, $r->all(), $r->user())); }
 
     public function setPrice(Request $r, int $productId)

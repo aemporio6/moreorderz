@@ -176,6 +176,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('variations/{id}/{child}/remove', [StockController::class, 'variationRemove'])->whereNumber('id')->whereNumber('child');
         Route::get('variations/{id}/{child}/duplicate', [StockController::class, 'variationDuplicate'])->whereNumber('id')->whereNumber('child');
         Route::get('prices/{productId}/marketplaces', [StockController::class, 'mpPrices'])->whereNumber('productId');
+        Route::get('tariff-3pl', [StockController::class, 'tariff']);
+        Route::post('tariff-3pl/{mp}', [StockController::class, 'tariffSave'])->whereNumber('mp');
         Route::post('prices/{productId}/marketplace/{mp}', [StockController::class, 'mpPriceSave'])->whereNumber('productId')->whereNumber('mp');
         Route::post('stock/bins', [StockController::class, 'bins']);
         Route::get('buying', [BuyingController::class, 'dashboard']);

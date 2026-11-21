@@ -37,6 +37,7 @@ class FormRules
         if ($table === 't_account_job_history') return self::jobHistory($data, $old, $id);
         if ($table === 't_src_cycles' || $table === 't_src_po') return self::srcDuplicate($table, $data, $old, $id);
         if ($table === 't_src_po_lines') return self::poLine($data, $old);
+        if ($table === 't_product_marketplace_shipping') return self::mpFees($data, $old);
         if ($formKey !== 'cat_company_house') return [];
         $strict = self::strict($formKey); $e = []; $val = fn (string $c) => array_key_exists($c, $data) ? $data[$c] : ($old[$c] ?? null);
         if (isset($data['company_name']) && is_string($data['company_name']) && $data['company_name'] !== '') $data['company_name'] = mb_strtoupper(mb_substr($data['company_name'], 0, 1)) . mb_substr($data['company_name'], 1);
@@ -73,6 +74,19 @@ class FormRules
         }
         try { if (SrcDuplicate::guard($x, request()->input('dup_reason')) && $cycle) SrcDuplicate::forced($cycle, $x, (string) request()->input('dup_reason'), $ent); }
         catch (SrcDuplicateException $e) { return ['order_ref' => $e->getMessage(), '_dup' => $x->cycle_code . '|' . $x->id] + ($table === 't_src_po' ? ['fk_id_supplier' => $e->getMessage()] : []); }
+        return [];
+    }
+
+    /** 3PL fees per marketplace row (R-D-23): ≥ 0 at 2 dp; a new row with no fee typed starts from the company 3PL tariff. */
+    private static function mpFees(array &$data, array $old): array
+    {
+        $typed = false;
+        foreach (['packing_fee', 'storage_fee'] as $c) if (array_key_exists($c, $data) && $data[$c] !== null && $data[$c] !== '') { $data[$c] = ThreePlTariff::money($data[$c]); $typed = true; }
+        if (! $old && ! empty($data['fk_id_marketplace'])) {
+            $t = ThreePlTariff::defaults((int) Context::ent(), (int) $data['fk_id_marketplace']);
+            foreach (['packing_fee', 'storage_fee'] as $c) if (! isset($data[$c]) || $data[$c] === null) $data[$c] = $t[$c];
+            $data['fee_source'] = $typed ? 'TYPED' : ($t['from_tariff'] ? 'TARIFF' : null);
+        } elseif ($typed) $data['fee_source'] = 'TYPED';
         return [];
     }
 
