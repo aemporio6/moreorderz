@@ -54,7 +54,7 @@
 54|M||Gen-1 SALE sheet type not built
 55|M||Etsy orders type not built
 56|M||supplier orders (BUY) file type not built
-57|M||sale <-> buy match summary not built
+57|B|class Gen1Compare|Gen-1 sale ↔ buy (legacy, read-only, #/gen1): months list; match summary per customer + address (customer equal, buy address without spaces / upper case contains the sale address), Sale / Buy address, Qty (Sale) vs Qty (Buy) red when different, Sale price / Buy amount / Profit sums behind orders.MONEY, Audit text, totals; Gen-1 Sale list and Buy list (Buy from, items, total); shop scope; Gen1CompareTest
 58|M||Etsy audit header not built
 59|F|form:t_audit_main|form only; audit run logic not built
 60|F|form:orders_audit|form only; eBay audit import not built

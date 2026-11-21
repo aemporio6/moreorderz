@@ -402,6 +402,16 @@ class OrdersController extends Controller
     public function saleExtra(Request $r, int $mp) { $this->can($r, 'orders.saleImport'); return ['rows' => \App\Services\SaleView::extraSetup($mp), 'can_save' => \App\Services\Perm::has($r->user(), 'orders.saleColumns')]; }
     public function saleExtraSave(Request $r, int $mp) { return $this->run(function () use ($r, $mp) { $this->can($r, 'orders.saleColumns'); return ['message' => 'Extra columns saved.', 'rows' => \App\Services\SaleView::saveExtra($mp, (array) $r->input('rows', []))]; }); }
     public function saleExportCheck(Request $r) { return $this->run(function () use ($r) { $this->can($r, 'orders.saleExport'); return \App\Services\SaleView::exportCheck($this->saleFilters($r), strtolower((string) $r->query('format', 'pdf')), $r->user()); }); }
+    /** Gen-1 sale ↔ buy compare, read-only until cut-over (R-A_SALES-57). */
+    public function gen1List(Request $r) { $this->can($r, 'orders.SEE'); return ['rows' => \App\Services\Gen1Compare::headers()]; }
+    public function gen1(Request $r, int $id, string $view)
+    {
+        return $this->run(function () use ($r, $id, $view) {
+            $this->can($r, 'orders.SEE'); $money = \App\Services\Perm::has($r->user(), 'orders.MONEY');
+            return match ($view) { 'summary' => \App\Services\Gen1Compare::summary($id, $money), 'sales' => ['header' => \App\Services\Gen1Compare::info($id), 'rows' => \App\Services\Gen1Compare::sales($id, $money), 'money' => $money], 'buys' => ['header' => \App\Services\Gen1Compare::info($id), 'rows' => \App\Services\Gen1Compare::buys($id, $money), 'money' => $money], default => abort(404) };
+        });
+    }
+
     public function saleExport(Request $r)
     {
         return $this->run(function () use ($r) {

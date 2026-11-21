@@ -165,6 +165,8 @@
       if (r === '#/inbound') return await pageInbound();
       if (r === '#/stock-alerts') return await pageStockAlerts();
       if (r === '#/settings/sourcing') return await pageSourcingSettings();
+      if (r === '#/gen1') return await pageGen1List();
+      if ((mt = r.match(/^#\/gen1\/(\d+)(?:\/(summary|sales|buys))?/))) return await pageGen1(+mt[1], mt[2] || 'summary');
       if (r === '#/settings/warehouse') return await pageWarehouseSettings();
       if (/^#\/inbound\/\d+$/.test(r)) return await pageInboundOne(+r.split('/')[2]);
       if (r === '#/lost-parcels') return await pageLostParcels();
@@ -1397,6 +1399,26 @@
         <td class="num"><input type="number" min="1" max="${r.qty}" value="${r.qty}" data-paq="${r.task}" style="width:80px"></td><td><button class="btn sm primary" data-pa="${r.task}">Put away</button></td></tr>`).join('')}</tbody></table>
       ${d.rows.length ? '' : `<div class="empty">${ic('check')}<div>Nothing waits in RECEIVING.</div></div>`}</div></div>`;
     $$('[data-pa]').forEach(b => b.onclick = async () => { const t = b.dataset.pa; try { toast((await api(`putaway/${t}`, { method: 'POST', body: { bin: +$(`[data-pab="${t}"]`).value, qty: +$(`[data-paq="${t}"]`).value } })).message); pagePutaway(); } catch (e) { toast(e.message, 'err'); } });
+  }
+  // ---------- Gen-1 sale ↔ buy compare (R-A_SALES-57), read-only until cut-over ----------
+  async function pageGen1List() {
+    busy(true); let d; try { d = await api('gen1'); } finally { busy(false); }
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Gen-1 sale ↔ buy</h1><div class="sub">Old Etsy-style months: sales against the supplier's buy lines by customer and address. Read-only until the cut-over.</div></div></div>
+      <div class="card"><div class="tbl-wrap"><table class="t" id="g1List"><thead><tr><th>Shop</th><th>Month</th><th class="num">Sale lines</th><th class="num">Buy lines</th><th>Sale loaded</th><th>Summary made</th></tr></thead><tbody>${d.rows.map(r => `<tr class="click" data-g1="${r.id}"><td>${esc(r.shop || '')}</td><td>${String(r.mon).padStart(2, '0')}/${r.yr}</td><td class="num">${r.sales}</td><td class="num">${r.buys}</td><td>${+r.f_sale_loaded ? 'Yes' : 'No'}</td><td>${+r.f_summary_generated ? 'Yes' : 'No'}</td></tr>`).join('')}</tbody></table>
+      ${d.rows.length ? '' : `<div class="empty">${ic('inbox')}<div>No Gen-1 months.</div></div>`}</div></div>`;
+    $$('[data-g1]').forEach(t => t.onclick = () => go('#/gen1/' + t.dataset.g1));
+  }
+  async function pageGen1(id, view) {
+    busy(true); let d; try { d = await api(`gen1/${id}/${view}`); } finally { busy(false); }
+    const m2 = v => v === undefined || v === null ? '' : (+v).toFixed(2), red = 'style="color:var(--err)"';
+    const tabs = [['summary', 'Match summary'], ['sales', 'Gen-1 Sale list'], ['buys', 'Gen-1 Buy list']].map(([k, l]) => `<a class="btn sm ${k === view ? 'primary' : ''}" href="#/gen1/${id}/${k}">${l}</a>`).join(' ');
+    let body;
+    if (view === 'summary') body = `<div class="tbl-wrap"><table class="t" id="g1Sum"><thead><tr><th>Shop</th><th>Customer</th><th>Address</th><th class="num">Qty (Sale)</th><th class="num">Qty (Buy)</th>${d.money ? '<th class="num">Sale price</th><th class="num">Buy amount</th><th class="num">Profit</th>' : ''}<th>Audit</th></tr></thead><tbody>${d.rows.map(r => `<tr><td>${esc(r.shop)}</td><td>${esc(r.customer)}</td><td class="small">Sale: ${esc(r.sale_address)}${r.buy_address ? `<div ${red}>Buy: ${esc(r.buy_address)}</div>` : ''}</td><td class="num" ${r.qty_differs ? red : ''}>${r.qty_sale}</td><td class="num" ${r.qty_differs ? red : ''}>${r.qty_buy}</td>${d.money ? `<td class="num">${m2(r.sale)}</td><td class="num">${m2(r.buy)}</td><td class="num">${m2(r.profit)}</td>` : ''}<td class="small">${esc(r.audit)}</td></tr>`).join('')}</tbody>
+      <tfoot><tr><th colspan="3">${d.totals.matched} of ${d.rows.length} matched · ${d.totals.differences} with a difference</th><th class="num">${d.totals.qty_sale}</th><th class="num">${d.totals.qty_buy}</th>${d.money ? `<th class="num">${m2(d.totals.sale)}</th><th class="num">${m2(d.totals.buy)}</th><th class="num">${m2(d.totals.profit)}</th>` : ''}<th></th></tr></tfoot></table>${d.rows.length ? '' : '<div class="empty">No sales in this month.</div>'}</div>`;
+    else if (view === 'sales') body = `<div class="tbl-wrap"><table class="t" id="g1Sales"><thead><tr><th>Shop</th><th>Order</th><th>Sale date</th><th>Item</th><th>Customer</th><th>Address</th><th class="num">Qty</th>${d.money ? '<th class="num">Price</th>' : ''}</tr></thead><tbody>${d.rows.map(r => `<tr><td>${esc(r.shop)}</td><td>${esc(r.order || '')}</td><td>${esc(r.date || '')}</td><td>${esc(r.item)}</td><td>${esc(r.customer || '')}</td><td class="small">${esc(r.address || '')}</td><td class="num">${r.qty}</td>${d.money ? `<td class="num">${m2(r.price)}</td>` : ''}</tr>`).join('')}</tbody></table>${d.rows.length ? '' : '<div class="empty">No sale lines.</div>'}</div>`;
+    else body = `<div class="tbl-wrap"><table class="t" id="g1Buys"><thead><tr><th>Shop</th><th>Buy from</th><th>Order</th><th>Date</th><th>Item</th><th>Customer</th><th>Address</th><th class="num">No. of items</th>${d.money ? '<th class="num">Total</th>' : ''}</tr></thead><tbody>${d.rows.map(r => `<tr><td>${esc(r.shop)}</td><td>${esc(r.buy_from || '')}</td><td>${esc(r.order || '')}</td><td>${esc(r.date || '')}</td><td>${esc(r.item)}</td><td>${esc(r.customer || '')}</td><td class="small">${esc(r.address || '')}</td><td class="num">${r.items}</td>${d.money ? `<td class="num">${m2(r.total)}</td>` : ''}</tr>`).join('')}</tbody></table>${d.rows.length ? '' : '<div class="empty">No buy lines.</div>'}</div>`;
+    const head = d.header ? `${esc(d.header.shop)} · ${esc(d.header.month)}` : '';
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/gen1">Gen-1 sale ↔ buy</a> ›</div><h1>${head || 'Gen-1 month #' + id}</h1><div class="sub">Read-only (legacy compare until cut-over).</div></div><div class="actions">${tabs}</div></div><div class="card">${body}</div>`;
   }
   // ---------- Settings › Warehouse (R-H-57): tabs, every switch with default and help, history ----------
   let WS_TAB = 0;

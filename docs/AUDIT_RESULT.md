@@ -5,7 +5,7 @@ Every line of MASTER_REGISTER_v1.7 (1,547 lines) checked against the code. BUILT
 | Area | Lines that count | BUILT | PARTIAL | FORM ONLY | MISSING | Not judged | Not applicable | BUILT % |
 |---|---|---|---|---|---|---|---|---|
 | Core/Platform | 210 | 87 | 76 | 9 | 38 | 0 | 42 | 41 % |
-| Finance | 208 | 53 | 70 | 33 | 52 | 0 | 7 | 25 % |
+| Finance | 208 | 54 | 70 | 33 | 51 | 0 | 7 | 26 % |
 | Sourcing | 185 | 62 | 65 | 20 | 38 | 0 | 3 | 34 % |
 | Stock/Warehouse | 162 | 83 | 65 | 4 | 10 | 0 | 11 | 51 % |
 | Sales | 155 | 104 | 29 | 11 | 11 | 0 | 8 | 67 % |
@@ -16,8 +16,8 @@ Every line of MASTER_REGISTER_v1.7 (1,547 lines) checked against the code. BUILT
 | Labels/Printing | 44 | 25 | 9 | 5 | 5 | 0 | 2 | 57 % |
 | Security | 28 | 12 | 12 | 1 | 3 | 0 | 8 | 43 % |
 | Reports | 25 | 6 | 7 | 0 | 12 | 0 | 3 | 24 % |
-| Migration | 9 | 4 | 3 | 0 | 2 | 0 | 8 | 44 % |
-| **All** | **1433** | **608** | **427** | **163** | **235** | **0** | **114** | **42 %** |
+| Migration | 9 | 6 | 3 | 0 | 0 | 0 | 8 | 67 % |
+| **All** | **1433** | **611** | **427** | **163** | **232** | **0** | **114** | **43 %** |
 
 FORM ONLY = the form and its list exist and save (with rights and history), but the rule's own logic is not built.
 PARTIAL = part of the rule works; the note in `audit/REGISTER_AUDIT.csv` says what is missing.
