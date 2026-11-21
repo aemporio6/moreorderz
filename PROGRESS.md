@@ -511,3 +511,14 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - Not built yet (honest): upload of the profile's daily orders report into this queue (R-A_SALES-78 / 79); Month Close FILES_PRESENT checks only the money file, not the orders file.
 - Tests: 332 pass (2 new in `FulfilmentTest` with both examples of the rule).
 - Register after this batch: BUILT 372 of 1,433 (26 %); Sales 95 of 155 (61 %) – no line closed (rule 84 stays PARTIAL).
+
+### Batch 7e-20 (21 Nov 2026)
+- **Convert file** (R-A_SALES-78, PARTIAL) and **Update existing data** (R-A_SALES-79, BUILT): service `CsvConvert`, screen `#/csv-convert` (button "Convert file" on Fulfilment orders), endpoints `api/csv-convert*`.
+  - Step 1: a .csv is held as `<user>_<YmdHis>_<rand>.csv` in storage (24 hours).
+  - Step 2: "Use existing custom import format" (preview; the Owner deletes a format) or "Map CSV Columns" (Owner / Admin, right `orders.csvFormats`): every system column must be mapped, an address part may be set to "(empty)". Formats are saved by name in `csv_generator_history` (CSV columns shown as letters A, B …). Other people see "They will appear once they are ready by the Super Admin".
+  - Output: `Download_<file>` with Date, Order ID, Item Title, Customer, Address, Quantity, Sale Price / Buy Price, SKU; dates d.m.Y; a stray "Â" removed; the uploaded file is deleted. Or "Add to the queue": each row becomes a daily fulfilment order of the chosen shop (rows with a problem are listed, the others saved).
+  - "Update Existing Data" (right `orders.importUpdate`, Owner / Admin): key shop + order no (+ SKU); only the mapped columns change (tracking, carrier service, postcode, customer name / contacts, product info); "Preview the changes" shows old → new per field; Confirmed or locked lines are refused; every change is a row in the line's Log History (`t_sale_change_log`, action FILE_UPDATE).
+- **Month Close**: new check `ORDERS_FILE` – the orders file of the month is imported; for a daily-only profile the batch of its daily orders counts.
+- Not built yet (honest): saved formats as export templates of the List Standard (M116); reading a profile's own daily orders report without a saved format (needs R-A_SALES-87).
+- Tests: 336 pass (new `CsvConvertTest` 4; `FulfilmentTest` checks ORDERS_FILE).
+- Register after this batch: BUILT 373 of 1,433 (26 %); Sales 95 of 155 (61 %).

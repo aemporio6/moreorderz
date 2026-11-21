@@ -13,7 +13,7 @@ class CloseService
 {
     /** code → [title, waivable] in run order */
     public const CHECKS = [
-        'FILES_PRESENT' => ['The marketplace money file for the month is loaded', false], 'SETTLEMENT_COMPLETE' => ['Every statement of the month has all its rows', false],
+        'FILES_PRESENT' => ['The marketplace money file for the month is loaded', false], 'ORDERS_FILE' => ['The orders file of the month is imported (for a daily-only shop: its daily orders)', false], 'SETTLEMENT_COMPLETE' => ['Every statement of the month has all its rows', false],
         'ORDERS_VS_TXN' => ['Every order has a money line and every money line an order', true], 'HUB_TOTALS' => ['Statements together = the marketplace\'s own period total', true],
         'PAYOUT_VS_BANK' => ['Every payout of the month is matched to a bank line', true], 'BANK_ALL_CATEGORISED' => ['No bank line of the month is left unmatched', false],
         'PURCHASE_VS_SUPPLIER' => ['Purchases match supplier proof', true], 'SALES_CONFIRMED' => ['All sale lines of the month are confirmed', false],
@@ -55,6 +55,13 @@ class CloseService
         $hasFiles = DB::table('mo_settlements')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->exists();
         $sts = DB::table('mo_settlements')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->whereBetween('statement_date', [$from, $to])->get();
         $periods = DB::table('mo_settlement_periods')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->where('period_from', '<=', $to)->where('period_to', '>=', $from)->get();
+
+        // the orders file of the month (IC-6): a monthly sales import, or for a daily-only profile the batch of its daily orders (R-A_SALES-84)
+        $mm = (int) substr($from, 5, 2); $yy = (int) substr($from, 0, 4); $ob = DB::table('t_sale_imports')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->where('period_month', $mm)->where('period_year', $yy)->where('import_nature', '<>', 'Totals')->get();
+        $shopRow = DB::table('t_branches')->where('id', $branchId)->first(); $dailyOnly = $shopRow && Fulfilment::dailyOnly($shopRow); $real = $ob->where('f_daily', 0)->isNotEmpty(); $daily = $ob->where('f_daily', 1)->isNotEmpty();
+        if (! DB::table('t_sale_imports')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->exists()) $set('ORDERS_FILE', 'NA', 'No sales have ever been imported for this shop, so this check does not apply.');
+        elseif ($real || ($dailyOnly && $daily)) $set('ORDERS_FILE', 'GREEN', $real ? 'The orders file of the month is imported.' : 'Daily-only shop: the batch of its daily orders counts as the orders file.');
+        else $set('ORDERS_FILE', 'RED', $daily ? 'Only daily orders so far: import the monthly orders file of the shop (it merges into them).' : 'No orders file is imported for this month.', 1, '#/sales-import');
 
         // 1 – 5: the marketplace's money file
         if (! $hasFiles) {

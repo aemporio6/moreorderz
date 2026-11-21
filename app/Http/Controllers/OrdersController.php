@@ -460,6 +460,16 @@ class OrdersController extends Controller
             $x = \App\Services\Fulfilment::export($this->fulfilFilters($r), $r->user()); return response($x['body'], 200, ['Content-Type' => 'text/csv; charset=UTF-8', 'Content-Disposition' => 'attachment; filename="' . $x['name'] . '"']); });
     }
     public function fulfilmentSave(Request $r, ?int $id = null) { return $this->run(fn () => \App\Services\Fulfilment::save($r->all(), $id, $r->user())); }
+    // ---------- convert any CSV to the standard sheet, update existing data (R-A_SALES-78 / 79) ----------
+    private function convOpt(Request $r): array { return ['format' => $r->input('format'), 'map' => (array) $r->input('map', []), 'price_label' => $r->input('price_label')]; }
+    public function csvConvertUpload(Request $r) { return $this->run(function () use ($r) { $f = $r->file('file'); if (! $f || ! $f->isValid()) throw new \InvalidArgumentException('Choose a .csv file.'); return \App\Services\CsvConvert::upload($f->getRealPath(), $f->getClientOriginalName(), $r->user()); }); }
+    public function csvConvertFormat(Request $r) { return $this->run(fn () => \App\Services\CsvConvert::saveFormat((string) $r->input('name'), (array) $r->input('map', []), $r->user())); }
+    public function csvConvertFormatDelete(Request $r, int $id) { return $this->run(fn () => \App\Services\CsvConvert::deleteFormat($id, $r->user())); }
+    public function csvConvertPreview(Request $r) { return $this->run(function () use ($r) { $x = \App\Services\CsvConvert::rows((string) $r->input('token'), $this->convOpt($r), $r->user()); return ['rows' => array_slice($x['rows'], 0, 10), 'count' => count($x['rows'])]; }); }
+    public function csvConvertDownload(Request $r) { return $this->run(fn () => \App\Services\CsvConvert::download((string) $r->input('token'), $this->convOpt($r), $r->user())); }
+    public function csvConvertQueue(Request $r) { return $this->run(fn () => \App\Services\CsvConvert::intoQueue((string) $r->input('token'), $this->convOpt($r), (int) $r->input('shop'), $r->user())); }
+    public function csvConvertUpdate(Request $r) { return $this->run(fn () => \App\Services\CsvConvert::update((string) $r->input('token'), (int) $r->input('shop'), ['key' => (array) $r->input('key', []), 'fields' => (array) $r->input('fields', [])], $r->user(), $r->boolean('apply'))); }
+
     public function fulfilmentCloseDaily(Request $r) { return $this->run(fn () => \App\Services\Fulfilment::closeDaily((int) $r->input('shop'), (int) $r->input('month'), (int) $r->input('year'), $r->user(), $r->boolean('overwrite'))); }
     public function fulfilmentBulk(Request $r) { return $this->run(fn () => \App\Services\Fulfilment::bulk((array) $r->input('ids', []), (string) $r->input('action'), $r->user(), $r->input('status'))); }
 

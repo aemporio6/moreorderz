@@ -83,6 +83,8 @@ class FulfilmentTest extends TestCase
         DB::table('t_sales')->where('order_no', 'T-2')->update(['total_amount' => 9.99]); $this->actingAs($this->tl); $r = Fulfilment::closeDaily($this->shop, 11, 2026, $this->tl);
         $this->assertSame([['T-2'], true], [$r['kept'], $r['ask_overwrite']]); $this->assertSame(9.99, (float) DB::table('t_sales')->where('order_no', 'T-2')->value('total_amount'));
         Fulfilment::closeDaily($this->shop, 11, 2026, $this->tl, true); $this->assertSame(8.5, (float) DB::table('t_sales')->where('order_no', 'T-2')->value('total_amount'));
+        $chk = fn () => collect(\App\Services\CloseService::evaluate(1, $this->shop, '2026-11')['checks'])->firstWhere('code', 'ORDERS_FILE');      // Month Close: for a daily-only shop the daily batch counts as the orders file
+        $this->assertSame('GREEN', $chk()['status']); DB::table('mp_profiles')->where('id', $prof)->update(['f_daily_only' => 0]); $this->assertSame('RED', $chk()['status']); $this->assertStringContainsString('Only daily orders so far', $chk()['detail']);
     }
 
     /** The rule's second example: eBay shop – 5 daily lines, the monthly file has 4 of them + 1 new → 4 merged (tracking kept), 1 added, 1 flagged "Not in the monthly file", none deleted. */
