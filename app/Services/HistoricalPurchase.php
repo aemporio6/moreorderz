@@ -114,7 +114,8 @@ class HistoricalPurchase
             DB::table('t_src_po')->where('id', $po)->update(['deposit_amount' => 0, 'balance_amount' => max(0, $open), 'f_paid_in_full' => $paid > 0 && $open <= $tol ? 1 : 0]);
             /* shipment, costs, receiving */
             $sh = (array) ($e['shipping'] ?? []); $rc = (array) ($e['received'] ?? []); $ship = null;
-            $hasRecv = ! empty($rc['date']) && collect($lines)->contains(fn ($l) => (float) ($l['qty_accepted'] ?? 0) > 0);
+            $accOf = fn ($l) => ($l['qty_accepted'] ?? null) === null || ($l['qty_accepted'] ?? '') === '' ? (float) ($l['qty'] ?? 0) : (float) $l['qty_accepted'];      /* R-B_SOURCING-10: a line with no receiving row counts as accepted = ordered */
+            $hasRecv = ! empty($rc['date']) && collect($lines)->contains(fn ($l) => (strtoupper((string) ($l['line_type'] ?? '')) ?: 'PRODUCT') === 'PRODUCT' && $accOf($l) > 0);
             if (! empty($sh['shipped_date']) || ! empty($sh['arrived_date']) || $hasRecv || ! empty($sh['freight'])) {
                 $fw = ! empty($sh['forwarder']) ? DB::table('t_src_forwarders')->where('fk_id_ent', $ent)->whereRaw('LOWER(TRIM(forwarder_name)) = ?', [mb_strtolower(trim((string) $sh['forwarder']))])->value('id') : null;
                 if (! empty($sh['forwarder']) && ! $fw) $log[] = "WARN forwarder \"{$sh['forwarder']}\" not found – left empty";
@@ -135,18 +136,22 @@ class HistoricalPurchase
                 if ($wh && ! ctype_digit((string) $wh)) $wh = DB::table('cat_inventory_locations')->where('fk_id_ent', $ent)->whereRaw('LOWER(TRIM(location_name)) = ?', [mb_strtolower(trim((string) $wh))])->value('id');
                 $wh = (int) ($wh ?: Settings::get('MAIN_WAREHOUSE', $ent, 0)) ?: (int) DB::table('cat_inventory_locations')->where('fk_id_ent', $ent)->where('f_active', 1)->whereIn('kind', ['WAREHOUSE', 'BIN'])->orderBy('id')->value('id');
                 if (! $wh) throw new \InvalidArgumentException('Received goods need a warehouse – add one under Setup › Locations.');
-                $pl = DB::table('t_src_po_lines')->where('fk_id_po', $po)->where('f_active', 1)->orderBy('id')->get()->values(); $gl = []; $k = 0;
+                $pl = DB::table('t_src_po_lines')->where('fk_id_po', $po)->where('f_active', 1)->orderBy('id')->get()->values(); $gl = []; $k = 0; $extra = [];
                 foreach ($lines as $i => $l) { $row = $pl[$i] ?? null; if (! $row || ! PoLines::isStock($row->line_type)) continue;
-                    $acc = (float) ($l['qty_accepted'] ?? 0); $dmg = (float) ($l['qty_damaged'] ?? 0); $mis = (float) ($l['qty_missing'] ?? max(0, (float) $row->qty_ordered - $acc - $dmg));
-                    $gl[] = ['po_line' => $row->id, 'received' => $acc + $dmg, 'damaged' => $dmg, 'missing' => $mis]; }
+                    $acc = $accOf($l); $dmg = (float) ($l['qty_damaged'] ?? 0); $mis = ($l['qty_missing'] ?? '') === '' || ($l['qty_missing'] ?? null) === null ? max(0, (float) $row->qty_ordered - $acc - $dmg) : (float) $l['qty_missing'];
+                    $gl[] = ['po_line' => $row->id, 'received' => $acc + $dmg, 'damaged' => $dmg, 'missing' => $mis];
+                    $k++; $ov = ($l['landed_override'] ?? '') !== '' && ($l['landed_override'] ?? null) !== null ? round((float) $l['landed_override'], 4) : null;
+                    if ($ov !== null && trim((string) ($l['override_reason'] ?? '')) === '') throw new \InvalidArgumentException("Line " . ($i + 1) . ': give the reason for the landed cost override.');
+                    $extra[(int) $row->fk_id_product] = ['batch' => trim((string) ($l['batch'] ?? '')) ?: "HIST-$cycle-$k", 'override' => $ov, 'reason' => trim((string) ($l['override_reason'] ?? ''))]; }
                 $grn = BuyingService::createGrn(['shipment' => $ship, 'location' => $wh, 'date' => $rc['date'], 'lines' => $gl]);
-                DB::table('t_src_grn')->where('id', $grn)->update(['grn_source' => 'HISTORICAL']);
+                DB::table('t_src_grn')->where('id', $grn)->update(['grn_source' => 'HISTORICAL', 'receiving_qc_status' => 'Accepted', 'notes' => mb_substr("Historical entry $ref", 0, 250)]);
                 if (self::needsApproval($ent, $u)) {      /* R-B_SOURCING-5: stock unaffected until a Partner / the Owner approves */
                     $pending = true; DB::table('t_src_cycles')->where('id', $cycle)->update(['approval_status' => 'PENDING', 'approved_by' => null, 'approved_at' => null]);
                     $base = round((float) DB::table('t_src_po')->where('id', $po)->value('po_total') * $rate, 2);
-                    Approvals::request($ent, 'SRC_HISTORICAL', 't_src_cycles', $cycle, $base, ['cycle' => $cycle, 'grn' => $grn, 'drafts' => $drafts, 'ref' => $ref], "Approve old purchase $ref (" . $sup->supplier_name . ') – its stock waits');
+                    Approvals::request($ent, 'SRC_HISTORICAL', 't_src_cycles', $cycle, $base, ['cycle' => $cycle, 'grn' => $grn, 'drafts' => $drafts, 'ref' => $ref, 'extra' => $extra], "Approve old purchase $ref (" . $sup->supplier_name . ') – its stock waits');
                     $log[] = 'NOTE pending approval – stock unaffected until a Partner approves';
-                } else self::postReceived($cycle, $grn, $drafts);
+                } else self::postReceived($cycle, $grn, $drafts, $extra);
+                $log[] = 'GRN + ' . count($extra) . ' lot(s)' . (! empty($pending) ? ' (INACTIVE until approved)' : '');
                 $done = ! empty($pending) ? false : ! DB::table('t_src_po_lines as p')->where('p.fk_id_po', $po)->where('p.f_active', 1)->where(fn ($q) => $q->whereNull('p.line_type')->orWhereIn('p.line_type', ['', 'PRODUCT']))
                     ->whereRaw('p.qty_ordered - 0.001 > (SELECT COALESCE(SUM(l.accepted_qty + l.damaged_qty + l.missing_qty),0) FROM t_src_grn_lines l WHERE l.fk_id_po_line = p.id)')->exists();
             } elseif (! empty($rc['date'])) $log[] = 'NOTE received date given but no accepted quantity – nothing received';
@@ -162,9 +167,17 @@ class HistoricalPurchase
     public static function needsApproval(int $ent, object $u): bool { return Choices::get('OLD_ENTRY_APPROVAL', $ent) === 'NOT_OWNER' && ($u->role_code ?? '') !== 'OWNER'; }
 
     /** Post the GRN of an entry: lots, drafts live, cycle completed when every PRODUCT line is received. */
-    public static function postReceived(int $cycle, int $grn, array $drafts): bool
+    public static function postReceived(int $cycle, int $grn, array $drafts, array $extra = []): bool
     {
         BuyingService::postGrn($grn);
+        foreach ($extra as $pid => $x) {      /* R-B_SOURCING-10 per-line batch and the landed cost override (audit-logged with the reason) */
+            $lots = DB::table('fin_lots')->where('source', 'GRN')->where('source_id', $grn)->where('fk_id_product', (int) $pid)->get(['id', 'unit_cost_gbp']);
+            foreach ($lots as $l) {
+                $set = ['batch_no' => mb_substr((string) $x['batch'], 0, 40)];
+                if ($x['override'] !== null) { $set += ['unit_cost_gbp' => $x['override'], 'landed_status' => 'FINAL', 'cost_source' => 'OVERRIDE']; Audit::log('fin_lots', (int) $l->id, 'UPDATE', ['unit_cost_gbp' => [(float) $l->unit_cost_gbp, $x['override']]], 'Landed cost override: ' . $x['reason']); }
+                DB::table('fin_lots')->where('id', $l->id)->update($set);
+            }
+        }
         if ($drafts) DB::table('t_product_vendors')->whereIn('id', $drafts)->whereIn('id', DB::table('fin_lots')->where('fk_id_cycle', $cycle)->select('fk_id_product'))->update(['f_active' => 1]);      /* a new product with stock is live */
         $po = (int) DB::table('t_src_po')->where('fk_id_cycle', $cycle)->value('id');
         $done = ! DB::table('t_src_po_lines as p')->where('p.fk_id_po', $po)->where('p.f_active', 1)->where(fn ($q) => $q->whereNull('p.line_type')->orWhereIn('p.line_type', ['', 'PRODUCT']))
@@ -177,7 +190,7 @@ class HistoricalPurchase
     public static function decided(object $a, bool $ok, ?string $reason): void
     {
         $c = json_decode((string) $a->change_json, true);
-        if ($ok) { DB::table('t_src_cycles')->where('id', $c['cycle'])->update(['approval_status' => 'APPROVED', 'approved_by' => Context::userId(), 'approved_at' => now()]); self::postReceived((int) $c['cycle'], (int) $c['grn'], (array) ($c['drafts'] ?? [])); }
+        if ($ok) { DB::table('t_src_cycles')->where('id', $c['cycle'])->update(['approval_status' => 'APPROVED', 'approved_by' => Context::userId(), 'approved_at' => now()]); self::postReceived((int) $c['cycle'], (int) $c['grn'], (array) ($c['drafts'] ?? []), (array) ($c['extra'] ?? [])); }
         else DB::table('t_src_cycles')->where('id', $c['cycle'])->update(['approval_status' => 'REJECTED']);
         Audit::log('t_src_cycles', (int) $c['cycle'], $ok ? 'APPROVE' : 'REJECT', ['old purchase' => $c['ref'] ?? ''], $reason, (int) $a->fk_id_ent);
     }
@@ -222,7 +235,7 @@ class HistoricalPurchase
             $e = ['source' => 'CSV', 'supplier_name' => $f['supplier_name'], 'order_date' => self::date($f['order_date'] ?? ''), 'order_ref' => $ref, 'order_ref_note' => $f['order_ref_note'] ?? null, 'currency' => $f['currency'] ?? '',
                 'rate' => self::num($f['exchange_rate'] ?? '') ?: null, 'owner_name' => $f['owner_entity'] ?? '', 'brand' => $f['brand'] ?? null, 'notes' => null, 'payments' => $pay,
                 'lines' => array_map(fn ($a) => ['line_type' => $a['line_type'] ?? '', 'product_name' => $a['product_name'] ?? '', 'sku' => $a['sku'] ?? '', 'qty' => self::num($a['qty'] ?? ''), 'unit_price' => self::num($a['unit_price'] ?? ''), 'notes' => $a['notes'] ?? null,
-                    'qty_accepted' => self::num($a['qty_accepted'] ?? ''), 'qty_damaged' => self::num($a['qty_damaged'] ?? ''), 'qty_missing' => ($a['qty_missing'] ?? '') === '' ? null : self::num($a['qty_missing'])], $g),
+                    'qty_accepted' => ($a['qty_accepted'] ?? '') === '' ? null : self::num($a['qty_accepted']), 'qty_damaged' => self::num($a['qty_damaged'] ?? ''), 'qty_missing' => ($a['qty_missing'] ?? '') === '' ? null : self::num($a['qty_missing']), 'batch' => $a['batch'] ?? null], $g),
                 'shipping' => ['shipped_date' => self::date($f['shipped_date'] ?? ''), 'arrived_date' => self::date($f['arrived_date'] ?? ''), 'mode' => $f['mode'] ?? null, 'forwarder' => $f['forwarder'] ?? null, 'tracking' => $f['tracking'] ?? null,
                     'freight' => $freight, 'duty' => self::num($f['duty_cost'] ?? ''), 'other' => self::num($f['other_cost'] ?? '')], 'received' => ['date' => self::date($f['received_date'] ?? ''), 'warehouse' => $f['warehouse'] ?? null]];
             $entries[$ref] = ['entry' => $e, 'warn' => $warn, 'rows' => count($g)];

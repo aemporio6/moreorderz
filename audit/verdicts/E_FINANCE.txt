@@ -37,7 +37,7 @@ FIN-43|B|function shareLines|shares by agreements active on the first day of the
 FIN-44|P|class ProfitService|profit by product; spreading of unassigned fees by sales share partly
 FIN-45|B|class CloseService|17 close checks in order, waivers (5 checks, Owner), statuses OPEN / CHECKED / LOCKED – PURCHASE_VS_SUPPLIER N/A
 FIN-46|B|function lock|lock: Owner, owner note, nothing red, partner rows posted, figures frozen, statements made
-FIN-47|P|function adjust|locked month never reopened; partner adjustment + late sale lines forward; landed-cost corrections forward built (fin_cogs_corrections, 7e-109); returns after lock forward not built
+FIN-47|B|function adjust|a locked month is never reopened; partner adjustments and late sale lines go forward; landed-cost corrections forward (fin_cogs_corrections, 7e-109); returns: a return booked into the same lot for a sale of a LOCKED month writes a negative cost-correction line in the shop's next open month (the locked month keeps its figure), an open month takes it in place (7e-159); ReturnCorrectionTest
 FIN-48|B|function makeStatements|company + partner statements as PDF, versioned, never deleted
 FIN-49|B|function statementAnswer|Accept / Ask on a statement, question task, answer by WhatsApp
 FIN-50|B|class FinanceMonthly|1st 08:00 WhatsApp MONTHLY_SUMMARY per partner with an ACTIVE agreement, all companies added up, key MONTHLY:YYYY-MM:<partner> (twice → once); FIN_REPORT_MISSING:<shop> hourly for OPEN/CHECKED periods > 17 days with no later period, closes itself on the next settlement (new), FIN_SETTLEMENT_OVERDUE held back meanwhile; FinanceSnapshotTest r50

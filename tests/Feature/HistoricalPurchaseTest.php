@@ -122,4 +122,21 @@ class HistoricalPurchaseTest extends TestCase
         $q = \App\Services\CycleAlerts::quantities($r['cycle'])[0];
         $this->assertSame([10.0, 9.0, 8.0], [$q['produced'], $q['qc_passed'], $q['in_stock']], 'the trail adds produced, QC passed and in stock (accepted units on hand)');
     }
+
+    public function test_r10_receiving_section(): void
+    {
+        $e = $this->entry(['order_ref' => 'PI-R10', 'lines' => [['product_name' => 'Steel mug', 'sku' => 'MUG-R10', 'qty' => 100, 'unit_price' => 2.00, 'qty_accepted' => 96, 'qty_damaged' => 3, 'qty_missing' => 1, 'landed_override' => '1.95', 'override_reason' => 'agreed with the supplier'],
+            ['product_name' => 'Steel lid', 'sku' => 'LID-R10', 'qty' => 20, 'unit_price' => 0.50]], 'received' => ['date' => '2025-05-02', 'warehouse' => $this->wh]]);
+        try { H::entry(1, ['order_ref' => 'PI-R10X'] + array_replace_recursive($e, ['lines' => [['override_reason' => '']]]), $this->owner); $this->fail(); } catch (\InvalidArgumentException $x) { $this->assertStringContainsString('reason for the landed cost override', $x->getMessage()); }
+        $r = H::entry(1, $e, $this->owner);
+        $g = DB::table('t_src_grn')->where('fk_id_cycle', $r['cycle'])->first();
+        $this->assertSame([119, 3, 1, 'Accepted', 'Historical entry PI-R10'], [(int) $g->units_received, (int) $g->damaged_units, (int) $g->missing_units, $g->receiving_qc_status, $g->notes], '96 + 3 received on the mug, the lid with no row counts as accepted = ordered (20)');
+        $mug = DB::table('t_product_vendors')->where('SKU_VENDOR', 'MUG-R10')->value('id');
+        $lot = DB::table('fin_lots')->where('fk_id_cycle', $r['cycle'])->where('fk_id_product', $mug)->first();
+        $this->assertSame([99, 'HIST-' . $r['cycle'] . '-1', 1.95, 'FINAL/OVERRIDE'], [(int) $lot->qty, $lot->batch_no, (float) $lot->unit_cost_gbp, $lot->landed_status . '/' . $lot->cost_source], 'batch auto HIST-<cycle>-<n>, the override with its reason');
+        $dam = \App\Services\StockService::systemLocation(1, 'DAMAGED');
+        $this->assertSame(3, (int) DB::table('fin_lot_balances')->where('fk_id_lot', $lot->id)->where('fk_id_location', $dam)->sum('qty'), '3 units on DAMAGED');
+        $this->assertTrue(\App\Services\TaskEngine::isOpen('SRC_GRN_SHORT', \App\Services\CycleAlerts::key('SRC_GRN_SHORT', (int) $g->id)), 'missing / damaged → SRC_GRN_SHORT');
+        $this->assertContains('GRN + 2 lot(s)', $r['log']);
+    }
 }

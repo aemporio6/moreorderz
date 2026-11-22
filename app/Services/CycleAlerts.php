@@ -143,8 +143,17 @@ class CycleAlerts
             else $chip = ['grey', '—'];
             $out[] = ['cycle_product' => (int) $cp->id, 'product' => (int) $cp->fk_id_product, 'sku' => $cp->sku, 'name' => $cp->product_name, 'ordered' => $ord, 'planned' => $planned, 'confirmed' => (float) $al->confirmed, 'dispatched' => (float) $al->dispatched,
                 'expected' => (float) $g->expected, 'received' => (float) $g->received, 'accepted' => (float) $g->accepted, 'damaged' => (float) $g->damaged, 'missing' => (float) $g->missing, 'chip' => $chip[1], 'tone' => $chip[0],
+                'claim' => $chip[1] === 'Balanced' && (float) $g->missing > 0 ? (float) $g->missing : 0.0,      /* "Balanced · claim m" */
                 'produced' => $prodBy[(int) $cp->fk_id_product] ?? null, 'qc_passed' => $qcBy[(int) $cp->fk_id_product] ?? null, 'in_stock' => (float) ($stock[(int) $cp->fk_id_product] ?? 0)];
         }
+        return $out;
+    }
+
+    /** R-F_SETUP-24 what blocks Completed / Closed: Mismatch always; unallocated / OVER only on a cycle that plans with allocations (Old entry and Direct PO cycles have none). */
+    public static function unbalanced(int $cycleId): array
+    {
+        $alloc = DB::table('t_src_allocations')->where('fk_id_cycle', $cycleId)->where('f_active', 1)->exists(); $out = [];
+        foreach (self::quantities($cycleId) as $q) if ($q['chip'] === 'Mismatch' || ($alloc && (str_ends_with($q['chip'], 'unallocated') || str_ends_with($q['chip'], 'OVER')))) $out[] = ($q['sku'] ?: $q['name']) . ': ' . $q['chip'];
         return $out;
     }
 

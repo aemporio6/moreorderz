@@ -117,4 +117,19 @@ class SourcingAlertsTest extends TestCase
         $this->assertStringContainsString('Fast Cargo', (string) DB::table('sys_audit_log')->where('table_name', 't_src_cycles')->where('record_id', $this->cy)->orderByDesc('id')->value('changes_json'));
         $o = $this->getJson("/api/cycle/{$this->cy}/overview")->assertOk()->json(); $this->assertCount(12, $o['pipeline']['steps']); $this->assertArrayHasKey('contacts', $o);
     }
+
+    public function test_quantities_block_completion_and_show_the_claim(): void
+    {
+        $this->world();
+        $grn = $this->ins('t_src_grn', ['fk_id_cycle' => $this->cy, 'grn_number' => 'GRN-T9', 'grn_date' => '2026-11-10']);      /* v1.7 quantities (IC-3): expected = received + missing, received = accepted + damaged */
+        $line = $this->ins('t_src_grn_lines', ['fk_id_grn' => $grn, 'fk_id_product' => $this->prod, 'sku' => 'LAMP-1', 'expected_qty' => 1000, 'received_qty' => 990, 'accepted_qty' => 980, 'damaged_qty' => 10, 'missing_qty' => 10]);
+        $this->ins('t_src_allocations', ['fk_id_cycle' => $this->cy, 'fk_id_po' => $this->po, 'fk_id_cycle_product' => $this->cp, 'alloc_code' => 'AL-9', 'allocated_qty' => 1000]);
+        $q = CA::quantities($this->cy)[0]; $this->assertSame(['Balanced', 10.0], [$q['chip'], $q['claim']], 'Balanced · claim 10');
+        DB::table('t_src_grn_lines')->where('id', $line)->update(['accepted_qty' => 970]);
+        try { RecordService::save('src_cycle', ['status' => 'Completed'], $this->cy); $this->fail('closed with a mismatch'); }
+        catch (\Illuminate\Validation\ValidationException $e) { $this->assertStringStartsWith('Quantities do not balance – see Quantity check', $e->errors()['status'][0]); }
+        DB::table('t_src_grn_lines')->where('id', $line)->update(['accepted_qty' => 980]);
+        RecordService::save('src_cycle', ['status' => 'Completed'], $this->cy);
+        $this->assertSame('Completed', DB::table('t_src_cycles')->where('id', $this->cy)->value('status'));
+    }
 }
