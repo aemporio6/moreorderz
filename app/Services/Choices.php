@@ -146,11 +146,12 @@ class Choices
             '15' => ['15 minutes', ''], '30' => ['30 minutes', 'Suggested.'], '60' => ['1 hour', ''], '1440' => ['1 day', '']]],
         'SECURE_FORMS' => ['Secure pages (R-G_CORE-59): which pages ask the phone-app code before they open?', 'Recommended: bank accounts, PayPal, supplier banks and tax returns – they hold money details; the code is asked once per session and again after the idle time.', 't_account_bank,t_account_paypal,supplier_bank,tax_period,tax_entry', []],
         'OWN_SHOP_ROLES' => ['Data scope: which roles see only their own shops (R-G_CORE-63)?', 'Recommended: VA and Team lead – they work for given shops; a person of such a role with no shop sees no shop rows. Other roles see every shop of their companies (a shop limit set on one login still applies).', 'VA,TL', []],
+        'EXCEPTIONS_DIGEST_ROLES' => ['Tasks: who gets the daily exceptions digest (what the system found, approvals and rights requests waiting, failed messages, Health warnings)?', 'Recommended: Owner only – the team digest already goes to Partners and Managers; the exceptions are the Owner\'s list.', 'OWNER', []],
         'HIDDEN_MARGIN_ROLES' => ['Owner Home › Invoicing / Profit: who sees the row "Hidden margin"?', 'Recommended: Owner only – a partner\'s share is worked out on the net profit, so the margin kept by the company stays with the Owner.', 'OWNER', []],
     ];
 
     /** Multiple choices: key → where the options come from (party roles = roles of people, login roles = roles of logins). Value = comma list or ALL. */
-    public const MULTI = ['DIRECTOR_ROLES' => 'party_roles', 'HIDDEN_MARGIN_ROLES' => 'login_roles', 'FBA_LOCATION_KINDS' => 'list:LOCATION_KIND', 'TASK_PROOF_OFF_ROLES' => 'login_roles', 'CHANNEL_SWITCH_ROLES' => 'login_roles', 'ABSENCE_ROLES' => 'login_roles', 'DELEGATION_ROLES' => 'login_roles', 'CATEGORY_ROLES' => 'login_roles', 'COUNT_TRIGGERS' => 'inline', 'CLOSE_WAIVABLE' => 'close_checks', 'SECURE_FORMS' => 'secure_forms', 'OWN_SHOP_ROLES' => 'login_roles'];
+    public const MULTI = ['DIRECTOR_ROLES' => 'party_roles', 'HIDDEN_MARGIN_ROLES' => 'login_roles', 'EXCEPTIONS_DIGEST_ROLES' => 'login_roles', 'FBA_LOCATION_KINDS' => 'list:LOCATION_KIND', 'TASK_PROOF_OFF_ROLES' => 'login_roles', 'CHANNEL_SWITCH_ROLES' => 'login_roles', 'ABSENCE_ROLES' => 'login_roles', 'DELEGATION_ROLES' => 'login_roles', 'CATEGORY_ROLES' => 'login_roles', 'COUNT_TRIGGERS' => 'inline', 'CLOSE_WAIVABLE' => 'close_checks', 'SECURE_FORMS' => 'secure_forms', 'OWN_SHOP_ROLES' => 'login_roles'];
 
     /** [code => [label, effect]] of a multiple choice (All first). */
     public static function options(string $key): array

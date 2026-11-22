@@ -72,26 +72,55 @@ class TaskDigest
             . "\nSTUCK ($stuck)\nWAITING APPROVAL ($wait)\nOVER LIMIT (" . count($over) . ')' . ($over ? "\n- " . implode("\n- ", $over) : '') . "\nOpen tasks: " . self::link() . '?scope=all';
     }
 
+    /**
+     * R-G_CORE-45 the Owner exceptions digest on the same mechanism (N16): what the system found and nobody closed yet –
+     * open system tasks by rule (late ones counted), approvals waiting, rights requests, messages that failed in the last 24 hours,
+     * events that failed, Health warnings. Who gets it: Settings › Choices EXCEPTIONS_DIGEST_ROLES (default Owner).
+     */
+    public static function exceptions(int $userId, string $date): ?string
+    {
+        $first = strtok(self::name($userId), ' ') ?: self::name($userId); $out = []; $n = 0;
+        $rule = DB::table('tasks')->where('source', 'RULE')->whereIn('status', self::OPEN)->groupBy('rule_code')->selectRaw("rule_code, COUNT(*) c, SUM(CASE WHEN DATE(due_at) < ? THEN 1 ELSE 0 END) l, MIN(title) t", [$date])->orderByDesc('c')->get();
+        if ($rule->count()) { $n += $rule->sum('c'); $out[] = 'SYSTEM FOUND (' . $rule->sum('c') . ')';
+            foreach ($rule->take(self::MAX_LINES) as $r) $out[] = '- ' . ($r->c > 1 ? $r->c . '× ' : '') . $r->t . ($r->l ? " ({$r->l} late)" : '');
+            if ($rule->count() > self::MAX_LINES) $out[] = '- ... and ' . ($rule->count() - self::MAX_LINES) . ' more'; }
+        $simple = [
+            'APPROVALS WAITING' => \Illuminate\Support\Facades\Schema::hasTable('sys_approvals') ? DB::table('sys_approvals')->where('status', 'PENDING')->count() : 0,
+            'RIGHTS REQUESTS' => \Illuminate\Support\Facades\Schema::hasTable('mo_access_requests') ? DB::table('mo_access_requests')->where('status', 'OPEN')->count() : 0,
+            'MESSAGES FAILED (24 h)' => DB::table('tm_messages')->where('status', 'FAILED')->where('failed_at', '>=', now()->subDay())->count(),
+            'EVENTS FAILED' => DB::table('sys_events')->where('status', 'FAILED')->count(),
+        ];
+        foreach ($simple as $h => $c) if ($c) { $n += $c; $out[] = "$h ($c)"; }
+        $warn = array_merge((array) TaskWeekly::missed(), TaskTemplates::health());
+        if ($warn) { $n += count($warn); $out[] = 'HEALTH (' . count($warn) . ')'; foreach (array_slice($warn, 0, self::MAX_LINES) as $w) $out[] = '- ' . (is_array($w) ? ($w['text'] ?? $w['message'] ?? json_encode($w)) : $w); }
+        if (! $n && ! (int) AlertRules::threshold('digest_send_empty')) return null;
+        return "Exceptions today, $first – " . date('D d M', strtotime($date)) . ":\n" . ($n ? implode("\n", $out) : 'No exceptions. All clear.') . "\nOpen Home: " . rtrim((string) config('app.url'), '/') . '/#/home';
+    }
+
+    private static function getsExceptions(object $u): bool { return Choices::has('EXCEPTIONS_DIGEST_ROLES', (int) ($u->fk_id_ent ?? 0) ?: ((int) Context::ent() ?: 1), (string) $u->role_code); }
+
     /** Preview: a boss for anyone, a person for himself. */
     public static function preview(object $viewer, int $userId): array
     {
         if ((int) $viewer->id !== $userId && ! in_array($viewer->role_code, TaskScore::BOSS, true)) throw new \InvalidArgumentException('Refused: you can preview only your own digest.');
         $acc = PersonChannels::account($userId); $date = (new \DateTimeImmutable('now', new \DateTimeZone(PersonChannels::tz($acc))))->format('Y-m-d');
-        $u = DB::table('t_users')->where('id', $userId)->first(['id', 'role_code']);
+        $u = DB::table('t_users')->where('id', $userId)->first(['id', 'role_code', 'fk_id_ent']);
         return ['user' => self::name($userId), 'date' => $date, 'at' => substr((string) ($acc->digest_time ?? '08:00') ?: '08:00', 0, 5) . ' ' . PersonChannels::tz($acc), 'text' => self::text($userId, $date, true),
-            'team' => $u && in_array($u->role_code, TaskScore::BOSS, true) ? self::team($userId, $date) : null];
+            'team' => $u && in_array($u->role_code, TaskScore::BOSS, true) ? self::team($userId, $date) : null,
+            'exceptions' => $u && self::getsExceptions($u) ? self::exceptions($userId, $date) : null];
     }
 
     /** The worker (every minute): send each digest that is due in the person's zone, once per local day, inside the 3-hour catch-up window. */
     public static function run(?\DateTimeInterface $nowUtc = null): int
     {
         $now = \DateTimeImmutable::createFromInterface($nowUtc ?? new \DateTimeImmutable('now', new \DateTimeZone('UTC'))); $n = 0; $off = (int) AlertRules::threshold('team_digest_offset_min');
-        foreach (DB::table('t_users')->where('f_active', 1)->whereNotNull('fk_id_account')->get(['id', 'role_code']) as $u) {
+        foreach (DB::table('t_users')->where('f_active', 1)->whereNotNull('fk_id_account')->get(['id', 'role_code', 'fk_id_ent']) as $u) {
             $acc = PersonChannels::account((int) $u->id); $local = $now->setTimezone(new \DateTimeZone(PersonChannels::tz($acc))); $date = $local->format('Y-m-d');
             $at = substr((string) ($acc->digest_time ?? ''), 0, 5) ?: '08:00';
             $due = fn (int $plus) => ($s = $local->setTime((int) substr($at, 0, 2), (int) substr($at, 3, 2))->modify("+$plus minutes")) <= $local && $local < $s->modify('+' . self::CATCH_UP_H . ' hours');
             if ($due(0) && ($txt = self::text((int) $u->id, $date)) !== null && AlertRules::send('N13', (int) $u->id, ['body' => $txt, 'date' => date('D d M', strtotime($date))], null, "N13:{$u->id}:$date")) $n++;
             if (in_array($u->role_code, TaskScore::BOSS, true) && $due($off) && ($tt = self::team((int) $u->id, $date)) !== null && AlertRules::send('N13', (int) $u->id, ['body' => $tt, 'date' => date('D d M', strtotime($date))], null, "N13T:{$u->id}:$date", 'tm_team_digest')) $n++;
+            if (self::getsExceptions($u) && $due($off) && ($tx = self::exceptions((int) $u->id, $date)) !== null && AlertRules::send('N16', (int) $u->id, ['body' => $tx, 'date' => date('D d M', strtotime($date))], null, "N16:{$u->id}:$date")) $n++;
         }
         return $n;
     }

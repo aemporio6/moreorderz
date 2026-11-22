@@ -19,7 +19,7 @@ class AlertRulesTest extends TestCase
     {
         $this->actingAs($this->owner);
         $d = $this->getJson('/api/alerts')->assertOk()->json();
-        $this->assertSame(['N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7', 'N8', 'N9', 'N10', 'N11', 'N12', 'N13', 'N14', 'MANUAL', 'APPROVED'], array_column($d['rules'], 'code'));
+        $this->assertSame(['N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7', 'N8', 'N9', 'N10', 'N11', 'N12', 'N13', 'N14', 'N15', 'N16', 'MANUAL', 'APPROVED'], array_column($d['rules'], 'code'));
         $n13 = collect($d['rules'])->firstWhere('code', 'N13'); $this->assertSame(['tm_digest', 'tm_team_digest'], array_values(array_unique(array_column($n13['texts'], 'key'))));
         $this->assertTrue($d['can_edit']);
         $this->postJson('/api/alerts/rules/MANUAL', ['is_active' => 0])->assertStatus(422)->assertJsonFragment(['message' => 'Refused: MANUAL is always WhatsApp + in-app and cannot be switched off.']);

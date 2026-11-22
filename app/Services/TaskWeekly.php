@@ -76,9 +76,44 @@ class TaskWeekly
             $ids = AlertRules::send('N14', (int) $u->id, ['first_name' => strtok((string) $u->display_name, ' '), 'week' => $d['week'], 'done' => $d['tiles']['closed'], 'late' => $d['tiles']['late'], 'stuck' => $d['tiles']['stuck'],
                 'link' => rtrim((string) config('app.url'), '/') . '/#/tasks?scope=weekly&week=' . $mon], null, $key);
             DB::table('tm_messages')->whereIn('id', $ids ?: [0])->where('channel', 'EMAIL')->update(['text' => $html, 'attachment' => $pdf]);
+            if ($pdf) DB::table('tm_messages')->whereIn('id', $ids ?: [0])->where('channel', 'WHATSAPP')->update(['attachment' => $pdf, 'subject' => 'Weekly task report ' . $d['week']]);      // R-G_CORE-44 (new): the WhatsApp document copy
             if ($ids) $n++;
         }
         DB::table('sys_job_runs')->insert(['job_code' => 'WEEKLY_REPORT', 'fk_id_ent' => (int) Context::ent(), 'started_at' => now(), 'finished_at' => now(), 'run_status' => 'OK', 'items_done' => $n, 'messages_queued' => $n, 'error_text' => $key]);
+        return $n;
+    }
+
+    /** R-G_CORE-40 (new): the leaderboard of a month as HTML (e-mail / PDF). */
+    public static function monthHtml(string $month): string
+    {
+        $e = fn ($s) => htmlspecialchars((string) $s, ENT_QUOTES); $rows = TaskTeam::leaderboard($month)['rows'];
+        $lb = implode('', array_map(fn ($r) => '<tr><td>' . $r['rank'] . '</td><td>' . $e($r['name']) . '</td><td>' . $r['closed'] . '</td><td>' . $r['on_time'] . '%</td><td>' . $r['proof'] . '%</td><td>' . $r['rework'] . '</td><td>' . ($r['avg'] ?? '—') . '</td><td>' . $e($r['trend']) . '</td></tr>', $rows));
+        return '<div style="font-family:Arial,sans-serif;font-size:12px"><h2>Task leaderboard ' . $e(date('F Y', strtotime($month . '-01'))) . '</h2>'
+            . ($rows ? '<table border="1" cellpadding="4" cellspacing="0"><tr><th>#</th><th>Name</th><th>Closed</th><th>On time</th><th>Proof</th><th>Rework</th><th>Avg score</th><th>Trend</th></tr>' . $lb . '</table>' : '<p>No task was approved this month.</p>')
+            . '<p style="color:#666">Sorted by average score, then closed tasks. On time = share of approved tasks with full on-time points.</p></div>';
+    }
+
+    /** R-G_CORE-40 (new): on the 1st at monthly_report_time (company time, catch-up 3 h) the month before goes to the Partners and the Owner as e-mail + A4 PDF (+ WhatsApp document), key N15:YYYY-MM. */
+    public static function runMonthly(?\DateTimeImmutable $now = null): int
+    {
+        $now ??= new \DateTimeImmutable(); $local = $now->setTimezone(self::tz());
+        if ($local->format('j') !== '1') return 0;
+        $hm = (string) AlertRules::threshold('monthly_report_time') ?: '09:00'; $at = $local->setTime((int) substr($hm, 0, 2), (int) substr($hm, 3, 2));
+        if ($local < $at || $local >= $at->modify('+3 hours')) return 0;
+        $month = $local->modify('first day of last month')->format('Y-m'); $key = "N15:$month";
+        if (DB::table('tm_messages')->where('event_key', 'like', $key . '|%')->exists()) return 0;
+        $html = self::monthHtml($month); $rows = TaskTeam::leaderboard($month)['rows']; $pdf = null;
+        if ((int) AlertRules::threshold('weekly_report_pdf') && class_exists(PrintService::$maker)) {
+            try { $pdf = "weekly_reports/leaderboard_$month.pdf"; Storage::disk('local')->put($pdf, PrintService::pdf($html, 210, 297)); } catch (\Throwable) { $pdf = null; }
+        }
+        $n = 0;
+        foreach (DB::table('t_users')->whereIn('role_code', ['OWNER', 'PARTNER'])->where('f_active', 1)->get(['id', 'display_name']) as $u) {
+            $ids = AlertRules::send('N15', (int) $u->id, ['first_name' => strtok((string) $u->display_name, ' '), 'month' => date('F Y', strtotime($month . '-01')), 'people' => count($rows), 'closed' => array_sum(array_column($rows, 'closed')),
+                'best' => $rows ? $rows[0]['name'] . ' (' . $rows[0]['avg'] . ')' : '—', 'link' => rtrim((string) config('app.url'), '/') . '/#/tasks/team?month=' . $month], null, $key);
+            DB::table('tm_messages')->whereIn('id', $ids ?: [0])->where('channel', 'EMAIL')->update(['text' => $html, 'attachment' => $pdf]);
+            if ($pdf) DB::table('tm_messages')->whereIn('id', $ids ?: [0])->where('channel', 'WHATSAPP')->update(['attachment' => $pdf, 'subject' => 'Task leaderboard ' . $month]);
+            if ($ids) $n++;
+        }
         return $n;
     }
 

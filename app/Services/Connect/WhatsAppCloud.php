@@ -42,6 +42,17 @@ class WhatsAppCloud extends Adapter
         return (string) ($j['messages'][0]['id'] ?? throw new ApiError('WhatsApp took the message but gave no id.'));
     }
 
+    /** R-G_CORE-44 a document (the weekly report PDF): POST /{phone_number_id}/media (multipart) → media id, then a document message. Free form = inside the 24-hour window only. */
+    public function sendDocument(string $phone, string $bytes, string $fileName, string $caption = ''): string
+    {
+        $up = Api::ok($this->call('POST', $this->url('/media'), ['timeout' => 30, 'headers' => ['Authorization' => 'Bearer ' . $this->s['access_token']],
+            'multipart' => [['name' => 'messaging_product', 'contents' => 'whatsapp'], ['name' => 'type', 'contents' => 'application/pdf'], ['name' => 'file', 'contents' => $bytes, 'filename' => $fileName, 'headers' => ['Content-Type' => 'application/pdf']]]]), 'WhatsApp media upload');
+        $media = (string) ($up['id'] ?? throw new ApiError('WhatsApp took the file but gave no media id.'));
+        $body = ['messaging_product' => 'whatsapp', 'to' => preg_replace('/\D/', '', $phone), 'type' => 'document', 'document' => ['id' => $media, 'filename' => $fileName] + ($caption !== '' ? ['caption' => mb_substr($caption, 0, 1000)] : [])];
+        $j = Api::ok($this->call('POST', $this->url('/messages'), ['timeout' => 15, 'headers' => ['Authorization' => 'Bearer ' . $this->s['access_token']], 'json' => $body]), 'WhatsApp document');
+        return (string) ($j['messages'][0]['id'] ?? throw new ApiError('WhatsApp took the document but gave no id.'));
+    }
+
     /** Download a media file the person sent: [bytes, mime, size]. GET /{media id} → url, then GET url with the token. */
     public function media(string $mediaId): array
     {

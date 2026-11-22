@@ -34,7 +34,9 @@ class AlertRules
         'N11' => ['Reassigned', 'TASK_REASSIGNED', 'New owner', 'tm_reassigned', null, ['WHATSAPP', 'INAPP'], 'At once', '', 0, 0],
         'N12' => ['Stale', 'TASK_STALE', 'Owner', 'tm_stale', null, ['WHATSAPP', 'INAPP'], 'Once per stale spell (stale_days without an update)', '', 0, 1],
         'N13' => ['Daily digest + team digest', 'DIGEST', 'Every person; bosses also get the team digest', 'tm_digest', 'tm_team_digest', ['WHATSAPP', 'EMAIL', 'INAPP'], "At the person's digest_time (team digest + team_digest_offset_min)", '', 0, 0],
-        'N14' => ['Weekly report', 'WEEKLY_REPORT', 'Partners + Managers', 'tm_weekly_report', null, ['EMAIL', 'INAPP'], 'weekly_report (MON 09:00)', '', 0, 0],
+        'N14' => ['Weekly report', 'WEEKLY_REPORT', 'Partners + Managers', 'tm_weekly_report', null, ['EMAIL', 'WHATSAPP', 'INAPP'], 'weekly_report (MON 09:00); the PDF also as a WhatsApp document inside the 24-hour window', '', 0, 0],
+        'N15' => ['Monthly leaderboard', 'MONTHLY_REPORT', 'Partners (and the Owner)', 'tm_monthly_report', null, ['EMAIL', 'WHATSAPP', 'INAPP'], 'On the 1st at monthly_report_time for the month before, A4 PDF attached', '', 0, 0],
+        'N16' => ['Owner exceptions digest', 'DIGEST', 'Settings › Choices EXCEPTIONS_DIGEST_ROLES (default Owner)', 'tm_exceptions', null, ['WHATSAPP', 'EMAIL', 'INAPP'], "With the team digest (digest_time + team_digest_offset_min)", '', 0, 0],
         'MANUAL' => ['Reminder (sent by hand)', 'TASK_REMIND', 'Owner', 'tm_reminder', null, ['WHATSAPP', 'INAPP'], 'When the assigner or boss presses Remind', '', 1, 0],
         'APPROVED' => ['Approved', 'TASK_APPROVED', 'Owner', 'tm_approved', null, ['WHATSAPP', 'INAPP'], 'At once', '', 1, 0],
     ];
@@ -55,6 +57,8 @@ class AlertRules
         'tm_digest' => ['Your tasks for {date}', '{body}'],      // R-G_CORE-45: the whole digest text (sections) is built by TaskDigest
         'tm_team_digest' => ['Your team for {date}', '{body}'],
         'tm_weekly_report' => ['Weekly task report {week}', 'Hi {first_name}, the weekly task report for {week} is ready: {done} done, {late} late, {stuck} stuck. {link}'],
+        'tm_monthly_report' => ['Task leaderboard {month}', 'Hi {first_name}, the task leaderboard for {month} is ready: {people} people, {closed} tasks closed, best {best}. {link}'],
+        'tm_exceptions' => ['Exceptions for {date}', '{body}'],      // R-G_CORE-45: the Owner exceptions digest, built by TaskDigest::exceptions
         'tm_reminder' => ['[{task_ref}] Reminder', 'Reminder from {by}: {task_ref} {title} (due {due}). {link}'],      // R-G_CORE-32 text
         'tm_approved' => ['[{task_ref}] Approved', 'Well done {first_name}, {task_ref}: {title} is approved – quality {quality}, score {score}. {link}'],
     ];
@@ -77,6 +81,7 @@ class AlertRules
         'team_digest_offset_min' => ['15', 'NUMBER', 'Team digest after own digest (minutes)', 'Bosses get the team digest this many minutes after their own.'],
         'weekly_report' => ['MON 09:00', 'DAYTIME', 'Weekly report time', 'Day and time of N14, e.g. MON 09:00.'],
         'ack_escalate_multiplier' => ['2', 'NUMBER', 'Escalate after ack hours ×', 'N2 escalates to the category escalate-to role after ack hours × this.'],
+        'monthly_report_time' => ['09:00', 'TIME', 'Monthly leaderboard time', 'N15 goes on the 1st of the month at this company time (catch-up 3 hours).'],
         'weekly_report_pdf' => ['1', 'NUMBER', 'Weekly report with A4 PDF (1 = yes, 0 = no)', 'Attach the A4 PDF to N14.'],
         'digest_send_empty' => ['1', 'NUMBER', 'Send an empty digest (1 = yes, 0 = no)', 'Send N13 even when the person has nothing waiting.'],
         'due_move_limit' => ['2', 'NUMBER', 'Due date moves before Partner', 'The next move of a due date needs a Partner.'],

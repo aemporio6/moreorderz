@@ -42,7 +42,7 @@ class TaskWorker
             }
             if ($only === null) {
                 $before = (int) DB::table('tm_messages')->max('id');
-                TaskAlerts::run($now); TaskDigest::run($now); TaskWeekly::run($now);
+                TaskAlerts::run($now); TaskDigest::run($now); TaskWeekly::run($now); TaskWeekly::runMonthly($now);
                 $q = (int) DB::table('tm_messages')->where('id', '>', $before)->where('channel', '<>', 'INAPP')->count();
                 $parts[] = "reminders queued: $q";
             }

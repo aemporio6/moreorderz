@@ -28,6 +28,14 @@ class WhatsApp360 extends Adapter
             'components' => $params ? [['type' => 'body', 'parameters' => array_map(fn ($v) => ['type' => 'text', 'text' => mb_substr((string) $v, 0, 1000)], array_values($params))]] : []]], 'WhatsApp send');
     }
 
+    /** R-G_CORE-44 a document: POST /media (raw bytes) → media id, then a document message (inside the 24-hour window). */
+    public function sendDocument(string $phone, string $bytes, string $fileName, string $caption = ''): string
+    {
+        $up = Api::ok($this->call('POST', $this->base() . '/media', ['timeout' => 30, 'headers' => ['D360-API-KEY' => $this->s['api_key'], 'Content-Type' => 'application/pdf'], 'raw' => $bytes]), 'WhatsApp media upload');
+        $media = (string) ($up['id'] ?? throw new ApiError('360dialog took the file but gave no media id.'));
+        return $this->post(['to' => preg_replace('/\D/', '', $phone), 'type' => 'document', 'document' => ['id' => $media, 'filename' => $fileName] + ($caption !== '' ? ['caption' => mb_substr($caption, 0, 1000)] : [])], 'WhatsApp document');
+    }
+
     public function sendText(string $phone, string $text): string
     {
         return $this->post(['to' => preg_replace('/\D/', '', $phone), 'type' => 'text', 'text' => ['body' => mb_substr($text, 0, 4000)]], 'WhatsApp reply');

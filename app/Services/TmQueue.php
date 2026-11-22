@@ -52,6 +52,11 @@ class TmQueue
                         $id = $ad->send((string) $m->to_address, (string) ($tpl->provider_name ?: $tpl->code), json_decode((string) $m->template_params, true) ?: []);
                     }
                     $note = $c->adapter === 'WHATSAPP_LOG' ? 'log provider' : null;
+                    $f = (string) ($m->attachment ?? '');      // R-G_CORE-44: the report PDF as a WhatsApp document – free form, so only inside the 24-hour window
+                    if ($f !== '' && method_exists($ad, 'sendDocument') && \Illuminate\Support\Facades\Storage::disk('local')->exists($f)) {
+                        if (self::inWindow($acc ?: null, $now)) { $ad->sendDocument((string) $m->to_address, \Illuminate\Support\Facades\Storage::disk('local')->get($f), basename($f), (string) ($m->subject ?? '')); $note = trim(($note ? $note . ' · ' : '') . 'PDF sent as document'); }
+                        else $note = trim(($note ? $note . ' · ' : '') . 'PDF not sent – outside the 24-hour window (the e-mail has it)');
+                    }
                 } else {
                     if (! Messenger::emailReady()) { self::wait($m, 'No e-mail server is set up (MAIL_… lines of the .env file). It goes out as soon as one is.'); $done['waiting']++; continue; }
                     $send = str_starts_with(ltrim((string) $m->text), '<') ? 'html' : 'raw';      // an HTML report (N14) goes as HTML
