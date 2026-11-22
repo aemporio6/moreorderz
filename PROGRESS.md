@@ -672,3 +672,5 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-158 (22 Nov): R-B_SOURCING-5 approval of old entries, R-B_SOURCING-13 CSV check screen, R-B_SOURCING-39 quantity trail – all BUILT. 878 → 887 BUILT (62 %), MISSING 122. 679 tests. Browser desktop + phone, business checksums same.
 - 7e-159 (22 Nov): R-B_SOURCING-10 old entry receiving and R-FIN-47 returns after lock BUILT; R-F_SETUP-24 completion block PARTIAL; R-D-88 month part built. 887 → 893 BUILT, MISSING 122 → 120. 683 tests. Browser desktop + phone, business checksums same.
 - 7e-160 (22 Nov): R-D-88 Missing return written off (STOCK_LOSS) and R-F_SETUP-24 Month Close quantity check BUILT; R-H-20 quantity per listing PARTIAL (API push open). 893 → 897 BUILT (63 %), MISSING 120 → 118. 686 tests. Browser desktop + phone, business checksums same.
+
+- 7e-161 (fa392ec): marketplace money readers read profile fee buckets first, migration 000126 one profile per marketplace + column sets on the profile; preset groups R-D-62 built. 688 tests pass. BUILT 899 / PARTIAL 296 / FORM ONLY 120 / MISSING 118. Open: R-A_SALES-87 file layouts still code; R-D-83 portal part.
