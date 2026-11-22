@@ -552,6 +552,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('old-entry', [\App\Http\Controllers\BuyingController::class, 'oldEntryMeta']);      // R-B_SOURCING-5 / 8 / 13
         Route::get('old-entry/rate', [\App\Http\Controllers\BuyingController::class, 'oldEntryRate']);
         Route::post('old-entry', [\App\Http\Controllers\BuyingController::class, 'oldEntrySave']);
+        Route::post('old-entry/csv/check', [\App\Http\Controllers\BuyingController::class, 'oldEntryCheck']);      // dry run – never writes
         Route::post('old-entry/csv', [\App\Http\Controllers\BuyingController::class, 'oldEntryCsv']);
         Route::post('old-entry/csv/{job}/undo', [\App\Http\Controllers\BuyingController::class, 'oldEntryUndo'])->whereNumber('job');
         Route::get('old-entry/template', [\App\Http\Controllers\BuyingController::class, 'oldEntryTemplate']);

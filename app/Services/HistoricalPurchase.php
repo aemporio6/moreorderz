@@ -141,16 +141,45 @@ class HistoricalPurchase
                     $gl[] = ['po_line' => $row->id, 'received' => $acc + $dmg, 'damaged' => $dmg, 'missing' => $mis]; }
                 $grn = BuyingService::createGrn(['shipment' => $ship, 'location' => $wh, 'date' => $rc['date'], 'lines' => $gl]);
                 DB::table('t_src_grn')->where('id', $grn)->update(['grn_source' => 'HISTORICAL']);
-                BuyingService::postGrn($grn);
-                if ($drafts) DB::table('t_product_vendors')->whereIn('id', $drafts)->whereIn('id', DB::table('fin_lots')->where('fk_id_cycle', $cycle)->select('fk_id_product'))->update(['f_active' => 1]);      /* a new product with stock is live */
-                $done = ! DB::table('t_src_po_lines as p')->where('p.fk_id_po', $po)->where('p.f_active', 1)->where(fn ($q) => $q->whereNull('p.line_type')->orWhereIn('p.line_type', ['', 'PRODUCT']))
+                if (self::needsApproval($ent, $u)) {      /* R-B_SOURCING-5: stock unaffected until a Partner / the Owner approves */
+                    $pending = true; DB::table('t_src_cycles')->where('id', $cycle)->update(['approval_status' => 'PENDING', 'approved_by' => null, 'approved_at' => null]);
+                    $base = round((float) DB::table('t_src_po')->where('id', $po)->value('po_total') * $rate, 2);
+                    Approvals::request($ent, 'SRC_HISTORICAL', 't_src_cycles', $cycle, $base, ['cycle' => $cycle, 'grn' => $grn, 'drafts' => $drafts, 'ref' => $ref], "Approve old purchase $ref (" . $sup->supplier_name . ') – its stock waits');
+                    $log[] = 'NOTE pending approval – stock unaffected until a Partner approves';
+                } else self::postReceived($cycle, $grn, $drafts);
+                $done = ! empty($pending) ? false : ! DB::table('t_src_po_lines as p')->where('p.fk_id_po', $po)->where('p.f_active', 1)->where(fn ($q) => $q->whereNull('p.line_type')->orWhereIn('p.line_type', ['', 'PRODUCT']))
                     ->whereRaw('p.qty_ordered - 0.001 > (SELECT COALESCE(SUM(l.accepted_qty + l.damaged_qty + l.missing_qty),0) FROM t_src_grn_lines l WHERE l.fk_id_po_line = p.id)')->exists();
             } elseif (! empty($rc['date'])) $log[] = 'NOTE received date given but no accepted quantity – nothing received';
             DB::table('t_src_cycles')->where('id', $cycle)->update(['status' => $done ? 'COMPLETED' : 'OPEN']);
-            $log[] = $done ? 'Cycle CLOSED (every PRODUCT line received)' : 'Cycle OPEN at the first unfilled step';
+            $log[] = $done ? 'Cycle CLOSED (every PRODUCT line received)' : (! empty($pending) ? 'Cycle OPEN until the approval' : 'Cycle OPEN at the first unfilled step');
             Audit::log('t_src_cycles', $cycle, 'INSERT', ['HISTORICAL' => $ref, 'log' => $log], $e['force_reason'] ?? null, $ent);
-            return ['cycle' => $cycle, 'po' => $po, 'code' => DB::table('t_src_cycles')->where('id', $cycle)->value('cycle_code'), 'completed' => $done, 'log' => $log];
+            return ['cycle' => $cycle, 'po' => $po, 'code' => DB::table('t_src_cycles')->where('id', $cycle)->value('cycle_code'), 'completed' => $done, 'pending' => ! empty($pending), 'log' => $log,
+                'message' => ! empty($pending) ? 'Saved PENDING APPROVAL - stock unaffected until a Partner approves. Opening cycle...' : 'Saved. Opening cycle...'];
         });
+    }
+
+    /** Settings › Choices OLD_ENTRY_APPROVAL: NOT_OWNER (default) = an old entry with received goods made by anyone but the Owner waits for approval. */
+    public static function needsApproval(int $ent, object $u): bool { return Choices::get('OLD_ENTRY_APPROVAL', $ent) === 'NOT_OWNER' && ($u->role_code ?? '') !== 'OWNER'; }
+
+    /** Post the GRN of an entry: lots, drafts live, cycle completed when every PRODUCT line is received. */
+    public static function postReceived(int $cycle, int $grn, array $drafts): bool
+    {
+        BuyingService::postGrn($grn);
+        if ($drafts) DB::table('t_product_vendors')->whereIn('id', $drafts)->whereIn('id', DB::table('fin_lots')->where('fk_id_cycle', $cycle)->select('fk_id_product'))->update(['f_active' => 1]);      /* a new product with stock is live */
+        $po = (int) DB::table('t_src_po')->where('fk_id_cycle', $cycle)->value('id');
+        $done = ! DB::table('t_src_po_lines as p')->where('p.fk_id_po', $po)->where('p.f_active', 1)->where(fn ($q) => $q->whereNull('p.line_type')->orWhereIn('p.line_type', ['', 'PRODUCT']))
+            ->whereRaw('p.qty_ordered - 0.001 > (SELECT COALESCE(SUM(l.accepted_qty + l.damaged_qty + l.missing_qty),0) FROM t_src_grn_lines l WHERE l.fk_id_po_line = p.id)')->exists();
+        DB::table('t_src_cycles')->where('id', $cycle)->update(['status' => $done ? 'COMPLETED' : 'OPEN']);
+        return $done;
+    }
+
+    /** The approval handler: approved → the stock is posted; refused → nothing is received (the GRN stays a draft, the cycle shows REJECTED). */
+    public static function decided(object $a, bool $ok, ?string $reason): void
+    {
+        $c = json_decode((string) $a->change_json, true);
+        if ($ok) { DB::table('t_src_cycles')->where('id', $c['cycle'])->update(['approval_status' => 'APPROVED', 'approved_by' => Context::userId(), 'approved_at' => now()]); self::postReceived((int) $c['cycle'], (int) $c['grn'], (array) ($c['drafts'] ?? [])); }
+        else DB::table('t_src_cycles')->where('id', $c['cycle'])->update(['approval_status' => 'REJECTED']);
+        Audit::log('t_src_cycles', (int) $c['cycle'], $ok ? 'APPROVE' : 'REJECT', ['old purchase' => $c['ref'] ?? ''], $reason, (int) $a->fk_id_ent);
     }
 
     /* ---------------- R-B_SOURCING-13 the CSV ---------------- */
@@ -162,7 +191,8 @@ class HistoricalPurchase
         return implode(',', self::COLUMNS) . "\n" . implode("\n", array_map(fn ($r) => implode(',', $r), $ex)) . "\n";
     }
 
-    public static function import(int $ent, string $text, object $u, array $force = []): array
+    /** The CSV as entries (no write). */
+    public static function parse(string $text): array
     {
         if (trim($text) === '') throw new \InvalidArgumentException('Empty file.');
         $rows = PurchaseAudit::csv($text); $head = array_map(fn ($h) => strtolower(trim(preg_replace('/^\xEF\xBB\xBF/', '', $h))), array_shift($rows) ?? []);
@@ -175,7 +205,7 @@ class HistoricalPurchase
             if (($a['product_name'] ?? '') === '' && ($a['line_type'] ?? '') === '') { $log[] = 'Line ' . ($i + 2) . ' skipped: product_name empty'; $skipped++; continue; }
             $groups[$a['order_ref']][] = $a;
         }
-        $created = []; $failed = 0;
+        $entries = [];
         foreach ($groups as $ref => $g) {
             $f = $g[0]; $warn = []; $pay = []; $freight = [];
             $explicit = false;
@@ -190,20 +220,48 @@ class HistoricalPurchase
                 if ($k > 0 && abs($v - self::num($f['freight_cost'] ?? '')) < 0.005) { $warn[] = "WARN line " . ($k + 1) . " of $ref: freight_cost $v repeats the first row – possible double count – check (not added)"; continue; }
                 $freight[] = ['cost' => $v, 'currency' => $a['freight_currency'] ?? '']; }
             $e = ['source' => 'CSV', 'supplier_name' => $f['supplier_name'], 'order_date' => self::date($f['order_date'] ?? ''), 'order_ref' => $ref, 'order_ref_note' => $f['order_ref_note'] ?? null, 'currency' => $f['currency'] ?? '',
-                'rate' => self::num($f['exchange_rate'] ?? '') ?: null, 'owner_name' => $f['owner_entity'] ?? '', 'brand' => $f['brand'] ?? null, 'notes' => null, 'force_reason' => $force[$ref] ?? null, 'payments' => $pay,
+                'rate' => self::num($f['exchange_rate'] ?? '') ?: null, 'owner_name' => $f['owner_entity'] ?? '', 'brand' => $f['brand'] ?? null, 'notes' => null, 'payments' => $pay,
                 'lines' => array_map(fn ($a) => ['line_type' => $a['line_type'] ?? '', 'product_name' => $a['product_name'] ?? '', 'sku' => $a['sku'] ?? '', 'qty' => self::num($a['qty'] ?? ''), 'unit_price' => self::num($a['unit_price'] ?? ''), 'notes' => $a['notes'] ?? null,
                     'qty_accepted' => self::num($a['qty_accepted'] ?? ''), 'qty_damaged' => self::num($a['qty_damaged'] ?? ''), 'qty_missing' => ($a['qty_missing'] ?? '') === '' ? null : self::num($a['qty_missing'])], $g),
                 'shipping' => ['shipped_date' => self::date($f['shipped_date'] ?? ''), 'arrived_date' => self::date($f['arrived_date'] ?? ''), 'mode' => $f['mode'] ?? null, 'forwarder' => $f['forwarder'] ?? null, 'tracking' => $f['tracking'] ?? null,
                     'freight' => $freight, 'duty' => self::num($f['duty_cost'] ?? ''), 'other' => self::num($f['other_cost'] ?? '')], 'received' => ['date' => self::date($f['received_date'] ?? ''), 'warehouse' => $f['warehouse'] ?? null]];
+            $entries[$ref] = ['entry' => $e, 'warn' => $warn, 'rows' => count($g)];
+        }
+        return ['entries' => $entries, 'log' => $log, 'skipped' => $skipped];
+    }
+
+    /** R-B_SOURCING-13 check screen (dry run – never writes): per entry the supplier, date, lines, money, warnings, a duplicate to force with a reason, problems. */
+    public static function check(int $ent, string $text, object $u): array
+    {
+        $p = self::parse($text); $out = [];
+        foreach ($p['entries'] as $ref => $x) {
+            $e = $x['entry']; $prob = [];
+            if (! $e['order_date']) $prob[] = 'order_date must be YYYY-MM-DD or DD Mon YYYY';
+            $sup = DB::table('t_src_suppliers')->where('fk_id_ent', $ent)->whereRaw('LOWER(TRIM(supplier_name)) = ?', [mb_strtolower(trim((string) $e['supplier_name']))])->where('f_active', 1)->first();
+            $owner = trim((string) $e['owner_name']) !== '' ? DB::table('t_account')->where(fn ($w) => $w->where('account_code', $e['owner_name'])->orWhereRaw("LOWER(TRIM(CONCAT_WS(' ', first_name, sur_name))) = ?", [mb_strtolower(trim((string) $e['owner_name']))]))->value('id') : null;
+            if (! $owner && Choices::get('OLD_ENTRY_OWNER_REQUIRED', $ent) === 'Y') $prob[] = 'owner entity ' . ($e['owner_name'] ? "\"{$e['owner_name']}\" not found" : 'missing');
+            $dup = $sup ? SrcDuplicate::existing($ent, (int) $sup->id, $ref) : null;
+            $out[] = ['ref' => $ref, 'supplier' => $e['supplier_name'], 'new_supplier' => ! $sup, 'date' => $e['order_date'], 'currency' => $e['currency'], 'lines' => count($e['lines']), 'rows' => $x['rows'],
+                'total' => round(array_sum(array_map(fn ($l) => $l['qty'] * $l['unit_price'], $e['lines'])), 2), 'paid' => round(array_sum(array_column($e['payments'], 'amount')), 2), 'received' => (bool) $e['received']['date'],
+                'warn' => $x['warn'], 'duplicate' => $dup->cycle_code ?? null, 'problems' => $prob];
+        }
+        return ['entries' => $out, 'log' => $p['log'], 'skipped' => $p['skipped'], 'ok' => count(array_filter($out, fn ($r) => ! $r['problems'] && ! $r['duplicate'])), 'pending_approval' => self::needsApproval($ent, $u)];
+    }
+
+    public static function import(int $ent, string $text, object $u, array $force = []): array
+    {
+        $p = self::parse($text); $log = $p['log']; $created = []; $failed = 0; $pending = 0;
+        foreach ($p['entries'] as $ref => $x) {
+            $e = $x['entry'] + ['force_reason' => $force[$ref] ?? null]; $warn = $x['warn'];
             if (! $e['order_date']) { $failed++; $log[] = "[$ref] FAILED: order_date must be YYYY-MM-DD or DD Mon YYYY"; continue; }
-            try { $x = self::entry($ent, $e, $u); $created[] = $x['cycle']; foreach (array_merge($warn, $x['log']) as $l) $log[] = "[$ref] $l"; $log[] = "[$ref] created {$x['code']}"; }
+            try { $r = self::entry($ent, $e, $u); $created[] = $r['cycle']; if ($r['pending']) $pending++; foreach (array_merge($warn, $r['log']) as $l) $log[] = "[$ref] $l"; $log[] = "[$ref] created {$r['code']}"; }
             catch (SrcDuplicateException $d) { $failed++; $log[] = "[$ref] FAILED: " . $d->getMessage(); }
             catch (\Illuminate\Database\QueryException $t) { $failed++; report($t); $log[] = "[$ref] FAILED: Save failed - nothing was created (the details are in the system log)"; }
             catch (\Throwable $t) { $failed++; $log[] = "[$ref] FAILED: " . $t->getMessage(); if (! $t instanceof \InvalidArgumentException && ! $t instanceof \RuntimeException) report($t); }
         }
         $job = $created ? (int) DB::table('bulk_jobs')->insertGetId(['job_no' => 'SH-' . date('ymd') . '-' . strtoupper(substr(bin2hex(random_bytes(3)), 0, 5)), 'list_key' => 'src_historical', 'fk_id_account' => $u->id,
             'change_json' => json_encode(['cycles' => $created]), 'row_count' => count($created), 'status' => 'APPLIED', 'created_at' => now(), 'applied_at' => now()]) : null;
-        return ['job' => $job, 'created' => count($created), 'failed' => $failed, 'skipped' => $skipped, 'log' => $log, 'message' => 'Done: ' . count($created) . ' entries created (0 pending approval) · ' . $failed . ' failed'];
+        return ['job' => $job, 'created' => count($created), 'pending' => $pending, 'failed' => $failed, 'skipped' => $p['skipped'], 'log' => $log, 'message' => 'Done: ' . count($created) . " entries created ($pending pending approval) · $failed failed"];
     }
 
     /** Undo a CSV batch: every cycle with all it made, when no later record uses it (a sale took a lot, a bank line matched a payment …). */

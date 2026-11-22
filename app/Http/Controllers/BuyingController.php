@@ -510,7 +510,7 @@ class BuyingController extends Controller
     public function oldEntrySave(Request $r)
     {
         \App\Services\Perm::need($r->user(), 'buying.BUY');
-        try { return \App\Services\HistoricalPurchase::entry((int) \App\Services\Context::ent(), $r->all(), $r->user()) + ['message' => 'Saved. Opening cycle...']; }
+        try { return \App\Services\HistoricalPurchase::entry((int) \App\Services\Context::ent(), $r->all(), $r->user()); }
         catch (\App\Services\SrcDuplicateException $e) { return response()->json(['message' => $e->getMessage(), 'duplicate' => $e->existing->cycle_code ?? null], 409); }
         catch (\InvalidArgumentException|\RuntimeException $e) { return response()->json(['message' => $e->getMessage()], 422); }
     }
@@ -519,6 +519,13 @@ class BuyingController extends Controller
         \App\Services\Perm::need($r->user(), 'buying.BUY');
         if (! $r->hasFile('file')) return response()->json(['message' => 'No file uploaded'], 422);
         try { return \App\Services\HistoricalPurchase::import((int) \App\Services\Context::ent(), (string) file_get_contents($r->file('file')->getRealPath()), $r->user(), (array) json_decode((string) $r->input('force', '{}'), true)); }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+    }
+    public function oldEntryCheck(Request $r)
+    {
+        \App\Services\Perm::need($r->user(), 'buying.BUY');
+        if (! $r->hasFile('file')) return response()->json(['message' => 'No file uploaded'], 422);
+        try { return \App\Services\HistoricalPurchase::check((int) \App\Services\Context::ent(), (string) file_get_contents($r->file('file')->getRealPath()), $r->user()); }
         catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
     }
     public function oldEntryUndo(Request $r, int $job) { \App\Services\Perm::need($r->user(), 'buying.BUY'); try { return \App\Services\HistoricalPurchase::undo($job, $r->user()); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }

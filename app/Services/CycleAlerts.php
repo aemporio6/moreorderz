@@ -122,6 +122,14 @@ class CycleAlerts
     public static function quantities(int $cycleId): array
     {
         $out = [];
+        /* R-39 (new) trail: produced / QC passed per PO (a PO with one product gives them to that product), in stock = lots of the cycle still on hand */
+        $poProd = DB::table('t_src_po_lines')->where('fk_id_cycle', $cycleId)->where('f_active', 1)->where(fn ($q) => $q->whereNull('line_type')->orWhereIn('line_type', ['', 'PRODUCT']))->get(['fk_id_po', 'fk_id_product'])->groupBy('fk_id_po')
+            ->map(fn ($g) => $g->pluck('fk_id_product')->unique()->count() === 1 ? (int) $g->first()->fk_id_product : null);
+        $prodBy = []; $qcBy = []; $cyProd = 0.0; $cyQc = 0.0;
+        foreach (DB::table('t_src_production')->where('fk_id_cycle', $cycleId)->where('f_active', 1)->get(['fk_id_po', 'produced_qty']) as $r) { $cyProd += (float) $r->produced_qty; if ($pid = $poProd[$r->fk_id_po] ?? (count($poProd) === 1 ? $poProd->first() : null)) $prodBy[$pid] = ($prodBy[$pid] ?? 0) + (float) $r->produced_qty; }
+        foreach (DB::table('t_src_qc')->where('fk_id_cycle', $cycleId)->where('f_active', 1)->whereNull('re_inspection_of')->get(['fk_id_po', 'qty_passed']) as $r) { $cyQc += (float) $r->qty_passed; if ($pid = $poProd[$r->fk_id_po] ?? (count($poProd) === 1 ? $poProd->first() : null)) $qcBy[$pid] = ($qcBy[$pid] ?? 0) + (float) $r->qty_passed; }
+        $stock = DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->leftJoin('cat_inventory_locations as c', 'c.id', '=', 'b.fk_id_location')->where('l.fk_id_cycle', $cycleId)
+            ->where(fn ($w) => $w->whereNull('c.kind')->orWhereNotIn('c.kind', ['DAMAGED', 'SHIPPED']))->groupBy('l.fk_id_product')->selectRaw('l.fk_id_product p, SUM(b.qty) q')->pluck('q', 'p');
         foreach (DB::table('t_src_cycle_products as cp')->leftJoin('t_product_vendors as p', 'p.id', '=', 'cp.fk_id_product')->where('cp.fk_id_cycle', $cycleId)->get(['cp.id', 'cp.fk_id_product', 'p.SKU_VENDOR as sku', 'cp.product_name']) as $cp) {
             $ord = (float) DB::table('t_src_po_lines')->where('f_active', 1)->where('fk_id_cycle', $cycleId)->where(fn ($q) => $q->where('fk_id_cycle_product', $cp->id)->orWhere(fn ($w) => $w->whereNull('fk_id_cycle_product')->where('fk_id_product', $cp->fk_id_product)))->sum('qty_ordered');
             $al = DB::table('t_src_allocations')->where('f_active', 1)->where('fk_id_cycle', $cycleId)->where('fk_id_cycle_product', $cp->id)->selectRaw('COALESCE(SUM(allocated_qty),0) planned, COALESCE(SUM(confirmed_qty),0) confirmed, COALESCE(SUM(dispatched_qty),0) dispatched')->first();
@@ -134,7 +142,8 @@ class CycleAlerts
             elseif ($ord > 0) $chip = ['teal', 'OK'];
             else $chip = ['grey', '—'];
             $out[] = ['cycle_product' => (int) $cp->id, 'product' => (int) $cp->fk_id_product, 'sku' => $cp->sku, 'name' => $cp->product_name, 'ordered' => $ord, 'planned' => $planned, 'confirmed' => (float) $al->confirmed, 'dispatched' => (float) $al->dispatched,
-                'expected' => (float) $g->expected, 'received' => (float) $g->received, 'accepted' => (float) $g->accepted, 'damaged' => (float) $g->damaged, 'missing' => (float) $g->missing, 'chip' => $chip[1], 'tone' => $chip[0]];
+                'expected' => (float) $g->expected, 'received' => (float) $g->received, 'accepted' => (float) $g->accepted, 'damaged' => (float) $g->damaged, 'missing' => (float) $g->missing, 'chip' => $chip[1], 'tone' => $chip[0],
+                'produced' => $prodBy[(int) $cp->fk_id_product] ?? null, 'qc_passed' => $qcBy[(int) $cp->fk_id_product] ?? null, 'in_stock' => (float) ($stock[(int) $cp->fk_id_product] ?? 0)];
         }
         return $out;
     }

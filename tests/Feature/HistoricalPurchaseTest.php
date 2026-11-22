@@ -84,4 +84,42 @@ class HistoricalPurchaseTest extends TestCase
         $this->assertSame(0, DB::table('t_src_payments')->where('fk_id_cycle', $cy)->count() + DB::table('t_src_po_lines')->where('fk_id_cycle', $cy)->count());
         $this->assertStringStartsWith('order_ref,order_ref_note,supplier_name', H::template());
     }
+
+    public function test_r5_approval_holds_the_stock(): void
+    {
+        $src = \App\Models\User::create(['login_id' => 'src' . uniqid() . '@t', 'password_hash' => bcrypt('x-password-1'), 'role_code' => 'SOURCING', 'display_name' => 'Buyer', 'fk_id_ent' => 1, 'f_active' => 1]);
+        $this->actingAs($src); Context::set(1, $src->id);
+        $r = H::entry(1, $this->entry(['order_ref' => 'PI-APP', 'lines' => [['product_name' => 'Steel mug', 'sku' => 'MUG-AP', 'qty' => 10, 'unit_price' => 2.00, 'qty_accepted' => 10]], 'received' => ['date' => '2025-05-02', 'warehouse' => $this->wh]]), $src);
+        $this->assertTrue($r['pending']); $this->assertSame('Saved PENDING APPROVAL - stock unaffected until a Partner approves. Opening cycle...', $r['message']);
+        $this->assertSame(0, DB::table('fin_lots')->where('fk_id_cycle', $r['cycle'])->count(), 'stock unaffected until approved');
+        $a = DB::table('sys_approvals')->where('action_code', 'SRC_HISTORICAL')->where('entity_id', $r['cycle'])->first();
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id);
+        \App\Services\Approvals::decide((int) $a->id, true);
+        $this->assertSame(10, (int) DB::table('fin_lots')->where('fk_id_cycle', $r['cycle'])->sum('qty'), 'approved → the lot is made');
+        $this->assertSame(['APPROVED', 'COMPLETED'], array_values((array) DB::table('t_src_cycles')->where('id', $r['cycle'])->first(['approval_status', 'status'])));
+    }
+
+    public function test_r13_check_screen_writes_nothing_and_force_imports(): void
+    {
+        H::entry(1, $this->entry(['order_ref' => 'PI-D']), $this->owner);
+        $base = ['supplier_name' => 'Ningbo Housewares', 'order_date' => '2025-03-01', 'currency' => 'USD', 'owner_entity' => 'OWN1', 'unit_price' => '2.00', 'qty' => '10', 'product_name' => 'Mug', 'sku' => 'MUG-ST'];
+        $file = $this->csv([['order_ref' => 'PI-D'] + $base, ['order_ref' => 'PI-E'] + $base, ['order_ref' => 'PI-F', 'owner_entity' => 'NOBODY'] + $base]);
+        $before = DB::table('t_src_cycles')->count();
+        $c = H::check(1, $file, $this->owner);
+        $this->assertSame($before, DB::table('t_src_cycles')->count(), 'the check writes nothing');
+        $by = collect($c['entries'])->keyBy('ref');
+        $this->assertNotNull($by['PI-D']['duplicate']); $this->assertSame([], $by['PI-E']['problems']); $this->assertSame(['owner entity "NOBODY" not found'], $by['PI-F']['problems']); $this->assertSame(1, $c['ok']);
+        $r = H::import(1, $file, $this->owner, ['PI-D' => 'second shipment of the same PI']);
+        $this->assertSame([2, 1], [$r['created'], $r['failed']], 'the duplicate forced with a reason is imported; the one without owner fails');
+        $this->assertNotEmpty(array_filter($r['log'], fn ($l) => str_contains($l, 'OVERRIDE duplicate')));
+    }
+
+    public function test_r39_trail_produced_qc_in_stock(): void
+    {
+        $r = H::entry(1, $this->entry(['order_ref' => 'PI-Q', 'lines' => [['product_name' => 'Steel mug', 'sku' => 'MUG-Q', 'qty' => 10, 'unit_price' => 2.00, 'qty_accepted' => 8, 'qty_damaged' => 1, 'qty_missing' => 1]], 'received' => ['date' => '2025-05-02', 'warehouse' => $this->wh]]), $this->owner);
+        DB::table('t_src_production')->insert(RecordService::fillNotNull('t_src_production', ['fk_id_ent' => 1, 'fk_id_cycle' => $r['cycle'], 'fk_id_po' => $r['po'], 'produced_qty' => 10, 'f_active' => 1, 'created_at' => now()]));
+        DB::table('t_src_qc')->insert(RecordService::fillNotNull('t_src_qc', ['fk_id_ent' => 1, 'fk_id_cycle' => $r['cycle'], 'fk_id_po' => $r['po'], 'qty_passed' => 9, 'f_active' => 1, 'created_at' => now()]));
+        $q = \App\Services\CycleAlerts::quantities($r['cycle'])[0];
+        $this->assertSame([10.0, 9.0, 8.0], [$q['produced'], $q['qc_passed'], $q['in_stock']], 'the trail adds produced, QC passed and in stock (accepted units on hand)');
+    }
 }

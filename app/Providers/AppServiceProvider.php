@@ -36,6 +36,7 @@ class AppServiceProvider extends ServiceProvider
             if ($ok) \App\Services\BuyingService::pay($p);
             else \Illuminate\Support\Facades\DB::table('t_src_payments')->where('id', $p['_pending'])->where('status', 'PENDING_APPROVAL')->update(['status' => 'REJECTED', 'f_active' => 0]);
         });
+        \App\Services\Approvals::handler('SRC_HISTORICAL', fn (object $a, bool $ok, ?string $reason = null) => \App\Services\HistoricalPurchase::decided($a, $ok, $reason));      // R-B_SOURCING-5: the stock of an old entry after approval
         \App\Services\Approvals::handler('SRC_LC_OVERRIDE', fn (object $a, bool $ok) => \App\Services\LandedVersions::decided($a, $ok));      // R-B_SOURCING-45
         \App\Services\Approvals::handler('EXPENSE', function (object $a, bool $ok) {
             if ($ok) { \Illuminate\Support\Facades\DB::table('fin_expenses')->where('id', $a->entity_id)->update(['f_active' => 1]); \App\Services\MoneyService::postExpense((int) $a->entity_id); }
