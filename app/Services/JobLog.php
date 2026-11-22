@@ -17,7 +17,7 @@ class JobLog
     public const PLAN = [
         'TASK_WORKER' => ['Task worker + messages (mo:events)', 1], 'SRC_ALERTS' => ['Sourcing alerts (mo:src-alerts)', 15], 'DISPATCH_WATCH' => ['Dispatch watch (mo:dispatch-watch)', 15],
         'PULL' => ['Marketplace pulls + Drive folders (mo:pull)', 60], 'FIN_HOURLY' => ['Finance hourly (mo:finance-hourly)', 60],
-        'FIN_NIGHTLY' => ['Finance nightly (mo:finance-nightly)', 1440], 'NIGHTLY' => ['Nightly jobs (mo:nightly)', 1440], 'TEMP_CLEANUP' => ['Temporary files clean-up (mo:cleanup-temp)', 1440],
+        'FIN_NIGHTLY' => ['Finance nightly (mo:finance-nightly)', 1440], 'NIGHTLY' => ['Nightly jobs (mo:nightly)', 1440], 'ACC_REMINDERS' => ['Filing reminders (Tax & filings, with mo:nightly)', 1440], 'TEMP_CLEANUP' => ['Temporary files clean-up (mo:cleanup-temp)', 1440],
         'FIN_MONTHLY' => ['Finance monthly (mo:finance-monthly)', 44640],
     ];
 

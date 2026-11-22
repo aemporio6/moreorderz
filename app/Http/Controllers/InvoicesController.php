@@ -29,6 +29,21 @@ class InvoicesController extends Controller
     public function complianceDocUpload(Request $r) { Perm::need($r->user(), 'money.EDIT'); if (! $r->hasFile('file')) return response()->json(['message' => 'Choose the file.'], 422); return $this->run(fn () => ['id' => \App\Services\AccFilings::uploadFor($this->ent(), $r->only(['entity_type', 'entity_id', 'doc_title']), $r->file('file'), $r->user()), 'message' => 'Document added.']); }
     public function complianceDocShow(Request $r, int $id) { Perm::need($r->user(), 'money.SEE'); return \App\Services\AccFilings::serve($this->ent(), $id); }
     public function complianceDocRemove(Request $r, int $id) { Perm::need($r->user(), 'money.EDIT'); return $this->run(fn () => \App\Services\AccFilings::removeDocument($this->ent(), $id, $r->user())); }
+    /* R-ACC-16 / 18 / 20 / 22 Accountancy Hub */
+    public function hubSettings(Request $r) { Perm::need($r->user(), 'money.SEE'); return ['values' => \App\Services\AccHubAdmin::settings($this->ent()), 'last_run' => \App\Services\AccHubAdmin::lastRun($this->ent()), 'team' => $r->user()->role_code === 'OWNER' ? \App\Services\AccHubAdmin::team($this->ent(), (string) $r->query('q', '')) : null, 'areas' => \App\Services\AccFilings::AREAS]; }
+    public function hubSettingsSave(Request $r) { Perm::need($r->user(), 'money.EDIT'); return $this->run(fn () => \App\Services\AccHubAdmin::saveSettings($this->ent(), $r->only(['due_soon_days', 'history_months', 'horizon_months', 'acc_hub_upload_max_mb', 'cs_date_is', 'reminders_enabled', 'sender_name', 'sender_address']), $r->user())); }
+    public function hubMember(Request $r, int $user) { return $this->run(fn () => \App\Services\AccHubAdmin::saveMember($this->ent(), $user, $r->only(['is_accountant', 'can_reveal']), $r->user())); }
+    public function hubCloseBefore(Request $r) { Perm::need($r->user(), 'money.EDIT'); return $this->run(fn () => \App\Services\AccHubAdmin::closeBefore($this->ent(), (string) $r->input('date'), $r->input('area') ?: null, $r->user())); }
+    public function hubRunJob(Request $r) { Perm::need($r->user(), 'money.EDIT'); $x = \App\Services\AccHubAdmin::job($this->ent()); return ['message' => $x['status'] === 'OK' ? "Run done – {$x['queued']} reminder(s) queued, {$x['failed']} failed." : 'Run ' . $x['status'] . ': ' . ($x['error'] ?? ''), 'run' => $x]; }
+    public function hubPerson(Request $r, int $acc) { Perm::need($r->user(), 'money.SEE'); return $this->run(fn () => \App\Services\AccHubAdmin::person($this->ent(), $acc)); }
+    public function hubPersonSave(Request $r, int $acc) { Perm::need($r->user(), 'money.EDIT'); return $this->run(fn () => \App\Services\AccHubAdmin::savePerson($this->ent(), $acc, $r->only(['utr', 'ni', 'sa_registered', 'poa_required', 'first_tax_year', 'fk_accountant', 'notes']), $r->user())); }
+    public function hubPersonReveal(Request $r, int $acc)
+    {
+        if ($need = \App\Services\SecureStep::needed($r, $r->user())) return response()->json($need, 428);      /* R-G_CORE-59 the 2FA step before a secret */
+        try { return \App\Services\AccHubAdmin::revealPerson($this->ent(), $acc, (string) $r->input('field'), $r->user()); }
+        catch (\Illuminate\Auth\Access\AuthorizationException $e) { return response()->json(['message' => $e->getMessage()], 403); }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+    }
     public function complianceRebuild(Request $r, int $company) { Perm::need($r->user(), 'money.EDIT'); return ['message' => \App\Services\AccCompliance::rebuild($this->ent(), $company)]; }
     public function index(Request $r) { Perm::need($r->user(), 'money.SEE'); return Docs::page($this->ent(), $r->only(['period', 'status'])); }
     public function show(Request $r, int $id)

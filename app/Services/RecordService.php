@@ -199,6 +199,7 @@ class RecordService
             if (! empty($opt['event'])) EventBus::fire($opt['event'], $table, $id, ['form' => $formKey, 'created' => $created], $ent);
             FormAssist::remember($formKey, $data);   // for the "you used this last time" chips
             if ($table === 't_src_po_lines') PoLines::sync((int) $id);
+            if ($table === 'tax_periods') AccHubAdmin::periodSaved((int) $id);      // R-ACC-21 / R-TAX-4 a tax period status ticks the matching filing
             if ($table === 't_product_vendors' && $created) ProductFamily::created((int) $id, (int) ($data['fk_id_ent'] ?? $ent ?? 0));      // R-D-1: a 0.00 price row per marketplace
             if ($table === 'fin_partner_users') PartnerOnboarding::refresh((int) DB::table('fin_partner_users')->where($pk, $id)->value('investor_id'), 'Partner login linked');      // R-FIN-3 login_created
             if ($table === 't_account_branches') ShopAssignments::saved((int) $id, $created);      // R-C-41: event + VA cache      // FEE / COST freight-cost row, SAMPLE row, PO total (R-B_SOURCING-6)

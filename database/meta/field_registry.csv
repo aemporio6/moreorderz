@@ -1110,7 +1110,7 @@ cat_company_house,Company (enterprise),module,Basics,1,2,company_name,Company Na
 cat_company_house,Company (enterprise),module,Basics,1,3,director_1_share,Director 1 Share,number,,,,,,,all,,,0.01,0,100,"Share in %, 0–100, 2 decimals. Shares of the three directors together may not exceed 100 %.",,,cat_company_house,director_1_share,,Y,,,,
 cat_company_house,Company (enterprise),module,Basics,1,4,director_2_share,Director 2 Share,number,,,,,,,all,,,0.01,0,100,"Share in %, 0–100, 2 decimals.",,,cat_company_house,director_2_share,,Y,,,,
 cat_company_house,Company (enterprise),module,Basics,1,5,director_3_share,Director 3 Share,number,,,,,,,all,,,0.01,0,100,"Share in %, 0–100, 2 decimals.",,,cat_company_house,director_3_share,,Y,,,,
-cat_company_house,Company (enterprise),module,Basics,1,6,company_utr,UTR,text,,,,,,,all,,,,,,10 digits; spaces are removed.,,,cat_company_house,company_utr,,Y,,,,
+cat_company_house,Company (enterprise),module,Basics,1,6,company_utr,UTR,text,,,,,,,all,,,,,,10 digits; spaces are removed.,,,cat_company_house,company_utr,,Y,,,Y,
 cat_company_house,Company (enterprise),module,Details,2,1,authentication_code,Authentication Code,text,,,,,,,OWNER,,upper,,,,"Companies House authentication code: 6 letters / digits, typed as given. Kept in the vault; Owner only.",,,cat_company_house,authentication_code,,Y,,,Y,
 cat_company_house,Company (enterprise),module,Details,2,2,gateway_id,Gateway ID,text,,,,,,,OWNER,,,,,,"Kept in the vault, masked; Owner only, every reveal is logged.",,,cat_company_house,gateway_id,,Y,,,Y,
 cat_company_house,Company (enterprise),module,Details,2,3,gateway_pass,Gateway ID PW,text,,,,,,,OWNER,,,,,,"Kept in the vault, masked; Owner only, every reveal is logged.",,,cat_company_house,gateway_pass,,Y,,,Y,

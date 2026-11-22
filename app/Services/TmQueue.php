@@ -62,6 +62,8 @@ class TmQueue
                     $send = str_starts_with(ltrim((string) $m->text), '<') ? 'html' : 'raw';      // an HTML report (N14) goes as HTML
                     Mail::$send((string) $m->text, function ($msg) use ($m) {
                         $msg->to((string) $m->to_address)->subject((string) ($m->subject ?: 'MoreOrderz'));
+                        $from = trim((string) Settings::get('EMAIL_SENDER_ADDRESS', (int) ($m->fk_id_ent ?? 0) ?: null, ''));      /* R-ACC-22: the sender comes from the settings, never from code */
+                        if ($from !== '' && filter_var($from, FILTER_VALIDATE_EMAIL)) $msg->from($from, (string) Settings::get('EMAIL_SENDER_NAME', (int) ($m->fk_id_ent ?? 0) ?: null, '') ?: null);
                         $f = (string) ($m->attachment ?? '');
                         if ($f !== '' && \Illuminate\Support\Facades\Storage::disk('local')->exists($f)) $msg->attach(\Illuminate\Support\Facades\Storage::disk('local')->path($f), ['as' => basename($f)]);
                     });

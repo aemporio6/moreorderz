@@ -549,6 +549,14 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('compliance/{id}', [\App\Http\Controllers\InvoicesController::class, 'complianceUpdate'])->whereNumber('id');      // R-ACC-10
         Route::post('compliance/{id}/document', [\App\Http\Controllers\InvoicesController::class, 'complianceDocument'])->whereNumber('id');
         Route::post('compliance/generate', [\App\Http\Controllers\InvoicesController::class, 'complianceGenerate']);
+        Route::get('compliance/hub', [\App\Http\Controllers\InvoicesController::class, 'hubSettings']);      // R-ACC-20 / 22
+        Route::post('compliance/hub', [\App\Http\Controllers\InvoicesController::class, 'hubSettingsSave']);
+        Route::post('compliance/hub/team/{user}', [\App\Http\Controllers\InvoicesController::class, 'hubMember'])->whereNumber('user');
+        Route::post('compliance/hub/close-before', [\App\Http\Controllers\InvoicesController::class, 'hubCloseBefore']);
+        Route::post('compliance/hub/run', [\App\Http\Controllers\InvoicesController::class, 'hubRunJob']);
+        Route::get('compliance/person/{acc}', [\App\Http\Controllers\InvoicesController::class, 'hubPerson'])->whereNumber('acc');      // R-ACC-18
+        Route::post('compliance/person/{acc}', [\App\Http\Controllers\InvoicesController::class, 'hubPersonSave'])->whereNumber('acc');
+        Route::post('compliance/person/{acc}/reveal', [\App\Http\Controllers\InvoicesController::class, 'hubPersonReveal'])->whereNumber('acc');
         Route::get('compliance/types', [\App\Http\Controllers\InvoicesController::class, 'complianceTypes']);      // R-ACC-11
         Route::post('compliance/types/{code}', [\App\Http\Controllers\InvoicesController::class, 'complianceTypeSave'])->where('code', '[A-Za-z0-9_]+');
         Route::post('compliance/items', [\App\Http\Controllers\InvoicesController::class, 'complianceCreate']);      // R-ACC-14

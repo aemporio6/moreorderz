@@ -10,7 +10,8 @@ use Illuminate\Support\Facades\DB;
  */
 class AccHub
 {
-    public const FIELDS = ['year_end_day', 'year_end_month', 'first_period_end', 'cs_review_date', 'cs_date_is', 'vat_registered', 'vat_frequency', 'vat_stagger', 'vat_scheme', 'vat_reg_date', 'paye_registered', 'paye_ref', 'fk_accountant', 'fk_compliance_owner', 'notes'];
+    public const FIELDS = ['f_tracked', 'track_from', 'year_end_day', 'year_end_month', 'first_period_end', 'cs_review_date', 'cs_date_is', 'vat_registered', 'vat_frequency', 'vat_stagger', 'vat_scheme', 'vat_reg_date', 'paye_registered', 'paye_ref',
+        'accounts_office_ref', 'pay_frequency', 'payday_day', 'first_payday', 'paye_quarterly', 'eps_required', 'paye_start_date', 'fk_accountant', 'fk_compliance_owner', 'notes'];
     private const STAGGER = [1 => 'Mar / Jun / Sep / Dec', 2 => 'Apr / Jul / Oct / Jan', 3 => 'May / Aug / Nov / Feb'];
 
     public static function row(int $companyId): ?object { return DB::table('acc_company_settings')->where('fk_id_ent', Context::ent())->where('fk_id_company', $companyId)->first(); }
@@ -53,7 +54,7 @@ class AccHub
         return [
             ['label' => 'Year end', 'type' => 'text', 'value' => $ye], ['label' => 'VAT scheme', 'type' => 'text', 'value' => $h && $h->vat_registered ? ($h->vat_scheme ?: 'Standard') : ($h ? 'Not VAT registered' : null)],
             ['label' => 'VAT quarters', 'type' => 'text', 'value' => $h && $h->vat_registered ? (['Q' => 'Quarterly', 'M' => 'Monthly', 'A' => 'Annual'][$h->vat_frequency] ?? $h->vat_frequency) . ($h->vat_frequency === 'Q' ? ' – ' . (self::STAGGER[(int) $h->vat_stagger] ?? '') : '') : null],
-            ['label' => 'Accountant', 'type' => 'text', 'value' => $h ? $name((int) $h->fk_accountant) : null], ['label' => 'Compliance owner', 'type' => 'text', 'value' => $h ? $name((int) $h->fk_compliance_owner) : null],
+            ['label' => 'Accountant', 'type' => 'text', 'value' => $h && (int) $h->fk_accountant ? DB::table('t_users')->where('id', $h->fk_accountant)->selectRaw('COALESCE(NULLIF(display_name, ""), login_id) n')->value('n') : null],      /* a login of the Hub team (R-ACC-17 / 20) */ ['label' => 'Compliance owner', 'type' => 'text', 'value' => $h ? $name((int) $h->fk_compliance_owner) : null],
             ['label' => 'Confirmation statement review date', 'type' => 'date', 'value' => $due['cs']['review'] ?? null], ['label' => 'Confirmation statement due', 'type' => 'text', 'value' => $due['cs'] ? $due['cs']['due'] . ' (' . $due['cs']['how'] . ')' : ($due['note'] ?? null)],
             ['label' => 'Accounts due', 'type' => 'text', 'value' => $due['accounts'] ? $due['accounts']['due'] . ' (' . $due['accounts']['how'] . ')' : ($due['note'] ?? null)],
             ['label' => 'Kept in', 'type' => 'applink', 'value' => '#/acc-company/' . $companyId, 'shown' => 'Edit in Accountancy Hub'],
@@ -65,7 +66,9 @@ class AccHub
         Perm::need($u, 'setup.accHub'); $co = DB::table('cat_company_house')->where('id', $companyId)->where('fk_id_ent', Context::ent())->first() ?? throw new \InvalidArgumentException('Company not found.');
         $h = self::row($companyId); $v = []; foreach (self::FIELDS as $f) $v[$f] = $h->$f ?? null; $v['cs_date_is'] ??= 'REVIEW';
         $people = DB::table('t_account')->where('f_active', 1)->orderBy('first_name')->limit(500)->selectRaw("id, TRIM(CONCAT_WS(' ', first_name, sur_name)) n")->pluck('n', 'id')->all();
-        return ['company' => ['id' => (int) $co->id, 'name' => $co->company_name, 'incorporated' => $co->incorporate_date, 'file_return_date' => $co->file_return_date, 'external' => (bool) $co->f_external], 'values' => $v, 'due' => self::due($co, $h), 'people' => $people, 'stagger' => self::STAGGER];
+        $v['f_tracked'] ??= 1; $v['pay_frequency'] ??= 'M'; $v['payday_day'] ??= 28; $ent = (int) Context::ent();
+        return ['company' => ['id' => (int) $co->id, 'name' => $co->company_name, 'incorporated' => $co->incorporate_date, 'file_return_date' => $co->file_return_date, 'external' => (bool) $co->f_external], 'values' => $v, 'due' => self::due($co, $h), 'people' => $people, 'stagger' => self::STAGGER,
+            'accountants' => AccFilings::accountants($ent), 'secrets' => AccHubAdmin::companySecrets($companyId), 'can_reveal' => AccHubAdmin::canReveal($u), 'history' => AccHubAdmin::history('cat_company_house', $companyId)] + AccHubAdmin::companyTax($ent, $companyId);      /* R-ACC-16 / 21 */
     }
 
     public static function save(int $companyId, array $d, ?object $u): array
@@ -76,11 +79,23 @@ class AccHub
         $row = ['year_end_day' => $int('year_end_day', 1, 31), 'year_end_month' => $int('year_end_month', 1, 12), 'first_period_end' => $date('first_period_end'), 'cs_review_date' => $date('cs_review_date'), 'cs_date_is' => ($d['cs_date_is'] ?? '') === 'DUE' ? 'DUE' : 'REVIEW',
             'vat_registered' => ! empty($d['vat_registered']) ? 1 : 0, 'vat_frequency' => in_array($d['vat_frequency'] ?? '', ['Q', 'M', 'A'], true) ? $d['vat_frequency'] : 'Q', 'vat_stagger' => in_array((int) ($d['vat_stagger'] ?? 1), [1, 2, 3], true) ? (int) ($d['vat_stagger'] ?? 1) : 1,
             'vat_scheme' => mb_substr(trim((string) ($d['vat_scheme'] ?? '')), 0, 40) ?: null, 'vat_reg_date' => $date('vat_reg_date'), 'paye_registered' => ! empty($d['paye_registered']) ? 1 : 0, 'paye_ref' => mb_substr(strtoupper(trim((string) ($d['paye_ref'] ?? ''))), 0, 30) ?: null,
-            'fk_accountant' => (int) ($d['fk_accountant'] ?? 0), 'fk_compliance_owner' => (int) ($d['fk_compliance_owner'] ?? 0) ?: null, 'notes' => trim((string) ($d['notes'] ?? '')) ?: null];
+            'fk_accountant' => (int) ($d['fk_accountant'] ?? 0), 'fk_compliance_owner' => (int) ($d['fk_compliance_owner'] ?? 0) ?: null, 'notes' => trim((string) ($d['notes'] ?? '')) ?: null,
+            /* R-ACC-17 the rest of the Hub settings of a company */
+            'f_tracked' => array_key_exists('f_tracked', $d) ? (int) (bool) $d['f_tracked'] : 1, 'track_from' => $date('track_from'), 'accounts_office_ref' => mb_substr(strtoupper(trim((string) ($d['accounts_office_ref'] ?? ''))), 0, 30) ?: null,
+            'pay_frequency' => in_array($d['pay_frequency'] ?? 'M', ['M', 'W', '4W'], true) ? ($d['pay_frequency'] ?? 'M') : 'M', 'payday_day' => $int('payday_day', 1, 31) ?? 28, 'first_payday' => $date('first_payday'),
+            'paye_quarterly' => ! empty($d['paye_quarterly']) ? 1 : 0, 'eps_required' => ! empty($d['eps_required']) ? 1 : 0, 'paye_start_date' => $date('paye_start_date')];
         if (($row['year_end_day'] === null) !== ($row['year_end_month'] === null)) $e['year_end_day'] = 'Give both the day and the month of the year end.';
+        elseif ($row['year_end_day'] && ! checkdate((int) $row['year_end_month'], (int) $row['year_end_day'], 2024)) $e['year_end_day'] = 'That day does not exist in that month.';      /* 29 Feb allowed = last day of February */
+        foreach (['vat_scheme' => 40, 'paye_ref' => 30, 'accounts_office_ref' => 30] as $k => $max) if (mb_strlen(trim((string) ($d[$k] ?? ''))) > $max) $e[$k] = "At most $max characters.";
+        if (mb_strlen((string) ($row['notes'] ?? '')) > 4000) $e['notes'] = 'At most 4000 characters.';
+        if (in_array($row['pay_frequency'], ['W', '4W'], true) && ! $row['first_payday']) $e['first_payday'] = 'Weekly and 4-weekly pay need the first payday.';
+        if ($row['fk_accountant'] && ! in_array($row['fk_accountant'], array_column(AccFilings::accountants((int) Context::ent()), 'id'), true)) $e['fk_accountant'] = 'Choose an accountant of the Hub.';
         if ($e) throw \Illuminate\Validation\ValidationException::withMessages($e);
         DB::table('acc_company_settings')->updateOrInsert(['fk_id_ent' => (int) Context::ent(), 'fk_id_company' => $companyId], $row + ['updated_by' => $u->id ?? 0, 'updated_at' => now()]);
         Audit::log('acc_company_settings', $companyId, 'UPDATE', $row);
-        return ['message' => 'Accountancy Hub values of ' . $co->company_name . ' saved.', 'due' => self::due($co, self::row($companyId))];
+        $ent = (int) Context::ent(); $assigned = 0;      /* R-ACC-17: open unassigned filings get the accountant, then the schedule is rebuilt (R-ACC-9) */
+        if ($row['fk_accountant']) $assigned = DB::table('acc_obligations')->where('fk_id_ent', $ent)->where('entity_type', 'COMPANY')->where('entity_id', $companyId)->where('f_done', 0)->where('fk_assigned', 0)->update(['fk_assigned' => $row['fk_accountant']]);
+        $rebuilt = $row['f_tracked'] ? AccCompliance::rebuild($ent, $companyId) : 'not tracked';
+        return ['message' => 'Accountancy Hub values of ' . $co->company_name . ' saved.' . ($assigned ? " $assigned filing(s) given to the accountant." : '') . ' Schedule: ' . $rebuilt . '.', 'due' => self::due($co, self::row($companyId))];
     }
 }

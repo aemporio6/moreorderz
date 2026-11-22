@@ -70,7 +70,8 @@ class AccFilings
     /** Hub accountants: active logins of the enterprise who may change filings (money.EDIT). */
     public static function accountants(int $ent): array
     {
-        return DB::table('t_users')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('display_name')->get()->filter(fn ($u) => Perm::has($u, 'money.EDIT'))
+        $marked = AccHubAdmin::accountantIds($ent);      /* R-ACC-20: the Hub team's accountants once anyone is marked */
+        return DB::table('t_users')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('display_name')->get()->filter(fn ($u) => $marked ? in_array((int) $u->id, $marked, true) : Perm::has($u, 'money.EDIT'))
             ->map(fn ($u) => ['id' => (int) $u->id, 'name' => trim((string) ($u->display_name ?: $u->login_id))])->values()->all();
     }
 
@@ -148,7 +149,7 @@ class AccFilings
     /** Tabs, filters, summary per area, month calendar (?ym=YYYY-MM), page size 10–100 (default 25). */
     public static function overview(int $ent, array $f, ?string $today = null): array
     {
-        $today ??= date('Y-m-d'); $soon = max(1, (int) self::setting($ent, 'due_soon_days', '14'));
+        $today ??= date('Y-m-d'); $soon = max(1, (int) self::setting($ent, 'due_soon_days', '30'));
         $week = date('Y-m-d', strtotime("$today +7 days")); $soonDate = date('Y-m-d', strtotime("$today +$soon days")); $month = substr($today, 0, 7);
         $tab = isset(self::TABS[$f['tab'] ?? '']) ? $f['tab'] : 'open';
         $cols = ['o.*', 'c.company_name', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as person")];
@@ -297,7 +298,7 @@ class AccFilings
 
     public static function companies(int $ent, array $f, ?string $today = null): array
     {
-        $today ??= date('Y-m-d'); $soonDate = date('Y-m-d', strtotime("$today +" . max(1, (int) self::setting($ent, 'due_soon_days', '14')) . ' days'));
+        $today ??= date('Y-m-d'); $soonDate = date('Y-m-d', strtotime("$today +" . max(1, (int) self::setting($ent, 'due_soon_days', '30')) . ' days'));
         $cnt = self::counts($ent, 'COMPANY', $today, $soonDate); $acc = collect(self::accountants($ent))->pluck('name', 'id');
         $q = DB::table('cat_company_house as c')->leftJoin('acc_company_settings as s', fn ($j) => $j->on('s.fk_id_company', '=', 'c.id')->where('s.fk_id_ent', $ent))
             ->where(fn ($w) => $w->whereNull('c.f_active')->orWhere('c.f_active', 1));
@@ -313,7 +314,7 @@ class AccFilings
     /** People = directors 1–3 of active companies + anyone with Self Assessment settings; one row per person with every company name. */
     public static function people(int $ent, array $f, ?string $today = null): array
     {
-        $today ??= date('Y-m-d'); $soonDate = date('Y-m-d', strtotime("$today +" . max(1, (int) self::setting($ent, 'due_soon_days', '14')) . ' days'));
+        $today ??= date('Y-m-d'); $soonDate = date('Y-m-d', strtotime("$today +" . max(1, (int) self::setting($ent, 'due_soon_days', '30')) . ' days'));
         $cos = [];
         foreach (DB::table('cat_company_house')->where(fn ($w) => $w->whereNull('f_active')->orWhere('f_active', 1))->get(['company_name', 'fk_director_1', 'fk_director_2', 'fk_director_3']) as $c)
             foreach ([1, 2, 3] as $i) if ((int) $c->{"fk_director_$i"} > 0) $cos[(int) $c->{"fk_director_$i"}][] = (string) $c->company_name;

@@ -52,6 +52,7 @@ class Vault
     {
         $t = self::columns($table)['types'][$col] ?? null;
         if (! $t || ! in_array($t->ty, ['varchar', 'char', 'text', 'tinytext', 'mediumtext', 'longtext'], true)) return null;   // a date or number column cannot hold a mask: it stays empty
+        if (in_array($col, AccHubAdmin::HUB_SECRETS[$table] ?? [], true)) { $m = AccHubAdmin::mask($plain) ?? self::MASK; return $t->len ? mb_substr($m, 0, (int) $t->len) : $m; }      /* R-ACC-16 "••••••" + last 3 */
         $l4 = ($kind === 'CARD' || preg_match(self::ACCOUNT, $col)) ? self::digits4($plain) : null;
         $m = self::MASK . ($l4 ? ' ' . $l4 : '');
         return $t->len ? mb_substr($m, 0, (int) $t->len) : $m;
@@ -107,9 +108,10 @@ class Vault
         return $row;
     }
 
-    public static function mayReveal(?string $role): bool
+    public static function mayReveal(?string $role, ?string $table = null): bool
     {
         if ($role === 'OWNER') return true;
+        if ($table && isset(AccHubAdmin::HUB_SECRETS[$table]) && AccHubAdmin::canReveal(\Illuminate\Support\Facades\Auth::user())) return true;      /* R-ACC-16 a Hub member with can_reveal */
         return $role === 'MANAGER' && Choices::get('VAULT_REVEAL', Context::ent()) === 'OWNER_MANAGER';
     }
 
@@ -121,7 +123,7 @@ class Vault
         $kind = self::kinds($table)[$col] ?? null;
         if ($kind !== 'VAULT') throw new \InvalidArgumentException($kind === 'CARD' ? 'Only the last 4 digits of a card number are kept – there is nothing more to reveal.' : ($kind === 'NEVER' ? 'CVV and PIN are never stored.' : 'This field is not a secret.'));
         $role = Context::role();
-        if (! self::mayReveal($role) || ! Rights::can($role, 'VIEW', $formKey)) {
+        if (! self::mayReveal($role, $table) || ! Rights::can($role, 'VIEW', $formKey)) {
             Audit::log($table, $id, 'REVEAL', ['field' => $col, 'result' => 'DENIED'], null, Context::ent());
             throw new \Illuminate\Auth\Access\AuthorizationException('Your role may not reveal secrets. Every attempt is logged.');
         }

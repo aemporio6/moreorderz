@@ -27,7 +27,8 @@ class CompanyFormTest extends TestCase
         $this->actingAs($this->owner);
         $r = RecordService::save('cat_company_house', $this->base(['hmrc_activation_code' => 'abcd 1234 efgh', 'authentication_code' => 'ab12cd', 'company_utr' => '12345 67890', 'vat_no' => 'gb 123 456 789', 'director_1_share' => '60', 'director_2_share' => '40']));
         $c = DB::table('cat_company_house')->where('id', $r['id'])->first();
-        $this->assertSame(['Acme trading ltd', 'ACME', 'SC123456', '1234567890', 'GB123456789'], [$c->company_name, $c->iso_code, $c->registration_no, $c->company_utr, $c->vat_no]);
+        $this->assertSame(['Acme trading ltd', 'ACME', 'SC123456', '••••••890', 'GB123456789'], [$c->company_name, $c->iso_code, $c->registration_no, $c->company_utr, $c->vat_no]);      /* the UTR is a vault secret since R-ACC-16 */
+        $this->assertSame('1234567890', \Illuminate\Support\Facades\Crypt::decryptString(DB::table('sys_vault')->where(['table_name' => 'cat_company_house', 'record_id' => $c->id, 'column_name' => 'company_utr'])->value('cipher')));
         $this->assertTrue(Vault::isMasked($c->hmrc_activation_code)); $this->assertSame('ABCD1234EFGH', Vault::reveal('cat_company_house', $r['id'], 'hmrc_activation_code')['value']);      // typed, upper, in the vault – no number generated
         $this->assertSame([null, null, null], [$c->incorporate_date, $c->confirmation_statement_date, $c->file_return_date]);      // no "today" by itself
         $this->assertSame(0, DB::table('tasks')->where('linked_module', 'cat_company_house')->where('linked_record_id', $r['id'])->count());
@@ -82,9 +83,9 @@ class CompanyFormTest extends TestCase
         DB::table('cat_company_house')->where('id', $id)->update(['f_external' => 0]);
         $hub = collect(RecordService::page('cat_company_house', $id)['sections']['Accountancy Hub (read-only here)'])->keyBy('label');
         $this->assertSame(['31 March', 'Flat Rate', 'Quarterly – Apr / Jul / Oct / Jan', '#/acc-company/' . $id], [$hub['Year end']['value'], $hub['VAT scheme']['value'], $hub['VAT quarters']['value'], $hub['Kept in']['value']]);
-        $acct = DB::table('t_account')->insertGetId(RecordService::fillNotNull('t_account', ['fk_id_ent' => 1, 'first_name' => 'Ada', 'sur_name' => 'Books', 'f_active' => 1])); AccHub::save($id, ['year_end_day' => 31, 'year_end_month' => 3, 'vat_registered' => 1, 'vat_scheme' => 'Flat Rate', 'vat_stagger' => 2, 'fk_accountant' => $acct, 'cs_review_date' => '2026-04-01', 'cs_date_is' => 'DUE'], $this->owner);
+        $acct = (int) \App\Models\User::create(['login_id' => 'ada@test', 'password_hash' => bcrypt('x-password-1'), 'role_code' => 'ACCOUNTANT', 'display_name' => 'Ada Books', 'fk_id_ent' => 1, 'f_active' => 1])->id; \App\Services\AccHubAdmin::saveMember(1, $acct, ['is_accountant' => 1], $this->owner); AccHub::save($id, ['year_end_day' => 31, 'year_end_month' => 3, 'vat_registered' => 1, 'vat_scheme' => 'Flat Rate', 'vat_stagger' => 2, 'fk_accountant' => $acct, 'cs_review_date' => '2026-04-01', 'cs_date_is' => 'DUE'], $this->owner);
         $this->assertSame('Ada Books', collect(RecordService::page('cat_company_house', $id)['sections']['Accountancy Hub (read-only here)'])->firstWhere('label', 'Accountant')['value']);
-        $pg = AccHub::page($id, $this->owner); $this->assertSame(['DUE', 'Ada Books'], [$pg['values']['cs_date_is'], $pg['people'][$acct]]);
+        $pg = AccHub::page($id, $this->owner); $this->assertSame(['DUE', 'Ada Books'], [$pg['values']['cs_date_is'], collect($pg['accountants'])->firstWhere('id', $acct)['name']]);      /* the accountant is a login of the Hub (R-ACC-17) */
         $this->assertFalse(collect(Registry::fields('cat_company_house'))->contains(fn ($f) => in_array($f['field_name'], ['year_end', 'vat_scheme', 'vat_quarter', 'accountant'], true)));      // never stored twice on the company
         $this->assertSame(1, (int) collect(Registry::fields('cat_company_house'))->firstWhere('field_name', 'confirmation_statement_date')['readonly']);
     }
