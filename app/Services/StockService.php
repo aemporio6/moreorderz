@@ -436,7 +436,7 @@ class StockService
             'source_type' => $srcType, 'source_id' => $srcId, 'pair_id' => $pair]);
     }
 
-    private static function refreshCache(int $productId): void
+    public static function refreshCache(int $productId): void
     {
         $units = self::balance($productId);
         DB::table('t_product_vendors')->where('id', $productId)->update(['stock' => $units]);

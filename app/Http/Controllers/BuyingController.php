@@ -494,4 +494,33 @@ class BuyingController extends Controller
             $paid = $x['paid'] ? (collect($x['paid'])->contains(fn ($p) => $p['status'] === 'WAITING') ? ' · payment waits for approval' : ' · paid') : ' · not paid yet';
             return $x + ['message' => "Quick buy {$x['po_number']}: {$x['units']} unit(s) in stock$paid"]; });
     }
+
+    /* R-B_SOURCING-5 / 8 / 13 old purchases */
+    public function oldEntryMeta(Request $r)
+    {
+        \App\Services\Perm::need($r->user(), 'buying.SEE'); $ent = (int) \App\Services\Context::ent(); $D = \Illuminate\Support\Facades\DB::class;
+        return ['suppliers' => $D::table('t_src_suppliers')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('supplier_name')->limit(1000)->get(['id', 'supplier_name']),
+            'owners' => \App\Services\Registry::options(['source' => 'party:OWNER,PARTNER,INVESTOR', 'type' => 'select'], $ent, null, 500), 'base' => \App\Services\Fx::base($ent),
+            'currencies' => $D::table('cat_currency')->orderBy('currency_code')->pluck('currency_code'), 'forwarders' => $D::table('t_src_forwarders')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('forwarder_name')->pluck('forwarder_name'),
+            'warehouses' => $D::table('cat_inventory_locations')->where('fk_id_ent', $ent)->where('f_active', 1)->whereIn('kind', ['WAREHOUSE', 'BIN'])->orderBy('location_name')->limit(300)->get(['id', 'location_name']),
+            'batches' => $D::table('bulk_jobs')->where('list_key', 'src_historical')->orderByDesc('id')->limit(20)->get(['id', 'job_no', 'status', 'row_count', 'created_at']),
+];
+    }
+    public function oldEntryRate(Request $r) { return ['rate' => \App\Services\Fx::rate(strtoupper((string) $r->query('currency')), (string) ($r->query('date') ?: date('Y-m-d')), (int) \App\Services\Context::ent())]; }
+    public function oldEntrySave(Request $r)
+    {
+        \App\Services\Perm::need($r->user(), 'buying.BUY');
+        try { return \App\Services\HistoricalPurchase::entry((int) \App\Services\Context::ent(), $r->all(), $r->user()) + ['message' => 'Saved. Opening cycle...']; }
+        catch (\App\Services\SrcDuplicateException $e) { return response()->json(['message' => $e->getMessage(), 'duplicate' => $e->existing->cycle_code ?? null], 409); }
+        catch (\InvalidArgumentException|\RuntimeException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+    }
+    public function oldEntryCsv(Request $r)
+    {
+        \App\Services\Perm::need($r->user(), 'buying.BUY');
+        if (! $r->hasFile('file')) return response()->json(['message' => 'No file uploaded'], 422);
+        try { return \App\Services\HistoricalPurchase::import((int) \App\Services\Context::ent(), (string) file_get_contents($r->file('file')->getRealPath()), $r->user(), (array) json_decode((string) $r->input('force', '{}'), true)); }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+    }
+    public function oldEntryUndo(Request $r, int $job) { \App\Services\Perm::need($r->user(), 'buying.BUY'); try { return \App\Services\HistoricalPurchase::undo($job, $r->user()); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
+    public function oldEntryTemplate() { return response(\App\Services\HistoricalPurchase::template(), 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => 'attachment; filename="SRC_HISTORICAL_template.csv"']); }
 }

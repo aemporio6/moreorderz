@@ -549,6 +549,12 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('compliance/{id}', [\App\Http\Controllers\InvoicesController::class, 'complianceUpdate'])->whereNumber('id');      // R-ACC-10
         Route::post('compliance/{id}/document', [\App\Http\Controllers\InvoicesController::class, 'complianceDocument'])->whereNumber('id');
         Route::post('compliance/generate', [\App\Http\Controllers\InvoicesController::class, 'complianceGenerate']);
+        Route::get('old-entry', [\App\Http\Controllers\BuyingController::class, 'oldEntryMeta']);      // R-B_SOURCING-5 / 8 / 13
+        Route::get('old-entry/rate', [\App\Http\Controllers\BuyingController::class, 'oldEntryRate']);
+        Route::post('old-entry', [\App\Http\Controllers\BuyingController::class, 'oldEntrySave']);
+        Route::post('old-entry/csv', [\App\Http\Controllers\BuyingController::class, 'oldEntryCsv']);
+        Route::post('old-entry/csv/{job}/undo', [\App\Http\Controllers\BuyingController::class, 'oldEntryUndo'])->whereNumber('job');
+        Route::get('old-entry/template', [\App\Http\Controllers\BuyingController::class, 'oldEntryTemplate']);
         Route::get('listings-import', [\App\Http\Controllers\PurchaseAuditController::class, 'listingBatches']);      // R-D-59
         Route::post('listings-import', [\App\Http\Controllers\PurchaseAuditController::class, 'listings']);
         Route::post('listings-import/{job}/undo', [\App\Http\Controllers\PurchaseAuditController::class, 'listingsUndo'])->whereNumber('job');
