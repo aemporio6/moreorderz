@@ -329,6 +329,7 @@
       if (r === '#/permissions') return await pagePermissions();
       if (r === '#/playbooks') return await pagePlaybooks();
       if (r === '#/menu-builder') return await pageMenuBuilder();      // R-G_CORE-57
+      if (r.startsWith('#/invoices')) return await pageInvoices();      // R-D-83 / 84
       if (r === '#/bulk-jobs') return await pageBulkJobs();
       if (r === '#/choices') return await pageChoices();
       if (r === '#/settings') return await pageSettings();
@@ -2063,6 +2064,22 @@
     });
   }
 
+  async function pageInvoices() {
+    const qs = new URLSearchParams(location.hash.split('?')[1] || ''); busy(true); let d; try { d = await api('invoices?' + new URLSearchParams({ period: qs.get('period') || '', status: qs.get('status') || '' })); } finally { busy(false); }
+    const tone = b => ({ Unpaid: 'err', 'Part paid': 'warn', Paid: 'done', Overdue: 'err', Statement: 'accent', Cancelled: 'plain', Credited: 'plain' }[b] || 'plain'), money = n => '£' + (+n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Invoices &amp; credit notes</h1><div class="sub">Made from a settled month only. Cancelling a sent invoice makes a credit note; a month is reopened only when no invoice of it is still active.</div></div></div>
+      <div class="card" style="margin-bottom:12px"><div class="card-h"><h3>Settled months</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Shop · month</th><th>Status</th><th class="num">Documents</th><th></th></tr></thead><tbody>${d.periods.map(p => `<tr><td>${esc(p.name)}</td><td>${esc(p.status)}</td><td class="num">${p.documents}</td><td style="white-space:nowrap">${p.status === 'CONFIRMED' ? `<button class="btn sm primary" data-ivg="${p.id}">Generate</button> <button class="btn sm" data-ivr="${p.id}">Reopen</button>` : ''} <a class="btn sm ghost" href="#/invoices?period=${p.id}">Documents</a></td></tr>`).join('') || '<tr><td colspan="4" class="muted">No settled month yet.</td></tr>'}</tbody></table></div></div>
+      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>Number</th><th>Type</th><th>Shop · month</th><th>Date</th><th>Due</th><th class="num">Total</th><th class="num">Paid</th><th>Status</th><th></th></tr></thead><tbody>${d.rows.map(x => `<tr><td><a href="#" data-ivv="${x.id}">${esc(x.no)}</a></td><td>${esc(x.type)}</td><td>${esc((x.shop || '') + ' · ' + x.month)}</td><td>${esc(x.date || '')}</td><td>${esc(x.due || '')}</td><td class="num">${money(x.total)}</td><td class="num">${money(x.paid)}</td>
+        <td><span class="chip ${tone(x.badge)}">${esc(x.badge)}</span></td><td style="white-space:nowrap">${['UNPAID', 'PART_PAID'].includes(x.status) ? `<button class="btn sm" data-ivp="${x.id}">Payment</button> ` : ''}${!['CANCELLED', 'CREDITED'].includes(x.status) ? `<button class="btn sm" data-ive="${x.id}">E-mail</button> ` : ''}${!['CANCELLED', 'CREDITED'].includes(x.status) && x.type_code !== 'CREDIT_NOTE' ? `<button class="btn sm ghost" data-ivc="${x.id}">Cancel</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="9" class="muted">No documents.</td></tr>'}</tbody></table></div></div>`;
+    const re = () => pageInvoices(), post = (u, b) => api(u, { method: 'POST', body: b || {} });
+    $$('[data-ivg]').forEach(b => b.onclick = async () => { try { toast((await post('invoices/generate/' + b.dataset.ivg)).message); re(); } catch (e) { toast(e.message, 'err'); } });
+    $$('[data-ivr]').forEach(b => b.onclick = async () => { try { toast((await post('invoices/reopen/' + b.dataset.ivr)).message); re(); } catch (e) { toast(e.message, 'err'); } });
+    $$('[data-ivv]').forEach(a => a.onclick = async e => { e.preventDefault(); try { const v = await api('invoices/' + a.dataset.ivv); modal(v.badge, '', v.html + (v.payments.length ? `<h3>Payments</h3>${v.payments.map(p => `<div class="small">${esc(p.d_payment)} · ${money(p.amount)} · ${esc(p.method || '')} ${esc(p.reference || '')}</div>`).join('')}` : ''), '', true); } catch (x) { toast(x.message, 'err'); } });
+    $$('[data-ivp]').forEach(b => b.onclick = () => miniForm('Record a payment', 'The proof (jpg, png, pdf, webp, at most 5 MB) can be added on the next save.', [{ name: 'amount', label: 'Amount £', required: true, type: 'number' }, { name: 'date', label: 'Payment date', required: true, type: 'date', value: S.boot.today }, { name: 'method', label: 'Method', options: d.methods.map(m => [m, m]) }, { name: 'reference', label: 'Reference' }, { name: 'notes', label: 'Notes' }],
+      async v => { const r = await post(`invoices/${b.dataset.ivp}/pay`, v); re(); return r; }, 'Record'));
+    $$('[data-ive]').forEach(b => b.onclick = () => miniForm('E-mail the document', 'Empty = the recipient\'s e-mail.', [{ name: 'to', label: 'To', type: 'email' }], async v => { const r = await post(`invoices/${b.dataset.ive}/email`, v); re(); return r; }, 'Send'));
+    $$('[data-ivc]').forEach(b => b.onclick = () => miniForm('Cancel this document', 'A sent invoice gets a credit note for the whole amount.', [{ name: 'reason', label: 'Reason', required: true }], async v => { const r = await post(`invoices/${b.dataset.ivc}/cancel`, v); re(); return r; }, 'Cancel it'));
+  }
   async function pageMenuBuilder() {
     busy(true); let d; try { d = await api('menu-builder'); } catch (e) { busy(false); return toast(e.message, 'err'); } busy(false);
     const item = i => `<div class="mbi" draggable="true" data-mbi="${i.id}" style="display:flex;gap:8px;align-items:center;padding:6px 8px;border:1px solid var(--line);border-radius:8px;margin:4px 0;background:var(--card,#fff);cursor:grab;flex-wrap:wrap">

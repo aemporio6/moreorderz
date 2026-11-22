@@ -544,6 +544,14 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('tasks', [WorkController::class, 'tasks']);
         Route::get('tasks/dashboard', [WorkController::class, 'tasksDashboard']);
         Route::get('tasks/team', [WorkController::class, 'tasksTeam']);
+        Route::get('invoices', [\App\Http\Controllers\InvoicesController::class, 'index']);      // R-D-83 / 84
+        Route::get('invoices/{id}', [\App\Http\Controllers\InvoicesController::class, 'show'])->whereNumber('id');
+        Route::post('invoices/generate/{period}', [\App\Http\Controllers\InvoicesController::class, 'generate'])->whereNumber('period');
+        Route::post('invoices/reopen/{period}', [\App\Http\Controllers\InvoicesController::class, 'reopen'])->whereNumber('period');
+        Route::post('invoices/{id}/pay', [\App\Http\Controllers\InvoicesController::class, 'pay'])->whereNumber('id');
+        Route::post('invoices/payments/{payment}/delete', [\App\Http\Controllers\InvoicesController::class, 'unpay'])->whereNumber('payment');
+        Route::post('invoices/{id}/cancel', [\App\Http\Controllers\InvoicesController::class, 'cancel'])->whereNumber('id');
+        Route::post('invoices/{id}/email', [\App\Http\Controllers\InvoicesController::class, 'email'])->whereNumber('id');
         Route::post('warehouse/sites/{id}/manage', [StockController::class, 'siteManage'])->whereNumber('id');      // R-H-3
         Route::get('warehouse/sites/{id}/go-live', [StockController::class, 'siteGoLive'])->whereNumber('id');      // R-H-14 dry run
         Route::post('warehouse/sites/{id}/go-live', [StockController::class, 'siteGoLive'])->whereNumber('id');

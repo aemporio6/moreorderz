@@ -68,7 +68,7 @@ INV-3|M||hidden margin report not built
 INV-4|P|class Rights|cost columns hidden from Warehouse; field-level visible_to on prints partly
 INV-5|B|function saveSplit|profit split rules per shop: 4 % = 100, modes, retire
 INV-6|P|function vaSalary|split by month end, VA salary from job history, loss brought forward; one payable per VA not built
-INV-7|M||invoice documents generate / reopen not built
+INV-7|B|class InvestorDocs|generate only for CONFIRMED months, only the missing documents ("All invoices for this month already exist."), numbering as R-D-83 under a row lock, reopen keeps the sales confirmed; the Invoices page lists the settled months with their documents (7e-148, InvestorDocsTest r83 / r84)
 INV-8|F|form:invoice_document|form only
 INV-9|M||invoice PDF not built
 INV-10|F|form:invoice_payment|form only
