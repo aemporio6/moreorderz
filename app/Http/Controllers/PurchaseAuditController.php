@@ -43,6 +43,11 @@ class PurchaseAuditController extends Controller
     /* R-D-59 eBay active listings per shop */
     public function listings(Request $r) { return $this->run(fn () => \App\Services\ListingsImport::import((string) $r->file('file')?->getClientOriginalName(), $this->text($r), $r->user())); }
     public function listingsUndo(Request $r, int $job) { return $this->run(fn () => \App\Services\ListingsImport::undo($job, $r->user())); }
-    public function listingBatches(Request $r) { return ['rows' => DB::table('bulk_jobs')->where('list_key', 'listing_import')->orderByDesc('id')->limit(30)->get(['id', 'job_no', 'status', 'row_count', 'created_at', 'change_json'])->map(fn ($j) => ['id' => (int) $j->id, 'no' => $j->job_no, 'status' => $j->status, 'changes' => (int) $j->row_count, 'at' => (string) $j->created_at,
+    public function listingBatches(Request $r) { $sh = \App\Services\Perm::shops($r->user()); return ['shops' => DB::table('t_branches')->where('fk_id_ent', (int) \App\Services\Context::ent())->where('f_active', 1)->when($sh !== null, fn ($q) => $q->whereIn('id', $sh ?: [0]))->orderBy('shop_no')->get(['id', 'shop_no', 'shop_name']), 'rows' => DB::table('bulk_jobs')->where('list_key', 'listing_import')->orderByDesc('id')->limit(30)->get(['id', 'job_no', 'status', 'row_count', 'created_at', 'change_json'])->map(fn ($j) => ['id' => (int) $j->id, 'no' => $j->job_no, 'status' => $j->status, 'changes' => (int) $j->row_count, 'at' => (string) $j->created_at,
         'shop' => DB::table('t_branches')->where('id', json_decode((string) $j->change_json, true)['shop'] ?? 0)->value('shop_no')])->all()]; }
+
+    /* R-H-20 stock quantity per listing (outbound) */
+    private function shopOk(Request $r): int { \App\Services\Perm::need($r->user(), 'orders.SEE'); $s = (int) $r->query('shop'); if (! \App\Services\Perm::shopAllowed($r->user(), $s)) abort(403, ' User has no rights for that shop'); return $s; }
+    public function listingQty(Request $r) { $s = $this->shopOk($r); return \App\Services\ListingQty::rows((int) \App\Services\Context::ent(), $s) + ['shops' => DB::table('t_branches')->where('fk_id_ent', (int) \App\Services\Context::ent())->where('f_active', 1)->orderBy('shop_no')->get(['id', 'shop_no', 'shop_name'])]; }
+    public function listingQtyCsv(Request $r) { $s = $this->shopOk($r); return response(\App\Services\ListingQty::csv((int) \App\Services\Context::ent(), $s), 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => 'attachment; filename="listing_quantities_' . $s . '.csv"']); }
 }

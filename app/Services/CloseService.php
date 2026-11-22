@@ -21,6 +21,7 @@ class CloseService
         'STOCK_ROLL' => ['Stock adds up: products = lots = movements, and stock value = the ledger', false], 'SHARES_LE_100' => ['Partner shares are not over 100 %', false],
         'SPLIT_RULES' => ['A profit split rule is valid for the month', false], 'OPENING_LOCKED' => ['Opening balances are locked', false], 'PREVIOUS_LOCKED' => ['Earlier months of the shop are locked', false],
         'ONE_PROFIT_ROUTE' => ['The shop-month has exactly one profit route', false],
+        'QTY_BALANCED' => ['Sourcing quantities balance (no cycle of the shop shows Mismatch, unallocated or OVER)', false],
     ];
 
     /** May this check be waived? Settings › Choices CLOSE_WAIVABLE (default: the five the specification allows). */
@@ -156,6 +157,12 @@ class CloseService
         $routes = DB::table('t_branch_profit_routes')->where('fk_id_company', $ent)->where('fk_id_branch', $branchId)->where('d_start', '<=', $to)->where(fn ($w) => $w->whereNull('d_end')->orWhere('d_end', '>=', $from))->pluck('profit_route');
         $def = (string) Settings::get('DEFAULT_PROFIT_ROUTE', $ent, 'LOT_PROFIT');
         $set('ONE_PROFIT_ROUTE', $routes->count() > 1 ? 'RED' : 'GREEN', $routes->count() > 1 ? 'More than one profit route is valid in this month: ' . $routes->implode(', ') . '.' : ($routes->count() === 1 ? "Route {$routes[0]}." : "No route row for this shop – the company default $def applies."), $routes->count() > 1 ? 1 : 0);
+        // 18 R-F_SETUP-24: the quantity check of the shop's cycles that received goods up to the month end
+        $bad = [];
+        foreach (DB::table('t_src_cycles as c')->where('c.fk_id_ent', $ent)->where('c.fk_id_main_branch', $branchId)->where('c.f_active', 1)
+            ->whereExists(fn ($q) => $q->selectRaw('1')->from('t_src_grn as g')->whereColumn('g.fk_id_cycle', 'c.id')->where('g.f_active', 1)->where('g.grn_date', '<=', $to))->get(['c.id', 'c.cycle_code']) as $c)
+            foreach (CycleAlerts::unbalanced((int) $c->id) as $x) $bad[] = "$c->cycle_code $x";
+        $set('QTY_BALANCED', $bad ? 'RED' : 'GREEN', $bad ? 'Quantities do not balance – see Quantity check: ' . implode(' · ', array_slice($bad, 0, 5)) . (count($bad) > 5 ? ' …' : '') : 'Every cycle of this shop that received goods balances.', count($bad), '#/buying');
         $ordered = []; foreach (array_keys(self::CHECKS) as $c) $ordered[] = $out[$c];
         return ['checks' => $ordered, 'route' => $routes->count() === 1 ? $routes[0] : $def, 'shop' => $shop->shop_name, 'from' => $from, 'to' => $to];
     }

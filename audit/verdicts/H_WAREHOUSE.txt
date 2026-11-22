@@ -17,7 +17,7 @@
 17|B|function release|release and consume
 18|B|function fillShorts|short at intake, filled when stock arrives
 19|B|class Bundles|channel SKU map = t_product_listings with pack_qty and f_bundle + child grid listing_component (t_listing_components: product, qty per listing unit); intake resolution: the shop's listing by item id / channel SKU first, then the product SKU, then aliases (import) and Needs Attention; a pack listing expands at intake (qty × pack), a bundle reserves one row per component (order qty × qty per unit, short per component, WH_ORDER_SHORT names the short SKUs) and at Month Confirm each component leaves stock, cost = Σ components' lot cost (7e-156); SalesDispatchTest (2-pack), ListingsMoneyFilesTest h19 (A+B × 1 → 1 A + 1 B, cost A + cost B)
-20|M||stock quantity per listing (outbound) not built
+20|P|class ListingQty|quantity per listing = floor((available − buffer) ÷ pack qty), bundle = the smallest floor((available − buffer) ÷ component qty), never below 0; buffer = the listing override else the shop's marketplace profile (stock_buffer_units); profile stock_sync_mode / oos_action shown, 0 + END → action END; the listing-quantity export file per shop (sku, item id, quantity, action) on Import active listings; PRODUCT_OOS already fired by ProductStockFlag (7e-160); ListingsMoneyFilesTest h20 (available 9, buffer 1, pack 2 → 4). Open: the API push at once when a product reaches 0 (no channel connector pushes quantities yet)
 21|P|function createGrn|receive with a place per line; phone receiving flow partly
 22|P|function quickBuy|receiving without a PO = quick buy / opening stock
 23|B|function suggest|putaway suggestion with reason

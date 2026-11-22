@@ -179,7 +179,7 @@ class StockService
             if ($qty > $sold - $back) throw new \RuntimeException('Only ' . ($sold - $back) . ' unit(s) of this sale can still come back.');
             $kinds = ['SELLABLE' => null, 'DAMAGED' => 'DAMAGED', 'MISSING' => 'WRITTEN_OFF', 'QUARANTINE' => 'QUARANTINE'];
             $kind = array_key_exists($condition, $kinds) ? $kinds[$condition] : 'RETURNS';
-            $left = $qty; $cost = 0.0; $productId = null;
+            $left = $qty; $cost = 0.0; $loss = 0.0; $productId = null;
             $sale = DB::table('t_sales')->where('id', $saleId)->first(['fk_id_branch', 'd_order', 'cost_gbp', 'buy_amount', 'total_amount_gbp', 'qty']);
             $month = $sale ? substr((string) $sale->d_order, 0, 7) : null; $locked = $sale && $sale->fk_id_branch && LandedVersions::isLocked((int) $sale->fk_id_branch, $month);      /* R-D-88 / R-FIN-47 */
             foreach ($cons as $c) {
@@ -196,7 +196,8 @@ class StockService
                     DB::table('fin_lots')->where('id', $lot->id)->increment('qty_left', $take);
                 }
                 $mv = self::move($ent, $productId, $condition === 'MISSING' ? 'written_off' : 'return_in', $condition === 'MISSING' ? 0 : $take, $loc, $lot->id, $c->fk_id_owner, (float) $c->unit_cost_gbp, 'RETURN', $saleId, "Return: $condition");
-                DB::table('fin_lot_consumption')->insert(['period_id' => $c->period_id, 'settlement_line_id' => $c->settlement_line_id, 'lot_id' => $lot->id, 'sku' => $c->sku, 'qty' => -$take,
+                if ($condition === 'MISSING') $loss += $take * (float) $c->unit_cost_gbp;      /* R-D-88: nothing came back – no reversing row; the cost moves from cost of sale to stock loss (STOCK_LOSS) */
+                else DB::table('fin_lot_consumption')->insert(['period_id' => $c->period_id, 'settlement_line_id' => $c->settlement_line_id, 'lot_id' => $lot->id, 'sku' => $c->sku, 'qty' => -$take,
                     'unit_cost_gbp' => $c->unit_cost_gbp, 'fk_id_sale' => $saleId, 'fk_id_owner' => $c->fk_id_owner, 'fk_id_movement' => $mv, 'consumed_on' => Ledger::openDate($ent), 'fk_id_reverses' => $c->id, 'reason' => 'RETURN']);
                 if ($condition !== 'MISSING') $cost += $take * (float) $c->unit_cost_gbp;
                 if ($condition !== 'MISSING' && $locked) {      /* the LOCKED sale month is not edited: a negative cost-correction line in the shop's next open month */
@@ -212,9 +213,12 @@ class StockService
                 $nc = round(max(0, (float) $sale->cost_gbp - $cost), 2);
                 DB::table('t_sales')->where('id', $saleId)->update(['cost_gbp' => $nc, 'buy_amount' => $nc, 'profit' => round((float) $sale->total_amount_gbp - $nc, 2)]);
             }
+            if (($loss = round($loss, 2)) > 0) {
+                Ledger::post($ent, Ledger::openDate($ent), 'RETURN_WRITE_OFF', $saleId, [['account' => '5500', 'debit' => $loss], ['account' => '5000', 'credit' => $loss]], ['memo' => "Return not received back (sale #$saleId) – written off as stock loss"]);
+            }
             if ($cost > 0) Ledger::post($ent, Ledger::openDate($ent), 'RETURN', $saleId, [['account' => '1200', 'debit' => $cost], ['account' => '5000', 'credit' => $cost]], ['memo' => "Return of sale #$saleId back into stock"]);
             TaskEngine::close('SAL_RETURN_EXPECTED', [$saleId], 'The return was booked as received');
-            return ['cost_back' => $cost];
+            return ['cost_back' => $cost, 'written_off' => $loss];
         });
     }
 

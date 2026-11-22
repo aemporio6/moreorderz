@@ -132,4 +132,15 @@ class SourcingAlertsTest extends TestCase
         RecordService::save('src_cycle', ['status' => 'Completed'], $this->cy);
         $this->assertSame('Completed', DB::table('t_src_cycles')->where('id', $this->cy)->value('status'));
     }
+
+    public function test_month_close_quantity_check(): void
+    {
+        $this->world();
+        $shop = $this->ins('t_branches', ['shop_no' => 'QC1', 'shop_name' => 'Qty shop', 'iso_branch' => 'QC1']);
+        DB::table('t_src_cycles')->where('id', $this->cy)->update(['fk_id_main_branch' => $shop]);
+        $grn = $this->ins('t_src_grn', ['fk_id_cycle' => $this->cy, 'grn_number' => 'GRN-QC', 'grn_date' => '2026-11-10']);
+        $this->ins('t_src_grn_lines', ['fk_id_grn' => $grn, 'fk_id_product' => $this->prod, 'sku' => 'LAMP-1', 'expected_qty' => 1000, 'received_qty' => 990, 'accepted_qty' => 970, 'damaged_qty' => 10, 'missing_qty' => 10]);
+        $c = collect(\App\Services\CloseService::evaluate(1, $shop, '2026-11')['checks'])->keyBy('code')['QTY_BALANCED'];
+        $this->assertSame('RED', $c['status']); $this->assertStringStartsWith('Quantities do not balance – see Quantity check', $c['detail']);
+    }
 }

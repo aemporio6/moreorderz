@@ -85,4 +85,22 @@ class ListingsMoneyFilesTest extends TestCase
         try { FinanceReports::import(1, $this->shop, 'REIMB', 'r.csv', "sku,amount-total\nX,1\n", $this->owner); $this->fail(); } catch (\InvalidArgumentException $e) { $this->assertSame('These required columns are not mapped: reimbursement_id.', $e->getMessage()); }
         $this->assertContains('ADS', array_column(FinanceReports::boardRows(1), 'type'), 'feeds the report status board');
     }
+
+    public function test_h20_quantity_per_listing(): void
+    {
+        $a = $this->p('Q-A'); $b = $this->p('Q-B');
+        Stock::receive(1, [['product' => $a, 'qty' => 9, 'location' => $this->bin, 'unit_cost' => 1, 'received_date' => '2026-08-01'], ['product' => $b, 'qty' => 4, 'location' => $this->bin, 'unit_cost' => 1, 'received_date' => '2026-08-01']], 'GRN', 9);
+        $prof = $this->f('mp_profiles', ['fk_id_ent' => 1, 'code' => 'P' . uniqid(), 'name' => 'Test profile', 'stock_sync_mode' => 'FILE', 'stock_buffer_units' => 1, 'oos_action' => 'END', 'f_active' => 1]);
+        DB::table('t_branches')->where('id', $this->shop)->update(['fk_id_mp_profile' => $prof]);
+        $two = $this->f('t_product_listings', ['fk_id_ent' => 1, 'fk_id_product' => $a, 'fk_id_branch' => $this->shop, 'fk_id_marketplace' => $this->mp, 'marketplace_sku' => 'QA-2PK', 'pack_qty' => 2, 'status' => 'ACTIVE', 'f_active' => 1]);
+        $bun = $this->f('t_product_listings', ['fk_id_ent' => 1, 'fk_id_product' => $a, 'fk_id_branch' => $this->shop, 'fk_id_marketplace' => $this->mp, 'marketplace_sku' => 'QA+QB', 'pack_qty' => 1, 'f_bundle' => 1, 'status' => 'ACTIVE', 'f_active' => 1]);
+        DB::table('t_listing_components')->insert([['fk_id_listing' => $bun, 'fk_id_product' => $a, 'qty_per_unit' => 1, 'f_active' => 1], ['fk_id_listing' => $bun, 'fk_id_product' => $b, 'qty_per_unit' => 2, 'f_active' => 1]]);
+        $q = collect(\App\Services\ListingQty::rows(1, $this->shop)['rows'])->keyBy('sku');
+        $this->assertSame(4, $q['QA-2PK']['qty'], 'available 9, buffer 1, pack 2 → push 4');
+        $this->assertSame(1, $q['QA+QB']['qty'], 'bundle = min over components: A (9−1)/1 = 8, B (4−1)/2 = 1');
+        DB::table('t_product_listings')->where('id', $two)->update(['stock_buffer_override' => 8]);
+        $q = collect(\App\Services\ListingQty::rows(1, $this->shop)['rows'])->keyBy('sku');
+        $this->assertSame([0, 'END'], [$q['QA-2PK']['qty'], $q['QA-2PK']['action']], 'available 1 above the buffer → push 0; the profile ends the listing');
+        $this->assertStringContainsString('"QA-2PK","","0","END"', \App\Services\ListingQty::csv(1, $this->shop));
+    }
 }

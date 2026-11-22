@@ -46,4 +46,16 @@ class ReturnCorrectionTest extends TestCase
         $this->assertSame(['2026-08', '2026-09', -4.20], [$c->source_month, $c->target_month, (float) $c->amount], 'LOCKED month → correction −£4.20 in the next open month');
         $this->assertSame(4.20, (float) DB::table('t_sales')->where('id', $id)->value('cost_gbp'), 'the locked month keeps its figure');
     }
+
+    public function test_missing_is_written_off_not_reversed(): void
+    {
+        [$id] = $this->sale();
+        $lotBefore = (int) DB::table('fin_lots')->sum('qty_left');
+        $r = Stock::returnIn(1, $id, 2, 'MISSING');
+        $this->assertSame([0.0, 4.20], [(float) $r['cost_back'], (float) $r['written_off']], 'condition Missing → no stock in, write-off £4.20');
+        $this->assertSame(0, DB::table('fin_lot_consumption')->where('fk_id_sale', $id)->whereNotNull('fk_id_reverses')->count(), 'no reversing consumption row');
+        $this->assertSame($lotBefore, (int) DB::table('fin_lots')->sum('qty_left'));
+        $j = DB::table('gl_journals')->where('source_type', 'RETURN_WRITE_OFF')->where('source_id', $id)->value('id');
+        $this->assertSame(4.20, (float) DB::table('gl_lines as l')->join('gl_accounts as a', 'a.id', '=', 'l.account_id')->where('l.journal_id', $j)->where('a.code', '5500')->value('l.debit'), 'STOCK_LOSS (5500)');
+    }
 }

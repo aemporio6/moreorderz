@@ -143,7 +143,8 @@ class CycleAlerts
             else $chip = ['grey', '—'];
             $out[] = ['cycle_product' => (int) $cp->id, 'product' => (int) $cp->fk_id_product, 'sku' => $cp->sku, 'name' => $cp->product_name, 'ordered' => $ord, 'planned' => $planned, 'confirmed' => (float) $al->confirmed, 'dispatched' => (float) $al->dispatched,
                 'expected' => (float) $g->expected, 'received' => (float) $g->received, 'accepted' => (float) $g->accepted, 'damaged' => (float) $g->damaged, 'missing' => (float) $g->missing, 'chip' => $chip[1], 'tone' => $chip[0],
-                'claim' => $chip[1] === 'Balanced' && (float) $g->missing > 0 ? (float) $g->missing : 0.0,      /* "Balanced · claim m" */
+                'claim' => $chip[1] === 'Balanced' && (float) $g->missing > 0 ? (float) $g->missing : 0.0,      /* "Balanced · claim m" – opens the claim of the GRN */
+                'claim_grn' => (float) $g->missing > 0 ? (int) DB::table('t_src_grn_lines as l')->join('t_src_grn as g', 'g.id', '=', 'l.fk_id_grn')->where('g.fk_id_cycle', $cycleId)->where('l.fk_id_product', $cp->fk_id_product)->where('l.missing_qty', '>', 0)->orderByDesc('g.id')->value('g.id') : null,
                 'produced' => $prodBy[(int) $cp->fk_id_product] ?? null, 'qc_passed' => $qcBy[(int) $cp->fk_id_product] ?? null, 'in_stock' => (float) ($stock[(int) $cp->fk_id_product] ?? 0)];
         }
         return $out;
@@ -153,7 +154,12 @@ class CycleAlerts
     public static function unbalanced(int $cycleId): array
     {
         $alloc = DB::table('t_src_allocations')->where('fk_id_cycle', $cycleId)->where('f_active', 1)->exists(); $out = [];
-        foreach (self::quantities($cycleId) as $q) if ($q['chip'] === 'Mismatch' || ($alloc && (str_ends_with($q['chip'], 'unallocated') || str_ends_with($q['chip'], 'OVER')))) $out[] = ($q['sku'] ?: $q['name']) . ': ' . $q['chip'];
+        $ok = fn ($a, $b) => abs($a - $b) < 0.001;
+        foreach (self::quantities($cycleId) as $q) {
+            $grnBad = ($q['received'] > 0 || $q['expected'] > 0) && ! ($ok($q['expected'], $q['received'] + $q['missing']) && $ok($q['received'], $q['accepted'] + $q['damaged']));
+            if ($q['chip'] === 'Mismatch' || (! $alloc && $grnBad)) $out[] = ($q['sku'] ?: $q['name']) . ': Mismatch';      /* without allocations the GRN quantities are still checked */
+            elseif ($alloc && (str_ends_with($q['chip'], 'unallocated') || str_ends_with($q['chip'], 'OVER'))) $out[] = ($q['sku'] ?: $q['name']) . ': ' . $q['chip'];
+        }
         return $out;
     }
 
