@@ -25,6 +25,7 @@ class MoNightly extends Command
         foreach (DB::table('t_enterprise')->where('f_active', 1)->pluck('id') as $ent) {
             Context::set((int) $ent, null);
             $r = StockService::selfCheck((int) $ent);
+            \App\Services\AccCompliance::generate((int) $ent);      // R-ACC-9 the daily schedule run
             $low = StockService::lowStockTasks((int) $ent);
             \App\Services\BuyingService::staleResearch((int) $ent);
             \App\Services\CycleAlerts::sweep((int) $ent);

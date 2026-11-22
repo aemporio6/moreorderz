@@ -71,7 +71,8 @@ class AppController extends Controller
     {
         $no = (string) $m->screen_no;
         if (str_starts_with($no, '1.')) return '#/home';
-        if ($no === '10.7') return '#/invoices';      /* R-D-83 / 84 investor documents */
+        if ($no === '10.7') return '#/invoices';
+        if ($no === '10.8') return '#/compliance';      /* R-ACC compliance calendar */      /* R-D-83 / 84 investor documents */
         if ($no === '13.1') return '#/tasks?scope=dashboard';      // R-G_CORE-20 boss-only dashboard
         if ($no === '13.2') return '#/tasks?scope=all';
         if ($no === '13.3') return '#/tasks';

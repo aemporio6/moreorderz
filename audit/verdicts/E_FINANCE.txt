@@ -79,15 +79,15 @@ INV-14|M||invoice party print details not built
 INV-15|M||portal dashboard / my sales not built
 INV-16|M||portal exports not built
 INV-17|M||invoicing conventions (shop label) not built
-ACC-1|M||year end / accounts periods engine not built
-ACC-2|M||ACCOUNTS due date not built
-ACC-3|M||CT periods / payment / CT600 dates not built
+ACC-1|B|function periods|incorporation = incorporate_date else creation_date; year end from the Hub settings, else File Return Date − 9 months, else the incorporation month end; first period end = Hub first_period_end else the year-end date closest to incorporation + 12 months (after incorporation, ≤ + 18 months); periods until the window end (max 40); no incorporation → 6 years back (7e-150); AccComplianceTest r1
+ACC-2|B|function accountsDue|first long period: later of incorporation + 21 months and end + 3 months, else end + 9 months (month-end clamp); File Return Date within 45 days wins, more than 45 days before → not generated (already filed) (7e-150); AccComplianceTest r2
+ACC-3|B|function ctPeriods|a long period of account → CT1 (12 months) + CT2; CT_PAYMENT = CT end + 9 months + 1 day; CT600 = period-of-account end + 12 months for both (7e-150); AccComplianceTest r3
 ACC-4|M||VAT return dates not built
-ACC-5|M||confirmation statement dates not built
+ACC-5|B|function confirmationStatements|anchor Hub cs_review_date, else the Companies House date (− 14 days when cs_date_is = DUE; earlier years skipped as it is the next statement), else incorporation + 12 months; k = −6 … +3, due = review + 14 days, period = review − 12 months + 1 day → review; skip before the first review − 40 days, before the window, after the window (7e-150); AccComplianceTest r5
 ACC-6|M||PAYE dates not built
 ACC-7|M||Self Assessment dates not built
-ACC-8|M||track_from / window not built
-ACC-9|M||schedule generation not built
+ACC-8|P|function window|window today − history_months (1–72, default 12) → today + horizon_months (3–36, default 15) from acc_settings; company rows kept when due ≥ window start and period end ≤ window end; track_from removes company rows due before it (7e-150, AccComplianceTest r8). Open: the person rows (they come with R-ACC-7)
+ACC-9|P|function generate|per company (tracked, active types only): gen_key C<id>|<type>|<period end or due>, insert-ignore (a re-run adds 0), PENDING, auto, the accountant assigned; daily in mo:nightly and from the page when the last run is older than 6 hours; rebuild of one company removes only untouched auto PENDING rows (no notes, reference, amounts, documents) – "<n> removed, <m> added"; Tax & filings page (7e-150, AccComplianceTest r9). Open: people with SA settings, VAT and PAYE rows (R-ACC-4 / 6 / 7)
 ACC-10|F|form:acc_obligation|form only; status machine not built
 ACC-11|F|form:acc_obligation_type|form only
 ACC-12|M||reminder digest not built

@@ -544,6 +544,9 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('tasks', [WorkController::class, 'tasks']);
         Route::get('tasks/dashboard', [WorkController::class, 'tasksDashboard']);
         Route::get('tasks/team', [WorkController::class, 'tasksTeam']);
+        Route::get('compliance', [\App\Http\Controllers\InvoicesController::class, 'compliance']);      // R-ACC-1 … 9
+        Route::post('compliance/generate', [\App\Http\Controllers\InvoicesController::class, 'complianceGenerate']);
+        Route::post('compliance/rebuild/{company}', [\App\Http\Controllers\InvoicesController::class, 'complianceRebuild'])->whereNumber('company');
         Route::get('invoices', [\App\Http\Controllers\InvoicesController::class, 'index']);      // R-D-83 / 84
         Route::get('invoices/{id}', [\App\Http\Controllers\InvoicesController::class, 'show'])->whereNumber('id');
         Route::post('invoices/generate/{period}', [\App\Http\Controllers\InvoicesController::class, 'generate'])->whereNumber('period');

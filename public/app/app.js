@@ -330,6 +330,7 @@
       if (r === '#/playbooks') return await pagePlaybooks();
       if (r === '#/menu-builder') return await pageMenuBuilder();      // R-G_CORE-57
       if (r.startsWith('#/invoices')) return await pageInvoices();      // R-D-83 / 84
+      if (r.startsWith('#/compliance')) return await pageCompliance();      // R-ACC-1 … 9
       if (r === '#/bulk-jobs') return await pageBulkJobs();
       if (r === '#/choices') return await pageChoices();
       if (r === '#/settings') return await pageSettings();
@@ -2064,6 +2065,17 @@
     });
   }
 
+  async function pageCompliance() {
+    const qs = new URLSearchParams(location.hash.split('?')[1] || ''); busy(true); let d; try { d = await api('compliance?' + new URLSearchParams({ company: qs.get('company') || '' })); } finally { busy(false); }
+    if (d.stale && !S.ccRan) { S.ccRan = true; try { await api('compliance/generate', { method: 'POST' }); return pageCompliance(); } catch (e) {} }      /* R-ACC-9: a run when the last one is older than 6 hours */
+    const tone = { OVERDUE: 'err', DUE_SOON: 'warn', UPCOMING: 'plain', FILED: 'done', PAID: 'done', NOT_REQUIRED: 'plain' }, word = { OVERDUE: 'Overdue', DUE_SOON: 'Due soon', UPCOMING: 'Upcoming', FILED: 'Filed', PAID: 'Paid', NOT_REQUIRED: 'Not required', IN_PROGRESS: 'In progress' };
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Tax &amp; filings</h1><div class="sub">Accounts, Corporation Tax and confirmation statements of every company, worked out from the company dates and the Hub settings. Last run: ${esc(d.last_run || 'never')}.</div></div>
+      <div class="actions"><select class="q" id="ccCo"><option value="">All companies</option>${d.companies.map(c => `<option value="${c.id}" ${String(c.id) === (qs.get('company') || '') ? 'selected' : ''}>${esc(c.company_name)}</option>`).join('')}</select>${qs.get('company') ? `<button class="btn" id="ccRb">Rebuild this company</button>` : ''}<button class="btn primary" id="ccGen">Run now</button></div></div>
+      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>Due</th><th>Company</th><th>What</th><th>Period</th><th>Status</th></tr></thead><tbody>${d.rows.map(o => `<tr><td style="white-space:nowrap">${esc(o.due)}</td><td>${esc(o.company || '')}</td><td>${esc(o.title)}</td><td class="small">${esc(o.period)}</td><td><span class="chip ${tone[o.shown] || 'plain'}">${esc(word[o.shown] || o.shown)}</span></td></tr>`).join('') || '<tr><td colspan="5" class="muted">Nothing in the window. Add the companies (incorporation date) and press Run now.</td></tr>'}</tbody></table></div></div>`;
+    $('#ccCo').onchange = e => go('#/compliance' + (e.target.value ? '?company=' + e.target.value : ''));
+    $('#ccGen').onclick = async () => { try { toast((await api('compliance/generate', { method: 'POST' })).message); pageCompliance(); } catch (e) { toast(e.message, 'err'); } };
+    if ($('#ccRb')) $('#ccRb').onclick = async () => { try { toast((await api('compliance/rebuild/' + qs.get('company'), { method: 'POST' })).message); pageCompliance(); } catch (e) { toast(e.message, 'err'); } };
+  }
   async function pageInvoices() {
     const qs = new URLSearchParams(location.hash.split('?')[1] || ''); busy(true); let d; try { d = await api('invoices?' + new URLSearchParams({ period: qs.get('period') || '', status: qs.get('status') || '' })); } finally { busy(false); }
     const tone = b => ({ Unpaid: 'err', 'Part paid': 'warn', Paid: 'done', Overdue: 'err', Statement: 'accent', Cancelled: 'plain', Credited: 'plain' }[b] || 'plain'), money = n => '£' + (+n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
