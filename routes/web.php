@@ -544,6 +544,10 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('tasks', [WorkController::class, 'tasks']);
         Route::get('tasks/dashboard', [WorkController::class, 'tasksDashboard']);
         Route::get('tasks/team', [WorkController::class, 'tasksTeam']);
+        Route::post('warehouse/sites/{id}/manage', [StockController::class, 'siteManage'])->whereNumber('id');      // R-H-3
+        Route::get('warehouse/sites/{id}/go-live', [StockController::class, 'siteGoLive'])->whereNumber('id');      // R-H-14 dry run
+        Route::post('warehouse/sites/{id}/go-live', [StockController::class, 'siteGoLive'])->whereNumber('id');
+        Route::get('bins/{id}/contents', [StockController::class, 'binContents'])->whereNumber('id');      // R-H-8
         Route::get('tasks/absence-calendar', [WorkController::class, 'absenceCalendar']);
         Route::post('absence/{id}/end', [WorkController::class, 'absenceEnd'])->whereNumber('id');
         Route::post('delegation/{id}/end', [WorkController::class, 'delegationEnd'])->whereNumber('id');

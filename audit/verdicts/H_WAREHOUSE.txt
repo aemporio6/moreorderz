@@ -1,17 +1,17 @@
 1|P|STOCK_COST_LAYER|one layer by default, two-layer option as a Choice
 2|P|form:location|location tree
-3|P|function systemLocation|system places per company (shipped, returns, damaged)
+3|B|class WarehouseSites|managed site → 8 system bins UNASSIGNED, RECEIVING, DISPATCH, SHIPPED, RETURNS, QUARANTINE, DAMAGED, MISSING (code WH_SYSTEM_BIN_PREFIX + role, made once); sellable only UNASSIGNED (WH_UNASSIGNED_SELLABLE Y) and RECEIVING when WH_RECEIVING_SELLABLE = Y – the bins follow the setting; "System bins cannot be deactivated.", a system bin keeps its role; the site's own system bin is used when a site is given (company places stay for sites not managed); a bin with units is not deactivated ("Move the 12 units first.") (7e-147); WarehouseSitesTest r3
 4|P|class LocationGenerator|bin codes from the company format; live preview not built
 5|B|class LocationGenerator|bin generator, never a bin twice
 6|M||deactivate-never-delete / CSV import-export of locations not built
 7|B|class WarehouseMode|Warehouse mode #/warehouse-mode: Simple / Full preset buttons fill the 8 switches (each still editable on Settings), WH_PRESET shown (Custom when edited); Simple: GRN posts to the SKU's PRIMARY home bin; Full: GRN posts to RECEIVING and opens WH_PUTAWAY_WAITING per product, #/putaway with the suggested bin, task closes when nothing waits; Full → Simple refused while putaway tasks are open ("1 putaway task open") (WarehouseModeTest)
-8|P|class Context|one warehouse per company; many companies in one site not built
+8|B|class WarehouseSites|a site belongs to one company and may be shared (shared_companies): the shared company may book stock into its bins, scan them and see only its own SKUs with "+ n other SKUs not in your scope"; another company gets "Not in your scope."; Warehouse mode › Sites lists own and shared sites (7e-147); WarehouseSitesTest r8
 9|B|class SkuHomes|SKU homes: one main home per site, overflow homes, min / max
 10|B|function suggest|storage modes FIXED / HYBRID / CHAOTIC in the putaway suggestion
 11|M||segregated owner stock not built
 12|B|class StockService|movement types, one writer
 13|B|function consumeForSale|negative stock blocked; warehouse moves never change owner
-14|P|stock/opening|old stock in as opening lots in one place
+14|B|function goLive|go-live per site: dry run per SKU (book units at the site and its old shelves vs the old shelf rows), migration map old shelf → new bin places min(row qty, book not placed), no map → UNASSIGNED with "S-2 30 – no mapped bin"; the dry run changes nothing; apply moves the lot balances only (same lots, owners, cost) so Σ physical = Σ book; a second run → 0 changes; Owner only (7e-147); WarehouseSitesTest r14
 15|B|function available|available = sellable minus reserved
 16|B|function reserve|reservation at intake
 17|B|function release|release and consume

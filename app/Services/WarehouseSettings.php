@@ -149,6 +149,8 @@ class WarehouseSettings
             $a = $key === 'WH_ABC_A_PCT' ? (float) $v : (float) self::value('WH_ABC_A_PCT', $ent, self::defs()['WH_ABC_A_PCT']); $b = $key === 'WH_ABC_B_PCT' ? (float) $v : (float) self::value('WH_ABC_B_PCT', $ent, self::defs()['WH_ABC_B_PCT']);
             if ($a + $b > 100) throw new ValidationErrors(['value' => 'A % + B % cannot be more than 100']);
         }
-        return TypedSettings::store($ent, $key, $d[0], self::value($key, $ent, $d), $v, 'WAREHOUSE_SETTING');
+        $r = TypedSettings::store($ent, $key, $d[0], self::value($key, $ent, $d), $v, 'WAREHOUSE_SETTING');
+        if (in_array($key, ['WH_UNASSIGNED_SELLABLE', 'WH_RECEIVING_SELLABLE'], true)) WarehouseSites::syncSellable($ent);      // R-H-3 the system bins follow the setting
+        return $r;
     }
 }

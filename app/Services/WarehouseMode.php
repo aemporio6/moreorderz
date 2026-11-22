@@ -33,7 +33,9 @@ class WarehouseMode
     {
         $now = []; foreach (self::SWITCHES as $k => [$label, $s, $f]) $now[] = ['key' => $k, 'label' => $label, 'value' => (string) Settings::get($k, $ent, $s), 'simple' => $s, 'full' => $f];
         $preset = 'CUSTOM'; foreach (['SIMPLE' => 1, 'FULL' => 2] as $p => $i) if (collect($now)->every(fn ($x) => $x['value'] === ($i === 1 ? $x['simple'] : $x['full']))) $preset = $p;
-        return ['switches' => $now, 'preset' => $preset, 'open_putaways' => self::openPutaways($ent)];
+        $sites = \Illuminate\Support\Facades\DB::table('cat_inventory_locations')->where('kind', 'WAREHOUSE')->where('f_active', 1)->orderBy('id')->get()->filter(fn ($s) => WarehouseSites::mine($s, $ent))
+            ->map(fn ($s) => ['id' => (int) $s->id, 'name' => $s->location_name, 'managed' => (bool) $s->f_wh_managed, 'shared' => (string) $s->shared_companies, 'own' => (int) $s->fk_id_ent === $ent, 'bins' => count(WarehouseSites::bins((int) $s->id))])->values()->all();      // R-H-3 / 8
+        return ['switches' => $now, 'preset' => $preset, 'open_putaways' => self::openPutaways($ent), 'sites' => $sites];
     }
 
     /** A preset button: fill the switches. Full → Simple waits until no putaway task is open. */

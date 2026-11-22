@@ -61,6 +61,16 @@ class StockController extends Controller
     /** Simple / full warehouse by settings (R-H-7) and the putaway step. */
     public function whMode(Request $r) { \App\Services\Perm::need($r->user(), 'stock.bins'); return \App\Services\WarehouseMode::page((int) Context::ent()); }
     public function whModeApply(Request $r) { \App\Services\Perm::need($r->user(), 'stock.bins'); return $this->run(fn () => \App\Services\WarehouseMode::apply((int) Context::ent(), (string) $r->input('preset'), $r->user())); }
+    /** R-H-3 / 8 / 14 warehouse sites. */
+    private function wh(callable $fn) { try { return $fn(); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
+    public function siteManage(Request $r, int $id) { \App\Services\Perm::need($r->user(), 'stock.CHANGE'); return $this->wh(fn () => ['bins' => \App\Services\WarehouseSites::manage((int) Context::ent(), $id, (bool) $r->input('on', true)), 'message' => 'Saved']); }
+    public function siteGoLive(Request $r, int $id)
+    {
+        abort_unless($r->user()->role_code === 'OWNER', 403, 'Only the Owner runs the warehouse go-live.');
+        $map = array_map('intval', (array) $r->input('map', [])); $apply = $r->isMethod('POST') && (bool) $r->input('apply');
+        return $this->wh(fn () => \App\Services\WarehouseSites::goLive((int) Context::ent(), $id, $map, $apply));
+    }
+    public function binContents(Request $r, int $id) { \App\Services\Perm::need($r->user(), 'stock.SEE'); return $this->wh(fn () => \App\Services\WarehouseSites::contents($id, (int) Context::ent())); }
     public function putaways(Request $r) { \App\Services\Perm::need($r->user(), 'stock.CHANGE'); return ['rows' => \App\Services\WarehouseMode::putaways((int) Context::ent()), 'bins' => \Illuminate\Support\Facades\DB::table('cat_inventory_locations')->where('fk_id_ent', Context::ent())->where('kind', 'BIN')->where('f_active', 1)->orderBy('pick_seq')->limit(500)->get(['id', 'location_name as name'])]; }
     public function putaway(Request $r, int $id) { \App\Services\Perm::need($r->user(), 'stock.CHANGE'); return $this->run(fn () => \App\Services\WarehouseMode::putaway((int) Context::ent(), $id, (int) $r->input('bin'), $r->filled('qty') ? (int) $r->input('qty') : null)); }
 

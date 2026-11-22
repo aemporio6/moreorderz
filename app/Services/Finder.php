@@ -242,8 +242,9 @@ class Finder
             if ($s && ($f = RecordService::formOfTable('t_sales'))) return ['kind' => 'record', 'title' => 'Order ' . $s->order_no, 'sub' => 'Order line', 'url' => "#/rec/$f/{$s->id}"];
         }
         if (Perm::has($u, 'stock.SEE')) {
-            $l = DB::table('cat_inventory_locations')->where('fk_id_ent', $ent)->where(fn ($w) => $w->where('location_code', $code)->orWhere('barcode_value', $code))->first(['id', 'location_name']);
-            if ($l && ($f = RecordService::formOfTable('cat_inventory_locations'))) return ['kind' => 'record', 'title' => (string) $l->location_name, 'sub' => 'Location', 'url' => "#/rec/$f/{$l->id}"];
+            $l = DB::table('cat_inventory_locations')->where(fn ($w) => $w->where('location_code', $code)->orWhere('barcode_value', $code))->get()->first(fn ($x) => WarehouseSites::mine($x, $ent));      // R-H-8 shared sites too
+            if ($l && ($f = RecordService::formOfTable('cat_inventory_locations'))) { $c = WarehouseSites::contents((int) $l->id, $ent);
+                return ['kind' => 'record', 'title' => (string) $l->location_name, 'sub' => 'Location · ' . count($c['items']) . ' SKU' . (count($c['items']) === 1 ? '' : 's') . ($c['note'] ? ' · ' . $c['note'] : ''), 'url' => "#/rec/$f/{$l->id}"]; }
         }
         return null;
     }

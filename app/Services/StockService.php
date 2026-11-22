@@ -450,12 +450,15 @@ class StockService
 
     private static function location(int $id, int $ent): object
     {
-        return DB::table('cat_inventory_locations')->where('id', $id)->where(fn ($w) => $w->where('fk_id_ent', $ent)->orWhereNull('fk_id_ent')->orWhere('fk_id_ent', 0))->first() ?? throw new \RuntimeException('Location not found in this company.');
+        $l = DB::table('cat_inventory_locations')->where('id', $id)->first();      // R-H-8: a bin of a site shared with this company counts too
+        if ($l && WarehouseSites::mine($l, $ent)) return $l;
+        return DB::table('cat_inventory_locations')->where('id', 0)->first() ?? throw new \RuntimeException('Location not found in this company.');
     }
 
     /** The one DAMAGED / RETURNS / WRITTEN_OFF … location of a company; made the first time it is needed. */
-    public static function systemLocation(int $ent, string $kind): int
+    public static function systemLocation(int $ent, string $kind, ?int $site = null): int
     {
+        if ($site && ($b = WarehouseSites::systemBin($site, $kind))) return $b;      // R-H-3 the managed site's own system bin
         $id = DB::table('cat_inventory_locations')->where('fk_id_ent', $ent)->where('kind', $kind)->orderBy('id')->value('id');
         if ($id) return (int) $id;
         $names = ['DISPATCH' => 'Dispatch area', 'RECEIVING' => 'Receiving', 'SHIPPED' => 'Shipped (awaiting month confirm)', 'DAMAGED' => 'Damaged', 'RETURNS' => 'Returns', 'WRITTEN_OFF' => 'Written off', 'QUARANTINE' => 'Quarantine', 'TRANSIT' => 'In transit', 'MISSING' => 'Missing'];

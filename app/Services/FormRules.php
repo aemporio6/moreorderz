@@ -62,6 +62,7 @@ class FormRules
             if (! is_array($p) || array_values($p) !== $p || array_filter($p, fn ($x) => ! is_string($x) || ! preg_match('/^\w+$/', $x))) return ['params_json' => 'Parameters must be a list of names, e.g. ["first_name","task_ref"].'];
             $data['params_json'] = json_encode(array_values($p));
         }
+        if ($table === 'cat_inventory_locations' && ($w = WarehouseSites::check($data, $old, $id))) return $w;      // R-H-3 / 6 system bins, bins with units
         if ($table === 'user_absence') return TaskSettings::absence($data, $old, $id);      // R-G_CORE-16
         if ($table === 'tm_delegations') return TaskSettings::delegation($data, $old, $id);      // R-G_CORE-17
         if ($table === 'task_categories') return TaskSettings::category($data, $old, $id);      // R-G_CORE-23
