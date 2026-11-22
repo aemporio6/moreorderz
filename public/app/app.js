@@ -149,10 +149,16 @@
       <button class="tb-btn icon hide-m" id="btnFav" title="Make this page a favourite">${ic('star')}</button>
       <button class="tb-btn icon ${HELP ? 'primary' : ''}" id="btnHelp" title="Help: show the guidance of every screen (press ? for the keyboard shortcuts)">${ic('help')}</button>
       <button class="tb-btn icon" id="btnRefresh" title="Refresh data (keeps filters)">${ic('refresh')}</button>
+      <button class="tb-btn icon hide-m" id="btnFull" title="Full screen">⛶</button>
       <button class="tb-btn icon bell" id="btnBell" title="My tasks">${ic('bell')}<span class="dot" id="bellDot" style="display:${b.tasks_open ? 'flex' : 'none'}">${b.tasks_open}</span></button>
       <div class="user" id="btnUser" title="My account: password, 2-step sign-in, sign out"><div class="avatar">${esc(ini)}</div><div class="hide-m"><div style="font-weight:600;font-size:13px">${esc(b.user.name)}</div><div class="small muted">${esc(b.user.role)}</div></div></div>`;
     $('#btnBack svg') && ($('#btnBack svg').style.transform = 'rotate(180deg)');
-    $('#btnSide').onclick = () => document.body.classList.toggle('side-open');
+    const sideKey = 'mo_side_collapsed_' + b.user.id, wide = () => innerWidth > 900;      // R-G_CORE-60: the push-menu state is remembered per user (this browser)
+    try { if (wide() && localStorage.getItem(sideKey) === '1') document.body.classList.add('side-collapsed'); } catch (e) {}
+    $('#btnSide').onclick = () => { if (!wide()) return document.body.classList.toggle('side-open'); const c = document.body.classList.toggle('side-collapsed'); try { localStorage.setItem(sideKey, c ? '1' : '0'); } catch (e) {} };
+    if ($('#btnFull')) $('#btnFull').onclick = () => { try { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); } catch (e) {} };
+    if (!$('#toTop')) { const t = document.createElement('button'); t.id = 'toTop'; t.className = 'btn sm'; t.title = 'Back to top'; t.textContent = '↑'; t.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:30;display:none;border-radius:50%;width:38px;height:38px;padding:0;box-shadow:var(--shadow-lg)';
+      document.body.appendChild(t); addEventListener('scroll', () => { t.style.display = scrollY > 50 ? '' : 'none'; }, { passive: true }); t.onclick = () => scrollTo({ top: 0, behavior: 'smooth' }); }
     wireSearch();
     $('#brand').onclick = () => go('#/home');
     $('#btnCreate').onclick = () => openCreate();
@@ -170,11 +176,16 @@
   }
   const ICONS = { Home: 'home', Research: 'search', Buying: 'buy', Selling: 'sell', Money: 'money', Dispatch: 'truck', Documents: 'docs', Reports: 'reports', Setup: 'setup', Work: 'work' };
   const secIcon = n => ICONS[n] || (/Warehouse/.test(n) ? 'stock' : /Products/.test(n) ? 'file' : /Returns/.test(n) ? 'undo' : /Month/.test(n) ? 'audit' : /Partners/.test(n) ? 'partners' : /People/.test(n) ? 'people' : /Import/.test(n) ? 'import' : 'file');
+  /** R-G_CORE-55 current item: the exact address, else the longest item address the current one starts with. */
+  function currentItem() { const items = S.boot.menu.flatMap(x => x.items).filter(i => !i.soon), r = S.route || '', base = u => u.split('?')[0];
+    const hit = items.find(i => i.route === r) || items.filter(i => base(i.route).length > 2 && base(r).startsWith(base(i.route)))
+      .sort((a, b) => base(b.route).length - base(a.route).length || a.route.length - b.route.length)[0];      // longest path wins; same path → the item without extra filters
+    return hit ? hit.id : null; }
   function drawSide() {
-    const open = S.openSec;
+    const open = S.openSec, cur = currentItem();
     $('#side').innerHTML = `<div class="nav-label">Menu <span class="faint" style="text-transform:none;letter-spacing:0">· in the order of the work</span></div>` +
       S.boot.menu.map(s => `<div class="nav-sec ${open === s.id ? 'open' : ''}" data-sec="${s.id}"><div class="nav-head has">${ic(secIcon(s.name))}${esc(s.name)}<span class="faint small" style="margin-left:6px">${s.items.length}</span>${ic('chev', 'ico chev')}</div>
-        <div class="nav-items">${s.items.map(i => `<div class="nav-item lv1 ${S.route === i.route ? 'active' : ''}"><a class="lbl" href="${esc(i.route)}">${esc(i.name)}</a></div>`).join('')}</div></div>`).join('');
+        <div class="nav-items">${s.items.map(i => i.soon ? `<div class="nav-item lv1" title="Planned – not built yet"><span class="lbl" style="opacity:.55;cursor:default">${esc(i.name)} <span class="chip plain" style="font-size:10px">Soon</span></span></div>` : `<div class="nav-item lv1 ${i.id === cur ? 'active' : ''}"><a class="lbl" href="${esc(i.route)}">${esc(i.name)}</a></div>`).join('')}</div></div>`).join('');
     $$('#side .nav-head').forEach(h => h.onclick = () => { const id = +h.parentNode.dataset.sec; S.openSec = S.openSec === id ? null : id; drawSide(); });
   }
 
