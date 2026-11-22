@@ -21,13 +21,14 @@ class AccCompliance
         'SA_POA2' => ['Self Assessment payment on account 2', 'PERSONAL', 'HMRC', 'PAY', '14,7,1'],
     ];
 
-    /** add_months: the same day n months later, clamped to the month end (31 Jan + 1 → 28 / 29 Feb). */
+    /** add_months (Oracle / old tool): the same day n months later, clamped to the month end; a month-end date stays a month end (30 Apr + 1 → 31 May). */
     public static function addMonths(string $date, int $n): string
     {
         [$y, $m, $d] = array_map('intval', explode('-', substr($date, 0, 10)));
+        $endOfMonth = $d === (int) date('t', mktime(0, 0, 0, $m, 1, $y));
         $t = $m - 1 + $n; $y += intdiv($t, 12); $t %= 12; if ($t < 0) { $t += 12; $y--; }
         $last = (int) date('t', mktime(0, 0, 0, $t + 1, 1, $y));
-        return sprintf('%04d-%02d-%02d', $y, $t + 1, min($d, $last));
+        return sprintf('%04d-%02d-%02d', $y, $t + 1, $endOfMonth ? $last : min($d, $last));
     }
 
     private static function plusDays(string $d, int $n): string { return date('Y-m-d', strtotime("$d " . ($n >= 0 ? '+' : '') . "$n days")); }
@@ -106,6 +107,70 @@ class AccCompliance
         return $out;
     }
 
+    /** R-ACC-4 VAT returns (only when VAT registered): [start, end, due]. */
+    public static function vatRows(object $co, ?object $s, string $ws, string $we): array
+    {
+        if (! $s || ! (int) $s->vat_registered) return [];
+        $reg = $s->vat_reg_date ? substr((string) $s->vat_reg_date, 0, 10) : self::inc($co); $freq = strtoupper((string) ($s->vat_frequency ?: 'Q')); $out = [];
+        if ($freq === 'A') {
+            if (! ((int) $s->year_end_day && (int) $s->year_end_month) && empty($co->file_return_date)) return [];      // only when a year end is known
+            foreach (self::periods($co, $s, $we) as $p) { $st = self::plusDays(self::addMonths($p['end'], -12), 1); $out[] = [$st, $p['end'], self::addMonths($p['end'], 2)]; }
+        } else {
+            $stagger = (int) $s->vat_stagger; if ($stagger < 1 || $stagger > 3) $stagger = 1;
+            $y = (int) substr($ws, 0, 4) - 1; $m = 1;
+            while (true) {
+                $end = date('Y-m-t', mktime(0, 0, 0, $m, 1, $y)); if ($end > $we) break;
+                if ($freq === 'M' || ((($m - $stagger - 2) % 3) + 3) % 3 === 0) {
+                    $st = $freq === 'M' ? sprintf('%04d-%02d-01', $y, $m) : self::plusDays(self::addMonths($end, -3), 1);
+                    $out[] = [$st, $end, self::plusDays(self::addMonths($end, 1), 7)];
+                }
+                if (++$m > 12) { $m = 1; $y++; }
+            }
+        }
+        return array_values(array_filter(array_map(fn ($r) => $reg && $r[0] < $reg ? [$reg, $r[1], $r[2]] : $r, $out), fn ($r) => ! $reg || $r[1] >= $reg));      // before registration skipped, a start before it clipped
+    }
+
+    /** R-ACC-6 PAYE (only when PAYE registered): [type, start, end, due]. */
+    public static function payeRows(object $co, ?object $s, string $ws, string $we): array
+    {
+        if (! $s || ! (int) $s->paye_registered) return [];
+        $start = $s->paye_start_date ? substr((string) $s->paye_start_date, 0, 10) : (self::inc($co) ?: $ws); $lo = max($start, $ws); $out = [];
+        $y = (int) substr($lo, 0, 4); $m = (int) substr($lo, 5, 2) - 1; if ($m < 1) { $m = 12; $y--; }
+        for ($i = 0; $i < 60; $i++) {
+            $end = sprintf('%04d-%02d-05', $y, $m);
+            if ($end > $we) break;
+            if ($end >= $start) {
+                $due22 = sprintf('%04d-%02d-22', $y, $m); $prev6 = self::plusDays(self::addMonths($end, -1), 1);
+                if ((int) $s->paye_quarterly) { if (in_array($m, [1, 4, 7, 10], true)) $out[] = ['PAYE_PAY', self::plusDays(self::addMonths($end, -3), 1), $end, $due22]; }
+                else $out[] = ['PAYE_PAY', $prev6, $end, $due22];
+                if ((int) $s->eps_required) $out[] = ['PAYE_EPS', $prev6, $end, sprintf('%04d-%02d-19', $y, $m)];
+            }
+            if (++$m > 12) { $m = 1; $y++; }
+        }
+        $freq = strtoupper((string) ($s->pay_frequency ?: 'M'));
+        if ($freq === 'M') {
+            $day = (int) $s->payday_day ?: 28; $day = max(1, min(31, $day)); $y = (int) substr($lo, 0, 4); $m = (int) substr($lo, 5, 2);
+            for ($i = 0; $i < 60; $i++) { $d = self::yeDate($y, $m, $day); if ($d > $we) break; if ($d >= $lo) $out[] = ['PAYE_FPS', null, null, $d]; if (++$m > 12) { $m = 1; $y++; } }
+        } elseif ($s->first_payday) {
+            $step = $freq === 'W' ? 7 : 28; $d = substr((string) $s->first_payday, 0, 10);
+            for ($i = 0; $i < 400 && $d <= $we; $i++, $d = self::plusDays($d, $step)) if ($d >= $lo) $out[] = ['PAYE_FPS', null, null, $d];
+        }
+        return $out;
+    }
+
+    /** R-ACC-7 Self Assessment of a person: [type, start, end, due] for tax years y = 6 Apr y → 5 Apr y+1. */
+    public static function saRows(?object $ps, string $ws, string $we): array
+    {
+        if (! $ps || ! (int) $ps->sa_registered) return [];
+        $from = (int) substr($ws, 0, 4) - 2; if ((int) $ps->first_tax_year > 1990) $from = max($from, (int) $ps->first_tax_year); $out = [];
+        for ($y = $from; $y <= (int) substr($we, 0, 4); $y++) {
+            $st = "$y-04-06"; $en = ($y + 1) . '-04-05';
+            $out[] = ['SA_RETURN', $st, $en, ($y + 2) . '-01-31'];
+            if ((int) $ps->poa_required) { $out[] = ['SA_POA1', $st, $en, ($y + 1) . '-01-31']; $out[] = ['SA_POA2', $st, $en, ($y + 1) . '-07-31']; }
+        }
+        return array_values(array_filter($out, fn ($r) => $r[3] >= $ws && $r[1] <= $we));      // person rows: due ≥ window start, start ≤ window end
+    }
+
     /** R-ACC-8 the window: today − history_months (1–72, default 12) → today + horizon_months (3–36, default 15). */
     public static function window(int $ent, ?string $today = null): array
     {
@@ -124,6 +189,8 @@ class AccCompliance
             $rows[] = ['CT600', $p['start'], $p['end'], self::ctPeriods($p)[0]['ct600']];
         }
         foreach (self::confirmationStatements($co, $s, $ws, $we) as $c) $rows[] = ['CONF_STMT', $c['start'], $c['end'], $c['due']];
+        foreach (self::vatRows($co, $s, $ws, $we) as [$a, $b, $d]) $rows[] = ['VAT_RETURN', $a, $b, $d];      // R-ACC-4
+        foreach (self::payeRows($co, $s, $ws, $we) as $r) $rows[] = $r;      // R-ACC-6
         $track = $s && $s->track_from ? substr((string) $s->track_from, 0, 10) : null;
         return array_values(array_filter($rows, fn ($r) => $r[3] >= $ws && ($r[2] === null || $r[2] <= $we) && (! $track || $r[3] >= $track)));
     }
@@ -141,6 +208,15 @@ class AccCompliance
                 $n += DB::table('acc_obligations')->insertOrIgnore(['fk_id_ent' => $ent, 'entity_type' => 'COMPANY', 'entity_id' => $co->id, 'fk_type' => $t->id, 'type_code' => $code, 'area' => self::TYPES[$code][1], 'completion' => $t->completion,
                     'period_start' => $start, 'period_end' => $end, 'due_date' => $due, 'status' => 'PENDING', 'f_done' => 0, 'f_auto' => 1, 'gen_key' => 'C' . $co->id . '|' . $code . '|' . ($end ?: $due),
                     'title' => self::TYPES[$code][0] . ($end ? ' – period to ' . date('d M Y', strtotime($end)) : ''), 'fk_assigned' => (int) ($s->fk_accountant ?? 0), 'created_at' => now()]);
+            }
+        }
+        if (! $company) foreach (DB::table('acc_person_settings')->whereIn('fk_id_ent', [$ent, 0])->where('sa_registered', 1)->get() as $ps) {      // R-ACC-7 people (not filtered by track_from)
+            [$ws, $we] = self::window($ent, $today);
+            foreach (self::saRows($ps, $ws, $we) as [$code, $start, $end, $due]) {
+                $t = $types[$code] ?? null; if (! $t) continue;
+                $n += DB::table('acc_obligations')->insertOrIgnore(['fk_id_ent' => $ent, 'entity_type' => 'PERSON', 'entity_id' => $ps->fk_id_account, 'fk_type' => $t->id, 'type_code' => $code, 'area' => self::TYPES[$code][1], 'completion' => $t->completion,
+                    'period_start' => $start, 'period_end' => $end, 'due_date' => $due, 'status' => 'PENDING', 'f_done' => 0, 'f_auto' => 1, 'gen_key' => 'P' . $ps->fk_id_account . '|' . $code . '|' . $end,
+                    'title' => self::TYPES[$code][0] . ' ' . substr($start, 0, 4) . '-' . substr($end, 2, 2), 'fk_assigned' => (int) ($ps->fk_accountant ?? 0), 'created_at' => now()]);
             }
         }
         DB::table('acc_settings')->updateOrInsert(['fk_id_ent' => $ent, 'setting_key' => 'last_generated_at'], ['setting_value' => now()->format('Y-m-d H:i:s'), 'updated_at' => now()]);
@@ -166,6 +242,59 @@ class AccCompliance
         return "$gone removed, $add added";
     }
 
+    public const STATUSES = ['PENDING' => 'Not started', 'IN_PROGRESS' => 'In progress', 'FILED' => 'Filed', 'PAID' => 'Paid', 'NOT_REQUIRED' => 'Not required'];
+
+    /** R-ACC-10 done: NOT_REQUIRED always; FILE → FILED or PAID; PAY / FILE_PAY → PAID. */
+    public static function isDone(string $completion, string $status): bool
+    {
+        if ($status === 'NOT_REQUIRED') return true;
+        return $completion === 'FILE' ? in_array($status, ['FILED', 'PAID'], true) : $status === 'PAID';
+    }
+
+    /**
+     * R-ACC-10 change an item. Status; FILED / PAID need a proof document first (improved). filed_date today when empty (not for PAY types), PAID → paid_date today when empty,
+     * filed_by set once. Due date and title only on manual items. Every change logged (field old → new).
+     */
+    public static function update(int $ent, int $id, array $d, object $u): array
+    {
+        return DB::transaction(function () use ($ent, $id, $d, $u) {
+            $o = DB::table('acc_obligations')->where('id', $id)->where('fk_id_ent', $ent)->lockForUpdate()->first() ?? throw new \InvalidArgumentException('Item not found.');
+            $ch = []; $today = date('Y-m-d');
+            if (isset($d['status'])) {
+                $st = strtoupper((string) $d['status']); if (! isset(self::STATUSES[$st])) throw new \InvalidArgumentException('Choose a status from the list.');
+                if (in_array($st, ['FILED', 'PAID'], true) && ! DB::table('acc_documents')->where('fk_id_obligation', $id)->where('f_deleted', 0)->exists()) throw new \InvalidArgumentException('Add the proof document first (the filing receipt or the payment proof).');
+                $ch['status'] = $st; $ch['f_done'] = self::isDone((string) $o->completion, $st) ? 1 : 0;
+                if (in_array($st, ['FILED', 'PAID'], true)) {
+                    if (! $o->filed_date && $o->completion !== 'PAY') $ch['filed_date'] = $today;
+                    if (! (int) $o->filed_by) $ch['filed_by'] = $u->id;
+                    if ($st === 'PAID' && ! $o->paid_date) $ch['paid_date'] = $today;
+                }
+            }
+            foreach (['submission_ref' => 120, 'notes' => 2000] as $k => $max) if (array_key_exists($k, $d)) $ch[$k] = mb_substr(trim((string) $d[$k]), 0, $max);
+            foreach (['amount_due', 'amount_paid'] as $k) if (array_key_exists($k, $d) && $d[$k] !== '' && $d[$k] !== null) $ch[$k] = round((float) $d[$k], 2);
+            if (array_key_exists('fk_assigned', $d)) $ch['fk_assigned'] = (int) $d['fk_assigned'];
+            foreach (['due_date', 'title'] as $k) if (array_key_exists($k, $d)) { if ((int) $o->f_auto) throw new \InvalidArgumentException('The due date and the title are worked out by the rules – they can be changed only on items added by hand.'); $ch[$k] = $k === 'title' ? mb_substr(trim((string) $d[$k]), 0, 200) : $d[$k]; }
+            $ch = array_filter($ch, fn ($v, $k) => (string) ($o->$k ?? '') !== (string) $v, ARRAY_FILTER_USE_BOTH);
+            if (! $ch) return ['message' => 'Nothing changed.', 'done' => (bool) $o->f_done];
+            DB::table('acc_obligations')->where('id', $id)->update($ch + ['updated_by' => $u->id, 'updated_at' => now()]);
+            foreach ($ch as $k => $v) DB::table('acc_obligation_log')->insert(['fk_id_obligation' => $id, 'action' => 'UPDATE', 'details' => "$k: " . ($o->$k ?? '') . ' → ' . $v, 'fk_id_account' => $u->id, 'created_at' => now()]);
+            return ['message' => 'Saved.', 'done' => (bool) ($ch['f_done'] ?? $o->f_done)];
+        });
+    }
+
+    /** A proof document on an item (pdf / image, at most 10 MB, stored with a random name). */
+    public static function addDocument(int $ent, int $id, \Illuminate\Http\UploadedFile $f, object $u): int
+    {
+        $o = DB::table('acc_obligations')->where('id', $id)->where('fk_id_ent', $ent)->first() ?? throw new \InvalidArgumentException('Item not found.');
+        $ext = strtolower($f->getClientOriginalExtension());
+        if (! in_array($ext, ['pdf', 'jpg', 'jpeg', 'png', 'webp'], true) || $f->getSize() > 10 * 1024 * 1024) throw new \InvalidArgumentException('Use a pdf, jpg, png or webp file of at most 10 MB.');
+        $name = bin2hex(random_bytes(16)) . '.' . $ext; \Illuminate\Support\Facades\Storage::disk('local')->put('acc_documents/' . $name, (string) file_get_contents($f->getRealPath()));
+        $doc = (int) DB::table('acc_documents')->insertGetId(['fk_id_ent' => $ent, 'entity_type' => $o->entity_type, 'entity_id' => $o->entity_id, 'fk_id_obligation' => $id, 'doc_title' => mb_substr($f->getClientOriginalName(), 0, 200),
+            'stored_name' => $name, 'orig_name' => mb_substr($f->getClientOriginalName(), 0, 200), 'mime' => mb_substr((string) $f->getMimeType(), 0, 100), 'size_bytes' => (int) $f->getSize(), 'f_deleted' => 0, 'uploaded_by' => $u->id, 'created_at' => now()]);
+        DB::table('acc_obligation_log')->insert(['fk_id_obligation' => $id, 'action' => 'DOCUMENT', 'details' => 'proof added: ' . mb_substr($f->getClientOriginalName(), 0, 150), 'fk_id_account' => $u->id, 'created_at' => now()]);
+        return $doc;
+    }
+
     public static function seedTypes(): void
     {
         $i = 0;
@@ -181,9 +310,9 @@ class AccCompliance
     {
         $last = DB::table('acc_settings')->where('fk_id_ent', $ent)->where('setting_key', 'last_generated_at')->value('setting_value');      /* the page asks for a run (POST) when stale – a GET never writes */
         $soon = (int) (DB::table('acc_settings')->whereIn('fk_id_ent', [$ent, 0])->where('setting_key', 'due_soon_days')->value('setting_value') ?? 14); $today = date('Y-m-d');
-        $rows = DB::table('acc_obligations as o')->leftJoin('cat_company_house as c', fn ($j) => $j->on('c.id', '=', 'o.entity_id')->where('o.entity_type', 'COMPANY'))->where('o.fk_id_ent', $ent)
-            ->when(! empty($f['company']), fn ($q) => $q->where('o.entity_id', (int) $f['company']))->orderBy('o.due_date')->limit(500)->get(['o.*', 'c.company_name'])
-            ->map(fn ($o) => ['id' => (int) $o->id, 'company' => $o->company_name, 'type' => $o->type_code, 'title' => $o->title, 'period' => $o->period_start ? $o->period_start . ' → ' . $o->period_end : '', 'due' => $o->due_date,
+        $rows = DB::table('acc_obligations as o')->leftJoin('cat_company_house as c', fn ($j) => $j->on('c.id', '=', 'o.entity_id')->where('o.entity_type', 'COMPANY'))->leftJoin('t_account as a', fn ($j) => $j->on('a.id', '=', 'o.entity_id')->where('o.entity_type', 'PERSON'))->where('o.fk_id_ent', $ent)
+            ->when(! empty($f['company']), fn ($q) => $q->where('o.entity_id', (int) $f['company']))->orderBy('o.due_date')->limit(500)->get(['o.*', 'c.company_name', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as person")])
+            ->map(fn ($o) => ['id' => (int) $o->id, 'company' => $o->company_name ?: $o->person, 'auto' => (bool) $o->f_auto, 'docs' => DB::table('acc_documents')->where('fk_id_obligation', $o->id)->where('f_deleted', 0)->count(), 'type' => $o->type_code, 'title' => $o->title, 'period' => $o->period_start ? $o->period_start . ' → ' . $o->period_end : '', 'due' => $o->due_date,
                 'status' => $o->status, 'shown' => (int) $o->f_done ? $o->status : ($o->due_date < $today ? 'OVERDUE' : ($o->due_date <= date('Y-m-d', strtotime("+$soon days")) ? 'DUE_SOON' : 'UPCOMING'))])->all();
         return ['stale' => ! $last || strtotime((string) $last) < time() - 6 * 3600, 'last_run' => $last, 'rows' => $rows, 'companies' => DB::table('cat_company_house')->orderBy('company_name')->limit(500)->get(['id', 'company_name'])];
     }

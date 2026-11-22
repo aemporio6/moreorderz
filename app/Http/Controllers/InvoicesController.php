@@ -16,6 +16,8 @@ class InvoicesController extends Controller
     /** R-ACC-1 … 9 compliance calendar. */
     public function compliance(Request $r) { Perm::need($r->user(), 'money.SEE'); return \App\Services\AccCompliance::page($this->ent(), $r->only(['company'])); }
     public function complianceGenerate(Request $r) { Perm::need($r->user(), 'money.SEE'); $n = \App\Services\AccCompliance::generate($this->ent()); return ['added' => $n, 'message' => "$n new item(s)."]; }
+    public function complianceUpdate(Request $r, int $id) { Perm::need($r->user(), 'money.EDIT'); return $this->run(fn () => \App\Services\AccCompliance::update($this->ent(), $id, $r->only(['status', 'submission_ref', 'notes', 'amount_due', 'amount_paid', 'fk_assigned', 'due_date', 'title']), $r->user())); }
+    public function complianceDocument(Request $r, int $id) { Perm::need($r->user(), 'money.EDIT'); if (! $r->hasFile('file')) return response()->json(['message' => 'Choose the file.'], 422); return $this->run(fn () => ['id' => \App\Services\AccCompliance::addDocument($this->ent(), $id, $r->file('file'), $r->user()), 'message' => 'Proof added.']); }
     public function complianceRebuild(Request $r, int $company) { Perm::need($r->user(), 'money.EDIT'); return ['message' => \App\Services\AccCompliance::rebuild($this->ent(), $company)]; }
     public function index(Request $r) { Perm::need($r->user(), 'money.SEE'); return Docs::page($this->ent(), $r->only(['period', 'status'])); }
     public function show(Request $r, int $id)

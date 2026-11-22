@@ -12,9 +12,9 @@ class AccComplianceTest extends TestCase
 {
     private function co(array $x = []): object { $id = DB::table('cat_company_house')->insertGetId(RecordService::fillNotNull('cat_company_house', $x + ['company_name' => 'Test Trading Ltd', 'fk_id_ent' => 1, 'f_active' => 1])); return DB::table('cat_company_house')->where('id', $id)->first(); }
 
-    public function test_add_months_clamps_to_month_end(): void
+    public function test_add_months_clamps_and_keeps_month_end(): void
     {
-        $this->assertSame(['2026-02-28', '2024-02-29', '2025-11-28', '2023-05-31'], [C::addMonths('2025-05-31', 9), C::addMonths('2023-05-31', 9), C::addMonths('2026-02-28', -3), C::addMonths('2024-05-31', -12)]);
+        $this->assertSame(['2026-02-28', '2024-02-29', '2025-11-30', '2023-05-31'], [C::addMonths('2025-05-31', 9), C::addMonths('2023-05-31', 9), C::addMonths('2026-02-28', -3), C::addMonths('2024-05-31', -12)]);
     }
 
     public function test_r1_r2_r3_year_end_periods_accounts_and_ct(): void
