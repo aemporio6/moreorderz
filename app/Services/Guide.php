@@ -81,6 +81,8 @@ class Guide
             else $next[] = ['text' => ($late ? 'Late: ' : 'To do: ') . $t->title . ($t->owner ? ' – ' . $t->owner : '') . ($t->due_at ? ' · due ' . date('j M', strtotime((string) $t->due_at)) : '') . ($t->source === 'RULE' ? ' (closes by itself when it is fixed)' : ''),
                 'label' => $t->fix_url ? 'Fix' : 'Open tasks', 'url' => $t->fix_url ?: '#/tasks?scope=all', 'late' => $late];
         }
+        // 4b. R-G_CORE-4 improved: tasks stuck on this supplier / forwarder (a party record)
+        if ($table === 't_account') foreach (self::stuckOnParty($id) as $st) $blocked[] = ['why' => "Task {$st['ref']} \"{$st['title']}\" is stuck on this " . strtolower(DB::table('tasks')->where('id', $st['id'])->value('stuck_on_type')) . " since {$st['since']}.", 'label' => 'Open the task', 'url' => $st['link']];
         // 5. where it stands in its status list, and what comes after
         foreach ($fields as $f) {
             if (! in_array($f['column_name'], ['status', 'e_status', 'stage'], true) || $f['type'] !== 'select' || ! array_key_exists($f['column_name'], $row)) continue;
@@ -164,7 +166,8 @@ class Guide
     public static function stuck(int $taskId, object $u, string $type, ?int $onId, ?string $text): void
     {
         $t = DB::table('tasks')->where('id', $taskId)->first() ?? abort(404);
-        if ((int) $t->owner_user_id !== (int) $u->id && ! Perm::has($u, 'work.taskStatus_may')) abort(403, 'This task belongs to someone else.');
+        $cover = $t->owner_user_id && in_array((int) $t->owner_user_id, TaskVisibility::covered((int) $u->id), true);      // R-G_CORE-4 / 19: owner, boss or the cover
+        if ((int) $t->owner_user_id !== (int) $u->id && ! $cover && ! Perm::has($u, 'work.taskStatus_may')) abort(403, 'This task belongs to someone else.');
         if (in_array($t->status, ['DONE', 'APPROVED', 'CANCELLED'], true)) throw new \InvalidArgumentException('This task is closed.');
         if (! isset(self::STUCK_ON[$type])) throw new \InvalidArgumentException('Choose what the task is stuck on.');
         $text = trim((string) $text); if (mb_strlen($text) > 255) throw new \InvalidArgumentException('Keep the text to 255 characters.');
@@ -176,6 +179,7 @@ class Guide
             $name = $onId ? DB::table('mp_profiles')->where('id', $onId)->value(Registry::labelColumn('mp_profiles') ?: 'id') : null;
             if (! $name && $text === '') throw new \InvalidArgumentException('Refused: name the marketplace it is stuck on.');
         } else {
+            if ($onId && $type !== 'OTHER' && ! in_array($onId, array_column(self::parties($type, (int) $t->fk_id_ent ?: null), 0), true)) throw new \InvalidArgumentException('Refused: pick the ' . strtolower($type) . ' from the list of ' . strtolower($type) . 's (party master).');
             $name = $onId && $type !== 'OTHER' ? trim((string) DB::table('t_account')->where('id', $onId)->selectRaw("CONCAT_WS(' ', first_name, sur_name) as n")->value('n')) : null;
             if (! $name && $text === '') throw new \InvalidArgumentException('Refused: name the ' . strtolower($type) . ' it is stuck on.');
         }
@@ -186,6 +190,24 @@ class Guide
             Audit::log('tasks', $t->id, 'UPDATE', ['status' => [$t->status, 'STUCK'], 'stuck_on' => [null, $type]]);
             if ($type === 'USER') Notify::push((int) $onId, 'TASK', ($u->display_name ?: $u->login_id) . ' is stuck on you: ' . $t->title . ($text !== '' ? ' – ' . $text : ''), '#/tasks?scope=stuck_on_me', (int) $t->id);
         });
+    }
+
+    /** R-G_CORE-4 picker: suppliers / forwarders from the party master (party role SUPPLIER / FORWARDER), marketplaces from the marketplace profiles. [[id, name]] */
+    public static function parties(string $type, ?int $ent = null): array
+    {
+        if ($type === 'MARKETPLACE') return DB::table('mp_profiles')->when($ent && \Illuminate\Support\Facades\Schema::hasColumn('mp_profiles', 'fk_id_ent'), fn ($q) => $q->where('fk_id_ent', $ent))->orderBy('id')->limit(500)->get()
+            ->map(fn ($m) => [(int) $m->id, (string) ($m->{Registry::labelColumn('mp_profiles') ?: 'id'} ?? $m->id)])->all();
+        if (! in_array($type, ['SUPPLIER', 'FORWARDER'], true)) return [];
+        return DB::table('t_account as a')->join('t_account_in_types as at', 'at.fk_id_account', '=', 'a.id')->join('cat_account_types as ty', 'ty.id', '=', 'at.fk_id_account_type')
+            ->whereRaw('UPPER(ty.role_code) = ?', [$type])->where('a.f_active', 1)->where('at.f_active', 1)->when($ent, fn ($q) => $q->where('a.fk_id_ent', $ent))
+            ->selectRaw("a.id, TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as n")->distinct()->orderBy('n')->limit(500)->get()->map(fn ($a) => [(int) $a->id, (string) $a->n])->all();
+    }
+
+    /** R-G_CORE-4 improved: open tasks stuck on a supplier / forwarder (shown on the party's page). */
+    public static function stuckOnParty(int $accountId): array
+    {
+        return DB::table('tasks')->where('status', 'STUCK')->whereIn('stuck_on_type', ['SUPPLIER', 'FORWARDER'])->where('stuck_on_id', $accountId)->orderBy('stuck_since')
+            ->get(['id', 'title', 'stuck_since', 'stuck_on_type'])->map(fn ($t) => ['id' => (int) $t->id, 'ref' => TaskFlow::ref((int) $t->id), 'title' => $t->title, 'since' => substr((string) $t->stuck_since, 0, 10), 'link' => '#/task/' . $t->id])->all();
     }
 
     /** Leaving STUCK (start again, or done) clears the four stuck fields. */

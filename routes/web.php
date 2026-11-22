@@ -97,6 +97,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('permissions/request', [AdminController::class, 'permRequest']);
         Route::post('permissions/requests/{id}', [AdminController::class, 'permDecide'])->whereNumber('id');
         Route::get('permissions/why', [AdminController::class, 'permWhy']);
+        Route::get('permissions/migration', [AdminController::class, 'permMigration']);
+        Route::post('permissions/migration', [AdminController::class, 'permMigrationApply']);
         Route::post('permissions/view-as', [AdminController::class, 'permViewAs']);
         Route::post('users/{id?}', [AdminController::class, 'saveUser'])->whereNumber('id');
         Route::post('users/{id}/two-step-off', [AdminController::class, 'twoStepOff'])->whereNumber('id');

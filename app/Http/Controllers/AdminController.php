@@ -483,6 +483,20 @@ class AdminController extends Controller
         return ['allowed' => P::has($u, $d['code']), 'why' => P::explain($u, $d['code']), 'label' => P::label($d['code'])];
     }
 
+    /** R-G_CORE-61 dry-run: the old rights (roles × pages, personal GRANTED / REVOKED) against the new rights, per role and person. */
+    public function permMigration(Request $r)
+    {
+        P::need($r->user(), 'admin.permissions');
+        return \App\Services\RightsMigration::report();
+    }
+
+    /** Owner only: write the differences into the new rights, then the report again. */
+    public function permMigrationApply(Request $r)
+    {
+        abort_unless($r->user()->role_code === 'OWNER', 403, 'Only the Owner can move the old rights.');
+        return \App\Services\RightsMigration::apply((int) $r->user()->id);
+    }
+
     /** The Owner looks at the tool as another role (read-only); empty role = back to himself. */
     public function permViewAs(Request $r)
     {

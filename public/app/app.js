@@ -1985,8 +1985,8 @@
     on('approve', () => form('Approve the task', 'Score = on time + evidence + quality − rework, frozen now.', [{ name: 'quality', label: 'Quality', required: true, value: 'GOOD', options: [['EXCELLENT', 'Excellent (4)'], ['GOOD', 'Good (3)'], ['OK', 'OK (2)'], ['POOR', 'Poor (1)']] }], `tasks/${id}/approve`, null, 'Approve'));
     on('approvegood', () => post(`tasks/${id}/approve`, { quality: 'GOOD' }));
     on('rework', () => form('Send back for rework', 'Each rework costs 10 points (−10).', [{ name: 'reason', label: 'What must be redone?', required: true }], `tasks/${id}/rework`, null, 'Send back'));
-    on('stuck', () => form('I am stuck', 'Say what this task waits on.', [{ name: 'type', label: 'Stuck on', required: true, value: 'USER', options: Object.entries(d.stuck_on) }, { name: 'on_id', label: 'Person', options: [['', '—']].concat(p.people.map(x => [x.id, x.name])) }, { name: 'text', label: 'Name and what you need' }],
-      `tasks/${id}/stuck`, v => ({ type: v.type, on_id: v.type === 'USER' && v.on_id ? +v.on_id : null, text: v.text || null }), 'Mark as stuck'));
+    on('stuck', () => form('I am stuck', 'Say what this task waits on.', [{ name: 'type', label: 'Stuck on', required: true, value: 'USER', options: Object.entries(d.stuck_on) }, { name: 'on_id', label: 'Person', options: [['', '—']].concat(p.people.map(x => [x.id, x.name])) }, { name: 'party', label: 'Supplier / forwarder / marketplace (from the party list)', options: [['', '— or type it below']].concat(...Object.values(d.parties || {})) }, { name: 'text', label: 'Name and what you need' }],
+      `tasks/${id}/stuck`, v => ({ type: v.type, on_id: v.type === 'USER' && v.on_id ? +v.on_id : (v.party && v.party.split(':')[0] === v.type ? +v.party.split(':')[1] : null), text: v.text || null }), 'Mark as stuck'));
     on('reassign', () => form('Reassign', 'Least loaded first · open / weekly limit.', [{ name: 'owner', label: 'New owner', required: true, options: [['', 'Choose…']].concat(p.people.map(x => [x.id, `${x.name} · ${x.open}/${x.limit}${x.absent ? ' · absent' : ''}`])) }, { name: 'reason', label: 'Reason', required: true }], `tasks/${id}/reassign`, v => ({ owner: +v.owner, reason: v.reason }), 'Reassign'));
     on('due', () => form('Change due date', `${p.due_changes} of ${p.due_limit} used.`, [{ name: 'date', label: 'New due date', type: 'date', required: true, value: p.due }, { name: 'reason', label: 'Reason', required: true }], `tasks/${id}/due`, null, 'Move'));
     on('askdue', () => form('Ask for a new due date', 'The person who assigned it decides.', [{ name: 'date', label: 'New due date', type: 'date', required: true, value: p.due }, { name: 'reason', label: 'Reason', required: true }], `tasks/${id}/due-request`, null, 'Ask'));
@@ -2771,7 +2771,7 @@
     busy(true); let d; try { d = await api('permissions' + (PM.forms ? '?forms=1' : '')); } finally { busy(false); }
     const groups = [...new Set(d.rights.map(x => x.group))], roleOf = k => d.roles.find(r => r.code === k);
     const shown = d.roles.filter(r => r.active && (!PM.role || r.code === PM.role));
-    const tabs = [['roles', 'Roles and rights'], ['people', 'People'], ['fields', 'Fields'], ['requests', `Requests${d.requests.filter(q => q.status === 'OPEN').length ? ' · ' + d.requests.filter(q => q.status === 'OPEN').length : ''}`], ['viewas', 'View as']];
+    const tabs = [['roles', 'Roles and rights'], ['people', 'People'], ['fields', 'Fields'], ['requests', `Requests${d.requests.filter(q => q.status === 'OPEN').length ? ' · ' + d.requests.filter(q => q.status === 'OPEN').length : ''}`], ['viewas', 'View as'], ['migration', 'Old rights check']];
     const opt = (list, val, first) => (first ? `<option value="">${first}</option>` : '') + list.map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(val) ? 'selected' : ''}>${esc(l)}</option>`).join('');
     let body = '';
     if (PM.tab === 'roles') {
@@ -2809,6 +2809,16 @@
       body = `<div class="card"><div class="small muted" style="padding:12px 16px">When the tool refuses something, the person can press “Ask the Owner”. The requests land here. Granting gives that one right to that one person.</div><div class="tbl-wrap"><table class="t"><thead><tr><th>When</th><th>Person</th><th>Wants</th><th>Note</th><th>Status</th><th></th></tr></thead><tbody>
         ${d.requests.length ? d.requests.map(q => `<tr><td>${esc(String(q.created_at || '').slice(0, 16))}</td><td>${esc(q.display_name || q.login_id)}</td><td>${esc(q.label)}</td><td>${esc(q.note || '')}</td><td><span class="chip ${q.status === 'OPEN' ? 'warn' : q.status === 'GRANTED' ? 'done' : 'lock'}">${q.status === 'OPEN' ? 'Waiting' : q.status === 'GRANTED' ? 'Granted' : 'Refused'}</span>${q.decided_note ? ' <span class="small muted">' + esc(q.decided_note) + '</span>' : ''}</td>
           <td style="white-space:nowrap">${q.status === 'OPEN' ? `<button class="btn sm primary" data-pqg="${q.id}">Grant</button> <button class="btn sm" data-pqr="${q.id}">Refuse</button>` : ''}</td></tr>`).join('') : '<tr><td colspan="6" class="muted">No requests.</td></tr>'}</tbody></table></div></div>`;
+    }
+    if (PM.tab === 'migration') {      // R-G_CORE-61 dry-run report
+      let m; try { m = await api('permissions/migration'); } catch (e) { m = { message: e.message, roles: [], people: [], unmapped: [] }; }
+      const yn = v => v ? 'Yes' : 'No', dl = x => x.diff.length ? `<table class="tbl" style="margin-top:6px"><thead><tr><th>Old page</th><th>Form</th><th>Action</th><th>Old</th><th>New</th></tr></thead><tbody>${x.diff.map(f => `<tr><td>${esc(f.page)}</td><td>${esc(f.form || '—')}</td><td>${esc(f.action)}</td><td>${yn(f.old)}</td><td>${yn(f.new)}</td></tr>`).join('')}</tbody></table>` : '';
+      body = `<div class="card"><div class="card-b"><p style="margin-top:0">Dry run: the rights of the old program (role pages + each person's own Give / Take away) compared with the rights here, page by page. They must be equal before the switch.</p>
+        <p><b>${esc(m.message)}</b> ${m.checked != null ? `<span class="small muted">${m.old_rows} old rows · ${m.checked} checks · ${m.differences} differences</span>` : ''}</p>
+        ${m.roles.map(r => `<div style="margin:10px 0"><b>${esc(r.old_role)}</b> → ${esc(r.role || '—')} · ${r.pages} pages <span class="chip ${r.equal ? 'done' : 'err'}">${r.equal ? 'Equal' : r.diff.length + ' differences'}</span> ${r.note ? `<span class="small muted">${esc(r.note)}</span>` : ''}${dl(r)}</div>`).join('')}
+        ${m.people.map(p => `<div style="margin:10px 0"><b>${esc(p.user || '#' + p.account)}</b> (own changes) <span class="chip ${p.equal ? 'done' : 'err'}">${p.equal ? 'Equal' : p.diff.length + ' differences'}</span> ${p.note ? `<span class="small muted">${esc(p.note)}</span>` : ''}${dl(p)}</div>`).join('')}
+        ${m.unmapped.length ? `<p class="small">Old pages with no form here (not moved): ${m.unmapped.map(esc).join(', ')}</p>` : ''}
+        ${m.differences && S.boot.user.role === 'OWNER' ? '<button class="btn primary" id="pmApply">Apply – write the differences into the rights</button>' : ''}</div></div>`;
     }
     if (PM.tab === 'viewas') {
       body = `<div class="card"><div class="card-b"><p style="margin-top:0">See the tool exactly as a role sees it – menu, screens and buttons. While you view as another role <b>nothing can be changed</b>, so it is safe to click around.</p>
@@ -2871,6 +2881,7 @@
         async v => { v.grant = true; if (!v.until) delete v.until; const r = await api('permissions/requests/' + b.dataset.pqg, { method: 'POST', body: v }); re(); return r; }, 'Grant'));
       $$('#main [data-pqr]').forEach(b => b.onclick = () => miniForm('Refuse', '', [{ name: 'note', label: 'Reason', required: true }], async v => { v.grant = false; const r = await api('permissions/requests/' + b.dataset.pqr, { method: 'POST', body: v }); re(); return r; }, 'Refuse'));
     }
+    if ($('#pmApply')) $('#pmApply').onclick = async () => { busy(true); try { const r = await api('permissions/migration', { method: 'POST' }); toast(`${r.written} changes written. ${r.message}`); re(); } catch (e) { toast(e.message, 'err'); } finally { busy(false); } };
     if (PM.tab === 'viewas') {
       const sw = async role => { busy(true); try { await api('permissions/view-as', { method: 'POST', body: { role } }); location.reload(); } catch (e) { toast(e.message, 'err'); } finally { busy(false); } };
       $('#pvGo').onclick = () => sw($('#pvR').value); if ($('#pvBack')) $('#pvBack').onclick = () => sw('');

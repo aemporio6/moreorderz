@@ -404,7 +404,7 @@ class TaskActions
         }
         if (str_contains((string) $t->flags, 'REPEAT_BLOCKED')) $banners[] = ['REPEAT_BLOCKED', 'The next repeat of this task was not created because this one is still open. Close it and the next one appears.'];
         if ($p['waits_for'] && $p['waits_for']['blocked']) $banners[] = ['BLOCKED', "Blocked: waits for {$p['waits_for']['ref']} {$p['waits_for']['title']}. No reminders until it is approved."];
-        if ($t->status === 'STUCK') $banners[] = ['STUCK', 'Stuck since ' . substr((string) $t->stuck_since, 0, 10) . ' on ' . (Guide::STUCK_ON[$t->stuck_on_type] ?? 'something') . ': ' . ($t->stuck_on_type === 'USER' ? $name($t->stuck_on_id) : $t->stuck_on_text)];
+        if ($t->status === 'STUCK') $banners[] = ['STUCK', 'Stuck since ' . substr((string) $t->stuck_since, 0, 10) . ' on ' . ($t->stuck_on_type === 'USER' ? Guide::STUCK_ON['USER'] : ucfirst(strtolower((string) $t->stuck_on_type))) . ': ' . ($t->stuck_on_type === 'USER' ? $name($t->stuck_on_id) : $t->stuck_on_text)];
         if ($t->parent_task_id) $banners[] = ['SUBTASK', 'This is a subtask of ' . TaskFlow::ref((int) $t->parent_task_id) . ' – the parent is done when all its subtasks are approved.'];
         if ($t->owner_user_id && ($a = TaskOwner::absent((int) $t->owner_user_id))) { $c = TaskOwner::usable((int) $t->owner_user_id); $banners[] = ['ABSENT', self::name((int) $t->owner_user_id) . ' is away until ' . ($a->to_date ?: 'further notice') . ($c && $c !== (int) $t->owner_user_id ? ' – ' . self::name($c) . ' covers.' : ' and has no cover.')]; }
         $repeat = TaskRepeat::line($t);      // R-G_CORE-26 "weekly · Mon · next 2026-11-16" / "last one"
@@ -421,7 +421,7 @@ class TaskActions
             'score' => $t->status === 'APPROVED' && $t->score !== null ? ['final' => (float) $t->score, 'band' => TaskScore::band((float) $t->score)] : ($t->status === 'DONE' ? ['preview' => TaskScore::parts($t, 'GOOD')] : null),
             'checklist' => DB::table('task_checklist')->where('task_id', $id)->orderBy('sort')->get(['id', 'text', 'is_done', 'done_at']),
             'proof' => $ev, 'comments' => TaskComments::rows($id), 'people' => TaskComments::people((int) $t->fk_id_ent ?: null),
-            'history' => ($hx = TaskHistory::rows($id, $u, false))['rows'], 'history_total' => $hx['total'], 'stuck_on' => Guide::STUCK_ON, 'qualities' => array_keys(TaskScore::QUALITY)];
+            'history' => ($hx = TaskHistory::rows($id, $u, false))['rows'], 'history_total' => $hx['total'], 'stuck_on' => Guide::STUCK_ON, 'parties' => array_map(fn ($ty) => array_map(fn ($x) => [$ty . ':' . $x[0], Guide::STUCK_ON[$ty] . ' · ' . $x[1]], Guide::parties($ty, (int) $t->fk_id_ent ?: null)), ['SUPPLIER' => 'SUPPLIER', 'FORWARDER' => 'FORWARDER', 'MARKETPLACE' => 'MARKETPLACE']), 'qualities' => array_keys(TaskScore::QUALITY)];
     }
 
     /* ---------- the panel of one task ---------- */
