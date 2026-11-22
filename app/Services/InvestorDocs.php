@@ -57,6 +57,29 @@ class InvestorDocs
         return $series . '-' . str_pad((string) $n, 3, '0', STR_PAD_LEFT);
     }
 
+    /**
+     * R-D-83 investor item lines from the settled month (R-D-81 lines kept on the period): grouped by SKU + raw price, refunded lines apart
+     * ("Lost on refund: …", group RETURN – printed red), qty and amount × the investor's part, " (your share x%)" when a line is divided.
+     */
+    public static function itemLines(object $p, int $account): array
+    {
+        $calc = json_decode((string) $p->calc_json, true); if (empty($calc['lines'])) return [];
+        $g = [];
+        foreach ($calc['lines'] as $l) {
+            if (! in_array($account, $l['investors'], true)) continue;
+            $part = 1 / count($l['investors']); $key = ($l['refunded'] ? 'R' : 'I') . '|' . $l['sku'] . '|' . $l['raw'] . '|' . round($part, 4);
+            $g[$key] ??= ['ref' => $l['refunded'], 'sku' => $l['sku'], 'part' => $part, 'qty' => 0.0, 'amount' => 0.0];
+            $g[$key]['qty'] += $l['billed_qty'] * $part; $g[$key]['amount'] += $l['capital'] * $part;
+        }
+        $out = [];
+        foreach ($g as $x) {
+            if ($x['ref'] && $x['amount'] == 0.0) continue;
+            $name = (string) (DB::table('t_product_vendors')->where('SKU_VENDOR', $x['sku'])->value('product_name_vendor') ?: $x['sku']);
+            $out[] = [$x['ref'] ? 'RETURN' : 'ITEM', ($x['ref'] ? 'Lost on refund: ' : '') . $x['sku'] . ' ' . $name . ($x['part'] < 1 ? ' (your share ' . self::pct(100 * $x['part']) . '%)' : ''), round($x['qty'], 2), round($x['amount'], 2)];
+        }
+        return $out;
+    }
+
     /** R-D-83 generate the documents of a confirmed (settled) month. */
     public static function generate(int $ent, int $periodId, object $u): array
     {
@@ -85,8 +108,8 @@ class InvestorDocs
                 $type = (int) $iv->f_self ? 'SELF_SETTLEMENT' : 'INVESTOR'; if ($type === 'SELF_SETTLEMENT') $self = true;
                 if ($exists($type, (int) $iv->fk_id_investor_account)) continue;
                 $party = self::partyOf($ent, (int) $iv->fk_id_investor_account, 'INVESTOR');
-                $lines = [['ITEM', "Capital (raw cost) of the units sold - $shopName, $mon", (int) $iv->units, (float) $iv->capital],
-                    ['SHARE', 'Investor profit share ' . self::pct((float) $iv->weight_pct ?: (float) $p->investor_pct) . "% of Final Net Profit - $shopName, $mon", 1, (float) $iv->share_amount]];
+                $lines = array_merge(self::itemLines($p, (int) $iv->fk_id_investor_account) ?: [['ITEM', "Capital (raw cost) of the units sold - $shopName, $mon", (int) $iv->units, (float) $iv->capital]],
+                    [['SHARE', 'Investor profit share ' . self::pct((float) $p->investor_pct) . "% of Final Net Profit - $shopName, $mon", 1, (float) $iv->share_amount]]);
                 if ($type === 'SELF_SETTLEMENT') $lines = array_merge($lines, $ownerLines);
                 $make($type, $party, $owner, (int) $iv->fk_id_investor_account, $party->company_name ?: $party->display_name, $lines, $type === 'SELF_SETTLEMENT');
             }
@@ -237,6 +260,9 @@ class InvestorDocs
             'date' => $d->d_invoice, 'due' => $d->d_due, 'total' => (float) $d->total, 'paid' => (float) $d->amount_paid, 'status' => $d->status, 'badge' => self::badge($d), 'sent' => $d->sent_at, 'reference' => $d->reference])->all();
         $periods = DB::table('t_inv_periods as p')->leftJoin('t_branches as b', 'b.id', '=', 'p.fk_id_branch')->where('p.fk_id_ent', $ent)->orderByDesc('p.d_to')->limit(60)->get(['p.id', 'p.status', 'p.d_to', 'b.shop_name'])
             ->map(fn ($p) => ['id' => (int) $p->id, 'name' => ($p->shop_name ?: 'Shop') . ' · ' . date('M Y', strtotime((string) $p->d_to)), 'status' => $p->status, 'documents' => DB::table('t_invoices')->where('fk_id_period', $p->id)->whereNotIn('status', ['CANCELLED', 'CREDITED'])->count()])->all();
-        return ['rows' => $rows, 'periods' => $periods, 'methods' => self::METHODS];
+        $months = DB::table('t_sale_imports as i')->leftJoin('t_branches as b', 'b.id', '=', 'i.fk_id_branch')->where('i.fk_id_ent', $ent)->whereIn('i.status', ['Confirmed', 'CONFIRMED'])
+            ->whereNotExists(fn ($w) => $w->from('t_inv_periods as p')->whereColumn('p.fk_id_import', 'i.id')->where('p.status', 'CONFIRMED'))->orderByDesc('i.period_year')->orderByDesc('i.period_month')->limit(60)
+            ->get(['i.id', 'i.period_month', 'i.period_year', 'b.shop_name'])->map(fn ($m) => ['id' => (int) $m->id, 'name' => ($m->shop_name ?: 'Shop') . ' · ' . date('M Y', mktime(0, 0, 0, (int) $m->period_month, 1, (int) $m->period_year))])->all();      // R-D-82 confirmed sales months to settle
+        return ['rows' => $rows, 'periods' => $periods, 'methods' => self::METHODS, 'to_settle' => $months];
     }
 }

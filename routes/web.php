@@ -547,6 +547,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('invoices', [\App\Http\Controllers\InvoicesController::class, 'index']);      // R-D-83 / 84
         Route::get('invoices/{id}', [\App\Http\Controllers\InvoicesController::class, 'show'])->whereNumber('id');
         Route::post('invoices/generate/{period}', [\App\Http\Controllers\InvoicesController::class, 'generate'])->whereNumber('period');
+        Route::get('invoices/settle/{import}', [\App\Http\Controllers\InvoicesController::class, 'settlePreview'])->whereNumber('import');      // R-D-81 / 82 (preview never writes)
+        Route::post('invoices/settle/{import}', [\App\Http\Controllers\InvoicesController::class, 'settle'])->whereNumber('import');
         Route::post('invoices/reopen/{period}', [\App\Http\Controllers\InvoicesController::class, 'reopen'])->whereNumber('period');
         Route::post('invoices/{id}/pay', [\App\Http\Controllers\InvoicesController::class, 'pay'])->whereNumber('id');
         Route::post('invoices/payments/{payment}/delete', [\App\Http\Controllers\InvoicesController::class, 'unpay'])->whereNumber('payment');
