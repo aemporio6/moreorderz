@@ -390,7 +390,8 @@ class Perm
         if (! $u || ($u->role_code === 'OWNER' && ! self::$viewAs)) return null;
         $ids = DB::table('mo_user_scopes')->where('user_id', $u->id)->where('kind', 'SHOP')->pluck('ref_id')->map(fn ($x) => (int) $x)->all();
         $ids = array_values(array_unique(array_merge($ids, ShopAssignments::shopsOfUser($u))));      // + shop assignments valid today + own / seller shops (R-C-41)
-        return $ids ?: null;
+        $own = Choices::has('OWN_SHOP_ROLES', (int) ($u->fk_id_ent ?? 0) ?: null, self::$viewAs[0] ?? $u->role_code);      // R-G_CORE-63: an own-shops role with no shop sees no shop rows
+        return $ids ?: ($own ? [0] : null);
     }
 
     public static function setScope(int $userId, string $kind, array $ids, int $by): void

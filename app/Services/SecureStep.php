@@ -66,6 +66,16 @@ class SecureStep
         return ['ok' => true, 'message' => 'Secrets are open for this session (asked again after ' . self::minutes((int) (Context::ent() ?: 0) ?: null) . ' minutes without activity).'];
     }
 
+    /** R-G_CORE-59: a secure page (Settings › Choices SECURE_FORMS) asks the code before it opens; every open is logged (REVEAL, page). */
+    public static function page(Request $r, string $formKey): ?array
+    {
+        $u = $r->user(); if (! $u) return null; $ent = (int) (Context::ent() ?: ($u->fk_id_ent ?? 0)) ?: null;
+        if (! in_array($formKey, Choices::list('SECURE_FORMS', $ent), true)) return null;
+        if ($need = self::needed($r, $u)) return $need + ['secure_page' => $formKey];
+        if (! $r->session()->get("secure_page_logged.$formKey")) { Audit::log($formKey, null, 'REVEAL', ['page' => $formKey, 'result' => 'OPENED'], 'secure page', $ent); $r->session()->put("secure_page_logged.$formKey", 1); }
+        return null;
+    }
+
     private static function lockKey(object $u): string { return 'secure_lock:' . $u->id; }
     private static function failKey(object $u): string { return 'secure_fail:' . $u->id; }
 }

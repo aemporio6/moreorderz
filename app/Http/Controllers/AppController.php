@@ -217,6 +217,7 @@ class AppController extends Controller
     public function list(Request $r, string $key)
     {
         Rights::check('VIEW', $key);
+        if ($need = \App\Services\SecureStep::page($r, $key)) return response()->json($need, 428);      // R-G_CORE-59 secure page
         return RecordService::list($key, $r->query());
     }
 
@@ -233,9 +234,10 @@ class AppController extends Controller
         return ['ops' => \App\Services\ListFilter::OPS, 'presets' => \App\Services\ListFilter::PRESETS, 'per_page' => [25, 50, 100, 250]];
     }
 
-    public function record(string $key, int $id)
+    public function record(Request $r, string $key, int $id)
     {
         Rights::check('VIEW', $key);
+        if ($need = \App\Services\SecureStep::page($r, $key)) return response()->json($need, 428);      // R-G_CORE-59 secure page
         $table = \App\Services\Registry::table($key);
         $kinds = $table ? \App\Services\Vault::kinds($table) : [];
         return ['values' => \App\Services\Mask::row($key, RecordService::get($key, $id), \Illuminate\Support\Facades\Auth::user()),      // R-G_CORE-62 a hidden field is not in the answer

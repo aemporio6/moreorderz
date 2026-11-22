@@ -144,11 +144,13 @@ class Choices
             '15' => ['15 minutes', 'The old proposal.'], '30' => ['30 minutes', ''], '60' => ['60 minutes', 'Suggested.'], '120' => ['2 hours', '']]],
         'RESET_LINK_MINUTES' => ['Forgot password: the reset link works for …', 'Recommended: 30 minutes – enough to open the e-mail, short enough that an old mail is useless.', '30', [
             '15' => ['15 minutes', ''], '30' => ['30 minutes', 'Suggested.'], '60' => ['1 hour', ''], '1440' => ['1 day', '']]],
+        'SECURE_FORMS' => ['Secure pages (R-G_CORE-59): which pages ask the phone-app code before they open?', 'Recommended: bank accounts, PayPal, supplier banks and tax returns – they hold money details; the code is asked once per session and again after the idle time.', 't_account_bank,t_account_paypal,supplier_bank,tax_period,tax_entry', []],
+        'OWN_SHOP_ROLES' => ['Data scope: which roles see only their own shops (R-G_CORE-63)?', 'Recommended: VA and Team lead – they work for given shops; a person of such a role with no shop sees no shop rows. Other roles see every shop of their companies (a shop limit set on one login still applies).', 'VA,TL', []],
         'HIDDEN_MARGIN_ROLES' => ['Owner Home › Invoicing / Profit: who sees the row "Hidden margin"?', 'Recommended: Owner only – a partner\'s share is worked out on the net profit, so the margin kept by the company stays with the Owner.', 'OWNER', []],
     ];
 
     /** Multiple choices: key → where the options come from (party roles = roles of people, login roles = roles of logins). Value = comma list or ALL. */
-    public const MULTI = ['DIRECTOR_ROLES' => 'party_roles', 'HIDDEN_MARGIN_ROLES' => 'login_roles', 'FBA_LOCATION_KINDS' => 'list:LOCATION_KIND', 'TASK_PROOF_OFF_ROLES' => 'login_roles', 'CHANNEL_SWITCH_ROLES' => 'login_roles', 'ABSENCE_ROLES' => 'login_roles', 'DELEGATION_ROLES' => 'login_roles', 'CATEGORY_ROLES' => 'login_roles', 'COUNT_TRIGGERS' => 'inline', 'CLOSE_WAIVABLE' => 'close_checks'];
+    public const MULTI = ['DIRECTOR_ROLES' => 'party_roles', 'HIDDEN_MARGIN_ROLES' => 'login_roles', 'FBA_LOCATION_KINDS' => 'list:LOCATION_KIND', 'TASK_PROOF_OFF_ROLES' => 'login_roles', 'CHANNEL_SWITCH_ROLES' => 'login_roles', 'ABSENCE_ROLES' => 'login_roles', 'DELEGATION_ROLES' => 'login_roles', 'CATEGORY_ROLES' => 'login_roles', 'COUNT_TRIGGERS' => 'inline', 'CLOSE_WAIVABLE' => 'close_checks', 'SECURE_FORMS' => 'secure_forms', 'OWN_SHOP_ROLES' => 'login_roles'];
 
     /** [code => [label, effect]] of a multiple choice (All first). */
     public static function options(string $key): array
@@ -156,6 +158,7 @@ class Choices
         if (! isset(self::MULTI[$key])) return self::LIST[$key][3];
         $src = self::MULTI[$key];
         if ($src === 'inline') return ['ALL' => ['All', 'Every one of them.']] + self::LIST[$key][3];
+        if ($src === 'secure_forms') { $o = ['ALL' => ['Every page', '']]; foreach (\Illuminate\Support\Facades\DB::table('sys_registry')->where('form_kind', 'module')->select('form_key', 'form_title')->distinct()->orderBy('form_title')->get() as $f) $o[$f->form_key] ??= [(string) $f->form_title, '']; foreach (explode(',', self::LIST[$key][2]) as $d) $o[$d] ??= [$d, '']; return $o; }
         if ($src === 'close_checks') { $o = ['ALL' => ['All checks', 'Every check may be waived.']]; foreach (CloseService::CHECKS as $c => $x) $o[$c] = [$x[0], '']; return $o; }
         if (str_starts_with($src, 'list:')) {      // a list of the registry (fixed lists the program uses have no + Add)
             $o = ['ALL' => ['All', 'Every value of the list.']];
@@ -173,15 +176,15 @@ class Choices
     /** The roles of a multiple choice as a list (ALL → every option). */
     public static function list(string $key, ?int $ent): array
     {
-        $v = array_values(array_filter(array_map('trim', explode(',', strtoupper(self::get($key, $ent))))));
-        return in_array('ALL', $v, true) ? array_values(array_diff(array_keys(self::options($key)), ['ALL'])) : $v;
+        $v = array_values(array_filter(array_map('trim', explode(',', self::MULTI[$key] === 'secure_forms' ? self::get($key, $ent) : strtoupper(self::get($key, $ent))))));
+        return in_array('ALL', $v, true) || in_array('all', $v, true) ? array_values(array_diff(array_keys(self::options($key)), ['ALL'])) : $v;
     }
 
     /** Is $role in the multiple choice $key? (ALL → yes) */
     public static function has(string $key, ?int $ent, ?string $role): bool
     {
         if ($role === null || $role === '') return false;
-        $v = array_map('trim', explode(',', strtoupper(self::get($key, $ent))));
+        $v = array_map(fn ($x) => strtoupper(trim($x)), explode(',', self::get($key, $ent)));
         return in_array('ALL', $v, true) || in_array(strtoupper($role), $v, true);
     }
 
@@ -219,7 +222,7 @@ class Choices
             }
             $out[] = ['key' => $key, 'question' => $q, 'why' => $why, 'value' => $cur, 'recommended' => $fact ? null : $def, 'per_shop' => in_array($key, self::PER_SHOP, true), 'shops' => $shops,
                 'options' => array_map(fn ($v, $o) => ['value' => (string) $v, 'label' => $o[0], 'effect' => $o[1], 'recommended' => ! $fact && in_array((string) $v, $recList, true)], array_keys($opts), $opts), 'fact' => $fact,
-                'multi' => $multi, 'values' => $multi ? array_values(array_filter(explode(',', strtoupper($cur)))) : null, 'add_url' => $multi ? (self::MULTI[$key] === 'party_roles' ? '#/list/cat_account_type' : (self::MULTI[$key] === 'login_roles' ? '#/rights' : null)) : null];      // inline / list / close_checks: values the program uses – no + Add
+                'multi' => $multi, 'values' => $multi ? array_values(array_filter(explode(',', self::MULTI[$key] === 'secure_forms' ? $cur : strtoupper($cur)))) : null, 'add_url' => $multi ? (self::MULTI[$key] === 'party_roles' ? '#/list/cat_account_type' : (self::MULTI[$key] === 'login_roles' ? '#/rights' : null)) : null];      // inline / list / close_checks: values the program uses – no + Add
         }
         return $out;
     }
@@ -228,7 +231,7 @@ class Choices
     {
         if (! isset(self::LIST[$key])) throw new \InvalidArgumentException('Unknown choice.');
         if (isset(self::MULTI[$key])) {
-            $v = array_values(array_unique(array_filter(array_map('trim', explode(',', strtoupper($value))))));
+            $v = array_values(array_unique(array_filter(array_map('trim', explode(',', self::MULTI[$key] === 'secure_forms' ? $value : strtoupper($value))))));
             $what = str_ends_with(self::MULTI[$key], '_roles') ? 'role' : 'value';
             if (! $v) throw new \InvalidArgumentException("Choose at least one $what (or All).");
             $ok = self::options($key); foreach ($v as $x) if (! isset($ok[$x])) throw new \InvalidArgumentException("Choose {$what}s from the list ($x is not one).");

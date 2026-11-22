@@ -26,7 +26,7 @@ class Part4Test extends TestCase
 
     protected function setUp(): void
     {
-        parent::setUp();
+        parent::setUp(); \App\Services\Choices::set('OWN_SHOP_ROLES', 'OWNER', 1);      // shop scope by role is tested in ScopeSecureTest
         $this->actingAs($this->owner); Context::set(1, $this->owner->id);
         $f = fn ($t, $d) => DB::table($t)->insertGetId(RecordService::fillNotNull($t, $d));
         $mp = $f('cat_marketplaces', ['fk_id_ent' => 1]);

@@ -18,12 +18,22 @@
       body: opt.body ? JSON.stringify(opt.body) : undefined });
     if (res.status === 401 || res.status === 419) { location.href = '/login'; throw new Error('Signed out'); }
     const data = await res.json().catch(() => ({}));
+    if (res.status === 428 && data.need === 'CODE' && !opt._secured && !opt._noSecure && path !== 'me/secure-code') { await secureCode(data.message); return api(path, { ...opt, _secured: 1 }); }      // R-G_CORE-59 / 98: the code, then the same call again
     if (!res.ok) { const e = new Error(data.message || 'Something went wrong. Nothing was saved.'); e.status = res.status; e.errors = data.errors || {}; e.data = data;
       if (res.status === 403 && data.perm && data.can_request) askAccess(data);   // never stuck: one click asks the Owner for this right
       throw e; }
     return data;
   }
   MO.api = api;
+  /** Ask the 6-digit code of the phone app (secure pages, Reveal); resolves when the code is accepted. */
+  function secureCode(msg) {
+    return new Promise((ok, no) => {
+      const m = modal('Two-step check', msg || 'Type the 6-digit code of your phone app.', `<div class="form"><label>6-digit code<input id="scCode" inputmode="numeric" autocomplete="one-time-code" maxlength="7"></label><div class="small" id="scMsg" style="color:var(--err)"></div></div>`, '<button class="btn primary" id="scGo">Open</button>', false);
+      const go = async () => { try { await api('me/secure-code', { method: 'POST', body: { code: $('#scCode', m.ov).value } }); m.close(); ok(); } catch (e) { $('#scMsg', m.ov).textContent = e.message; } };
+      $('#scGo', m.ov).onclick = go; $('#scCode', m.ov).onkeydown = e => { if (e.key === 'Enter') go(); }; setTimeout(() => $('#scCode', m.ov).focus(), 50);
+      $('.x', m.ov).addEventListener('click', () => no(new Error('The code was not given – the page stays closed.')));
+    });
+  }
   async function apiForm(path, fd) {      // multipart (files)
     const res = await fetch('/api/' + path, { method: 'POST', credentials: 'same-origin', headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf }, body: fd }); const data = await res.json().catch(() => ({}));
     if (!res.ok) { const e = new Error(data.message || 'Something went wrong. Nothing was saved.'); e.data = data; throw e; } return data;
@@ -4493,7 +4503,6 @@
       const go = async () => { const x = await api(`reveal/${key}/${id}`, { method: 'POST', body: { field: b.dataset.reveal } }); if (x.value == null) return toast('Nothing is kept for this field.', 'warn');
         el.type = 'text'; el.value = x.value; val[b.dataset.reveal] = x.value; b.remove(); toast('Shown – this reveal is in the audit log.'); };
       try { await go(); } catch (x) {
-        if (x.status === 428 && x.data && x.data.need === 'CODE') return miniForm('Two-step check', x.data.message, [{ name: 'code', label: '6-digit code', required: true }], async v => { const r = await api('me/secure-code', { method: 'POST', body: { code: v.code } }); await go(); return r; });      // R-G_CORE-98
         if (x.status === 428 && x.data && x.data.need === 'SETUP') { toast(x.message, 'warn'); return; }
         toast(x.message, 'err'); } });
     // suggestions on every empty field: at most 2 chips with the reason; one click fills the field

@@ -100,6 +100,7 @@ class HttpTest extends TestCase
         foreach (DB::table('sys_registry')->distinct()->pluck('form_key') as $k) {
             if (! \App\Services\Registry::table($k) || ! \App\Services\Registry::columns(\App\Services\Registry::table($k))) continue;
             $res = $this->getJson('/api/list/' . $k);
+            if ($res->status() === 428 && in_array($k, \App\Services\Choices::list('SECURE_FORMS', 1), true)) continue;      // a secure page asks the code first (R-G_CORE-59, ScopeSecureTest)
             if ($res->status() !== 200) $bad[] = $k . ':' . $res->status() . ':' . mb_substr((string) $res->json('message'), 0, 80);
         }
         $this->assertSame([], $bad);

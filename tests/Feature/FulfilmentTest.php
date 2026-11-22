@@ -11,6 +11,8 @@ use Tests\TestCase;
 /** RULES_A_SALES R-A_SALES-75 / 76 / 77: daily fulfilment orders – add, who may set what, colours, scope, bulk tools, search + date presets, the 25-column carrier file. */
 class FulfilmentTest extends TestCase
 {
+    /** These tests are about their own rules; the shop scope by role (R-G_CORE-63, Settings › Choices OWN_SHOP_ROLES) is tested in ScopeSecureTest. */
+    protected function setUp(): void { parent::setUp(); \App\Services\Choices::set('OWN_SHOP_ROLES', 'OWNER', 1); }
     private int $shop; private object $va; private object $va2; private object $tl;
 
     private function world(): void

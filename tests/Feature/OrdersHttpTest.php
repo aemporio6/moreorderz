@@ -10,6 +10,8 @@ use Tests\TestCase;
 
 class OrdersHttpTest extends TestCase
 {
+    /** These tests are about their own rules; the shop scope by role (R-G_CORE-63, Settings › Choices OWN_SHOP_ROLES) is tested in ScopeSecureTest. */
+    protected function setUp(): void { parent::setUp(); \App\Services\Choices::set('OWN_SHOP_ROLES', 'OWNER', 1); }
     public function test_order_to_month_confirm_through_the_screens_api_with_roles(): void
     {
         $f = fn ($t, $d) => DB::table($t)->insertGetId(RecordService::fillNotNull($t, $d));

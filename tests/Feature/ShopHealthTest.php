@@ -11,6 +11,8 @@ use Tests\TestCase;
 /** RULES_A_SALES R-A_SALES-73 / 74: monthly account health per shop – rows, running totals, locks, limits + alert task, admin / TL view, history. */
 class ShopHealthTest extends TestCase
 {
+    /** These tests are about their own rules; the shop scope by role (R-G_CORE-63, Settings › Choices OWN_SHOP_ROLES) is tested in ScopeSecureTest. */
+    protected function setUp(): void { parent::setUp(); \App\Services\Choices::set('OWN_SHOP_ROLES', 'OWNER', 1); }
     private int $mp; private int $shopA; private int $shopB; private object $va; private object $tl; private int $accA; private int $accB;
 
     private function world(): void

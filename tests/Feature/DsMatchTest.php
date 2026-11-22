@@ -13,6 +13,8 @@ use Tests\TestCase;
 /** RULES_A_SALES R-A_SALES-19 … 26: the 5-matching rule, own phone numbers, assignment, lock, money, reasons + CSV, Re-match, the explanation with masking. */
 class DsMatchTest extends TestCase
 {
+    /** These tests are about their own rules; the shop scope by role (R-G_CORE-63, Settings › Choices OWN_SHOP_ROLES) is tested in ScopeSecureTest. */
+    protected function setUp(): void { parent::setUp(); \App\Services\Choices::set('OWN_SHOP_ROLES', 'OWNER', 1); }
     private int $shop; private int $mp; private int $plat; private array $files = [];
 
     private function fill(string $t, array $d): array { return RecordService::fillNotNull($t, $d); }

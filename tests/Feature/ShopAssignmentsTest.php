@@ -26,7 +26,7 @@ class ShopAssignmentsTest extends TestCase
 
         $a = $this->postJson("/api/people/$p/shops", ['fk_id_branch' => $s, 'role_code' => 'VA'])->assertOk()->json('id');
         $this->assertSame(date('Y-m-d'), DB::table('t_account_branches')->where('id', $a)->value('d_from'), 'from date defaults to today');
-        $this->postJson("/api/people/$p/shops", ['fk_id_branch' => $s, 'role_code' => 'VA'])->assertStatus(422)->assertJsonPath('errors.fk_id_branch.0', 'This shop is already assigned to this person');
+        $this->postJson("/api/people/$p/shops", ['fk_id_branch' => $s, 'role_code' => 'VA'])->assertStatus(422)->assertJsonPath('errors.fk_id_branch.0', 'Refused: Pari already has SA1.');
         $this->postJson("/api/people/$p/shops", ['fk_id_branch' => $s, 'role_code' => 'SUPERVISOR'])->assertOk();
         // another VA of the same shop at the same time → refused; after the first ends → allowed
         $this->postJson("/api/people/$q/shops", ['fk_id_branch' => $s, 'role_code' => 'VA'])->assertStatus(422)->assertJsonPath('errors.d_from.0', 'Shop SA1 Shop S already has a VA from ' . date('Y-m-d') . '.');

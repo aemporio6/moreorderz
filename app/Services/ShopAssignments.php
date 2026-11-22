@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Shop assignment = the person's shop scope (R-C-41, IC-11, B14). One place: t_account_branches (person, shop, role SUPERVISOR / VA / MANAGER …, from, to).
- * - Unique (person, shop, role): "This shop is already assigned to this person". Only active shops. Two VA rows of one shop overlapping in dates are refused
+ * - Unique (person, shop, role): "Refused: <person> already has <SHOP-NO>." (R-G_CORE-63). Only active shops. Two VA rows of one shop overlapping in dates are refused
  *   ("Shop <label> already has a VA from <date>."). From date defaults to today.
  * - Every grant / removal is in the history with the event SHOP_ACCESS_GRANTED / SHOP_ACCESS_REVOKED; created_by is kept, updated_by added.
  * - The VA valid on a date is the one source; t_branches.fk_id_seller is a computed cache of today's VA (refreshed on every change, never typed).
@@ -35,7 +35,7 @@ class ShopAssignments
         if (! DB::table('t_branches')->where('id', $shop)->where('f_active', 1)->exists()) return ['fk_id_branch' => 'Choose an active shop'];
         if ($to && $to < $from) return ['d_to' => 'The end date is before the start date.'];
         if (DB::table('t_account_branches')->where('fk_id_account', $person)->where('fk_id_branch', $shop)->where('role_code', $role)->where(fn ($w) => $w->whereNull('f_active')->orWhere('f_active', 1))->when($id, fn ($q) => $q->where('id', '<>', $id))->exists())
-            return ['fk_id_branch' => 'This shop is already assigned to this person'];
+            return ['fk_id_branch' => 'Refused: ' . (trim((string) DB::table('t_account')->where('id', $person)->selectRaw("CONCAT_WS(' ', first_name, sur_name) n")->value('n')) ?: 'this person') . ' already has ' . (DB::table('t_branches')->where('id', $shop)->value('shop_no') ?: 'this shop') . '.'];      // R-G_CORE-63 spec text
         if ($role === 'VA') {
             $clash = DB::table('t_account_branches')->where('fk_id_branch', $shop)->whereIn('role_code', ['VA', 'SELLER'])->where(fn ($w) => $w->whereNull('f_active')->orWhere('f_active', 1))->when($id, fn ($q) => $q->where('id', '<>', $id))
                 ->where(fn ($w) => $w->whereNull('d_to')->orWhere('d_to', '>=', $from))->when($to, fn ($q) => $q->where(fn ($w) => $w->whereNull('d_from')->orWhere('d_from', '<=', $to)))->orderBy('d_from')->first();
