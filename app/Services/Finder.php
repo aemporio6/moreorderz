@@ -48,6 +48,7 @@ class Finder
         ['Profit views', 'profit by shop product month margin', '#/profit', 'money.SEE'],
         ['VAT return', 'vat tax boxes hmrc', '#/vat-return', 'finance.MONEY'],
         ['Roles and rights', 'permissions access who can role', '#/permissions', 'admin.permissions'],
+        ['Menu builder', 'menu sidebar order rename hide show items sections drag', '#/menu-builder', 'admin.owner'],      // R-G_CORE-57
         ['Users', 'people logins password staff account', '#/users', 'admin.users'],
         ['Choices', 'settings options decisions switches', '#/choices', 'admin.choices'],
         ['Audit trail', 'history who changed log', '#/audit', 'admin.audit'],
@@ -131,13 +132,18 @@ class Finder
             }
             // fields of forms ("where do I type the HS code?") – "Form › Field", opens the form with the field focused
             $it = []; $seen = [];
-            foreach (self::fieldIndex() as [$form, $ftitle, $label, $name, $help]) {
+            foreach (self::fieldIndex() as [$form, $ftitle, $label, $name, $help, $fkind]) {
                 if (! ($s = $hit($label))) continue;
+                $s += $fkind === 'library' ? 15 : ($fkind === 'child' ? -5 : 0);      // R-G_CORE-99: the master form where a value is defined comes first ("sku" → Product › SKU)
                 if (isset($seen[$form . $label]) || ! Perm::has($u, "form:$form:VIEW")) continue;
                 $seen[$form . $label] = 1; $it[] = ['kind' => 'field', 'title' => $ftitle . ' › ' . $label, 'sub' => $help ?: 'Field', 'url' => "field:$form:$name", 'score' => $s];
                 if (count($it) > 60) break;
             }
             $add('Fields', $it);
+            // help topics (R-G_CORE-99): the built-in guides and the step playbooks
+            $it = [];
+            foreach (self::helpTopics() as [$t, $kw, $url]) if ($s = $hit($t, $kw)) $it[] = ['kind' => 'help', 'title' => $t, 'sub' => 'Help', 'url' => $url, 'score' => $s];
+            $add('Help', $it);
             // records
             $it = []; $keep = is_string(self::SCOPES[$scope]) ? self::SCOPES[$scope] : null;
             foreach (self::records($q, $words, $alts, $u) as $r) {
@@ -150,11 +156,13 @@ class Finder
         }
 
         // order: pages first, then records (R-G_CORE-56); a typed code (it has a digit) puts the records first
-        $order = ['Screens' => 1, 'Actions' => 2, 'Create' => 3, 'Records' => 4, 'Reports' => 5, 'Settings' => 6, 'Fields' => 7, 'Rights' => 8];
+        $order = ['Screens' => 1, 'Actions' => 2, 'Create' => 3, 'Records' => 4, 'Reports' => 5, 'Settings' => 6, 'Fields' => 7, 'Help' => 8, 'Rights' => 9];
         $code = (bool) preg_match('/\d/', $q);
-        $rank = fn ($g) => $g['name'] === 'Records' && $code && $g['best'] >= 50 ? 0 : $order[$g['name']];
+        $bestOf = fn (string $n) => (collect($groups)->firstWhere('name', $n)['best'] ?? 0);
+        $fieldFirst = $bestOf('Fields') >= 90 && $bestOf('Fields') > $bestOf('Screens');      // R-G_CORE-99: "sku" → Product form › SKU before the screens that only mention it
+        $rank = fn ($g) => $g['name'] === 'Records' && $code && $g['best'] >= 50 ? 0 : ($g['name'] === 'Fields' && $fieldFirst ? 0.5 : $order[$g['name']]);
         usort($groups, fn ($a, $b) => $rank($a) <=> $rank($b));
-        foreach ($groups as &$g) { if (in_array($g['name'], ['Fields', 'Rights', 'Settings'], true)) $g['items'] = array_slice($g['items'], 0, 4); unset($g['best']); } unset($g);
+        foreach ($groups as &$g) { if (in_array($g['name'], ['Fields', 'Rights', 'Settings', 'Help'], true)) $g['items'] = array_slice($g['items'], 0, 4); unset($g['best']); } unset($g);
         $n = array_sum(array_map(fn ($g) => count($g['items']), $groups));
         $out = ['q' => $q, 'groups' => $groups, 'count' => $n, 'scope' => $scope, 'scopes' => array_keys(self::SCOPES), 'hint' => null];
         if (! $n && ! $one) {
@@ -162,6 +170,17 @@ class Finder
             $out['hint'] = "No match for \"$q\". Try a SKU, an order number, a name or an amount – or open Products, Orders or People from the menu.";
             self::remember($u, $q, 0);          // every miss is kept, for the synonym list
         }
+        return $out;
+    }
+
+    /** R-G_CORE-99 help topics: [title, words, url] – the Tasks guide (steps, ways a task is born, WhatsApp commands) and every step playbook. */
+    public static function helpTopics(): array
+    {
+        $g = TaskGuide::page(); $out = [['How tasks work', 'help guide tasks how', '#/help/tasks']];
+        foreach ($g['steps'] as $s) $out[] = ['Tasks: ' . $s['step'], $s['what'] . ' ' . ($s['channel'] ?? ''), '#/help/tasks'];
+        foreach ($g['born'] as $b) $out[] = ['Tasks: ' . $b['how'], $b['where'], $b['link'] ?? '#/help/tasks'];
+        foreach ($g['commands'] as $c) $out[] = ['WhatsApp: ' . trim($c['say']), $c['does'] . ' whatsapp command reply', '#/help/tasks'];
+        foreach (Guide::workflows() as $code => [$name, $steps]) foreach (Guide::playbooks($code) as $step => $p) $out[] = ['How to: ' . $p['title'], $name . ' ' . ($steps[strtoupper($step)] ?? $steps[$step] ?? '') . ' ' . implode(' ', $p['checklist']), '#/playbooks'];
         return $out;
     }
 
@@ -200,9 +219,11 @@ class Finder
         $a = [];
         if ($entity === 't_product_vendors') {
             if (Perm::has($u, 'stock.SEE')) $a[] = ['label' => 'Stock', 'url' => "#/stock/product/$id"];
-            if (Perm::has($u, 'buying.BUY')) $a[] = ['label' => 'Quick buy', 'url' => '#/quick-buy'];
+            if (Perm::has($u, 'buying.BUY')) { $a[] = ['label' => 'Create PO for ' . mb_strimwidth($title, 0, 24, '…'), 'url' => "#/direct-po?product=$id"]; $a[] = ['label' => 'Quick buy', 'url' => "#/quick-buy?product=$id"]; }      // R-G_CORE-100
         }
         if ($entity === 't_src_po' && Perm::has($u, 'buying.SEE')) $a[] = ['label' => 'PO page', 'url' => "#/po/$id"];
+        if ($entity === 't_src_po' && Perm::has($u, 'print.kind_PO')) $a[] = ['label' => 'Print PO', 'url' => "print:PO:$id"];
+        if ($entity === 'wh_parcels' && Perm::has($u, 'print.kind_PACKING_SLIP')) $a[] = ['label' => 'Print label for ' . mb_strimwidth($title, 0, 24, '…'), 'url' => "print:PACKING_SLIP:$id"];      // R-G_CORE-100 "Print label for <order>"
         if ($entity === 't_src_cycles' && Perm::has($u, 'buying.SEE')) $a[] = ['label' => 'Cycle', 'url' => "#/cycle/$id"];
         if ($entity === 'src_research' && Perm::has($u, 'buying.SEE')) $a[] = ['label' => 'Workspace', 'url' => "#/research/$id"];
         return $a;
@@ -287,10 +308,10 @@ class Finder
     private static function fieldIndex(): array
     {
         if (self::$fields !== null) return self::$fields;
-        $out = [];
+        $out = []; $kind = DB::table('sys_registry')->groupBy('form_key')->selectRaw('form_key, MIN(form_kind) k')->pluck('k', 'form_key');
         foreach (DB::table('sys_forms')->where('f_active', 1)->pluck('title', 'form_key') as $key => $title) {
             if (! Registry::exists($key) || ! Registry::table($key)) continue;
-            foreach (Registry::fields($key) as $f) if (! empty($f['label']) && empty($f['secret'])) $out[] = [$key, $title, (string) $f['label'], (string) $f['field_name'], mb_substr((string) ($f['help'] ?? ''), 0, 160)];
+            foreach (Registry::fields($key) as $f) if (! empty($f['label']) && empty($f['secret'])) $out[] = [$key, $title, (string) $f['label'], (string) $f['field_name'], mb_substr((string) ($f['help'] ?? ''), 0, 160), (string) ($kind[$key] ?? '')];
         }
         return self::$fields = $out;
     }

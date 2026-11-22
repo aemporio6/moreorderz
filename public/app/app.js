@@ -250,7 +250,7 @@
       if (r.startsWith('#/src-investors')) return await pageSrcInvestors(r.includes('view=detail'));
       if (r.startsWith('#/src-suppliers')) return await pageSrcSuppliers({ from: (r.match(/from=([\d-]+)/) || [])[1], to: (r.match(/to=([\d-]+)/) || [])[1] });
       if (r.startsWith('#/sourcing-reports')) return await pageSrcReports(+((r.match(/cycle=(\d+)/) || [])[1] || 0), +((r.match(/po=(\d+)/) || [])[1] || 0));
-      if (r.startsWith('#/direct-po')) return await pageDirectPo(null, null);
+      if (r.startsWith('#/direct-po')) return await pageDirectPo(null, null, +(new URLSearchParams(r.split('?')[1] || '').get('product')) || null);      // R-G_CORE-100 "Create PO for <product>" from search
       if ((mt = r.match(/^#\/cycle\/(\d+)/))) { const ctab = (r.match(/tab=(\w+)/) || [])[1], hl = decodeURIComponent((r.match(/hl=([^&]+)/) || [])[1] || '');
         if (['qc', 'allocation', 'samples', 'customs', 'production', 'freight', 'documents'].includes(ctab)) { await pageCycleExtras(+mt[1]); hilite(hl); return; }
         await pageCycle(+mt[1]); const head = { payment_terms: '3. Payments', shipments: '4. Shipments', grn: '5. Receiving', inventory: '6. Landed' }[ctab];
@@ -326,6 +326,7 @@
         return await pageSales((r.match(/import=(\d+)/) || [])[1]); }
       if (r === '#/permissions') return await pagePermissions();
       if (r === '#/playbooks') return await pagePlaybooks();
+      if (r === '#/menu-builder') return await pageMenuBuilder();      // R-G_CORE-57
       if (r === '#/bulk-jobs') return await pageBulkJobs();
       if (r === '#/choices') return await pageChoices();
       if (r === '#/settings') return await pageSettings();
@@ -2054,6 +2055,26 @@
     });
   }
 
+  async function pageMenuBuilder() {
+    busy(true); let d; try { d = await api('menu-builder'); } catch (e) { busy(false); return toast(e.message, 'err'); } busy(false);
+    const item = i => `<div class="mbi" draggable="true" data-mbi="${i.id}" style="display:flex;gap:8px;align-items:center;padding:6px 8px;border:1px solid var(--line);border-radius:8px;margin:4px 0;background:var(--card,#fff);cursor:grab;flex-wrap:wrap">
+      <span class="muted" title="Drag to move">⠿</span><span style="flex:1;min-width:140px"><a href="#" data-mbr="${i.id}" title="Rename">${esc(i.name)}</a> <span class="small muted">${esc(i.no || '')}</span></span>
+      <span style="display:flex;gap:4px;flex-wrap:wrap">${d.roles.map(r => `<button type="button" class="chip ${i.roles[r] ? 'accent' : 'plain'}" data-mbo="${i.id}" data-role="${r}" data-on="${i.roles[r] ? 1 : 0}" title="${i.roles[r] ? 'Shown to' : 'Hidden from'} ${r} – click to change" style="cursor:pointer;${i.roles[r] ? '' : 'opacity:.5;text-decoration:line-through'}">${esc(r)}</button>`).join('')}</span></div>`;
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/settings">Settings</a> ›</div><h1>Menu builder</h1><div class="sub">Drag items (or whole sections) into place – the order is saved at once. Click a name to rename it, a role to show or hide the item for that role. Hiding a screen from a role also takes its forms away (one rights list).</div></div></div>
+      <div id="mbSecs">${d.sections.map(s => `<div class="card mbs" draggable="true" data-mbs="${s.id}" style="margin-bottom:12px"><div class="card-h" style="cursor:grab"><h3>⠿ ${esc(s.name)}</h3><span class="small muted">${s.items.length} items</span></div><div class="card-b" data-mbz="${s.id}" style="min-height:24px">${s.items.map(item).join('')}</div></div>`).join('')}</div>`;
+    let drag = null;
+    const save = async (parent, ids) => { try { await api('menu-builder/order', { method: 'POST', body: { parent, ids } }); toast('Order saved'); } catch (e) { toast(e.message, 'err'); pageMenuBuilder(); } };
+    $$('[data-mbi]').forEach(el => { el.ondragstart = e => { drag = el; e.stopPropagation(); e.dataTransfer.effectAllowed = 'move'; }; });
+    $$('[data-mbs]').forEach(el => { el.ondragstart = e => { if (drag) return; drag = el; e.dataTransfer.effectAllowed = 'move'; }; });
+    $$('[data-mbz]').forEach(z => { z.ondragover = e => { if (!drag || !drag.dataset.mbi) return; e.preventDefault(); const after = [...z.querySelectorAll('[data-mbi]')].find(x => x !== drag && e.clientY < x.getBoundingClientRect().top + x.offsetHeight / 2); after ? z.insertBefore(drag, after) : z.appendChild(drag); };
+      z.ondrop = e => { if (!drag || !drag.dataset.mbi) return; e.preventDefault(); save(+z.dataset.mbz, [...z.querySelectorAll('[data-mbi]')].map(x => +x.dataset.mbi)); }; });
+    const host = $('#mbSecs'); host.ondragover = e => { if (!drag || !drag.dataset.mbs) return; e.preventDefault(); const after = [...host.querySelectorAll('[data-mbs]')].find(x => x !== drag && e.clientY < x.getBoundingClientRect().top + x.offsetHeight / 2); after ? host.insertBefore(drag, after) : host.appendChild(drag); };
+    host.ondrop = e => { if (!drag || !drag.dataset.mbs) return; e.preventDefault(); save(null, [...host.querySelectorAll('[data-mbs]')].map(x => +x.dataset.mbs)); };
+    document.addEventListener('dragend', () => { drag = null; }, { once: false });
+    $$('[data-mbr]').forEach(a => a.onclick = e => { e.preventDefault(); const id = +a.dataset.mbr; miniForm('Rename menu item', 'Everyone sees the new name in the menu.', [{ name: 'name', label: 'Name', required: true, value: a.textContent }],
+      async v => { const r = await api(`menu-builder/${id}/rename`, { method: 'POST', body: v }); pageMenuBuilder(); return r; }); });
+    $$('[data-mbo]').forEach(b => b.onclick = async () => { try { toast((await api(`menu-builder/${b.dataset.mbo}/role`, { method: 'POST', body: { role: b.dataset.role, on: b.dataset.on !== '1' } })).message); pageMenuBuilder(); } catch (e) { toast(e.message, 'err'); } });
+  }
   async function pageAbsenceCalendar(month) {
     busy(true); let d; try { d = await api('tasks/absence-calendar' + (month ? '?month=' + month : '')); } catch (e) { busy(false); return toast(e.message, 'err'); } busy(false);
     const pad = Array.from({ length: d.days[0].dow - 1 }, () => '<div></div>').join('');
@@ -2157,7 +2178,7 @@
 
   // ---------- search everything (Ctrl+K or /): screens, actions, create, reports, settings, fields, rights, records ----------
   const DO = { 'orders:new': '#oNew', 'orders:file': '#oFile', 'orders:pick': '#oPick', 'settlements:file': '#stLoad', 'expenses:new': '#exAdd', 'refunds:new': '#rfNew' };
-  const KIND_IC = { screen: 'panel', action: 'bolt', create: 'plus', report: 'reports', setting: 'setup', right: 'lock', field: 'wand', record: 'file', search: 'search' };
+  const KIND_IC = { screen: 'panel', action: 'bolt', create: 'plus', report: 'reports', setting: 'setup', right: 'lock', field: 'wand', help: 'play', record: 'file', search: 'search' };
   function openFound(x, q, count) {
     if (x.url.startsWith('q:')) return openPalette(x.url.slice(2));
     api('find/opened', { method: 'POST', body: { kind: x.kind, title: x.title, sub: x.sub || null, url: x.url, q: q || null, count: count || null } }).catch(() => {});
@@ -2188,7 +2209,7 @@
       const row = x => { flat.push(x); return `<div data-pi="${flat.length - 1}" style="display:flex;gap:10px;align-items:center;padding:8px 14px;cursor:pointer"><span class="muted">${ic(KIND_IC[x.kind] || 'search')}</span><div style="flex:1;min-width:0"><div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${hl(x.title, q)}</div><div class="small muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(x.sub || '')}</div></div>${(x.actions || []).map(a => `<a class="btn sm" data-act="${esc(a.url)}">${esc(a.label)}</a>`).join('')}${x.pinned ? '<span class="chip accent plain">pinned</span>' : ''}</div>`; };
       box.innerHTML = (d.groups || []).map(g => `<div class="small muted" style="padding:10px 14px 4px;font-weight:650;text-transform:uppercase;letter-spacing:.04em">${esc(g.name)}</div>` + g.items.map(row).join('')).join('')
         || `<div class="empty" style="padding:22px 16px"><div>${esc(d.hint || 'Nothing found.')}</div>${(d.did_you_mean || []).length ? `<div style="margin-top:10px">Did you mean</div>` : ''}</div>` + (d.did_you_mean || []).map(row).join('');
-      mark(); $$('[data-pi]', box).forEach(e => { e.onclick = ev => { const act = ev.target.closest('[data-act]'); close(); if (act) return go(act.dataset.act); openFound(flat[+e.dataset.pi], q, total); }; e.onmousemove = () => { if (cur !== +e.dataset.pi) { cur = +e.dataset.pi; mark(); } }; }); };
+      mark(); $$('[data-pi]', box).forEach(e => { e.onclick = ev => { const act = ev.target.closest('[data-act]'); close(); if (act && act.dataset.act.startsWith('print:')) { const [, kind, pid] = act.dataset.act.split(':'); return printNow(kind, [+pid]); } if (act) return go(act.dataset.act); /* R-G_CORE-100 print from search */ openFound(flat[+e.dataset.pi], q, total); }; e.onmousemove = () => { if (cur !== +e.dataset.pi) { cur = +e.dataset.pi; mark(); } }; }); };
     const run = async () => { const my = ++seq; try { const d = await api('find?q=' + encodeURIComponent(inp.value.trim()) + '&scope=' + scope); if (my === seq && $('#pal')) draw(d); } catch (e) {} };
     inp.oninput = () => { clearTimeout(timer); timer = setTimeout(run, 80); };
     inp.onkeydown = async e => {
@@ -2942,7 +2963,7 @@
   async function pageSettings() {
     busy(true); let d; try { d = await api('settings'); } finally { busy(false); }
     const ent = (S.boot.companies.find(c => c.id == S.boot.ent) || {}).name || 'this company';
-    $('#main').innerHTML = `<div class="page-head"><div><h1>Settings</h1><div class="sub">A value for ${esc(ent)} wins over the value for all companies. ${d.settings.length} settings.</div></div><div class="actions"><a class="btn primary" href="#/choices">Choices – how the company works</a></div></div>
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Settings</h1><div class="sub">A value for ${esc(ent)} wins over the value for all companies. ${d.settings.length} settings.</div></div><div class="actions">${S.boot.user.role === 'OWNER' ? '<a class="btn" href="#/menu-builder">Menu builder</a>' : ''}<a class="btn primary" href="#/choices">Choices – how the company works</a></div></div>
       <div class="card"><div class="list-bar"><input class="q" id="sQ" placeholder="Find a setting…"></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Setting</th><th>All companies</th><th>${esc(ent)}</th></tr></thead><tbody id="sBody"></tbody></table></div></div>`;
     const draw = () => { const q = $('#sQ').value.trim().toLowerCase(); $('#sBody').innerHTML = d.settings.filter(s => !q || s.key.toLowerCase().includes(q)).map(s => `<tr><td><code>${esc(s.key)}</code></td><td class="click" data-k="${esc(s.key)}" data-s="global" style="cursor:pointer">${s.global === null ? '<span class="faint">—</span>' : esc(s.global)}</td><td class="click" data-k="${esc(s.key)}" data-s="company" style="cursor:pointer">${s.company === null ? '<span class="faint">same</span>' : esc(s.company)}</td></tr>`).join('');
       $$('#sBody [data-k]').forEach(td => td.onclick = () => { const s = d.settings.find(x => x.key === td.dataset.k);
@@ -3416,11 +3437,11 @@
   }
   // ---------- Direct PO in one save (R-B_SOURCING-2) ----------
   async function directPo() { go('#/direct-po'); }
-  async function pageDirectPo(sup, rep) {
+  async function pageDirectPo(sup, rep, prod) {
     const p = await bpick(); let d = null;
     if (sup) { busy(true); try { d = await api('direct-po/prefill?' + new URLSearchParams({ supplier: sup, ...(rep ? { repeat: rep } : {}) })); } catch (e) { toast(e.message, 'err'); } finally { busy(false); } }
     const L = d ? d.lines.map(x => ({ ...x })) : [];
-    if (!L.length) L.push({ product: '', name: '', sku: '', qty: '', unit_price: '', units_per_carton: '' });
+    if (!L.length) { const pp = prod && p.products.find(x => +x.id === +prod); L.push({ product: pp ? pp.id : '', name: pp ? pp.name : '', sku: pp ? pp.sku || '' : '', qty: '', unit_price: '', units_per_carton: '' }); }
     const opt2 = (list, v, blank) => `<option value="">${blank}</option>` + list.map(x => `<option value="${x.id}" ${+x.id === +v ? 'selected' : ''}>${esc(x.name)}</option>`).join('');
     $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/buying">Buying</a> ›</div><h1>Direct PO</h1><div class="sub">One save makes the cycle, the confirmed PO, its lines, cartons and payment terms. Nothing is saved if any part fails.</div></div></div>
       <div class="card"><div class="form" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">
@@ -3438,9 +3459,9 @@
       ${d ? `<div class="card" style="margin-top:12px"><div class="tbl-wrap"><table class="t"><thead><tr><th>Product *</th><th class="num">Qty *</th><th class="num">Unit price</th><th class="num">Units / carton</th><th class="num">Line total</th><th></th></tr></thead><tbody id="dpLines"></tbody></table></div>
         <div style="display:flex;gap:10px;align-items:center;margin-top:8px"><button class="btn sm" id="dpAdd">${ic('plus')} Add line</button><span style="margin-left:auto">Total <b id="dpTot">0.00</b> ${esc(d.currency)}</span></div>
         <div id="dpErr" class="small" style="color:var(--err);margin-top:6px"></div><div style="margin-top:10px"><button class="btn primary" id="dpSave">Save direct PO</button></div></div>` : '<div class="card" style="margin-top:12px"><div class="empty">Select the Supplier to start.</div></div>'}`;
-    $('#dpSup').onchange = e => pageDirectPo(e.target.value || null, null);
+    $('#dpSup').onchange = e => pageDirectPo(e.target.value || null, null, prod);
     if (!d) return;
-    $('#dpRep').onchange = e => pageDirectPo(sup, e.target.value === '0' ? null : e.target.value);
+    $('#dpRep').onchange = e => pageDirectPo(sup, e.target.value === '0' ? null : e.target.value, prod);
     const prodOpts = v => `<option value="">Choose…</option>` + p.products.map(x => `<option value="${x.id}" ${+x.id === +v ? 'selected' : ''}>${esc(x.name)}</option>`).join('');
     const tot = () => { let t = 0; L.forEach(l => t += Math.round((+l.qty || 0) * (+l.unit_price || 0) * 100) / 100); $('#dpTot').textContent = t.toFixed(2); };
     const draw = () => { $('#dpLines').innerHTML = L.map((l, i) => `<tr><td><select data-l="${i}" data-k="product">${prodOpts(l.product)}</select></td><td class="num"><input type="number" min="1" data-l="${i}" data-k="qty" value="${l.qty}" style="width:90px"></td>

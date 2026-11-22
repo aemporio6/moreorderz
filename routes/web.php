@@ -97,6 +97,10 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('permissions/request', [AdminController::class, 'permRequest']);
         Route::post('permissions/requests/{id}', [AdminController::class, 'permDecide'])->whereNumber('id');
         Route::get('permissions/why', [AdminController::class, 'permWhy']);
+        Route::get('menu-builder', [AdminController::class, 'menuTree']);
+        Route::post('menu-builder/order', [AdminController::class, 'menuOrder']);
+        Route::post('menu-builder/{id}/rename', [AdminController::class, 'menuRename'])->whereNumber('id');
+        Route::post('menu-builder/{id}/role', [AdminController::class, 'menuRole'])->whereNumber('id');
         Route::get('permissions/migration', [AdminController::class, 'permMigration']);
         Route::post('permissions/migration', [AdminController::class, 'permMigrationApply']);
         Route::post('permissions/view-as', [AdminController::class, 'permViewAs']);

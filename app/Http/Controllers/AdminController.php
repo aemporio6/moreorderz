@@ -491,6 +491,13 @@ class AdminController extends Controller
         return ['allowed' => P::has($u, $d['code']), 'why' => P::explain($u, $d['code']), 'label' => P::label($d['code'])];
     }
 
+    /** R-G_CORE-57 menu builder (Owner): order, names, per-role visibility. */
+    private function mb(callable $fn) { try { $r = $fn(); return ['message' => $r]; } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
+    public function menuTree(Request $r) { abort_unless($r->user()->role_code === 'OWNER', 403, 'Only the Owner can change the menu.'); return \App\Services\MenuBuilder::tree(); }
+    public function menuOrder(Request $r) { return $this->mb(fn () => \App\Services\MenuBuilder::order($r->user(), $r->input('parent') !== null ? (int) $r->input('parent') : null, (array) $r->input('ids', []))); }
+    public function menuRename(Request $r, int $id) { return $this->mb(fn () => \App\Services\MenuBuilder::rename($r->user(), $id, (string) $r->input('name'))); }
+    public function menuRole(Request $r, int $id) { return $this->mb(fn () => \App\Services\MenuBuilder::role($r->user(), $id, (string) $r->input('role'), (bool) $r->input('on'))); }
+
     /** R-G_CORE-61 dry-run: the old rights (roles × pages, personal GRANTED / REVOKED) against the new rights, per role and person. */
     public function permMigration(Request $r)
     {
