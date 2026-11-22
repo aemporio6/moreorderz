@@ -549,6 +549,14 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('compliance/{id}', [\App\Http\Controllers\InvoicesController::class, 'complianceUpdate'])->whereNumber('id');      // R-ACC-10
         Route::post('compliance/{id}/document', [\App\Http\Controllers\InvoicesController::class, 'complianceDocument'])->whereNumber('id');
         Route::post('compliance/generate', [\App\Http\Controllers\InvoicesController::class, 'complianceGenerate']);
+        Route::get('purchase-audit', [\App\Http\Controllers\PurchaseAuditController::class, 'index']);      // R-A_SALES-60 … 64
+        Route::post('purchase-audit', [\App\Http\Controllers\PurchaseAuditController::class, 'create']);
+        Route::get('purchase-audit/suppliers', [\App\Http\Controllers\PurchaseAuditController::class, 'suppliers']);
+        Route::post('purchase-audit/suppliers/{vendor}', [\App\Http\Controllers\PurchaseAuditController::class, 'profile'])->whereNumber('vendor');
+        Route::get('purchase-audit/{id}', [\App\Http\Controllers\PurchaseAuditController::class, 'show'])->whereNumber('id');
+        Route::post('purchase-audit/{id}/ebay', [\App\Http\Controllers\PurchaseAuditController::class, 'ebay'])->whereNumber('id');
+        Route::post('purchase-audit/{id}/supplier/{vendor}', [\App\Http\Controllers\PurchaseAuditController::class, 'supplier'])->whereNumber(['id', 'vendor']);
+        Route::post('purchase-audit/{id}/accept/{sale}', [\App\Http\Controllers\PurchaseAuditController::class, 'accept'])->whereNumber(['id', 'sale']);
         Route::get('compliance/hub', [\App\Http\Controllers\InvoicesController::class, 'hubSettings']);      // R-ACC-20 / 22
         Route::post('compliance/hub', [\App\Http\Controllers\InvoicesController::class, 'hubSettingsSave']);
         Route::post('compliance/hub/team/{user}', [\App\Http\Controllers\InvoicesController::class, 'hubMember'])->whereNumber('user');
