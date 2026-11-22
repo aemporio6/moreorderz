@@ -217,6 +217,7 @@ class TaskActions
             if (TaskOwner::absent($to)) { $c = TaskOwner::usable($to); $warn[] = self::name($to) . ' is absent' . ($c && $c !== $to ? ' – ' . self::name($c) . ' covers.' : ' and has no cover.'); }
             DB::table('tasks')->where('id', $id)->update(['owner_user_id' => $to, 'acknowledged_at' => null, 'reassigned_at' => now(), 'last_update_at' => now()]);
             self::hist($id, (int) $u->id, 'owner_user_id', $t->owner_user_id ? (string) $t->owner_user_id : null, (string) $to, trim($reason));
+            if ($t->acknowledged_at) self::hist($id, (int) $u->id, 'acknowledged_at', (string) $t->acknowledged_at, null, trim($reason));      // R-G_CORE-30: the second row of a reassign
             if (DB::table('task_helpers')->where('task_id', $id)->where('user_id', $to)->delete()) self::hist($id, (int) $u->id, 'helper_removed', (string) $to, null, 'became owner');
             Audit::log('tasks', $id, 'UPDATE', ['owner_user_id' => [$t->owner_user_id, $to]], trim($reason));
             EventBus::fire('TASK_REASSIGNED', 'tasks', $id, ['from' => $t->owner_user_id, 'to' => $to, 'reason' => trim($reason)], (int) $t->fk_id_ent);
@@ -420,7 +421,7 @@ class TaskActions
             'score' => $t->status === 'APPROVED' && $t->score !== null ? ['final' => (float) $t->score, 'band' => TaskScore::band((float) $t->score)] : ($t->status === 'DONE' ? ['preview' => TaskScore::parts($t, 'GOOD')] : null),
             'checklist' => DB::table('task_checklist')->where('task_id', $id)->orderBy('sort')->get(['id', 'text', 'is_done', 'done_at']),
             'proof' => $ev, 'comments' => TaskComments::rows($id), 'people' => TaskComments::people((int) $t->fk_id_ent ?: null),
-            'history' => $hist, 'stuck_on' => Guide::STUCK_ON, 'qualities' => array_keys(TaskScore::QUALITY)];
+            'history' => ($hx = TaskHistory::rows($id, $u, false))['rows'], 'history_total' => $hx['total'], 'stuck_on' => Guide::STUCK_ON, 'qualities' => array_keys(TaskScore::QUALITY)];
     }
 
     /* ---------- the panel of one task ---------- */

@@ -551,6 +551,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('tasks/{id}/comment', [WorkController::class, 'taskComment'])->whereNumber('id');
         Route::post('tasks/{id}/proof', [WorkController::class, 'taskProof'])->whereNumber('id');
         Route::post('tasks/{id}/checklist', [WorkController::class, 'taskItem'])->whereNumber('id');
+        Route::get('tasks/{id}/history', [WorkController::class, 'taskHistory'])->whereNumber('id');
+        Route::get('help/tasks', [WorkController::class, 'tasksGuide']);
         Route::post('task-checklist/{id}/tick', [WorkController::class, 'taskTick'])->whereNumber('id');
         Route::get('task-import/template', [WorkController::class, 'taskImportTemplate']);
         Route::post('task-import', [WorkController::class, 'taskImport']);

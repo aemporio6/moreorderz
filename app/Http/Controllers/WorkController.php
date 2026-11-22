@@ -178,6 +178,12 @@ class WorkController extends Controller
     public function taskProof(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskActions::addProof($id, $r->user(), $r->file('file'), $r->input('link'), $r->input('reference'), $r->input('note'), $r->input('kind'))); }
     public function taskTemplates(Request $r) { return \App\Services\TaskTemplates::page($r->user()); }
     public function taskTemplateCreate(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskTemplates::create($id, $r->user(), ['record' => $r->input('record'), 'reference' => $r->input('reference'), 'start' => $r->input('start')])); }
+    public function taskHistory(Request $r, int $id)
+    {
+        $t = DB::table('tasks')->where('id', $id)->first(); if (! $t || ! \App\Services\TaskFlow::canSee($t, $r->user())) return response()->json(['message' => 'Task not found.'], 404);
+        return \App\Services\TaskHistory::rows($id, $r->user(), true);      // R-G_CORE-30 "Show all n changes"
+    }
+    public function tasksGuide() { return \App\Services\TaskGuide::page(); }      // R-G_CORE-42
     public function taskItem(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskActions::addItem($id, $r->user(), (string) $r->input('text'))); }
     public function taskTick(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskActions::tick($id, $r->user(), $r->boolean('done'))); }
     public function taskImportTemplate() { return response(\App\Services\TaskImport::template(), 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => 'attachment; filename="tasks_import_template.csv"']); }
