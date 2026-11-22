@@ -36,9 +36,9 @@
 36|B|class LostParcels|Not handed over: WH_NOT_HANDED_OVER (TrackingPush); handed over and not delivered after the carrier's claim_days → WH_PARCEL_LOST (nightly sweep); case LOST_INVESTIGATING → CLAIMED (ref, amount, date) → PAID / REJECTED (reason); PAID booked Dr 1150 / Cr 4100 on the shop; lost parcel stays shipped; resend = new reservation (resend_no) picked and packed as a new parcel with resend_of; page #/lost-parcels (LostParcelsTest)
 37|B|function confirmMonth|shipped awaiting confirm; Confirm consumes
 38|P|function receiveReturn|return before / after Confirm; cancel / refund around Confirm partly
-39|P|function receiveReturn|return intake with condition; scan intake partly
-40|P|function receiveReturn|unmatched return -> task
-41|P|function receiveReturn|refund review task WH_RETURN_REFUND_REVIEW to the VA on a booked return. Open: grade SUPPLIER_FAULT → claim line on the lot's GRN claim section (the claim section itself exists since 7e-110, SupplierClaims) + QUARANTINE wait
+39|B|function returnCandidates|return scan intake: resolver parcel tracking / parcel ref → order lines, order no / line tracking, intake ref, an item SKU → its shipped lines of 60 days to choose; several lines → choose first; grades RESELLABLE_NEW (home bin, WH_RETURN_NEW_TO) / RESELLABLE_OPENED (RETURNS, WH_RETURN_OPENED_TO) / DAMAGED / SUPPLIER_FAULT / WRONG_ITEM_RETURNED (QUARANTINE + Needs Attention) / MISSING_ITEM; before Confirm from SHIPPED, after Confirm into the same lot; "Already received 2 of 4 – receive more?"; op id never twice; SAL_RETURN_EXPECTED closes (7e-146); ReturnGradesTest r39
+40|P|function receiveReturn|unmatched return saved with no stock movement + WH_RETURN_UNMATCHED; matched later from Returns ("Match to order") → booked like any return, the task closes (7e-146, ReturnGradesTest r40). Open: the task waits WH_RETURN_UNMATCHED_DAYS before it asks; Found stock / dispose buttons
+41|B|function claimForReturn|refund review WH_RETURN_REFUND_REVIEW to the VA only when the order has no refund (a refunded order closes SAL_RETURN_EXPECTED); grade SUPPLIER_FAULT → claim line on the GRN of the lot (units, amount = lot cost, claim OPEN, return_claim_qty raises the cap) and the units wait in QUARANTINE (7e-146); ReturnGradesTest r41
 42|B|function transfer|bin transfer; site transfer two-step not built
 43|B|function move|change a SKU's home, units moved, 2 labels queued
 44|B|function refill|refill of a main home + nightly WH_REPLEN task

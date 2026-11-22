@@ -265,50 +265,142 @@ class DispatchService
 
     // ---------------------------------------------------------------- returns
 
+    /** R-H-39 return grades → [stock condition, restock place]; the old codes are still read (SELLABLE = resellable new, MISSING = empty box). */
+    public const GRADES = ['RESELLABLE_NEW' => 'Resellable – as new', 'RESELLABLE_OPENED' => 'Resellable – opened', 'DAMAGED' => 'Damaged', 'SUPPLIER_FAULT' => 'Supplier fault',
+        'WRONG_ITEM_RETURNED' => 'Wrong item returned', 'MISSING_ITEM' => 'Missing item (empty box)'];
+    private const OLD_GRADES = ['SELLABLE' => 'RESELLABLE_NEW', 'MISSING' => 'MISSING_ITEM', 'QUARANTINE' => 'QUARANTINE'];
+
+    public static function grade(?string $g): string
+    {
+        $g = strtoupper(trim((string) $g)) ?: 'RESELLABLE_NEW';
+        $g = self::OLD_GRADES[$g] ?? $g;
+        if ($g !== 'QUARANTINE' && ! isset(self::GRADES[$g])) throw new \InvalidArgumentException('Choose the grade of the return from the list.');
+        return $g;
+    }
+
+    /** Where a grade goes: [stock condition for the ledger, location id, settings used]. */
+    private static function restock(int $ent, object $sale, string $grade): array
+    {
+        $home = function () use ($ent, $sale) {
+            $h = DB::table('t_product_locations as h')->join('cat_inventory_locations as l', 'l.id', '=', 'h.fk_id_location')->where('h.fk_id_product', $sale->fk_product_id)->where('h.home_role', 'PRIMARY')->where('l.fk_id_ent', $ent)->where('l.f_active', 1)->value('h.fk_id_location');
+            return (int) ($h ?: ($sale->fk_id_sell_location ?: StockService::systemLocation($ent, 'RETURNS')));
+        };
+        $to = fn (string $setting, string $def) => strtoupper((string) Settings::get($setting, $ent, $def)) === 'HOME' ? $home() : StockService::systemLocation($ent, 'RETURNS');
+        return match ($grade) {
+            'RESELLABLE_NEW' => ['SELLABLE', $to('WH_RETURN_NEW_TO', 'HOME')],
+            'RESELLABLE_OPENED' => ['SELLABLE', $to('WH_RETURN_OPENED_TO', 'RETURNS')],
+            'DAMAGED' => ['DAMAGED', StockService::systemLocation($ent, 'DAMAGED')],
+            'SUPPLIER_FAULT', 'WRONG_ITEM_RETURNED', 'QUARANTINE' => ['QUARANTINE', StockService::systemLocation($ent, 'QUARANTINE')],
+            'MISSING_ITEM' => ['MISSING', StockService::systemLocation($ent, 'WRITTEN_OFF')],
+        };
+    }
+
     /**
-     * Book a return as received. Before Month Confirm the units simply come back from SHIPPED to the restock place;
-     * after Confirm they go back into their lot and the cost of sale is reversed (stock service).
-     * $d: code (order no / tracking / parcel code) or sale, qty, condition SELLABLE / DAMAGED / QUARANTINE / MISSING, to_location?, note?.
+     * R-H-39 resolver: the sale lines a scanned code means – parcel tracking / parcel ref → its lines; order no or tracking on the line; return intake ref;
+     * else an item code (SKU) → its shipped lines of the last 60 days (pick from a list). Returns sale rows (newest first).
+     */
+    public static function returnCandidates(int $ent, string $code, ?string $sku = null): array
+    {
+        $code = trim($code); if ($code === '') return [];
+        $q = fn () => DB::table('t_sales')->where('fk_id_ent', $ent)->when($sku, fn ($w) => $w->where('sku', $sku));
+        $parcel = DB::table('wh_parcels')->where('fk_id_ent', $ent)->where(fn ($w) => $w->where('tracking_no', $code)->orWhere('parcel_code', $code))->value('id');
+        if ($parcel) { $ids = DB::table('wh_parcel_lines')->where('fk_id_parcel', $parcel)->pluck('fk_id_sale')->filter()->all(); if ($ids) return $q()->whereIn('id', $ids)->orderByDesc('id')->get()->all(); }
+        $rows = $q()->where(fn ($w) => $w->where('order_no', $code)->orWhere('tracking_no', $code))->orderByDesc('id')->get();
+        if ($rows->count()) return $rows->all();
+        $in = DB::table('wh_return_intakes')->where('fk_id_ent', $ent)->where('intake_code', $code)->value('fk_id_sale');
+        if ($in) return $q()->where('id', $in)->get()->all();
+        return $q()->where('sku', $code)->where('qty_shipped', '>', 0)->where('created_at', '>=', now()->subDays(60))->orderByDesc('id')->limit(10)->get()->all();
+    }
+
+    /**
+     * Book a return (R-H-39 … 41). $d: code (anything on the parcel) or sale, qty, grade (condition = old name), to_location?, note?, op_id?, more (receive more than once), intake (match an unmatched intake).
+     * Several lines match → nothing is booked, the answer lists them to choose (choose). A line already returned → "Already received 2 of 4 – receive more?" (confirm) unless more = true.
+     * Before Month Confirm the units come back from SHIPPED to the restock place; after Confirm they go back into their lot and the cost of sale is reversed.
      */
     public static function receiveReturn(array $d): array
     {
         return DB::transaction(function () use ($d) {
             $ent = (int) Context::ent(); $code = trim((string) ($d['code'] ?? ''));
-            $sale = ! empty($d['sale']) ? DB::table('t_sales')->where('id', $d['sale'])->where('fk_id_ent', $ent)->lockForUpdate()->first()
-                : DB::table('t_sales')->where('fk_id_ent', $ent)->where(fn ($w) => $w->where('order_no', $code)->orWhere('tracking_no', $code))->when(! empty($d['sku']), fn ($q) => $q->where('sku', $d['sku']))->orderByDesc('id')->lockForUpdate()->first();
-            $intake = (int) DB::table('wh_return_intakes')->insertGetId(['fk_id_ent' => $ent, 'intake_code' => Numbering::next('RTI', $ent), 'fk_id_site' => 0, 'scanned_code' => mb_substr($code ?: ('sale ' . ($d['sale'] ?? '')), 0, 100), 'resolved_as' => $sale ? 'ORDER' : 'UNMATCHED',
-                'fk_id_branch' => $sale->fk_id_branch ?? null, 'fk_id_sale' => $sale->id ?? null, 'fk_id_product' => $sale->fk_product_id ?? null, 'qty' => $d['qty'] ?? 1, 'grade' => $d['condition'] ?? 'SELLABLE', 'status' => $sale ? 'BOOKED' : 'UNMATCHED', 'note' => $d['note'] ?? null,
-                'client_op_id' => $d['op_id'] ?? null, 'received_by' => Context::userId() ?? 0, 'received_at' => now()]);
-            EventBus::fire('RETURN_SCANNED', 'wh_return_intakes', $intake, ['matched' => (bool) $sale], $ent);
+            if (! empty($d['op_id']) && ($was = DB::table('t_sale_returns')->where('client_op_id', $d['op_id'])->first())) return ['intake' => (int) $was->fk_id_return_intake, 'matched' => true, 'return' => (int) $was->id, 'repeat' => true, 'before_confirm' => (bool) $was->f_before_confirm, 'cost_back' => 0.0];      // R-H-53 the same op twice
+            $grade = self::grade($d['grade'] ?? $d['condition'] ?? null);
+            $sale = null;
+            if (! empty($d['sale'])) $sale = DB::table('t_sales')->where('id', $d['sale'])->where('fk_id_ent', $ent)->lockForUpdate()->first();
+            else {
+                $c = self::returnCandidates($ent, $code, $d['sku'] ?? null);
+                $orders = collect($c)->pluck('order_no')->unique();
+                if (count($c) > 1) return ['matched' => true, 'choose' => array_map(fn ($x) => ['sale' => (int) $x->id, 'order_no' => $x->order_no, 'sku' => $x->sku, 'qty' => (int) $x->qty_shipped, 'returned' => (int) DB::table('t_sale_returns')->where('fk_id_sale', $x->id)->sum('qty')], $c),
+                    'message' => $orders->count() > 1 ? 'Several orders match – choose the order line.' : "Order {$orders->first()} has " . count($c) . ' lines – choose the line.'];
+                $sale = $c ? DB::table('t_sales')->where('id', $c[0]->id)->lockForUpdate()->first() : null;
+            }
             if (! $sale) {
-                TaskEngine::open('WH_RETURN_UNMATCHED', [$intake], "Return without an order: scanned “{$code}”", ['ent' => $ent, 'module' => 'wh_return_intakes', 'record_id' => $intake]);
+                if (! empty($d['intake'])) throw new \InvalidArgumentException('Order line not found.');
+                $intake = (int) DB::table('wh_return_intakes')->insertGetId(['fk_id_ent' => $ent, 'intake_code' => Numbering::next('RTI', $ent), 'fk_id_site' => 0, 'scanned_code' => mb_substr($code ?: ('sale ' . ($d['sale'] ?? '')), 0, 100), 'resolved_as' => 'UNMATCHED',
+                    'fk_id_product' => null, 'qty' => $d['qty'] ?? 1, 'grade' => $grade, 'status' => 'UNMATCHED', 'note' => $d['note'] ?? null, 'client_op_id' => $d['op_id'] ?? null, 'received_by' => Context::userId() ?? 0, 'received_at' => now()]);
+                EventBus::fire('RETURN_SCANNED', 'wh_return_intakes', $intake, ['matched' => false], $ent);
+                TaskEngine::open('WH_RETURN_UNMATCHED', [$intake], "Return without an order: scanned “{$code}” – match it under Returns to match", ['ent' => $ent, 'module' => 'wh_return_intakes', 'record_id' => $intake]);      // R-H-40 no stock movement
                 return ['intake' => $intake, 'matched' => false];
             }
-            $qty = (int) ($d['qty'] ?? 1); $cond = strtoupper($d['condition'] ?? 'SELLABLE');
+            $qty = (int) ($d['qty'] ?? 1);
             if ($qty <= 0) throw new \InvalidArgumentException('Quantity must be more than zero.');
             $before = $sale->status === 'Pending';
-            $kinds = ['SELLABLE' => null, 'DAMAGED' => 'DAMAGED', 'QUARANTINE' => 'QUARANTINE', 'MISSING' => 'WRITTEN_OFF'];
-            $kind = array_key_exists($cond, $kinds) ? $kinds[$cond] : 'RETURNS';
-            $to = $d['to_location'] ?? ($kind ? StockService::systemLocation($ent, $kind) : (int) ($sale->fk_id_sell_location ?: StockService::systemLocation($ent, 'RETURNS')));
+            if ($before) { $out = (int) $sale->qty_shipped - (int) $sale->qty_returned_unconfirmed; if ($qty > $out) throw new \RuntimeException("Only $out unit(s) of this line were shipped and are still out."); }
+            $had = (int) DB::table('t_sale_returns')->where('fk_id_sale', $sale->id)->sum('qty');
+            if ($had > 0 && empty($d['more'])) return ['matched' => true, 'confirm' => true, 'sale' => (int) $sale->id, 'message' => "Already received $had of " . (int) ($sale->qty ?: $sale->qty_shipped) . ' – receive more?'];
+            [$cond, $to] = self::restock($ent, $sale, $grade); $to = (int) ($d['to_location'] ?? $to);
+            if (! empty($d['intake'])) {      // R-H-40 an unmatched intake matched later
+                $intake = (int) $d['intake'];
+                $x = DB::table('wh_return_intakes')->where('id', $intake)->where('fk_id_ent', $ent)->lockForUpdate()->first() ?? throw new \InvalidArgumentException('Return intake not found.');
+                if ($x->status !== 'UNMATCHED') throw new \InvalidArgumentException('This return is already matched.');
+                DB::table('wh_return_intakes')->where('id', $intake)->update(['resolved_as' => 'ORDER', 'fk_id_branch' => $sale->fk_id_branch, 'fk_id_sale' => $sale->id, 'fk_id_product' => $sale->fk_product_id, 'grade' => $grade, 'status' => 'BOOKED']);
+                TaskEngine::close('WH_RETURN_UNMATCHED', [$intake], 'Matched to order ' . $sale->order_no);
+            } else {
+                $intake = (int) DB::table('wh_return_intakes')->insertGetId(['fk_id_ent' => $ent, 'intake_code' => Numbering::next('RTI', $ent), 'fk_id_site' => 0, 'scanned_code' => mb_substr($code ?: ('sale ' . $sale->id), 0, 100), 'resolved_as' => 'ORDER',
+                    'fk_id_branch' => $sale->fk_id_branch, 'fk_id_sale' => $sale->id, 'fk_id_product' => $sale->fk_product_id, 'qty' => $qty, 'grade' => $grade, 'status' => 'BOOKED', 'note' => $d['note'] ?? null, 'client_op_id' => $d['op_id'] ?? null, 'received_by' => Context::userId() ?? 0, 'received_at' => now()]);
+                EventBus::fire('RETURN_SCANNED', 'wh_return_intakes', $intake, ['matched' => true], $ent);
+            }
             if ($before) {
-                $out = (int) $sale->qty_shipped - (int) $sale->qty_returned_unconfirmed;
-                if ($qty > $out) throw new \RuntimeException("Only $out unit(s) of this line were shipped and are still out.");
                 if ($cond !== 'MISSING') {
                     $r = DB::table('wh_reservations')->where('fk_id_sale', $sale->id)->orderByDesc('id')->first();
-                    StockService::transfer($ent, (int) $sale->fk_product_id, $qty, StockService::systemLocation($ent, 'SHIPPED'), (int) $to, "Return $cond before confirm", ['rule' => ($r->owner_rule ?? 'POOL') === 'PRIVATE' ? 'PRIVATE' : 'POOL', 'owner' => $r->fk_id_owner_seg ?? null, 'source_type' => 'RETURN', 'source_id' => $sale->id]);
+                    StockService::transfer($ent, (int) $sale->fk_product_id, $qty, StockService::systemLocation($ent, 'SHIPPED'), $to, "Return $grade before confirm", ['rule' => ($r->owner_rule ?? 'POOL') === 'PRIVATE' ? 'PRIVATE' : 'POOL', 'owner' => $r->fk_id_owner_seg ?? null]);
                     DB::table('t_sales')->where('id', $sale->id)->update(['qty_returned_unconfirmed' => DB::raw('COALESCE(qty_returned_unconfirmed,0) + ' . $qty)]);
                 }
                 $back = 0.0;
             } else {
-                $back = StockService::returnIn($ent, (int) $sale->id, $qty, $cond, $d['to_location'] ?? null)['cost_back'];
+                $back = StockService::returnIn($ent, (int) $sale->id, $qty, $cond, $to)['cost_back'];
             }
-            $ret = (int) DB::table('t_sale_returns')->insertGetId(['fk_id_ent' => $ent, 'fk_id_sale' => $sale->id, 'condition_code' => $cond, 'qty' => $qty, 'd_received' => date('Y-m-d'), 'restock_to' => $kind ?: 'STOCK', 'note' => $d['note'] ?? null,
-                'created_by' => Context::userId(), 'created_at' => now(), 'fk_id_return_intake' => $intake, 'grade' => $cond, 'fk_id_restock_location' => $to, 'f_before_confirm' => $before ? 1 : 0, 'refund_review' => 'OPEN', 'received_by' => Context::userId()]);
-            TaskEngine::open('WH_RETURN_REFUND_REVIEW', [$ret], "Return received for order {$sale->order_no} ($qty × {$sale->sku}, $cond) – review the refund", ['ent' => $ent, 'module' => 't_sales', 'record_id' => $sale->id]);
-            EventBus::fire('RETURN_RECEIVED', 't_sale_returns', $ret, ['sale' => $sale->id, 'qty' => $qty, 'condition' => $cond, 'before_confirm' => $before], $ent);
-            if ($cond === 'SELLABLE') self::fillShorts((int) $sale->fk_product_id);
-            return ['intake' => $intake, 'matched' => true, 'return' => $ret, 'before_confirm' => $before, 'cost_back' => $back];
+            $refunded = $sale->refunded_at || ($sale->fk_id_refund_proposal && DB::table('t_sale_refund_proposals')->where('id', $sale->fk_id_refund_proposal)->whereIn('status', ['APPROVED', 'APPLIED', 'DONE'])->exists());
+            $ret = (int) DB::table('t_sale_returns')->insertGetId(['fk_id_ent' => $ent, 'fk_id_sale' => $sale->id, 'condition_code' => $cond, 'qty' => $qty, 'd_received' => date('Y-m-d'), 'restock_to' => $cond === 'SELLABLE' ? 'STOCK' : $cond, 'note' => $d['note'] ?? null,
+                'created_by' => Context::userId(), 'created_at' => now(), 'fk_id_return_intake' => $intake, 'grade' => $grade, 'fk_id_restock_location' => $to, 'f_before_confirm' => $before ? 1 : 0, 'refund_review' => $refunded ? 'DONE' : 'OPEN', 'received_by' => Context::userId(), 'client_op_id' => $d['op_id'] ?? null]);
+            // R-H-41: refund review only when the order has no refund yet; a refunded order just closes SAL_RETURN_EXPECTED
+            if ($refunded) TaskEngine::close('SAL_RETURN_EXPECTED', [$sale->id], 'The return was booked as received');
+            else TaskEngine::open('WH_RETURN_REFUND_REVIEW', [$ret], "Return received for order {$sale->order_no} ($qty × {$sale->sku}, " . (self::GRADES[$grade] ?? $grade) . ') – review the refund', ['ent' => $ent, 'module' => 't_sales', 'record_id' => $sale->id, 'fix_url' => '#/sales?q=' . rawurlencode((string) $sale->order_no)]);
+            $claim = $grade === 'SUPPLIER_FAULT' ? self::claimForReturn($ent, $sale, $qty, $ret) : null;
+            if ($grade === 'WRONG_ITEM_RETURNED') TaskEngine::open('WH_RETURN_UNMATCHED', [$intake], "Wrong item returned on order {$sale->order_no} – it is in QUARANTINE, check what came back", ['ent' => $ent, 'module' => 'wh_return_intakes', 'record_id' => $intake]);
+            EventBus::fire('RETURN_RECEIVED', 't_sale_returns', $ret, ['sale' => $sale->id, 'qty' => $qty, 'condition' => $cond, 'grade' => $grade, 'before_confirm' => $before], $ent);
+            if ($cond === 'SELLABLE' && $to !== StockService::systemLocation($ent, 'RETURNS')) self::fillShorts((int) $sale->fk_product_id);
+            return ['intake' => $intake, 'matched' => true, 'return' => $ret, 'grade' => $grade, 'restock_location' => $to, 'before_confirm' => $before, 'cost_back' => $back, 'claim' => $claim, 'refund_review' => ! $refunded];
         });
+    }
+
+    /**
+     * R-H-41 a SUPPLIER_FAULT return adds a claim line on the GRN of its lot: the lot the sale took (after Confirm), else the oldest lot of the product still holding units;
+     * units + amount (lot cost) on that GRN line's claim (return_claim_qty raises the cap), the GRN claim OPEN. The units wait in QUARANTINE.
+     */
+    private static function claimForReturn(int $ent, object $sale, int $qty, int $retId): ?array
+    {
+        $lotId = DB::table('fin_lot_consumption')->where('fk_id_sale', $sale->id)->whereNull('fk_id_reverses')->orderByDesc('id')->value('lot_id');
+        $lot = $lotId ? DB::table('fin_lots')->where('id', $lotId)->first() : DB::table('fin_lots')->where('company_id', $ent)->where('fk_id_product', $sale->fk_product_id)->where('source', 'GRN')->orderBy('received_date')->orderBy('id')->first();
+        if (! $lot || $lot->source !== 'GRN' || ! $lot->source_id) return null;
+        $line = DB::table('t_src_grn_lines')->where('fk_id_grn', $lot->source_id)->where('fk_id_product', $sale->fk_product_id)->orderBy('id')->first();
+        if (! $line) return null;
+        $amt = round($qty * (float) $lot->unit_cost_gbp, 2);
+        DB::table('t_src_grn_lines')->where('id', $line->id)->update(['return_claim_qty' => DB::raw('COALESCE(return_claim_qty,0) + ' . $qty), 'claim_qty' => DB::raw('COALESCE(claim_qty,0) + ' . $qty), 'claim_amount' => DB::raw('COALESCE(claim_amount,0) + ' . $amt)]);
+        $g = DB::table('t_src_grn')->where('id', $lot->source_id)->first();
+        if (! in_array($g->claim_status, ['SETTLED', 'REJECTED', 'NO_CLAIM'], true)) DB::table('t_src_grn')->where('id', $g->id)->update(['claim_status' => 'OPEN']);
+        DB::table('t_sale_returns')->where('id', $retId)->update(['fk_id_grn_claim' => $g->id]);
+        SupplierClaims::refresh($ent, (int) $g->id);
+        Audit::log('t_src_grn_lines', (int) $line->id, 'UPDATE', ['return_claim' => [$qty, $amt], 'return' => $retId], 'supplier-fault return', $ent);
+        return ['grn' => (int) $g->id, 'grn_code' => $g->grn_number ?: $g->grn_code, 'lot' => $lot->lot_code, 'units' => $qty, 'amount' => $amt];
     }
 
     // ---------------------------------------------------------------- reads and helpers

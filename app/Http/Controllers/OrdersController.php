@@ -325,8 +325,12 @@ class OrdersController extends Controller
     public function receiveReturn(Request $r)
     {
         $this->can($r, 'orders.WAREHOUSE');
-        $d = $r->validate(['code' => 'required|string|max:100', 'qty' => 'nullable|integer|min:1', 'condition' => 'nullable|in:SELLABLE,DAMAGED,QUARANTINE,MISSING', 'note' => 'nullable|string|max:500', 'op_id' => 'nullable|string|max:36']);
-        return $this->run(function () use ($d) { $x = Dispatch::receiveReturn(array_filter($d, fn ($v) => $v !== null)); return $x + ['message' => $x['matched'] ? 'Return booked' . ($x['before_confirm'] ? '' : ' – the cost of the sale is reversed') : 'No order matches this code – saved for review']; });
+        $grades = implode(',', array_merge(array_keys(Dispatch::GRADES), ['SELLABLE', 'QUARANTINE', 'MISSING']));      // R-H-39 grades (old names still read)
+        $d = $r->validate(['code' => 'required_without_all:sale,intake|nullable|string|max:100', 'sale' => 'nullable|integer', 'intake' => 'nullable|integer', 'qty' => 'nullable|integer|min:1', 'condition' => "nullable|in:$grades", 'grade' => "nullable|in:$grades",
+            'note' => 'nullable|string|max:500', 'op_id' => 'nullable|string|max:36', 'more' => 'boolean']);
+        return $this->run(function () use ($d) { $x = Dispatch::receiveReturn(array_filter($d, fn ($v) => $v !== null));
+            if (isset($x['choose']) || isset($x['confirm'])) return $x;
+            return $x + ['message' => $x['matched'] ? 'Return booked' . ($x['before_confirm'] ? '' : ' – the cost of the sale is reversed') . (! empty($x['claim']) ? " · claim line on {$x['claim']['grn_code']}" : '') : 'No order matches this code – saved for review under Returns to match']; });
     }
 
     // ───────────── sales list and the actions on a line (RULES_A_SALES §5, §6) ─────────────

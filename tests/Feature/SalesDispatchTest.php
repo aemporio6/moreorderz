@@ -175,7 +175,9 @@ class SalesDispatchTest extends TestCase
 
         $c = Sales::confirmMonth($this->shop, '2026-08', true);                 // 3 still out + 1 came back and is booked as shipped again = the line's 4
         $this->assertSame(4, $c['units']);
-        $after = Dispatch::receiveReturn(['code' => 'ORD-1', 'qty' => 2, 'condition' => 'DAMAGED']);
+        $ask = Dispatch::receiveReturn(['code' => 'ORD-1', 'qty' => 2, 'condition' => 'DAMAGED']);
+        $this->assertSame([true, 'Already received 1 of 4 – receive more?'], [$ask['confirm'], $ask['message']]); /* R-H-39 the same line again asks first */
+        $after = Dispatch::receiveReturn(['code' => 'ORD-1', 'qty' => 2, 'condition' => 'DAMAGED', 'more' => true]);
         $this->assertSame([false, 8.00], [$after['before_confirm'], $after['cost_back']]);
         $this->assertSame(2, Stock::balance($this->p, Stock::systemLocation(1, 'DAMAGED')));
         $this->assertSame(Stock::value(1), Ledger::balance(1, '1200'));

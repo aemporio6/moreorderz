@@ -73,7 +73,7 @@ class SupplierClaims
         $l = DB::table('t_src_grn_lines as l')->join('t_src_grn as g', 'g.id', '=', 'l.fk_id_grn')->leftJoin('t_src_po_lines as p', 'p.id', '=', 'l.fk_id_po_line')->where('l.id', $lineId)->where('g.fk_id_ent', $ent)
             ->first(['l.*', 'g.claim_status', 'p.unit_price']) ?? throw new \InvalidArgumentException('GRN line not found.');
         if (in_array($l->claim_status, ['SETTLED', 'REJECTED', 'NO_CLAIM'], true)) throw new \InvalidArgumentException('This claim is closed (' . $l->claim_status . ').');
-        $max = (float) $l->missing_qty + (float) $l->damaged_qty;
+        $max = (float) $l->missing_qty + (float) $l->damaged_qty + (float) ($l->return_claim_qty ?? 0);      // + supplier-fault returns (R-H-41)
         if ($qty < 0 || $qty > $max + 0.0001) throw new \InvalidArgumentException('The claim quantity is between 0 and ' . rtrim(rtrim(number_format($max, 2, '.', ''), '0'), '.') . ' (missing + damaged).');
         if ($qty < $max - 0.0001 && trim((string) $reason) === '') throw new \InvalidArgumentException('Give the reason for claiming less than the missing + damaged units.');
         $amt = $amount !== null ? round($amount, 2) : round($qty * (float) $l->unit_price, 2);
