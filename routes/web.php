@@ -101,6 +101,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('permissions/migration', [AdminController::class, 'permMigrationApply']);
         Route::post('permissions/view-as', [AdminController::class, 'permViewAs']);
         Route::post('users/{id?}', [AdminController::class, 'saveUser'])->whereNumber('id');
+        Route::post('users/bulk-role', [AdminController::class, 'usersBulkRole']);
         Route::post('users/{id}/two-step-off', [AdminController::class, 'twoStepOff'])->whereNumber('id');
         Route::post('me/password', [AdminController::class, 'password']);
         Route::get('me/two-step', [AdminController::class, 'twoStepSetup']);

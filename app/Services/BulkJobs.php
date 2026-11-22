@@ -152,6 +152,7 @@ class BulkJobs
     {
         $j = DB::table('bulk_jobs')->where('id', $jobId)->first() ?? abort(404, 'Job not found.');
         if ($j->list_key === 'task_bulk') return TaskBulk::undo($jobId, $u);
+        if ($j->list_key === 'user_role') return UserBulk::undo($jobId, $u);      // R-G_CORE-69 bulk role change
         if ($j->list_key === 'task_import') return TaskImport::undo($jobId, $u);      // R-G_CORE-34 batch undo      // R-G_CORE-33: task jobs put back by their own rules
         if ((int) $j->fk_id_account !== (int) $u->id && ! Perm::has($u, 'admin.owner') && ($u->role_code ?? '') !== 'MANAGER') abort(403, 'Only the person who did it, a Manager or the Owner can undo it.');
         if ($j->status !== 'APPLIED') throw new \InvalidArgumentException($j->status === 'UNDONE' ? 'This was already undone.' : 'This job cannot be undone.');

@@ -324,8 +324,33 @@ class RecordService
             if ($f['auto_correct'] === 'lower') $v = mb_strtolower($v);
         }
         if ($f['type'] === 'check') return in_array($v, [1, '1', true, 'true', 'on', 'Y'], true) ? 1 : 0;
+        if ($f['type'] === 'month_year' && is_string($v) && $v !== '') return self::monthYear($f, $v);
         if (in_array($f['type'], ['number', 'money'], true) && is_string($v) && $v !== '') $v = str_replace([',', '£', '$', '€', ' '], '', $v);
         return $v;
+    }
+
+    /** R-G_CORE-71 month_year: "0726", "07/2026", "7/26", "072026", "2026-07" → stored as a date (valid from = the 1st, an expiry = the last day) when the column is a date, else "MM/YYYY". A bad month stays "MM/YYYY" for the check. */
+    public static function monthYear(array $f, string $v): string
+    {
+        $v = trim($v);
+        if (preg_match('/^(\d{4})-(\d{2})(-\d{2})?$/', $v, $m)) [$mm, $yy] = [$m[2], $m[1]];
+        elseif (preg_match('/^(\d{1,2})\s*[\/\-.]\s*(\d{2}|\d{4})$/', $v, $m)) [$mm, $yy] = [$m[1], $m[2]];
+        elseif (preg_match('/^(\d{2})(\d{2}|\d{4})$/', $v, $m)) [$mm, $yy] = [$m[1], $m[2]];
+        else return $v;
+        $mm = str_pad($mm, 2, '0', STR_PAD_LEFT); $yy = strlen($yy) === 2 ? '20' . $yy : $yy;
+        if ((int) $mm < 1 || (int) $mm > 12) return "$mm/$yy";
+        if (! self::isDateColumn($f)) return "$mm/$yy";
+        return self::isExpiry($f) ? date('Y-m-t', strtotime("$yy-$mm-01")) : "$yy-$mm-01";
+    }
+
+    private static function isExpiry(array $f): bool { return (bool) preg_match('/upto|expir|valid_to|_until/i', (string) ($f['column_name'] ?? $f['field_name'] ?? '')); }
+
+    private static function isDateColumn(array $f): bool
+    {
+        static $c = [];
+        $k = ($f['table_name'] ?? '') . '.' . ($f['column_name'] ?? '');
+        if (! isset($c[$k])) { try { $c[$k] = in_array(strtolower((string) \Illuminate\Support\Facades\Schema::getColumnType((string) $f['table_name'], (string) $f['column_name'])), ['date', 'datetime', 'timestamp'], true); } catch (\Throwable) { $c[$k] = false; } }
+        return $c[$k];
     }
 
     private static function invalid(array $f, mixed $v): ?string
@@ -339,6 +364,12 @@ class RecordService
                 break;
             case 'date':
                 if (! preg_match('/^\d{4}-\d{2}-\d{2}/', (string) $v) || ! strtotime((string) $v)) return "$l must be a date (YYYY-MM-DD).";
+                break;
+            case 'month_year':      // R-G_CORE-71
+                if (preg_match('/^(\d{2})\/(\d{4})$/', (string) $v, $m)) { if ((int) $m[1] < 1 || (int) $m[1] > 12) return "$l: month 01–12."; $first = "$m[2]-$m[1]-01"; }
+                elseif (preg_match('/^(\d{4})-(\d{2})-\d{2}$/', (string) $v, $m)) $first = "$m[1]-$m[2]-01";
+                else return "$l must be a month and year (MM/YYYY).";
+                if (self::isExpiry($f) && $first < date('Y-m-01')) return "$l is in the past.";
                 break;
             case 'email':
                 if (! filter_var($v, FILTER_VALIDATE_EMAIL)) return "$l is not a valid email address.";

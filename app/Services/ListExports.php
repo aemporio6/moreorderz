@@ -59,7 +59,8 @@ class ListExports
         if (! Registry::exists($listKey)) throw new \InvalidArgumentException('List not found.');
         $format = strtoupper((string) ($d['format'] ?? 'CSV')); if (! isset(self::FORMATS[$format])) $format = 'CSV';
         $schedule = (string) ($d['schedule'] ?? 'NONE'); if (! in_array($schedule, ['NONE', 'DAILY', 'WEEKLY'], true)) $schedule = 'NONE'; $to = trim((string) ($d['send_to'] ?? ''));
-        if ($schedule !== 'NONE' && ! filter_var($to, FILTER_VALIDATE_EMAIL)) throw new \InvalidArgumentException('A scheduled export needs the e-mail address it is sent to.');
+        if ($schedule !== 'NONE' && ! filter_var($to, FILTER_VALIDATE_EMAIL) && ! Connect\DriveFolders::folderId($to)) throw new \InvalidArgumentException('A scheduled export needs the e-mail address or the Google Drive folder link it goes to.');
+        if ($schedule !== 'NONE' && ! filter_var($to, FILTER_VALIDATE_EMAIL)) $to = 'drive:' . Connect\DriveFolders::folderId($to);      // R-G_CORE-68 to a Drive folder
         $role = ($d['shared_role'] ?? '') ?: null;
         if ($role && $role !== '*' && ! isset(Perm::roles()[$role])) throw new \InvalidArgumentException('Role not found.');
         if ($role && ! Perm::has($u, 'admin.saveView_may')) throw new \InvalidArgumentException('Only the Owner or a Manager can share an export with a role.');
@@ -97,6 +98,32 @@ class ListExports
         DB::table('mo_export_templates')->where('id', $id)->delete();
     }
 
+    /**
+     * R-G_CORE-68 migration: the old saved exports (t_export_options: export_name, export_fields, export_controller_name, created_by) become templates of the matching list.
+     * The old page name → the list (RightsMigration::formOf); fields by column name or label; the person = the login with that id or that account. Nothing is guessed: a row that does not match is reported.
+     */
+    public static function importOld(): array
+    {
+        $moved = 0; $skip = [];
+        if (! \Illuminate\Support\Facades\Schema::hasTable('t_export_options')) return ['moved' => 0, 'skipped' => []];
+        foreach (DB::table('t_export_options')->orderBy('id')->get() as $o) {
+            $list = RightsMigration::formOf((string) $o->export_controller_name);
+            if (! $list) { $skip[] = ['id' => (int) $o->id, 'name' => $o->export_name, 'why' => 'No list for the old page "' . $o->export_controller_name . '".']; continue; }
+            $u = \App\Models\User::find((int) $o->created_by) ?? \App\Models\User::where('fk_id_account', (int) $o->created_by)->first();
+            if (! $u) { $skip[] = ['id' => (int) $o->id, 'name' => $o->export_name, 'why' => 'No login for the person who made it.']; continue; }
+            $fields = collect(Registry::fields($list)); $cols = []; $miss = [];
+            foreach (preg_split('/\s*[,;|]\s*/', (string) $o->export_fields, -1, PREG_SPLIT_NO_EMPTY) as $want) {
+                $f = $fields->first(fn ($f) => strcasecmp((string) $f['column_name'], $want) === 0 || strcasecmp((string) $f['field_name'], $want) === 0 || strcasecmp((string) $f['label'], $want) === 0);
+                if ($f) $cols[] = $f['field_name']; else $miss[] = $want;
+            }
+            if (! $cols) { $skip[] = ['id' => (int) $o->id, 'name' => $o->export_name, 'why' => 'None of its fields is on the list.']; continue; }
+            Context::set((int) ($u->fk_id_ent ?: 1), (int) $u->id);
+            self::save($u, $list, ['name' => trim((string) $o->export_name) ?: 'Old export ' . $o->id, 'columns' => array_values(array_unique($cols)), 'format' => 'CSV']);
+            $moved++; if ($miss) $skip[] = ['id' => (int) $o->id, 'name' => $o->export_name, 'why' => 'Moved without: ' . implode(', ', $miss) . ' (not on the list).'];
+        }
+        return ['moved' => $moved, 'skipped' => $skip];
+    }
+
     /** Night job: scheduled exports (daily; weekly on Monday) are made as their owner and e-mailed. Returns how many were queued. */
     public static function runScheduled(?string $today = null): int
     {
@@ -110,6 +137,12 @@ class ListExports
                 if (! Perm::has($u, "form:{$t->list_key}:EXPORT")) continue;
                 [$bytes, $name, , $rows] = self::run($t);
                 $path = 'exports/' . $t->id . '/' . $name; Storage::disk('local')->put($path, $bytes);
+                if (str_starts_with((string) $t->send_to, 'drive:')) {      // R-G_CORE-68: into the Drive folder (the Google Drive connection of System › API connections)
+                    $c = Connect\DriveFolders::connection() ?? throw new \RuntimeException('No Google Drive connection.'); $ad = Connect\Connections::adapter($c);
+                    $ad->upload(substr((string) $t->send_to, 6), $name, $bytes, self::FORMATS[$t->format][1] ?? 'text/csv');
+                    DB::table('mo_export_templates')->where('id', $t->id)->update(['last_run_at' => $today . ' ' . date('H:i:s')]);
+                    Audit::log(Registry::table($t->list_key), 0, 'EXPORT', ['rows' => $rows, 'template' => $t->name, 'scheduled' => true, 'to' => $t->send_to]); $n++; continue;
+                }
                 Connect\Messenger::queueEmail((int) Context::ent(), null, (string) $t->send_to, 'Export: ' . $t->name . ' (' . date('j M Y', strtotime($today)) . ')', "Your scheduled export \"{$t->name}\" is attached. Rows: $rows.", $path, 'EXPORT_SCHEDULED', 'mo_export_templates', (int) $t->id);
                 DB::table('mo_export_templates')->where('id', $t->id)->update(['last_run_at' => $today . ' ' . date('H:i:s')]);
                 Audit::log(Registry::table($t->list_key), 0, 'EXPORT', ['rows' => $rows, 'template' => $t->name, 'scheduled' => true, 'to' => $t->send_to]); $n++;

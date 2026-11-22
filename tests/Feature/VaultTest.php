@@ -88,7 +88,8 @@ class VaultTest extends TestCase
     public function test_accounts_dashboard_counts_shows_what_expires_and_lists_reveals(): void
     {
         $p = $this->person(); DB::table('t_account')->where('id', $p)->update(['current_passport_expires' => date('d/m/Y', strtotime('+10 days'))]);
-        $id = $this->actingAs($this->owner)->postJson('/api/record/t_account_bank', ['values' => ['fk_id_account' => $p, 'memorable_word' => 'x1', 'card_number' => '4000 0000 0000 0002', 'valid_upto' => date('Y-m-d', strtotime('-3 days'))]])->assertOk()->json('id');
+        $id = $this->actingAs($this->owner)->postJson('/api/record/t_account_bank', ['values' => ['fk_id_account' => $p, 'memorable_word' => 'x1', 'card_number' => '4000 0000 0000 0002', 'valid_upto' => date('m/Y', strtotime('first day of next month'))]])->assertOk()->json('id');
+        DB::table('t_account_banks')->where('id', $id)->update(['valid_upto' => date('Y-m-d', strtotime('-3 days'))]);      // an old card that ran out (the form refuses a past month – R-G_CORE-71)
         $this->actingAs($this->owner)->postJson("/api/reveal/t_account_bank/$id", ['field' => 'memorable_word'])->assertOk();
         $d = $this->actingAs($this->owner)->getJson('/api/accounts-dash')->assertOk();
         $due = collect($d->json('due'))->where('person_id', $p);

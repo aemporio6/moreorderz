@@ -1412,8 +1412,8 @@ t_account_bank,Person › Bank accounts,child,Banks,1,12,fk_currency_id,Currency
 t_account_bank,Person › Bank accounts,child,Banks,1,13,card_type,Card Type,select,list:BANK_CARD_TYPE,,,,,,all,,,,,,Choose from the list. Press + to add a new value – it is saved to the list and selected here.,,,t_account_banks,card_type,,Y,,,,t_account
 t_account_bank,Person › Bank accounts,child,Banks,1,14,fk_card_category_id,Card Category,select,ref:CATEGORY,,,,,,all,,,,,,Choose from the list. Press + to add a new value – it is saved to the list and selected here.,,,t_account_banks,fk_card_category_id,reference_value,Y,,,,t_account
 t_account_bank,Person › Bank accounts,child,Banks,1,15,card_number,Card Number,text,,,,,,,OWNER,,,,,,"Secret: kept in the vault, shown masked; Reveal is OWNER only and logged.",,,t_account_banks,card_number,,Y,,,Y,t_account
-t_account_bank,Person › Bank accounts,child,Banks,1,16,valid_from,Valid From,date,,,,,,,all,,,,,,Pick a date.,,,t_account_banks,valid_from,,Y,,,,t_account
-t_account_bank,Person › Bank accounts,child,Banks,1,17,valid_upto,Expires,date,,,,,,,all,,,,,,Pick a date.,,,t_account_banks,valid_upto,,Y,,,,t_account
+t_account_bank,Person › Bank accounts,child,Banks,1,16,valid_from,Valid From,month_year,,,,,,,all,,,,,,MM/YYYY – the month on the card.,,,t_account_banks,valid_from,,Y,,,,t_account
+t_account_bank,Person › Bank accounts,child,Banks,1,17,valid_upto,Expires,month_year,,,,,,,all,,,,,,MM/YYYY – the month on the card.,,,t_account_banks,valid_upto,,Y,,,,t_account
 t_account_bank,Person › Bank accounts,child,Banks,1,18,front_four_digits,Front 4 Digits,text,,,,,,,all,,,,,,Short text. Auto-corrected for spaces and case where it matters.,,,t_account_banks,front_four_digits,,Y,,,,t_account
 t_account_bank,Person › Bank accounts,child,Banks,1,19,name_on_card,Name On Card,text,,,,,,,all,,,,,,Short text. Auto-corrected for spaces and case where it matters.,,,t_account_banks,name_on_card,,Y,,,,t_account
 t_account_bank,Person › Bank accounts,child,Banks,1,20,app_mobile_no_id,App Mob Name,select,own:t_account_mobiles,,,,,,all,,,,,,Choose from the list. Press + to add a new value – it is saved to the list and selected here.,,,t_account_banks,app_mobile_no_id,t_account_mobile,Y,,,,t_account
@@ -1462,8 +1462,8 @@ t_account_credit_card,Person › Cards,child,More details,2,9,swift_code,Swift c
 t_account_credit_card,Person › Cards,child,More details,2,10,card_type,Card type,select,list:BANK_CARD_TYPE,,,,,,all,,,,,,,,,t_account_credit_cards,card_type,,Y,,,,t_account
 t_account_credit_card,Person › Cards,child,More details,2,11,fk_card_category_id,Card category,select,table:card_categories,,,,,,all,,,,,,,,,t_account_credit_cards,fk_card_category_id,card_categories,Y,,,,t_account
 t_account_credit_card,Person › Cards,child,More details,2,12,card_number,Card number,text,,,,,,,OWNER,,,,,,"Secret: kept in the vault, shown masked; Reveal is OWNER only and logged.",,,t_account_credit_cards,card_number,,Y,,,Y,t_account
-t_account_credit_card,Person › Cards,child,More details,2,13,valid_from,Valid from,date,,,,,,,all,,,,,,,,,t_account_credit_cards,valid_from,,Y,,,,t_account
-t_account_credit_card,Person › Cards,child,More details,2,14,valid_upto,Valid upto,date,,,,,,,all,,,,,,,,,t_account_credit_cards,valid_upto,,Y,,,,t_account
+t_account_credit_card,Person › Cards,child,More details,2,13,valid_from,Valid from,month_year,,,,,,,all,,,,,,,,,t_account_credit_cards,valid_from,,Y,,,,t_account
+t_account_credit_card,Person › Cards,child,More details,2,14,valid_upto,Valid upto,month_year,,,,,,,all,,,,,,,,,t_account_credit_cards,valid_upto,,Y,,,,t_account
 t_account_credit_card,Person › Cards,child,More details,2,15,front_four_digits,Front four digits,text,,,,,,,all,,,,,,,,,t_account_credit_cards,front_four_digits,,Y,,,,t_account
 t_account_credit_card,Person › Cards,child,More details,2,16,name_on_card,Name on card,text,,,,,,,all,,,,,,,,,t_account_credit_cards,name_on_card,,Y,,,,t_account
 t_account_credit_card,Person › Cards,child,More details,2,17,app_mobile_no_id,App mobile no,select,own:t_account_mobiles,,,,,,all,,,,,,,,,t_account_credit_cards,app_mobile_no_id,t_account_mobile,Y,,,,t_account

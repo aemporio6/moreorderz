@@ -39,6 +39,8 @@ class MoImportOld extends Command
         $f = fopen("$dir/{$x['run']}.csv", 'w'); fputcsv($f, ['old_table', 'plan', 'old_rows', 'imported', 'already_there', 'merged', 'failed', 'left_out_columns', 'masked_columns', 'note']);
         foreach ($x['rows'] as $r) fputcsv($f, [$r['old_table'], $r['plan'], $r['old_rows'], $r['imported'], $r['already_there'], $r['merged'], $r['failed'], $r['left_out_columns'], $r['masked_columns'], $r['note']]); fclose($f);
         $this->line("Report saved: storage/app/import/{$x['run']}.csv (it holds table names and counts only, no data rows).");
+        if (! $this->option('dry')) { $e = \App\Services\ListExports::importOld();      // R-G_CORE-68: the old saved exports → export templates of their list
+            $this->line("Saved exports moved: {$e['moved']}" . ($e['skipped'] ? ' · not moved / partly: ' . count($e['skipped']) : '')); foreach ($e['skipped'] as $s) $this->line("  - {$s['name']}: {$s['why']}"); }
         return $t['failed'] ? 2 : 0;
     }
 }

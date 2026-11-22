@@ -328,7 +328,7 @@
       if (r === '#/bulk-jobs') return await pageBulkJobs();
       if (r === '#/choices') return await pageChoices();
       if (r === '#/settings') return await pageSettings();
-      if (r.startsWith('#/audit')) { const u = new URLSearchParams(r.split('?')[1] || ''); return await pageAudit(Object.fromEntries(['user_id', 'from', 'to'].filter(k => u.get(k)).map(k => [k, u.get(k)]))); }
+      if (r.startsWith('#/audit')) { const u = new URLSearchParams(r.split('?')[1] || ''); const st = Object.fromEntries(['user_id', 'from', 'to', 'preset'].filter(k => u.get(k)).map(k => [k, u.get(k)])); if (st.preset && st.preset !== 'custom' && !st.from) [st.from, st.to] = auditRange(st.preset); return await pageAudit(st); }
       if (r === '#/health') return await pageHealth();
       if (r === '#/ledger') return await pageLedger();
       if (r === '#/me') return await pageMe();
@@ -556,7 +556,7 @@
          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;align-items:center"><label class="small">Format <select class="q" id="teFmt" style="min-width:0"><option>CSV</option><option ${t && t.format === 'XLSX' ? 'selected' : ''}>XLSX</option><option ${t && t.format === 'PDF' ? 'selected' : ''}>PDF</option><option ${t && t.format === 'DOCX' ? 'selected' : ''}>DOCX</option></select></label>
            <label class="chk small"><input type="checkbox" id="teFil" ${!t || (t.state && (t.state.where || Object.keys(t.state.filter || {}).length || t.state.q)) ? 'checked' : ''}> Keep the filters of the list as it is now</label>
            ${T.can_share ? `<label class="small">Share with <select class="q" id="teRole" style="min-width:0"><option value="">Only me</option><option value="*" ${t && t.shared_role === '*' ? 'selected' : ''}>Everybody</option>${T.roles.map(r => `<option value="${esc(r.code)}" ${t && t.shared_role === r.code ? 'selected' : ''}>${esc(r.label)}</option>`).join('')}</select></label>` : ''}
-           <label class="small">Send <select class="q" id="teSch" style="min-width:0"><option value="NONE">Never (download only)</option><option value="DAILY" ${t && t.schedule === 'DAILY' ? 'selected' : ''}>Every day</option><option value="WEEKLY" ${t && t.schedule === 'WEEKLY' ? 'selected' : ''}>Every Monday</option></select></label><input class="q" id="teTo" type="email" placeholder="to this e-mail address" value="${esc(t ? t.send_to || '' : '')}"></div>`,
+           <label class="small">Send <select class="q" id="teSch" style="min-width:0"><option value="NONE">Never (download only)</option><option value="DAILY" ${t && t.schedule === 'DAILY' ? 'selected' : ''}>Every day</option><option value="WEEKLY" ${t && t.schedule === 'WEEKLY' ? 'selected' : ''}>Every Monday</option></select></label><input class="q" id="teTo" type="text" placeholder="to an e-mail address or a Google Drive folder link" title="An e-mail address, or the link of a Drive folder shared with the tool's Google account" value="${esc(t ? (String(t.send_to || '').startsWith('drive:') ? 'https://drive.google.com/drive/folders/' + t.send_to.slice(6) : t.send_to || '') : '')}"></div>`,
         `<span class="left small" id="teMsg" style="color:var(--err,#b91c1c)"></span><button class="btn" id="teCancel">Cancel</button><button class="btn primary" id="teSave">Save</button>`);
       const o = m.ov, draw = () => { const fa = $('#teFa', o).value.toLowerCase(), fs = $('#teFs', o).value.toLowerCase();
         $('#teA', o).innerHTML = d.all_columns.filter(c => !sel.includes(c.name) && (!fa || c.label.toLowerCase().includes(fa))).sort((a, b) => a.label.localeCompare(b.label)).map(c => `<option value="${esc(c.name)}">${esc(c.label)}</option>`).join('');
@@ -2752,16 +2752,25 @@
     busy(true); let d; try { d = await api('users'); } finally { busy(false); }
     const owner = S.boot.user.role === 'OWNER';
     $('#main').innerHTML = `<div class="page-head"><div><h1>Users and roles</h1><div class="sub">The role decides which menu items, forms and buttons a person sees. ${d.users.length} users.</div></div>
-      <div class="actions">${owner ? `<button class="btn primary" id="uNew">${ic('plus')} New user</button>` : ''}</div></div>
-      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>Name</th><th>Login</th><th>Role</th><th>Company</th><th>2-step</th><th>Last sign-in</th><th>Status</th></tr></thead><tbody>
-      ${d.users.map(u => `<tr class="${owner ? 'click' : ''}" data-id="${u.id}"><td>${esc(u.display_name || '—')}</td><td>${esc(u.login_id)}</td><td><span class="chip accent plain">${esc(u.role_code)}</span></td><td>${esc(u.company || '—')}</td><td>${+u.two_step ? '<span class="chip done">On</span>' : '<span class="chip pend">Off</span>'}</td><td>${esc(u.last_login_at || 'never')}</td>
+      <div class="actions">${owner ? `<button class="btn" id="uRole">Change role of ticked</button><button class="btn primary" id="uNew">${ic('plus')} New user</button>` : ''}</div></div>
+      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr>${owner ? '<th style="width:28px"><input type="checkbox" id="uAll" title="Tick all"></th>' : ''}<th>Name</th><th>Login</th><th>Role</th><th>Company</th><th>2-step</th><th>Last sign-in</th><th>Status</th></tr></thead><tbody>
+      ${d.users.map(u => `<tr class="${owner ? 'click' : ''}" data-id="${u.id}">${owner ? `<td><input type="checkbox" data-utick="${u.id}"></td>` : ''}<td>${esc(u.display_name || '—')}</td><td>${esc(u.login_id)}</td><td><span class="chip accent plain">${esc(u.role_code)}</span></td><td>${esc(u.company || '—')}</td><td>${+u.two_step ? '<span class="chip done">On</span>' : '<span class="chip pend">Off</span>'}</td><td>${esc(u.last_login_at || 'never')}</td>
         <td>${!+u.has_password ? '<span class="chip warn">No password yet</span>' : +u.f_active ? '<span class="chip done">Active</span>' : '<span class="chip lock">Off</span>'}</td></tr>`).join('')}</tbody></table></div></div>`;
     const edit = u => miniForm(u ? 'Edit user' : 'New user', u ? 'Leave the password empty to keep the current one.' : 'The person signs in with this login and password.', [
       { name: 'display_name', label: 'Name', required: true, value: u && u.display_name }, { name: 'login_id', label: 'Login', required: true, value: u && u.login_id },
       { name: 'role_code', label: 'Role', required: true, value: u ? u.role_code : 'VA', options: d.roles.map(r => [r, r]) }, { name: 'fk_id_ent', label: 'Company', required: true, value: u ? u.fk_id_ent : S.boot.ent, options: d.companies.map(c => [c.id, c.name]) },
       { name: 'password', label: u ? 'New password' : 'Password', type: 'password', required: !u, help: 'At least 10 characters.' }, { name: 'f_active', label: 'Can sign in', type: 'check', value: u ? +u.f_active : 1 }],
       async v => { const r = await api('users' + (u ? '/' + u.id : ''), { method: 'POST', body: v }); pageUsers(); return r; });
-    if (owner) { $('#uNew').onclick = () => edit(null); $$('#main tr[data-id]').forEach(tr => tr.onclick = () => edit(d.users.find(u => u.id == tr.dataset.id))); }
+    if (owner) { $('#uNew').onclick = () => edit(null); $$('#main tr[data-id]').forEach(tr => tr.onclick = e => { if (e.target.closest('input[type=checkbox]')) return; edit(d.users.find(u => u.id == tr.dataset.id)); });
+      $('#uAll').onchange = e => $$('[data-utick]').forEach(c => c.checked = e.target.checked);
+      $('#uRole').onclick = () => { const ids = $$('[data-utick]:checked').map(c => +c.dataset.utick); if (!ids.length) return toast('Please select at least one checkbox', 'err');      // R-G_CORE-69
+        miniForm('Change role of selected row(s)', 'Next you see every row with its old and new role before anything is changed.', [{ name: 'role', label: 'New role', required: true, options: d.roles.filter(r => r !== 'OWNER').map(r => [r, r]) }], async v => {
+          const p = await api('users/bulk-role', { method: 'POST', body: { ids, role: v.role } });
+          const m = modal(p.title, p.message, `<table class="t"><thead><tr><th>User</th><th>Old</th><th>New</th><th></th></tr></thead><tbody>${p.rows.map(r => `<tr><td>${esc(r.label)}</td><td>${esc(r.old_label || '')}</td><td>${esc(r.new_label || '')}</td><td class="small muted">${esc(r.skip || '')}</td></tr>`).join('')}</tbody></table>`,
+            p.will_change ? '<button class="btn primary" id="ubGo">Change</button>' : '', false);
+          if ($('#ubGo', m.ov)) $('#ubGo', m.ov).onclick = async () => { try { const r = await api('users/bulk-role', { method: 'POST', body: { ids, role: v.role, apply: true } }); m.close(); pageUsers();
+            toast(r.message); if (r.job) setTimeout(() => { const b = document.createElement('button'); b.className = 'btn sm'; b.textContent = 'Undo'; b.onclick = async () => { try { toast((await api('bulk-jobs/' + r.job + '/undo', { method: 'POST' })).message); pageUsers(); } catch (e) { toast(e.message, 'err'); } }; const h = $('#main .page-head .actions'); h && h.prepend(b); }, 50); } catch (e) { toast(e.message, 'err'); } };
+          return { message: '' }; }, 'Preview'); }; }
   }
 
 
@@ -2931,16 +2940,22 @@
   }
 
   // ---------- audit log ----------
+  /** R-G_CORE-106: a date preset → [from, to] (local dates). */
+  function auditRange(p) { const d = new Date(), f = x => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`, back = n => { const x = new Date(d); x.setDate(x.getDate() - n); return x; };
+    return p === 'today' ? [f(d), f(d)] : p === 'yesterday' ? [f(back(1)), f(back(1))] : p === '7d' ? [f(back(6)), f(d)] : p === '30d' ? [f(back(29)), f(d)] : p === 'month' ? [f(new Date(d.getFullYear(), d.getMonth(), 1)), f(d)] : ['', '']; }
   async function pageAudit(st = {}) {
     busy(true); let d; try { d = await api('audit?' + new URLSearchParams({ page: st.page || 1, action: st.action || '', user: st.user || '', table: st.table || '', user_id: st.user_id || '', from: st.from || '', to: st.to || '' })); } finally { busy(false); }
     const pages = Math.max(1, Math.ceil(d.total / 50));
     $('#main').innerHTML = `<div class="page-head"><div><h1>Audit log</h1><div class="sub">Every change, sign-in and export. ${d.total.toLocaleString('en-GB')} rows. Nothing here can be edited or deleted.</div></div></div>
-      <div class="card"><div class="list-bar"><input class="q" id="aU" placeholder="User login…" value="${esc(st.user || '')}"><input class="q" id="aT" placeholder="Table…" value="${esc(st.table || '')}"><select class="q" id="aA"><option value="">Every action</option>${['INSERT', 'UPDATE', 'DELETE', 'LOGIN', 'LOGIN_FAIL', 'LOGOUT', 'EXPORT', 'APPROVE', 'REJECT', 'LOCK', 'UNLOCK'].map(a => `<option ${st.action === a ? 'selected' : ''}>${a}</option>`).join('')}</select><button class="btn sm primary" id="aGo">Show</button></div>
+      <div class="card"><div class="list-bar"><input class="q" id="aU" placeholder="User login…" value="${esc(st.user || '')}"><input class="q" id="aT" placeholder="Table…" value="${esc(st.table || '')}"><select class="q" id="aA"><option value="">Every action</option>${['INSERT', 'UPDATE', 'DELETE', 'LOGIN', 'LOGIN_FAIL', 'LOGOUT', 'EXPORT', 'APPROVE', 'REJECT', 'LOCK', 'UNLOCK'].map(a => `<option ${st.action === a ? 'selected' : ''}>${a}</option>`).join('')}</select><select class="q" id="aP" title="Dates">${[['', 'Any date'], ['today', 'Today – what changed today'], ['yesterday', 'Yesterday'], ['7d', 'Last 7 days'], ['30d', 'Last 30 days'], ['month', 'This month'], ['custom', 'From – to…']].map(([v, l]) => `<option value="${v}" ${(st.preset || '') === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        <span id="aFT" style="display:${st.preset === 'custom' ? 'contents' : 'none'}"><input class="q" type="date" id="aF" value="${esc(st.from || '')}" title="From"><input class="q" type="date" id="aTo" value="${esc(st.to || '')}" title="To"></span><button class="btn sm primary" id="aGo">Show</button></div>
       <div class="tbl-wrap"><table class="t"><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Where</th><th>Change</th><th>IP</th></tr></thead><tbody>${d.rows.map(r => { let ch = ''; try { const c = JSON.parse(r.changes_json || 'null'); if (c && r.action === 'UPDATE') ch = Object.entries(c).map(([k, v]) => `<b>${esc(k)}</b>: ${esc(Array.isArray(v) ? (v[0] ?? '—') + ' → ' + (v[1] ?? '—') : v)}`).join('<br>'); else if (c) ch = esc(JSON.stringify(c).slice(0, 140)); } catch (e) {}
         return `<tr><td style="white-space:nowrap">${esc(r.created_at)}</td><td>${esc(r.display_name || r.login_id || 'System')}</td><td><span class="chip ${r.action === 'LOGIN_FAIL' ? 'err' : r.action === 'EXPORT' ? 'warn' : 'pend'} plain">${esc(r.action)}</span></td><td>${esc(r.table_name)}${+r.record_id ? ' #' + r.record_id : ''}</td><td>${ch}${r.reason ? `<div class="small muted">${esc(r.reason)}</div>` : ''}</td><td>${esc(r.ip || '')}</td></tr>`; }).join('')}</tbody></table></div>
       <div class="pager"><span>Page ${d.page} of ${pages}</span><button class="btn sm" id="pPrev" ${d.page <= 1 ? 'disabled' : ''}>Previous</button><button class="btn sm" id="pNext" ${d.page >= pages ? 'disabled' : ''}>Next</button></div></div>`;
     const again = x => pageAudit({ ...st, ...x });
-    $('#aGo').onclick = () => again({ page: 1, user: $('#aU').value, table: $('#aT').value, action: $('#aA').value });
+    $('#aP').onchange = () => { $('#aFT').style.display = $('#aP').value === 'custom' ? 'contents' : 'none'; };
+    $('#aGo').onclick = () => { const p = $('#aP').value, [from, to] = p === 'custom' ? [$('#aF').value, $('#aTo').value] : auditRange(p);      // R-G_CORE-106 date presets
+      again({ page: 1, user: $('#aU').value, table: $('#aT').value, action: $('#aA').value, preset: p, from, to }); };
     $('#pPrev').onclick = () => again({ page: d.page - 1 }); $('#pNext').onclick = () => again({ page: d.page + 1 });
   }
 
@@ -4418,6 +4433,8 @@
       if (vk === 'NEVER') return `<input id="${idn}" data-f="${f.name}" type="text" value="" disabled placeholder="Never stored (CVV / PIN)">`;
       if (vk === 'CARD') return `<input id="${idn}" data-f="${f.name}" type="text" value="${esc(v)}" ${ro} autocomplete="off" placeholder="Card number"><div class="small muted">Only the last 4 digits are kept.</div>`;
       if (vk === 'VAULT') return `<div style="display:flex;gap:6px"><input id="${idn}" data-f="${f.name}" type="password" value="${esc(v)}" ${ro} autocomplete="new-password" style="flex:1">${id && vinfo.may_reveal && v ? `<button type="button" class="btn sm" data-reveal="${f.name}" title="Show the value (logged)">Reveal</button>` : ''}</div><div class="small muted">Kept encrypted in the vault.${id && v ? ' Leave •••• to keep it; type - to remove it.' : ''}</div>`;
+      if (f.type === 'month_year') { const my = /^\d{4}-\d{2}/.test(String(v)) ? String(v).slice(5, 7) + '/' + String(v).slice(0, 4) : v;      // R-G_CORE-71 MM/YYYY
+        return `<input id="${idn}" data-f="${f.name}" data-my type="text" inputmode="numeric" maxlength="7" placeholder="MM/YYYY" value="${esc(my)}" ${ro} autocomplete="off">`; }
       const t = { number: 'number', money: 'number', date: 'date', email: 'email', phone: 'tel', link: 'url', file: 'text' }[f.type] || 'text';
       const step = f.step || (f.type === 'money' ? '0.01' : f.type === 'number' ? '1' : '');
       const box = `<input id="${idn}" data-f="${f.name}" type="${f.secret ? 'password' : t}" value="${esc(v)}" ${t === 'number' ? `step="${f.type === 'money' ? '0.01' : 'any'}" ${f.min !== null && f.min !== '' ? `min="${esc(f.min)}"` : ''} ${f.max !== null && f.max !== '' ? `max="${esc(f.max)}"` : ''}` : ''} ${ro} autocomplete="off" style="flex:1;min-width:0">`;
@@ -4432,7 +4449,10 @@
       $$('.seg button', ov).forEach(b => b.classList.toggle('on', b.dataset.m === mode));
       const vis = flds.filter(shown); $('#fInfo', ov).innerHTML = `<b>${vis.length}</b> fields · <b>${vis.filter(f => f.required).length}</b> required · marked <span style="color:var(--err)">*</span> · saves into <b>${esc(def.title)}</b>`;
       // jump to a section; a red dot = a required field in it is still empty
-      $('#fNav', ov).innerHTML = secs.length > 1 ? secs.map(({ s, fs }, i) => `<button type="button" class="btn sm ghost" data-go="${i}">${esc(s.title)}${fs.some(f => f.required && empty(f.name) && !f.numbered) ? ' <span style="color:var(--err)">●</span>' : ''}</button>`).join('') : '';
+      const navB = ({ s, fs }, i) => `<button type="button" class="btn sm ghost" data-go="${i}">${esc(s.title)}${fs.some(f => f.required && empty(f.name) && !f.numbered) ? ' <span style="color:var(--err)">●</span>' : ''}</button>`, NAVMAX = 6;      // R-G_CORE-105: a long section bar shows the first ones + "More…"
+      $('#fNav', ov).innerHTML = secs.length < 2 ? '' : secs.length <= NAVMAX + 1 ? secs.map(navB).join('') : secs.slice(0, NAVMAX).map(navB).join('')
+        + `<select class="btn sm ghost" id="fNavMore" title="The other sections" style="max-width:150px"><option value="">More… (${secs.length - NAVMAX})</option>${secs.slice(NAVMAX).map(({ s, fs }, i) => `<option value="${i + NAVMAX}">${esc(s.title)}${fs.some(f => f.required && empty(f.name) && !f.numbered) ? ' ●' : ''}</option>`).join('')}</select>`;
+      if ($('#fNavMore', ov)) $('#fNavMore', ov).onchange = e => { const sec = $(`[data-sec="${e.target.value}"]`, ov); sec && sec.scrollIntoView({ block: 'start', behavior: 'smooth' }); e.target.value = ''; };
       vis.filter(f => f.has_options).forEach(f => ensureLabels(f)); paint();
       // form standard (e): the Owner sets who sees a field right here (the same rule as Rights › field rules)
       $$('[data-fvis]', ov).forEach(a => a.onclick = async e => { e.preventDefault(); e.stopPropagation(); const f = flds.find(x => x.name === a.dataset.fvis); let P; try { P = await api('permissions'); } catch (x) { return toast(x.message, 'err'); }
@@ -4517,6 +4537,10 @@
         else if (r.level === 'ok' && typing) w.insertAdjacentHTML('beforeend', `<div class="small live" data-live-ok style="color:var(--ok,#1e7e34)">${esc(r.message)}</div>`); }
       catch (x) { if (typing && w) w.insertAdjacentHTML('beforeend', '<div class="small muted live">Will verify on save</div>'); } };
     const liveTimers = {};
+    $('#fBody', ov).addEventListener('input', e => { const el = e.target; if (el.dataset && 'my' in el.dataset && e.inputType !== 'deleteContentBackward') {      // R-G_CORE-71 mask 99/9999
+      const d = el.value.replace(/\D/g, '').slice(0, 6); el.value = d.length > 2 ? d.slice(0, 2) + '/' + d.slice(2) : d; } });
+    $('#fBody', ov).addEventListener('focusout', e => { const el = e.target; if (!el.dataset || !('my' in el.dataset)) return; const d = el.value.replace(/\D/g, '');
+      if (d.length === 4) { el.value = d.slice(0, 2) + '/20' + d.slice(2); el.dispatchEvent(new Event('change', { bubbles: true })); } });
     $('#fBody', ov).addEventListener('input', e => { const el = e.target, name = el.dataset.f; if (!name || !(def.live_typing || []).includes(name)) return; clearTimeout(liveTimers[name]); liveTimers[name] = setTimeout(() => liveCheck(el, name, true), 500); });
     $('#fBody', ov).addEventListener('focusout', async e => { const el = e.target, name = el.dataset.f; if (!name) return; const f = flds.find(x => x.name === name); if (!f || el.type === 'checkbox' || el.type === 'password') return;
       if (['text', 'email', 'tel'].includes(el.type) && el.value) { const fx = fixOf(f, el.value); if (fx !== el.value && !fixes['!' + name]) { fixes[name] = el.value; el.value = fx; change(name, fx); drawUnder(f); } }

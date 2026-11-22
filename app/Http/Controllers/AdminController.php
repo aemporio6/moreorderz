@@ -46,6 +46,14 @@ class AdminController extends Controller
             'roles' => array_keys(array_filter(\App\Services\Perm::roles(), fn ($x) => $x['active'])), 'companies' => DB::table('t_enterprise')->where('f_active', 1)->get(['id', 'ent_name as name'])];
     }
 
+    /** R-G_CORE-69: change the role of ticked users – preview first (apply = 0), then apply (one bulk job with Undo). */
+    public function usersBulkRole(Request $r)
+    {
+        $d = $r->validate(['ids' => 'required|array|max:500', 'ids.*' => 'integer', 'role' => 'required|string|max:40', 'apply' => 'boolean']);
+        try { return ! empty($d['apply']) ? \App\Services\UserBulk::apply($r->user(), $d['ids'], $d['role']) : \App\Services\UserBulk::preview($r->user(), $d['ids'], $d['role']); }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+    }
+
     public function saveUser(Request $r, ?int $id = null)
     {
         $this->owner($r);

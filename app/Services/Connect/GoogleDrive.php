@@ -61,6 +61,16 @@ class GoogleDrive extends Adapter
         return ['id' => (string) $j['id'], 'url' => (string) ($j['webViewLink'] ?? 'https://drive.google.com/drive/folders/' . $j['id'])];
     }
 
+    /** R-G_CORE-68 a scheduled export into a Drive folder: multipart upload (metadata + bytes). Returns [id, url]. */
+    public function upload(string $folderId, string $name, string $bytes, string $mime = 'text/csv'): array
+    {
+        $b = 'mo' . bin2hex(random_bytes(8));
+        $body = "--$b\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n" . json_encode(['name' => mb_substr($name, 0, 200), 'parents' => [$folderId]]) . "\r\n--$b\r\nContent-Type: $mime\r\n\r\n" . $bytes . "\r\n--$b--";
+        $j = Api::ok($this->call('POST', 'https://www.googleapis.com/upload/drive/v3/files', ['headers' => $this->h() + ['Content-Type' => "multipart/related; boundary=$b"], 'timeout' => 120,
+            'query' => ['uploadType' => 'multipart', 'supportsAllDrives' => 'true', 'fields' => 'id,webViewLink'], 'raw' => $body]), 'Google Drive upload');
+        return ['id' => (string) $j['id'], 'url' => (string) ($j['webViewLink'] ?? 'https://drive.google.com/file/d/' . $j['id'])];
+    }
+
     /** Files directly in a folder (newest first). */
     public function files(string $folderId): array
     {
