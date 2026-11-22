@@ -21,8 +21,15 @@ class EventBus
         self::$listeners[$eventCode][] = $fn;
     }
 
+    /** The event names that have a listener right now (R-G_CORE-95 self-check). */
+    public static function listening(): array { return array_keys(self::$listeners); }
+
     public static function fire(string $eventCode, string $entity, int|string|null $entityId, array $payload = [], ?int $ent = null): int
     {
+        if ($new = EventCatalogue::canonical($eventCode)) {      // R-G_CORE-95 a retired alias: refused in development, the canonical name in production (logged)
+            if (! app()->environment('production')) throw new \InvalidArgumentException(EventCatalogue::refusal($eventCode));
+            Log::warning('Retired event name raised', ['event' => $eventCode, 'use' => $new]); $eventCode = $new;
+        }
         if (! self::$known) self::$known = DB::table('sys_event_types')->pluck('f_active', 'event_code')->all();
         if (! array_key_exists($eventCode, self::$known)) {
             throw new \InvalidArgumentException("Event $eventCode is not in the event catalogue (sys_event_types).");

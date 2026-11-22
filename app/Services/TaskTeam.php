@@ -40,6 +40,27 @@ class TaskTeam
         return ['month' => $month, 'months' => $months, 'rows' => $rows];
     }
 
+    /**
+     * R-G_CORE-16 the HR calendar: a month grid (Monday first) with who is away each day and who covers. Names only – never the reason.
+     * Who may open it: Settings › Choices ABSENCE_CALENDAR_ROLES (default the roles of the Home card: Owner, Partner, Manager, TL); "End now" stays on the Team page.
+     */
+    public static function calendar(?string $month = null, ?object $u = null): array
+    {
+        if ($u && ! Choices::has('ABSENCE_CALENDAR_ROLES', (int) ($u->fk_id_ent ?? 0) ?: ((int) Context::ent() ?: 1), (string) $u->role_code)) throw new \InvalidArgumentException('Refused: the absence calendar is not open to your role (Settings › Choices).');
+        $month = preg_match('/^\d{4}-\d{2}$/', (string) $month) ? $month : date('Y-m');
+        $first = $month . '-01'; $last = date('Y-m-t', strtotime($first));
+        $rows = DB::table('user_absence as a')->leftJoin('t_account as p', 'p.id', '=', 'a.user_id')->leftJoin('t_account as c', 'c.id', '=', 'a.cover_user_id')
+            ->where('a.from_date', '<=', $last)->where(fn ($w) => $w->whereNull('a.to_date')->orWhere('a.to_date', '>=', $first))->whereRaw('(a.to_date IS NULL OR a.to_date >= a.from_date)')->orderBy('a.from_date')
+            ->get(['a.from_date', 'a.to_date', DB::raw("TRIM(CONCAT_WS(' ', p.first_name, p.sur_name)) as who"), DB::raw("TRIM(CONCAT_WS(' ', c.first_name, c.sur_name)) as cover")]);
+        $days = [];
+        for ($d = $first; $d <= $last; $d = date('Y-m-d', strtotime("$d +1 day"))) {
+            $away = $rows->filter(fn ($a) => $a->from_date <= $d && ($a->to_date === null || $a->to_date >= $d))->map(fn ($a) => ['who' => $a->who ?: '—', 'cover' => $a->cover ?: null])->values()->all();
+            $days[] = ['date' => $d, 'day' => (int) substr($d, 8), 'dow' => (int) date('N', strtotime($d)), 'today' => $d === date('Y-m-d'), 'away' => $away];
+        }
+        $people = $rows->groupBy('who')->map(fn ($g, $who) => ['who' => $who ?: '—', 'spells' => $g->map(fn ($a) => date('j M', strtotime($a->from_date)) . ' – ' . ($a->to_date ? date('j M', strtotime($a->to_date)) : 'further notice') . ($a->cover ? ' (cover ' . $a->cover . ')' : ''))->values()->all()])->values()->all();
+        return ['month' => $month, 'title' => date('F Y', strtotime($first)), 'prev' => date('Y-m', strtotime("$first -1 month")), 'next' => date('Y-m', strtotime("$first +1 month")), 'days' => $days, 'people' => $people];
+    }
+
     public static function page(object $u, ?string $month = null): array
     {
         if (! in_array($u->role_code, TaskScore::BOSS, true)) throw new \InvalidArgumentException('Refused: the Team page is for a Partner or Manager.');

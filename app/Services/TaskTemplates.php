@@ -30,8 +30,9 @@ class TaskTemplates
         if (Auth::user() && ! self::partner(Auth::user())) return ['_form' => 'Refused: only a Partner manages templates.'];
         $name = trim((string) self::v($data, $old, 'name')); if ($name === '') return ['name' => 'Refused: the template name is required.'];
         $tr = strtoupper(trim((string) (self::v($data, $old, 'trigger_event') ?: 'MANUAL')));
-        if ($tr !== 'MANUAL' && ! DB::table('sys_event_types')->where('event_code', $tr === 'GRN_SAVED' ? 'GRN_POSTED' : $tr)->exists()) return ['trigger_event' => 'Refused: unknown trigger.'];
-        if (array_key_exists('trigger_event', $data) || ! $id) $data['trigger_event'] = $tr === 'GRN_SAVED' ? 'GRN_POSTED' : $tr;
+        $tr = EventCatalogue::canonical($tr) ?? $tr;      // R-G_CORE-95: a retired name is stored as its canonical name
+        if ($tr !== 'MANUAL' && ! DB::table('sys_event_types')->where('event_code', $tr)->exists()) return ['trigger_event' => 'Refused: unknown trigger.'];
+        if (array_key_exists('trigger_event', $data) || ! $id) $data['trigger_event'] = $tr;
         $mod = strtoupper(trim((string) self::v($data, $old, 'linked_module')));
         if ($mod !== '' && $mod !== 'NONE' && ! isset(TaskCreate::MODULES[$mod])) return ['linked_module' => 'Refused: choose what the tasks are about from the list.'];
         return [];

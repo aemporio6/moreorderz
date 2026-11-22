@@ -540,6 +540,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('tasks', [WorkController::class, 'tasks']);
         Route::get('tasks/dashboard', [WorkController::class, 'tasksDashboard']);
         Route::get('tasks/team', [WorkController::class, 'tasksTeam']);
+        Route::get('tasks/absence-calendar', [WorkController::class, 'absenceCalendar']);
         Route::post('absence/{id}/end', [WorkController::class, 'absenceEnd'])->whereNumber('id');
         Route::post('delegation/{id}/end', [WorkController::class, 'delegationEnd'])->whereNumber('id');
         Route::post('delegation/propose', [WorkController::class, 'delegationPropose']);

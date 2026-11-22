@@ -45,7 +45,7 @@ class HomeCards
             $today = date('Y-m-d');
             $who = DB::table('user_absence as a')->leftJoin('t_account as p', 'p.id', '=', 'a.user_id')->leftJoin('t_account as c', 'c.id', '=', 'a.cover_user_id')->where('a.from_date', '<=', $today)
                 ->where(fn ($w) => $w->whereNull('a.to_date')->orWhere('a.to_date', '>=', $today))->get([DB::raw("TRIM(CONCAT_WS(' ', p.first_name, p.sur_name)) as who"), DB::raw("TRIM(CONCAT_WS(' ', c.first_name, c.sur_name)) as cover")]);
-            return ['label' => 'Who is away today', 'value' => $who->count(), 'foot' => $who->count() ? $who->map(fn ($x) => $x->who . ($x->cover ? ' (cover ' . $x->cover . ')' : ''))->implode(', ') : 'everyone is in', 'tone' => $who->count() ? 'warn' : 'done', 'go' => '#/tasks?scope=team'];
+            return ['label' => 'Who is away today', 'value' => $who->count(), 'foot' => $who->count() ? $who->map(fn ($x) => $x->who . ($x->cover ? ' (cover ' . $x->cover . ')' : ''))->implode(', ') : 'everyone is in', 'tone' => $who->count() ? 'warn' : 'done', 'go' => '#/tasks/calendar'];      // the HR calendar (R-G_CORE-16)
         });
         self::register(['OWNER', 'MANAGER', 'TL'], function ($ent) use ($open) {
             $q = fn () => $open()->where(fn ($w) => $w->where('fk_id_ent', $ent)->orWhere('fk_id_ent', 0));

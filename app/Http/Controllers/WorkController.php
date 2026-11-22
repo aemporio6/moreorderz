@@ -194,6 +194,7 @@ class WorkController extends Controller
     }
     public function taskImportUndo(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskImport::undo($id, $r->user())); }
     /** R-G_CORE-40 Team page + leaderboard, R-G_CORE-44 weekly report screen, R-G_CORE-26 a suggested recurring task. */
+    public function absenceCalendar(Request $r) { return $this->act(fn () => \App\Services\TaskTeam::calendar($r->query('month'), $r->user())); }      // R-G_CORE-16 HR calendar
     public function tasksTeam(Request $r) { return $this->act(fn () => \App\Services\TaskTeam::page($r->user(), $r->query('month'))); }
     public function tasksWeekly(Request $r)
     {

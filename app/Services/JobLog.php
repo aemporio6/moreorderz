@@ -10,6 +10,43 @@ use Illuminate\Support\Facades\DB;
  */
 class JobLog
 {
+    /**
+     * R-G_CORE-110 every scheduled job (routes/console.php) and how often it should run (minutes). A job whose last run started more than
+     * 2 × its interval + 10 minutes ago is "late" on System › Health (and in the Owner exceptions digest).
+     */
+    public const PLAN = [
+        'TASK_WORKER' => ['Task worker + messages (mo:events)', 1], 'SRC_ALERTS' => ['Sourcing alerts (mo:src-alerts)', 15], 'DISPATCH_WATCH' => ['Dispatch watch (mo:dispatch-watch)', 15],
+        'PULL' => ['Marketplace pulls + Drive folders (mo:pull)', 60], 'FIN_HOURLY' => ['Finance hourly (mo:finance-hourly)', 60],
+        'FIN_NIGHTLY' => ['Finance nightly (mo:finance-nightly)', 1440], 'NIGHTLY' => ['Nightly jobs (mo:nightly)', 1440], 'TEMP_CLEANUP' => ['Temporary files clean-up (mo:cleanup-temp)', 1440],
+        'FIN_MONTHLY' => ['Finance monthly (mo:finance-monthly)', 44640],
+    ];
+
+    /** Every planned job with its last run and whether it is late. */
+    public static function overview(?\DateTimeInterface $now = null): array
+    {
+        $now = $now ? \Carbon\Carbon::instance(\DateTime::createFromInterface($now)) : now(); $any = DB::table('sys_job_runs')->exists(); $out = [];
+        foreach (self::PLAN as $code => [$label, $every]) {
+            $last = DB::table('sys_job_runs')->where('job_code', $code)->orderByDesc('id')->first(['started_at', 'finished_at', 'run_status', 'items_done', 'error_text']);
+            $limit = $every * 2 + 10; $age = $last ? (int) floor(($now->getTimestamp() - strtotime((string) $last->started_at)) / 60) : null;
+            $late = $last ? $age > $limit : $any;      // never ran while the scheduler runs other jobs = late too
+            $out[] = ['code' => $code, 'label' => $label, 'every_min' => $every, 'last' => $last ? (string) $last->started_at : null, 'status' => $last->run_status ?? null, 'items' => (int) ($last->items_done ?? 0), 'error' => $last->error_text ?? null, 'late' => $late];
+        }
+        return $out;
+    }
+
+    /** Plain sentences for System › Health. */
+    public static function late(?\DateTimeInterface $now = null): array
+    {
+        $w = [];
+        foreach (self::overview($now) as $j) {
+            if ($j['late']) $w[] = $j['last'] ? "Job {$j['label']} is late: last run {$j['last']}, it should run every " . self::every($j['every_min']) . '.' : "Job {$j['label']} has never run – is the server's schedule:run cron line in place?";
+            elseif ($j['status'] === 'FAILED') $w[] = "Job {$j['label']} failed at {$j['last']}: " . mb_substr((string) $j['error'], 0, 160);
+        }
+        return $w;
+    }
+
+    private static function every(int $m): string { return $m < 60 ? "$m minute" . ($m === 1 ? '' : 's') : ($m < 1440 ? ($m / 60) . ' hour' . ($m === 60 ? '' : 's') : ($m < 44640 ? 'day' : 'month')); }
+
     /** Minutes after which a RUNNING line is taken as crashed (its lock is free again). */
     public const STALE_MIN = 120;
 

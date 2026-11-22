@@ -91,7 +91,7 @@ class TaskDigest
             'EVENTS FAILED' => DB::table('sys_events')->where('status', 'FAILED')->count(),
         ];
         foreach ($simple as $h => $c) if ($c) { $n += $c; $out[] = "$h ($c)"; }
-        $warn = array_merge((array) TaskWeekly::missed(), TaskTemplates::health());
+        $warn = array_merge((array) TaskWeekly::missed(), TaskTemplates::health(), JobLog::late());      // + R-G_CORE-110 late jobs
         if ($warn) { $n += count($warn); $out[] = 'HEALTH (' . count($warn) . ')'; foreach (array_slice($warn, 0, self::MAX_LINES) as $w) $out[] = '- ' . (is_array($w) ? ($w['text'] ?? $w['message'] ?? json_encode($w)) : $w); }
         if (! $n && ! (int) AlertRules::threshold('digest_send_empty')) return null;
         return "Exceptions today, $first – " . date('D d M', strtotime($date)) . ":\n" . ($n ? implode("\n", $out) : 'No exceptions. All clear.') . "\nOpen Home: " . rtrim((string) config('app.url'), '/') . '/#/home';
