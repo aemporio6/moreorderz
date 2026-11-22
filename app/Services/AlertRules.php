@@ -37,6 +37,7 @@ class AlertRules
         'N14' => ['Weekly report', 'WEEKLY_REPORT', 'Partners + Managers', 'tm_weekly_report', null, ['EMAIL', 'WHATSAPP', 'INAPP'], 'weekly_report (MON 09:00); the PDF also as a WhatsApp document inside the 24-hour window', '', 0, 0],
         'N15' => ['Monthly leaderboard', 'MONTHLY_REPORT', 'Partners (and the Owner)', 'tm_monthly_report', null, ['EMAIL', 'WHATSAPP', 'INAPP'], 'On the 1st at monthly_report_time for the month before, A4 PDF attached', '', 0, 0],
         'N16' => ['Owner exceptions digest', 'DIGEST', 'Settings › Choices EXCEPTIONS_DIGEST_ROLES (default Owner)', 'tm_exceptions', null, ['WHATSAPP', 'EMAIL', 'INAPP'], "With the team digest (digest_time + team_digest_offset_min)", '', 0, 0],
+        'N17' => ['Filing reminders (Tax & filings)', 'DIGEST', 'The assigned accountant (no accountant → Settings › Choices ACC_REMINDERS_UNASSIGNED, default Owner)', 'tm_acc_reminders', null, ['EMAIL', 'WHATSAPP', 'INAPP'], 'Daily with the nightly schedule run: on the reminder days of the filing type, every day while overdue', '', 0, 0],      // R-ACC-12
         'MANUAL' => ['Reminder (sent by hand)', 'TASK_REMIND', 'Owner', 'tm_reminder', null, ['WHATSAPP', 'INAPP'], 'When the assigner or boss presses Remind', '', 1, 0],
         'APPROVED' => ['Approved', 'TASK_APPROVED', 'Owner', 'tm_approved', null, ['WHATSAPP', 'INAPP'], 'At once', '', 1, 0],
     ];
@@ -58,7 +59,8 @@ class AlertRules
         'tm_team_digest' => ['Your team for {date}', '{body}'],
         'tm_weekly_report' => ['Weekly task report {week}', 'Hi {first_name}, the weekly task report for {week} is ready: {done} done, {late} late, {stuck} stuck. {link}'],
         'tm_monthly_report' => ['Task leaderboard {month}', 'Hi {first_name}, the task leaderboard for {month} is ready: {people} people, {closed} tasks closed, best {best}. {link}'],
-        'tm_exceptions' => ['Exceptions for {date}', '{body}'],      // R-G_CORE-45: the Owner exceptions digest, built by TaskDigest::exceptions
+        'tm_exceptions' => ['Exceptions for {date}', '{body}'],
+        'tm_acc_reminders' => ['Filing reminders for {date}', '{body}'],      // R-ACC-12 one message per accountant      // R-G_CORE-45: the Owner exceptions digest, built by TaskDigest::exceptions
         'tm_reminder' => ['[{task_ref}] Reminder', 'Reminder from {by}: {task_ref} {title} (due {due}). {link}'],      // R-G_CORE-32 text
         'tm_approved' => ['[{task_ref}] Approved', 'Well done {first_name}, {task_ref}: {title} is approved – quality {quality}, score {score}. {link}'],
     ];

@@ -14,10 +14,21 @@ class InvoicesController extends Controller
     private function ent(): int { return (int) Context::ent(); }
 
     /** R-ACC-1 … 9 compliance calendar. */
-    public function compliance(Request $r) { Perm::need($r->user(), 'money.SEE'); return \App\Services\AccCompliance::page($this->ent(), $r->only(['company'])); }
+    public function compliance(Request $r) { Perm::need($r->user(), 'money.SEE'); return \App\Services\AccCompliance::page($this->ent(), $r->only(['company', 'tab', 'area', 'type', 'assigned', 'q', 'entity', 'from', 'to', 'ym', 'per', 'page'])); }
     public function complianceGenerate(Request $r) { Perm::need($r->user(), 'money.SEE'); $n = \App\Services\AccCompliance::generate($this->ent()); return ['added' => $n, 'message' => "$n new item(s)."]; }
-    public function complianceUpdate(Request $r, int $id) { Perm::need($r->user(), 'money.EDIT'); return $this->run(fn () => \App\Services\AccCompliance::update($this->ent(), $id, $r->only(['status', 'submission_ref', 'notes', 'amount_due', 'amount_paid', 'fk_assigned', 'due_date', 'title']), $r->user())); }
+    public function complianceUpdate(Request $r, int $id) { Perm::need($r->user(), 'money.EDIT'); return $this->run(fn () => \App\Services\AccCompliance::update($this->ent(), $id, $r->only(['status', 'submission_ref', 'notes', 'amount_due', 'amount_paid', 'fk_assigned', 'due_date', 'title', 'reason']), $r->user())); }
     public function complianceDocument(Request $r, int $id) { Perm::need($r->user(), 'money.EDIT'); if (! $r->hasFile('file')) return response()->json(['message' => 'Choose the file.'], 422); return $this->run(fn () => ['id' => \App\Services\AccCompliance::addDocument($this->ent(), $id, $r->file('file'), $r->user()), 'message' => 'Proof added.']); }
+    /* R-ACC-11 / 14 / 15 / 19 */
+    public function complianceTypes(Request $r) { Perm::need($r->user(), 'money.SEE'); return ['rows' => array_values(array_map(fn ($t) => (array) $t, \App\Services\AccFilings::types($this->ent()))), 'areas' => \App\Services\AccFilings::AREAS, 'authorities' => \App\Services\AccFilings::AUTHORITIES, 'completions' => \App\Services\AccFilings::COMPLETIONS]; }
+    public function complianceTypeSave(Request $r, string $code) { Perm::need($r->user(), 'money.EDIT'); return $this->run(fn () => \App\Services\AccFilings::saveType($this->ent(), $code, $r->only(['type_name', 'area', 'authority', 'completion', 'sort_order', 'reminder_days', 'f_active']), $r->user())); }
+    public function complianceCreate(Request $r) { Perm::need($r->user(), 'money.EDIT'); return $this->run(fn () => \App\Services\AccFilings::create($this->ent(), $r->all(), $r->user())); }
+    public function complianceDelete(Request $r, int $id) { Perm::need($r->user(), 'money.EDIT'); return $this->run(fn () => \App\Services\AccFilings::delete($this->ent(), $id, $r->user())); }
+    public function complianceCompanies(Request $r) { Perm::need($r->user(), 'money.SEE'); return \App\Services\AccFilings::companies($this->ent(), $r->only(['q', 'filter'])); }
+    public function compliancePeople(Request $r) { Perm::need($r->user(), 'money.SEE'); return \App\Services\AccFilings::people($this->ent(), $r->only(['q'])); }
+    public function complianceDocs(Request $r) { Perm::need($r->user(), 'money.SEE'); return \App\Services\AccFilings::documents($this->ent(), $r->only(['q', 'entity'])); }
+    public function complianceDocUpload(Request $r) { Perm::need($r->user(), 'money.EDIT'); if (! $r->hasFile('file')) return response()->json(['message' => 'Choose the file.'], 422); return $this->run(fn () => ['id' => \App\Services\AccFilings::uploadFor($this->ent(), $r->only(['entity_type', 'entity_id', 'doc_title']), $r->file('file'), $r->user()), 'message' => 'Document added.']); }
+    public function complianceDocShow(Request $r, int $id) { Perm::need($r->user(), 'money.SEE'); return \App\Services\AccFilings::serve($this->ent(), $id); }
+    public function complianceDocRemove(Request $r, int $id) { Perm::need($r->user(), 'money.EDIT'); return $this->run(fn () => \App\Services\AccFilings::removeDocument($this->ent(), $id, $r->user())); }
     public function complianceRebuild(Request $r, int $company) { Perm::need($r->user(), 'money.EDIT'); return ['message' => \App\Services\AccCompliance::rebuild($this->ent(), $company)]; }
     public function index(Request $r) { Perm::need($r->user(), 'money.SEE'); return Docs::page($this->ent(), $r->only(['period', 'status'])); }
     public function show(Request $r, int $id)

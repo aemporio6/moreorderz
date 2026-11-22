@@ -548,6 +548,16 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('compliance/{id}', [\App\Http\Controllers\InvoicesController::class, 'complianceUpdate'])->whereNumber('id');      // R-ACC-10
         Route::post('compliance/{id}/document', [\App\Http\Controllers\InvoicesController::class, 'complianceDocument'])->whereNumber('id');
         Route::post('compliance/generate', [\App\Http\Controllers\InvoicesController::class, 'complianceGenerate']);
+        Route::get('compliance/types', [\App\Http\Controllers\InvoicesController::class, 'complianceTypes']);      // R-ACC-11
+        Route::post('compliance/types/{code}', [\App\Http\Controllers\InvoicesController::class, 'complianceTypeSave'])->where('code', '[A-Za-z0-9_]+');
+        Route::post('compliance/items', [\App\Http\Controllers\InvoicesController::class, 'complianceCreate']);      // R-ACC-14
+        Route::delete('compliance/{id}', [\App\Http\Controllers\InvoicesController::class, 'complianceDelete'])->whereNumber('id');
+        Route::get('compliance/companies', [\App\Http\Controllers\InvoicesController::class, 'complianceCompanies']);      // R-ACC-19
+        Route::get('compliance/people', [\App\Http\Controllers\InvoicesController::class, 'compliancePeople']);
+        Route::get('compliance/documents', [\App\Http\Controllers\InvoicesController::class, 'complianceDocs']);      // R-ACC-15
+        Route::post('compliance/documents', [\App\Http\Controllers\InvoicesController::class, 'complianceDocUpload']);
+        Route::get('compliance/documents/{id}', [\App\Http\Controllers\InvoicesController::class, 'complianceDocShow'])->whereNumber('id');
+        Route::delete('compliance/documents/{id}', [\App\Http\Controllers\InvoicesController::class, 'complianceDocRemove'])->whereNumber('id');
         Route::post('compliance/rebuild/{company}', [\App\Http\Controllers\InvoicesController::class, 'complianceRebuild'])->whereNumber('company');
         Route::get('invoices', [\App\Http\Controllers\InvoicesController::class, 'index']);      // R-D-83 / 84
         Route::get('invoices/{id}', [\App\Http\Controllers\InvoicesController::class, 'show'])->whereNumber('id');

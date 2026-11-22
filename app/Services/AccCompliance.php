@@ -18,7 +18,7 @@ class AccCompliance
         'CT600' => ['Corporation Tax return (CT600)', 'CT', 'HMRC', 'FILE', '30,14,7,1'], 'CONF_STMT' => ['Confirmation statement', 'CS', 'CH', 'FILE', '14,7,1'],
         'VAT_RETURN' => ['VAT return', 'VAT', 'HMRC', 'FILE_PAY', '14,7,1'], 'PAYE_PAY' => ['PAYE payment', 'PAYROLL', 'HMRC', 'PAY', '7,1'], 'PAYE_EPS' => ['PAYE EPS', 'PAYROLL', 'HMRC', 'FILE', '7,1'],
         'PAYE_FPS' => ['PAYE FPS', 'PAYROLL', 'HMRC', 'FILE', '3,1'], 'SA_RETURN' => ['Self Assessment return', 'PERSONAL', 'HMRC', 'FILE_PAY', '30,14,7,1'], 'SA_POA1' => ['Self Assessment payment on account 1', 'PERSONAL', 'HMRC', 'PAY', '14,7,1'],
-        'SA_POA2' => ['Self Assessment payment on account 2', 'PERSONAL', 'HMRC', 'PAY', '14,7,1'],
+        'SA_POA2' => ['Self Assessment payment on account 2', 'PERSONAL', 'HMRC', 'PAY', '14,7,1'], 'OTHER' => ['Other filing', 'OTHER', 'OTHER', 'FILE', '30,14,7,1'],
     ];
 
     /** add_months (Oracle / old tool): the same day n months later, clamped to the month end; a month-end date stays a month end (30 Apr + 1 → 31 May). */
@@ -198,14 +198,14 @@ class AccCompliance
     /** R-ACC-9 generate the schedule of a company (or of all companies). insert-ignore by gen_key: a re-run never duplicates or overwrites work. Returns new rows. */
     public static function generate(int $ent, ?int $company = null, ?string $today = null): int
     {
-        self::seedTypes(); $types = DB::table('acc_obligation_types')->where('f_active', 1)->whereIn('fk_id_ent', [0, $ent])->get()->keyBy('type_code'); $n = 0;
+        $types = array_filter(AccFilings::types($ent), fn ($t) => (int) $t->f_active); $n = 0;      /* R-ACC-11 the enterprise's own copy of a type wins */
         $cos = DB::table('cat_company_house')->where(fn ($w) => $w->where('fk_id_ent', $ent)->orWhere('fk_id_ent', 0)->orWhereNull('fk_id_ent'))->when($company, fn ($q) => $q->where('id', $company))->where(fn ($w) => $w->whereNull('f_active')->orWhere('f_active', 1))->get();
         foreach ($cos as $co) {
             $s = DB::table('acc_company_settings')->where('fk_id_company', $co->id)->whereIn('fk_id_ent', [$ent, 0])->orderByDesc('fk_id_ent')->first();
             if ($s && isset($s->f_tracked) && (int) $s->f_tracked === 0) continue;
             foreach (self::companyRows($ent, $co, $s, $today) as [$code, $start, $end, $due]) {
                 $t = $types[$code] ?? null; if (! $t) continue;
-                $n += DB::table('acc_obligations')->insertOrIgnore(['fk_id_ent' => $ent, 'entity_type' => 'COMPANY', 'entity_id' => $co->id, 'fk_type' => $t->id, 'type_code' => $code, 'area' => self::TYPES[$code][1], 'completion' => $t->completion,
+                $n += DB::table('acc_obligations')->insertOrIgnore(['fk_id_ent' => $ent, 'entity_type' => 'COMPANY', 'entity_id' => $co->id, 'fk_type' => $t->id, 'type_code' => $code, 'area' => $t->area, 'completion' => $t->completion,
                     'period_start' => $start, 'period_end' => $end, 'due_date' => $due, 'status' => 'PENDING', 'f_done' => 0, 'f_auto' => 1, 'gen_key' => 'C' . $co->id . '|' . $code . '|' . ($end ?: $due),
                     'title' => self::TYPES[$code][0] . ($end ? ' – period to ' . date('d M Y', strtotime($end)) : ''), 'fk_assigned' => (int) ($s->fk_accountant ?? 0), 'created_at' => now()]);
             }
@@ -214,7 +214,7 @@ class AccCompliance
             [$ws, $we] = self::window($ent, $today);
             foreach (self::saRows($ps, $ws, $we) as [$code, $start, $end, $due]) {
                 $t = $types[$code] ?? null; if (! $t) continue;
-                $n += DB::table('acc_obligations')->insertOrIgnore(['fk_id_ent' => $ent, 'entity_type' => 'PERSON', 'entity_id' => $ps->fk_id_account, 'fk_type' => $t->id, 'type_code' => $code, 'area' => self::TYPES[$code][1], 'completion' => $t->completion,
+                $n += DB::table('acc_obligations')->insertOrIgnore(['fk_id_ent' => $ent, 'entity_type' => 'PERSON', 'entity_id' => $ps->fk_id_account, 'fk_type' => $t->id, 'type_code' => $code, 'area' => $t->area, 'completion' => $t->completion,
                     'period_start' => $start, 'period_end' => $end, 'due_date' => $due, 'status' => 'PENDING', 'f_done' => 0, 'f_auto' => 1, 'gen_key' => 'P' . $ps->fk_id_account . '|' . $code . '|' . $end,
                     'title' => self::TYPES[$code][0] . ' ' . substr($start, 0, 4) . '-' . substr($end, 2, 2), 'fk_assigned' => (int) ($ps->fk_accountant ?? 0), 'created_at' => now()]);
             }
@@ -263,6 +263,9 @@ class AccCompliance
             if (isset($d['status'])) {
                 $st = strtoupper((string) $d['status']); if (! isset(self::STATUSES[$st])) throw new \InvalidArgumentException('Choose a status from the list.');
                 if (in_array($st, ['FILED', 'PAID'], true) && ! DB::table('acc_documents')->where('fk_id_obligation', $id)->where('f_deleted', 0)->exists()) throw new \InvalidArgumentException('Add the proof document first (the filing receipt or the payment proof).');
+                $reason = trim((string) ($d['reason'] ?? ''));
+                if ($st === 'NOT_REQUIRED' && (int) $o->f_auto && $o->status !== 'NOT_REQUIRED' && $reason === '') throw new \InvalidArgumentException('Write the reason why this filing is not required.');      /* R-ACC-14 */
+                if ($reason !== '') $ch['notes'] = mb_substr(trim(($o->notes ? $o->notes . "\n" : '') . 'Not required: ' . $reason), 0, 2000);
                 $ch['status'] = $st; $ch['f_done'] = self::isDone((string) $o->completion, $st) ? 1 : 0;
                 if (in_array($st, ['FILED', 'PAID'], true)) {
                     if (! $o->filed_date && $o->completion !== 'PAY') $ch['filed_date'] = $today;
@@ -272,7 +275,7 @@ class AccCompliance
             }
             foreach (['submission_ref' => 120, 'notes' => 2000] as $k => $max) if (array_key_exists($k, $d)) $ch[$k] = mb_substr(trim((string) $d[$k]), 0, $max);
             foreach (['amount_due', 'amount_paid'] as $k) if (array_key_exists($k, $d) && $d[$k] !== '' && $d[$k] !== null) $ch[$k] = round((float) $d[$k], 2);
-            if (array_key_exists('fk_assigned', $d)) $ch['fk_assigned'] = (int) $d['fk_assigned'];
+            if (array_key_exists('fk_assigned', $d)) { $a = (int) $d['fk_assigned']; if ($a && ! in_array($a, array_column(AccFilings::accountants($ent), 'id'), true)) throw new \InvalidArgumentException('Choose an accountant of the Hub (a login that may change filings).'); $ch['fk_assigned'] = $a; }
             foreach (['due_date', 'title'] as $k) if (array_key_exists($k, $d)) { if ((int) $o->f_auto) throw new \InvalidArgumentException('The due date and the title are worked out by the rules – they can be changed only on items added by hand.'); $ch[$k] = $k === 'title' ? mb_substr(trim((string) $d[$k]), 0, 200) : $d[$k]; }
             $ch = array_filter($ch, fn ($v, $k) => (string) ($o->$k ?? '') !== (string) $v, ARRAY_FILTER_USE_BOTH);
             if (! $ch) return ['message' => 'Nothing changed.', 'done' => (bool) $o->f_done];
@@ -282,17 +285,11 @@ class AccCompliance
         });
     }
 
-    /** A proof document on an item (pdf / image, at most 10 MB, stored with a random name). */
+    /** A proof document on an item (R-ACC-15 rules in AccFilings::upload). */
     public static function addDocument(int $ent, int $id, \Illuminate\Http\UploadedFile $f, object $u): int
     {
         $o = DB::table('acc_obligations')->where('id', $id)->where('fk_id_ent', $ent)->first() ?? throw new \InvalidArgumentException('Item not found.');
-        $ext = strtolower($f->getClientOriginalExtension());
-        if (! in_array($ext, ['pdf', 'jpg', 'jpeg', 'png', 'webp'], true) || $f->getSize() > 10 * 1024 * 1024) throw new \InvalidArgumentException('Use a pdf, jpg, png or webp file of at most 10 MB.');
-        $name = bin2hex(random_bytes(16)) . '.' . $ext; \Illuminate\Support\Facades\Storage::disk('local')->put('acc_documents/' . $name, (string) file_get_contents($f->getRealPath()));
-        $doc = (int) DB::table('acc_documents')->insertGetId(['fk_id_ent' => $ent, 'entity_type' => $o->entity_type, 'entity_id' => $o->entity_id, 'fk_id_obligation' => $id, 'doc_title' => mb_substr($f->getClientOriginalName(), 0, 200),
-            'stored_name' => $name, 'orig_name' => mb_substr($f->getClientOriginalName(), 0, 200), 'mime' => mb_substr((string) $f->getMimeType(), 0, 100), 'size_bytes' => (int) $f->getSize(), 'f_deleted' => 0, 'uploaded_by' => $u->id, 'created_at' => now()]);
-        DB::table('acc_obligation_log')->insert(['fk_id_obligation' => $id, 'action' => 'DOCUMENT', 'details' => 'proof added: ' . mb_substr($f->getClientOriginalName(), 0, 150), 'fk_id_account' => $u->id, 'created_at' => now()]);
-        return $doc;
+        return AccFilings::upload($ent, (string) $o->entity_type, (int) $o->entity_id, $id, $f, $u);
     }
 
     public static function seedTypes(): void
@@ -305,15 +302,12 @@ class AccCompliance
         }
     }
 
-    /** The schedule list (shown status computed: done → its status, overdue, due soon, upcoming). */
+    /** The Tax & filings page: R-ACC-13 overview (tabs, filters, summary, calendar) + the last run (a GET never writes – the page asks for a run when stale). */
     public static function page(int $ent, array $f = []): array
     {
-        $last = DB::table('acc_settings')->where('fk_id_ent', $ent)->where('setting_key', 'last_generated_at')->value('setting_value');      /* the page asks for a run (POST) when stale – a GET never writes */
-        $soon = (int) (DB::table('acc_settings')->whereIn('fk_id_ent', [$ent, 0])->where('setting_key', 'due_soon_days')->value('setting_value') ?? 14); $today = date('Y-m-d');
-        $rows = DB::table('acc_obligations as o')->leftJoin('cat_company_house as c', fn ($j) => $j->on('c.id', '=', 'o.entity_id')->where('o.entity_type', 'COMPANY'))->leftJoin('t_account as a', fn ($j) => $j->on('a.id', '=', 'o.entity_id')->where('o.entity_type', 'PERSON'))->where('o.fk_id_ent', $ent)
-            ->when(! empty($f['company']), fn ($q) => $q->where('o.entity_id', (int) $f['company']))->orderBy('o.due_date')->limit(500)->get(['o.*', 'c.company_name', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as person")])
-            ->map(fn ($o) => ['id' => (int) $o->id, 'company' => $o->company_name ?: $o->person, 'auto' => (bool) $o->f_auto, 'docs' => DB::table('acc_documents')->where('fk_id_obligation', $o->id)->where('f_deleted', 0)->count(), 'type' => $o->type_code, 'title' => $o->title, 'period' => $o->period_start ? $o->period_start . ' → ' . $o->period_end : '', 'due' => $o->due_date,
-                'status' => $o->status, 'shown' => (int) $o->f_done ? $o->status : ($o->due_date < $today ? 'OVERDUE' : ($o->due_date <= date('Y-m-d', strtotime("+$soon days")) ? 'DUE_SOON' : 'UPCOMING'))])->all();
-        return ['stale' => ! $last || strtotime((string) $last) < time() - 6 * 3600, 'last_run' => $last, 'rows' => $rows, 'companies' => DB::table('cat_company_house')->orderBy('company_name')->limit(500)->get(['id', 'company_name'])];
+        $last = DB::table('acc_settings')->where('fk_id_ent', $ent)->where('setting_key', 'last_generated_at')->value('setting_value');
+        return ['stale' => ! $last || strtotime((string) $last) < time() - 6 * 3600, 'last_run' => $last, 'statuses' => self::STATUSES,
+            'companies' => DB::table('cat_company_house')->orderBy('company_name')->limit(500)->get(['id', 'company_name']),
+            'people' => DB::table('t_account as a')->join('acc_person_settings as s', 's.fk_id_account', '=', 'a.id')->orderBy('a.first_name')->limit(500)->get(['a.id', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as name")])] + AccFilings::overview($ent, $f);
     }
 }
