@@ -30,20 +30,29 @@ class SalesImport
     public static function columns(int $marketplaceId, string $set = 'SALE'): array
     {
         [$table, $col, $fields] = self::SETS[$set]; $out = array_fill_keys(array_keys($fields), []);
+        $pf = self::profileSets($marketplaceId);      /* R-A_SALES-87: the marketplace profile holds the sets; the old table is the fall-back */
+        if (! empty($pf[$set])) { foreach ((array) $pf[$set] as $f => $cols) if (isset($out[$f])) $out[$f] = array_values(array_filter(array_map('trim', (array) $cols), fn ($x) => $x !== '')); return $out; }
         foreach (DB::table($table)->where('fk_marketplace_id', $marketplaceId)->whereIn('fk_id_ent', [0, (int) Context::ent()])->get() as $r) if (isset($out[$r->$col])) $out[$r->$col] = array_values(array_filter(array_map('trim', explode(',', (string) $r->csv_columns)), fn ($x) => $x !== ''));
         return $out;
     }
+
+    /** The marketplace's own profile (one per cat_marketplaces row, R-A_SALES-87) and its SALE / DS / MATCH sets. */
+    public static function profileOf(int $marketplaceId): ?object { return DB::table('mp_profiles')->where('fk_id_marketplace', $marketplaceId)->whereIn('fk_id_ent', [0, (int) Context::ent()])->orderByDesc('fk_id_ent')->first(); }
+
+    public static function profileSets(int $marketplaceId): array { $p = self::profileOf($marketplaceId); return $p ? (array) json_decode((string) ($p->sale_sets_json ?? ''), true) : []; }
 
     public static function saveColumns(int $marketplaceId, string $set, array $data): array
     {
         if (! isset(self::SETS[$set])) throw new \InvalidArgumentException('Unknown mapping set.');
         if (! DB::table('cat_marketplaces')->where('id', $marketplaceId)->exists()) throw new \InvalidArgumentException('Marketplace not found.');
         [$table, $col, $fields] = self::SETS[$set]; $ent = (int) Context::ent(); $saved = [];
-        DB::transaction(function () use ($table, $col, $fields, $data, $marketplaceId, $ent, &$saved) {
+        DB::transaction(function () use ($table, $col, $fields, $data, $marketplaceId, $ent, $set, &$saved) {
             foreach ($fields as $f => $label) {
                 $list = Parse::headerList($data[$f] ?? ''); if (mb_strlen($list) > 1000) throw new \InvalidArgumentException("$label: too many CSV columns (1000 characters at most).");
                 DB::table($table)->updateOrInsert(['fk_id_ent' => $ent, 'fk_marketplace_id' => $marketplaceId, $col => $f], ['csv_columns' => $list, 'updated_at' => now()]); $saved[$f] = $list;
             }
+            if ($p = self::profileOf($marketplaceId)) { $sets = self::profileSets($marketplaceId); $sets[$set] = array_map(fn ($l) => array_values(array_filter(array_map('trim', explode(',', (string) $l)), fn ($x) => $x !== '')), $saved);
+                DB::table('mp_profiles')->where('id', $p->id)->update(['sale_sets_json' => json_encode($sets), 'updated_at' => now()]); }
             Audit::log($table, $marketplaceId, 'UPDATE', ['set' => 'columns saved']);
         });
         return $saved;

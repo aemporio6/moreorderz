@@ -36,7 +36,7 @@ class Marketplaces
             'telephone1' => mb_substr(trim((string) ($d['telephone1'] ?? '')), 0, 50), 'telephone2' => mb_substr(trim((string) ($d['telephone2'] ?? '')), 0, 50), 'telephone3' => mb_substr(trim((string) ($d['telephone3'] ?? '')), 0, 50),
             'email1' => mb_strtolower(trim((string) ($d['email1'] ?? ''))), 'email2' => mb_strtolower(trim((string) ($d['email2'] ?? ''))), 'address' => mb_substr(self::text($d['address'] ?? ''), 0, 255)];
         if ($id) { $old = DB::table('cat_marketplaces')->where('id', $id)->whereIn('fk_id_ent', [0, $ent])->first() ?? throw new \InvalidArgumentException('Marketplace not found.'); DB::table('cat_marketplaces')->where('id', $id)->update($row); Audit::log('cat_marketplaces', $id, 'UPDATE', array_diff_assoc(array_map('strval', $row), array_map('strval', array_intersect_key((array) $old, $row)))); }
-        else { $id = (int) DB::table('cat_marketplaces')->insertGetId(RecordService::fillNotNull('cat_marketplaces', $row + ['fk_id_ent' => $ent])); Audit::log('cat_marketplaces', $id, 'INSERT', $row); }
+        else { $id = (int) DB::table('cat_marketplaces')->insertGetId(RecordService::fillNotNull('cat_marketplaces', $row + ['fk_id_ent' => $ent])); Audit::log('cat_marketplaces', $id, 'INSERT', $row); Profiles::ensureForMarketplace($id); }
         return ['message' => 'Marketplace saved.', 'id' => $id];
     }
 

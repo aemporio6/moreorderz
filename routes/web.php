@@ -556,6 +556,14 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('old-entry/csv', [\App\Http\Controllers\BuyingController::class, 'oldEntryCsv']);
         Route::post('old-entry/csv/{job}/undo', [\App\Http\Controllers\BuyingController::class, 'oldEntryUndo'])->whereNumber('job');
         Route::get('old-entry/template', [\App\Http\Controllers\BuyingController::class, 'oldEntryTemplate']);
+        Route::get('preset-groups', [\App\Http\Controllers\PresetGroupController::class, 'index']);      // R-D-62
+        Route::post('preset-groups', [\App\Http\Controllers\PresetGroupController::class, 'store']);
+        Route::post('preset-groups/sort', [\App\Http\Controllers\PresetGroupController::class, 'sort']);
+        Route::post('preset-groups/{id}', [\App\Http\Controllers\PresetGroupController::class, 'update'])->whereNumber('id');
+        Route::post('preset-groups/{id}/star', [\App\Http\Controllers\PresetGroupController::class, 'star'])->whereNumber('id');
+        Route::post('preset-groups/{id}/copy', [\App\Http\Controllers\PresetGroupController::class, 'copy'])->whereNumber('id');
+        Route::delete('preset-groups/{id}', [\App\Http\Controllers\PresetGroupController::class, 'destroy'])->whereNumber('id');
+        Route::get('preset-groups/{id}/history', [\App\Http\Controllers\PresetGroupController::class, 'history'])->whereNumber('id');
         Route::get('listings-qty', [\App\Http\Controllers\PurchaseAuditController::class, 'listingQty']);      // R-H-20
         Route::get('listings-qty/export', [\App\Http\Controllers\PurchaseAuditController::class, 'listingQtyCsv']);
         Route::get('listings-import', [\App\Http\Controllers\PurchaseAuditController::class, 'listingBatches']);      // R-D-59

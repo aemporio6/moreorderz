@@ -24,9 +24,13 @@ class SettlementService
     public const BUCKET_NAMES = ['TT_COMMISSION' => 'Commission', 'TT_AFFILIATE' => 'Affiliate / creator commission', 'TT_SHIPPING_SERVICE' => 'Shipping service fee', 'TT_PROMOTION' => 'Promotion and ad fees', 'TT_MANAGED_SERVICE' => 'Managed service plan',
         'TT_VAT' => 'VAT on fees', 'TT_OTHER_FEE' => 'Other fee (new column)', 'TT_SHIPPING_NET' => 'Shipping (net)', 'TT_CHARGEBACK' => 'Chargebacks', 'TT_FULFIL_STORAGE' => 'Fulfilment warehouse fee', 'TT_ADJUSTMENT' => 'Other adjustments'];
 
+    /** R-A_SALES-87: the shop's profile columns of the TikTok buckets (file column → TT_ bucket) – they win over the built-in names. */
+    public static array $pfColumns = [];
+
     public static function feeBucket(string $col): string
     {
         $c = strtolower(trim($col));
+        if (isset(self::$pfColumns[MarketplaceFiles::keyOf($col)])) return self::$pfColumns[MarketplaceFiles::keyOf($col)];
         return match (true) {
             $c === 'tiktok shop commission fee' => 'TT_COMMISSION',
             str_starts_with($c, 'affiliate') => 'TT_AFFILIATE',
@@ -136,6 +140,9 @@ class SettlementService
     public static function importTikTok(int $ent, int $branchId, string $path, string $fileName): array
     {
         $shop = DB::table('t_branches')->where('id', $branchId)->where('fk_id_ent', $ent)->first() ?? throw new \InvalidArgumentException('Choose the shop this file belongs to.');
+        self::$pfColumns = [];
+        if ($p = Profiles::ofShop($branchId)) foreach (DB::table('mp_profile_fee_buckets')->where('fk_id_mp_profile', $p->id)->where('f_active', 1)->where('bucket_code', 'like', 'TT\\_%')->whereNotNull('file_columns')->get(['bucket_code', 'file_columns']) as $b)
+            foreach (array_filter(array_map('trim', explode(',', (string) $b->file_columns))) as $c) self::$pfColumns[MarketplaceFiles::keyOf($c)] = $b->bucket_code;
         $x = self::readTikTok($path, (float) Settings::get('TT_SETTLEMENT_TOLERANCE', $ent, 0));
         if ($x['row_errors'] || $x['statement_errors']) {
             throw new \InvalidArgumentException('The file does not add up, nothing was loaded. ' . implode(' | ', array_slice(array_merge($x['row_errors'], $x['statement_errors']), 0, 5)));

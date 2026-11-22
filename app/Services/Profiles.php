@@ -18,6 +18,23 @@ class Profiles
     ];
     public const BOOK_AS = ['NET_SALES', 'REFUND', 'MP_COMMISSION', 'MP_REGULATORY', 'MP_INTERNATIONAL', 'MP_PENALTY', 'MP_LISTING', 'MP_SUBSCRIPTION', 'MP_OTHER_FEE', 'MP_FULFILMENT', 'MP_STORAGE', 'MP_SHIPPING_LABEL', 'MP_ADS', 'MP_VAT_ON_FEES', 'MP_TAX_WITHHELD', 'MP_CHARGEBACK', 'MP_REIMBURSEMENT', 'MP_HOLD', 'MP_ADJUSTMENT', 'MP_FX', 'MP_OTHER'];
 
+    /** R-A_SALES-87: every marketplace has one profile – a new marketplace gets a copy of the matching example (eBay / Amazon / TikTok by name or ISO code), else a blank one. */
+    public static function ensureForMarketplace(int $marketplaceId): int
+    {
+        $m = DB::table('cat_marketplaces')->where('id', $marketplaceId)->first(); if (! $m) return 0;
+        if ($id = (int) DB::table('mp_profiles')->where('fk_id_marketplace', $m->id)->where('fk_id_ent', $m->fk_id_ent)->value('id')) return $id;
+        $name = trim(($m->marketplace_short ?? '') . ' ' . ($m->marketplace_descr ?? '')); $hay = mb_strtolower($name . ' ' . ($m->iso_code ?? '')); $src = null;
+        foreach (['EBAY_EXAMPLE' => 'ebay', 'AMAZON_EXAMPLE' => 'amazon', 'TIKTOK_EXAMPLE' => 'tiktok'] as $code => $w) if (str_contains($hay, $w)) $src = DB::table('mp_profiles')->where('code', $code)->where('fk_id_ent', 0)->first();
+        $base = $src ?? DB::table('mp_profiles')->where('fk_id_ent', 0)->orderBy('id')->first(); if (! $base) return 0;
+        $row = (array) $base; unset($row['id']);
+        return DB::transaction(function () use ($row, $m, $name, $src) {
+            $id = (int) DB::table('mp_profiles')->insertGetId(array_merge($row, ['fk_id_ent' => $m->fk_id_ent, 'fk_id_marketplace' => $m->id, 'code' => mb_substr('MP_' . $m->id, 0, 30), 'name' => mb_substr(($name !== '' ? $name : 'Marketplace ' . $m->id) . ' profile', 0, 100), 'sale_sets_json' => null, 'created_by' => Context::userId(), 'created_at' => now(), 'updated_at' => null]));
+            if ($src) foreach (['mp_profile_report_types', 'mp_profile_fee_buckets'] as $t) foreach (DB::table($t)->where('fk_id_mp_profile', $src->id)->get() as $r) { $r = (array) $r; unset($r['id']); $r['fk_id_mp_profile'] = $id; DB::table($t)->insert($r); }
+            Audit::log('mp_profiles', $id, 'INSERT', ['profile for marketplace' => $m->id, 'copied from' => $src->code ?? 'blank']);
+            return $id;
+        });
+    }
+
     public static function ofShop(int $shopId): ?object { $p = (int) DB::table('t_branches')->where('id', $shopId)->value('fk_id_mp_profile'); return $p ? DB::table('mp_profiles')->where('id', $p)->first() : null; }
 
     private static function names(?string $csv): array { return array_values(array_filter(array_map(fn ($x) => trim($x), explode(',', (string) $csv)), fn ($x) => $x !== '')); }

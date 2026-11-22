@@ -105,6 +105,7 @@ class MarketplaceFiles
     // ---------- Amazon: flat file V2 ----------
     public static function amazonCode(string $txn, string $type, string $desc): string
     {
+        if ($pc = self::pfLong("$txn $type $desc")) return $pc;      /* the profile's words first (R-A_SALES-87) */
         $t = mb_strtolower($type); $d = mb_strtolower($desc); $x = mb_strtolower($txn); $has = fn (string ...$w) => (bool) array_filter($w, fn ($k) => str_contains($d, $k));
         if (in_array($t, ['itemprice', 'promotion', 'itemwithheldtax', 'shipmentprice', 'directpayment'], true)) return 'NET_SALES';
         if (str_contains($t, 'advertising') || $has('advertis', 'sponsored')) return 'MP_ADS';
@@ -224,6 +225,7 @@ class MarketplaceFiles
         $g = function (array $r, string $k) use ($ix) { $v = trim((string) ($r[$ix[$k] ?? -1] ?? '')); return $v === '--' ? '' : $v; };
         $fees = ['final value fee - fixed' => 'MP_COMMISSION', 'final value fee - variable' => 'MP_COMMISSION', 'regulatory operating fee' => 'MP_REGULATORY', "very high 'item not as described' fee" => 'MP_PENALTY', 'below standard performance fee' => 'MP_PENALTY', 'international fee' => 'MP_INTERNATIONAL',
             'charity donation' => 'MP_OTHER_FEE', 'deposit processing fee' => 'MP_OTHER_FEE'];
+        foreach (self::$pfBuckets['wide'] as $col => $code) if (in_array($col, $h, true)) $fees[$col] = $code;      /* R-A_SALES-87: the profile's fee columns win over the built-in list */
         foreach ($h as $col) if ($col !== '' && str_contains($col, ' fee') && ! isset($fees[$col]) && ! in_array($col, ['regulatory operating fee'], true)) $fees[$col] = 'MP_OTHER_FEE';   // a fee column eBay adds later
         $st = []; $lines = []; $refund = []; $unknown = []; $payoutRows = []; $skip = ['rows' => 0, 'amount' => 0.0]; $bad = 0; $cur = 'GBP'; $dates = [];
         foreach (array_slice($rows, $hi + 1) as $r) {
@@ -244,7 +246,7 @@ class MarketplaceFiles
                 if ($type === 'refund' && $order !== '' && $gross < 0) $refund['EBAY-' . $pid . '|' . $order] = round(($refund['EBAY-' . $pid . '|' . $order] ?? 0) + $gross, 2);
                 continue;
             }
-            $code = match (true) {
+            $code = self::pfLong($g($r, 'type') . ' ' . $desc) ?? match (true) {      /* the profile's words first */
                 $type === 'other fee' => match (true) { str_contains($d, 'promoted') || str_contains($d, 'advert') || str_contains($d, 'ad fee') => 'MP_ADS', str_contains($d, 'subscription') || str_contains($d, 'shop') || str_contains($d, 'store') => 'MP_SUBSCRIPTION',
                     str_contains($d, 'insertion') || str_contains($d, 'listing') || str_contains($d, 'upgrade') || str_contains($d, 'subtitle') || str_contains($d, 'gallery') => 'MP_LISTING', str_contains($d, 'final value') => 'MP_COMMISSION', default => 'MP_OTHER_FEE' },
                 in_array($type, ['postage label', 'shipping label'], true) => 'MP_SHIPPING_LABEL',
@@ -388,8 +390,18 @@ class MarketplaceFiles
     }
 
     // ---------- load ----------
+    /** R-A_SALES-87: the shop's profile buckets the code readers (Amazon, eBay) look at first – header name → code (wide) and words → code (long). */
+    public static array $pfBuckets = ['wide' => [], 'long' => []];
+
+    private static function pfLong(string $text): ?string
+    {
+        $t = self::key($text); foreach (self::$pfBuckets['long'] as [$code, $keys]) foreach ($keys as $k) if ($k !== '' && str_contains($t, $k)) return $code;
+        return null;
+    }
+
     public static function read(string $path, string $ext, array $opt = []): array
     {
+        self::$pfBuckets = ['wide' => (array) ($opt['profile']['wide'] ?? []), 'long' => (array) ($opt['profile']['long'] ?? [])];
         $fmt = self::detect($path, $ext);
         return match ($fmt) { 'AMAZON_V2' => self::readAmazon($path), 'AMAZON_TXN' => self::readAmazonTxn($path), 'EBAY' => self::readEbay($path), 'TIKTOK' => ['format' => 'TIKTOK'], default => self::readMapped($path, $ext, $opt) };
     }

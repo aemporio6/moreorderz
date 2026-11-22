@@ -190,4 +190,46 @@ class MarketplaceFilesTest extends TestCase
         $d = $this->actingAs($fin)->getJson('/api/settlements')->assertOk()->json();
         $this->assertCount(3, $d['rows']); $this->assertCount(2, $d['periods']);
     }
+
+    /** R-A_SALES-87: the money readers take the fee buckets from the shop's profile rows; the code lists are only the fall-back. */
+    public function test_profile_rows_win_over_the_built_in_lists_and_each_marketplace_has_one_profile(): void
+    {
+        $mp = (int) DB::table('t_branches')->where('id', $this->shop)->value('fk_id_marketplace');
+        DB::table('cat_marketplaces')->where('id', $mp)->update(['marketplace_short' => 'eBay', 'marketplace_descr' => 'eBay UK']);
+        $pid = \App\Services\Profiles::ensureForMarketplace($mp);
+        $this->assertSame($pid, \App\Services\Profiles::ensureForMarketplace($mp), 'one profile per marketplace');
+        $this->assertSame(['MP_COMMISSION', 'Final value fee - fixed,Final value fee - variable'], array_values((array) DB::table('mp_profile_fee_buckets')->where('fk_id_mp_profile', $pid)->where('bucket_code', 'FVF')->first(['book_as', 'file_columns'])), 'the eBay example is copied with its fee columns');
+        $codes = fn (array $x, string $like) => array_values(array_unique(array_column(array_filter($x['lines'], fn ($l) => str_contains($l['desc'], $like)), 'code')));
+        $path = $this->file('Transaction_report.csv', $this->ebay());
+        $this->assertSame(['MP_REGULATORY'], $codes(MF::read($path, 'csv'), 'Regulatory'), 'no profile: the code list');
+        $this->assertSame(['MP_REGULATORY'], $codes(MF::read($path, 'csv', ['profile' => \App\Services\Profiles::buckets($pid)]), 'Regulatory'), 'the seeded profile books like the code');
+        DB::table('mp_profile_fee_buckets')->where('fk_id_mp_profile', $pid)->where('bucket_code', 'REGULATORY')->update(['book_as' => 'MP_OTHER_FEE']);
+        DB::table('mp_profile_fee_buckets')->where('fk_id_mp_profile', $pid)->where('bucket_code', 'AD_FEE')->update(['book_as' => 'MP_SUBSCRIPTION', 'match_keywords' => 'promoted listings']);
+        $x = MF::read($path, 'csv', ['profile' => \App\Services\Profiles::buckets($pid)]);
+        $this->assertSame([['MP_OTHER_FEE'], ['MP_SUBSCRIPTION']], [$codes($x, 'Regulatory'), $codes($x, 'Promoted')], 'a fee column and a fee word changed in the profile rows – no code change');
+        DB::table('t_branches')->where('id', $this->shop)->update(['fk_id_mp_profile' => $pid]);
+        MF::import(1, $this->shop, $path, 'Transaction_report.csv');
+        $this->assertGreaterThan(0, DB::table('fin_settlement_lines')->where('amount_description', 'like', 'Regulatory%')->where('amount_type', 'MP_OTHER_FEE')->count(), 'import uses the shop profile');
+
+        $amz = (int) DB::table('mp_profiles')->where('code', 'AMAZON_EXAMPLE')->value('id'); $this->assertGreaterThan(0, $amz, 'the Amazon example profile is seeded');
+        $ap = $this->file('amz.txt', $this->amazon()); $plain = MF::read($ap, 'txt'); $pf = MF::read($ap, 'txt', ['profile' => \App\Services\Profiles::buckets($amz)]);
+        $this->assertSame(array_column($plain['lines'], 'code'), array_column($pf['lines'], 'code'), 'the seeded Amazon words book every line as the code does');
+        DB::table('mp_profile_fee_buckets')->insert(['fk_id_mp_profile' => $amz, 'bucket_code' => 'NEWTHING', 'label' => 'New thing', 'source_rule' => 'words', 'charge_kind' => 'X', 'sort_no' => 1, 'f_active' => 1, 'sign_rule' => 'COST', 'f_in_selling_costs' => 1, 'book_as' => 'MP_ADJUSTMENT', 'match_keywords' => 'new thing']);
+        $this->assertSame(['MP_ADJUSTMENT'], $codes(MF::read($ap, 'txt', ['profile' => \App\Services\Profiles::buckets($amz)]), 'New thing'));
+        $this->assertSame(['MP_OTHER'], $codes(MF::read($ap, 'txt'), 'New thing'), 'a read without the profile does not keep the last profile');
+
+        $this->assertNotNull(DB::table('mp_profile_fee_buckets as b')->join('mp_profiles as p', 'p.id', '=', 'b.fk_id_mp_profile')->where('p.code', 'TIKTOK_EXAMPLE')->where('b.bucket_code', 'TT_COMMISSION')->value('b.file_columns'));
+        Settle::$pfColumns = [MF::keyOf('Brand new TikTok fee') => 'TT_PROMOTION'];
+        $this->assertSame(['TT_PROMOTION', 'TT_COMMISSION'], [Settle::feeBucket('Brand new TikTok fee'), Settle::feeBucket('TikTok Shop commission fee')]);
+        Settle::$pfColumns = []; $this->assertSame('TT_OTHER_FEE', Settle::feeBucket('Brand new TikTok fee'));
+
+        \App\Services\Context::set(1, null);
+        \App\Services\SalesImport::saveColumns($mp, 'SALE', ['order_no' => 'Order number, Sales record']);
+        $this->assertSame(['Order number', 'Sales record'], json_decode((string) DB::table('mp_profiles')->where('id', $pid)->value('sale_sets_json'), true)['SALE']['order_no']);
+        DB::table('marketplace_sale_columns')->where('fk_marketplace_id', $mp)->delete();
+        $this->assertSame(['Order number', 'Sales record'], \App\Services\SalesImport::columns($mp, 'SALE')['order_no'], 'the column set is read from the profile');
+        $blank = DB::table('cat_marketplaces')->insertGetId(RecordService::fillNotNull('cat_marketplaces', ['fk_id_ent' => 1, 'marketplace_short' => 'OnBuy']));
+        $bp = \App\Services\Profiles::ensureForMarketplace($blank);
+        $this->assertSame([0, 'OnBuy profile'], [DB::table('mp_profile_fee_buckets')->where('fk_id_mp_profile', $bp)->count(), DB::table('mp_profiles')->where('id', $bp)->value('name')], 'a marketplace with no example gets a blank profile');
+    }
 }
