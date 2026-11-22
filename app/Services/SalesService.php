@@ -26,11 +26,11 @@ class SalesService
                 foreach (['order_no', 'd_order', 'sku', 'qty'] as $k) if (! isset($l[$k]) || $l[$k] === '') throw new \InvalidArgumentException('Line ' . ($i + 1) . ": $k is missing.");
                 $qty = (int) $l['qty']; if ($qty <= 0) throw new \InvalidArgumentException('Line ' . ($i + 1) . ': quantity must be more than zero.');
                 $sku = trim((string) $l['sku']); $pack = 1; $listing = null;
-                $product = DB::table('t_product_vendors')->where('fk_id_ent', $ent)->where('SKU_VENDOR', $sku)->first();
-                if (! $product) {      // the shop's own SKU for it (channel SKU map), with pack quantity
-                    $listing = DB::table('t_product_listings')->where('fk_id_ent', $ent)->where('fk_id_branch', $shop->id)->where(fn ($w) => $w->where('marketplace_sku', $sku)->orWhere('item_id', $sku))->where('f_active', 1)->first();
-                    if ($listing) { $product = DB::table('t_product_vendors')->where('id', $listing->fk_id_product)->first(); $pack = max(1, (int) $listing->pack_qty); }
-                }
+                /* R-H-19 resolution order: (1) the shop's listing by item id or channel SKU (pack / bundle), (2) the product SKU; (3) aliases and (4) Needs Attention follow in the import */
+                $listing = DB::table('t_product_listings')->where('fk_id_ent', $ent)->where('fk_id_branch', $shop->id)->where(fn ($w) => $w->where('marketplace_sku', $sku)->orWhere('item_id', $sku))->where('f_active', 1)->first();
+                $product = $listing ? DB::table('t_product_vendors')->where('id', $listing->fk_id_product)->first() : null;
+                if ($listing && $product) $pack = (int) $listing->f_bundle ? 1 : max(1, (int) $listing->pack_qty);
+                else { $listing = null; $product = DB::table('t_product_vendors')->where('fk_id_ent', $ent)->where('SKU_VENDOR', $sku)->first(); }
                 $rate = round((float) ($l['sale_rate'] ?? 0), 2); $total = round($qty * $rate, 2);
                 $cur = strtoupper($l['currency'] ?? Fx::code($shop->fk_id_payout_currency, $ent));
                 $period = $product ? PriceService::on((int) $product->id, (int) $shop->fk_id_marketplace, $l['d_order']) : null;
@@ -145,7 +145,12 @@ class SalesService
                 $upd = ['f_locked' => 1, 'd_confirmed' => now(), 'confirmed_by' => Context::userId(), 'updated_at' => now()];
                 if ($s->status === 'Pending') {
                     $upd['status'] = 'Confirmed'; $revenue += (float) $s->total_amount_gbp; $n++;
-                    if ($s->sale_source === 'active' && $s->fk_product_id && ($s->fulfilment_channel ?: 'SELF') === 'SELF') {
+                    if ($s->sale_source === 'active' && $s->fk_product_id && ($s->fulfilment_channel ?: 'SELF') === 'SELF' && ($comps = Bundles::of($s))) {      /* R-H-19 a bundle: each component leaves stock, cost = Σ */
+                        $r = DB::table('wh_reservations')->where('fk_id_sale', $s->id)->orderByDesc('id')->first(); $own = ($r->fk_id_owner_seg ?? 0) ?: null;
+                        $cost = Bundles::confirm($ent, $s, $comps, $shipped, $own, $postDate, fn ($pid, $q) => self::shelfBins($pid, $ent, $q));
+                        $upd += ['f_stock_deducted' => 1, 'cost_gbp' => $cost, 'buy_amount' => $cost, 'buy_rate' => $s->qty > 0 ? round($cost / $s->qty, 2) : 0, 'cost_source' => 'lots', 'profit' => round((float) $s->total_amount_gbp - $cost, 2), 'wh_status' => 'CONFIRMED', 'qty_shipped' => (int) $s->qty];
+                        $units += (int) $s->qty; $cogs += $cost;
+                    } elseif ($s->sale_source === 'active' && $s->fk_product_id && ($s->fulfilment_channel ?: 'SELF') === 'SELF') {
                         $r = DB::table('wh_reservations')->where('fk_id_sale', $s->id)->orderByDesc('id')->first();
                         $rule = ['rule' => ($r->owner_rule ?? 'POOL') === 'PRIVATE' ? 'PRIVATE' : 'POOL', 'owner' => ($r->fk_id_owner_seg ?? 0) ?: null];
                         $out = max(0, (int) $s->qty_shipped - (int) $s->qty_returned_unconfirmed); $miss = (int) $s->qty - $out;

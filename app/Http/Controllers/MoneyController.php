@@ -132,7 +132,8 @@ class MoneyController extends Controller
             return response($x['body'], 200, ['Content-Type' => $x['type'], 'Content-Disposition' => 'attachment; filename="' . $x['name'] . '"']); });
     }
     /** R-FIN-25 report status board per shop × report type. */
-    public function reportBoard(Request $r) { $this->can($r, 'money.SEE'); return \App\Services\FinanceExports::board((int) Context::ent()); }
+    public function reportBoard(Request $r) { $this->can($r, 'money.SEE'); $b = \App\Services\FinanceExports::board((int) Context::ent()); foreach (\App\Services\FinanceReports::boardRows((int) Context::ent()) as $x) $b['rows'][] = $x + ['days' => $x['data_until'] ? (int) floor((time() - strtotime($x['data_until'])) / 86400) : null, 'state' => $x['data_until'] ? 'loaded' : 'nothing yet'];
+        return $b + ['types' => array_map(fn ($t) => $t[1], \App\Services\FinanceReports::TYPES), 'shops' => \Illuminate\Support\Facades\DB::table('t_branches')->where('fk_id_ent', (int) Context::ent())->where('f_active', 1)->orderBy('shop_no')->get(['id', 'shop_no', 'shop_name'])]; }
 
     /** R-FIN-54 Products & stock profit list. */
     public function productProfit(Request $r)
@@ -382,5 +383,12 @@ class MoneyController extends Controller
             ->where('e.fk_id_ent', $ent)->where('e.f_active', 1)->whereNull('e.fk_id_bank_line')->where('e.fk_id_paid_from', $l->bank_account_id)
             ->whereBetween('e.d_expense', [date('Y-m-d', strtotime("$l->txn_date -30 day")), date('Y-m-d', strtotime("$l->txn_date +30 day"))])->orderBy('e.d_expense')->limit(200)
             ->get(['e.id', 'e.d_expense', 'e.amount', 'e.category_code', 'e.fk_id_payee', \Illuminate\Support\Facades\DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as payee"), 'e.note'])];
+    }
+
+    /** R-FIN-22 ADS / FBA_STOCK / RETURNS / REIMB / STORAGE files of a shop. */
+    public function financeReport(Request $r)
+    {
+        if (! $r->hasFile('file')) return response()->json(['message' => 'No file uploaded'], 422);
+        return $this->run(fn () => \App\Services\FinanceReports::import((int) Context::ent(), (int) $r->input('shop'), (string) $r->input('type'), $r->file('file')->getClientOriginalName(), (string) file_get_contents($r->file('file')->getRealPath()), $r->user()));
     }
 }

@@ -19,6 +19,7 @@ class DispatchService
         return DB::transaction(function () use ($saleId) {
             $s = DB::table('t_sales')->where('id', $saleId)->lockForUpdate()->first() ?? throw new \RuntimeException('Sale line not found.');
             if (($s->fulfilment_channel ?: 'SELF') !== 'SELF' || $s->sale_source !== 'active' || ! $s->fk_product_id || $s->status !== 'Pending') return null;
+            if ($comps = Bundles::of($s)) return Bundles::reserve($s, $comps);      /* R-H-19 a bundle reserves each component */
             $ent = (int) $s->fk_id_ent;
             DB::table('t_product_vendors')->where('id', $s->fk_product_id)->lockForUpdate()->first();          // two intakes of the last unit wait here
             $r = DB::table('wh_reservations')->where('fk_id_sale', $saleId)->whereNotIn('status', ['RELEASED', 'SHIPPED'])->first();

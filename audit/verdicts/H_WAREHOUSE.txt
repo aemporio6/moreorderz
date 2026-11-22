@@ -16,7 +16,7 @@
 16|B|function reserve|reservation at intake
 17|B|function release|release and consume
 18|B|function fillShorts|short at intake, filled when stock arrives
-19|P|function intake|listing SKU with pack quantity; bundle components not built
+19|B|class Bundles|channel SKU map = t_product_listings with pack_qty and f_bundle + child grid listing_component (t_listing_components: product, qty per listing unit); intake resolution: the shop's listing by item id / channel SKU first, then the product SKU, then aliases (import) and Needs Attention; a pack listing expands at intake (qty × pack), a bundle reserves one row per component (order qty × qty per unit, short per component, WH_ORDER_SHORT names the short SKUs) and at Month Confirm each component leaves stock, cost = Σ components' lot cost (7e-156); SalesDispatchTest (2-pack), ListingsMoneyFilesTest h19 (A+B × 1 → 1 A + 1 B, cost A + cost B)
 20|M||stock quantity per listing (outbound) not built
 21|P|function createGrn|receive with a place per line; phone receiving flow partly
 22|P|function quickBuy|receiving without a PO = quick buy / opening stock

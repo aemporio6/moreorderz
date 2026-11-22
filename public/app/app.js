@@ -332,6 +332,7 @@
       if (r.startsWith('#/invoices')) return await pageInvoices();      // R-D-83 / 84
       if (r.startsWith('#/compliance')) return await pageCompliance();      // R-ACC-1 … 9
       if (r.startsWith('#/purchase-audit')) return await pagePurchaseAudit();      // R-A_SALES-60 … 64
+      if (r.startsWith('#/listings-import')) return await pageListingsImport();      // R-D-59
       if (r === '#/bulk-jobs') return await pageBulkJobs();
       if (r === '#/choices') return await pageChoices();
       if (r === '#/settings') return await pageSettings();
@@ -1744,7 +1745,7 @@
   async function pageNotListed(f = {}) {
     busy(true); let d; try { d = await api('not-listed?' + new URLSearchParams(Object.entries(f).filter(([, v]) => v))); } finally { busy(false); }
     const opt2 = (l, v, all) => `<option value="">${all}</option>` + l.map(x => `<option value="${esc(x.id ?? x)}" ${String(x.id ?? x) === String(v || '') ? 'selected' : ''}>${esc(x.name ?? x)}</option>`).join('');
-    $('#main').innerHTML = `<div class="page-head"><div><h1>Products not listed</h1><div class="sub">Per shop: products visible to it (Pool on its marketplace or Private with the shop ticked), active, with stock, not parents – that have no ACTIVE listing there.</div></div>
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Products not listed</h1><div class="sub">Per shop: products visible to it (Pool on its marketplace or Private with the shop ticked), active, with stock, not parents – that have no ACTIVE listing there. <a href="#/listings-import">Import active listings</a></div></div>
       <div class="actions"><a class="btn" href="#/import" title="Upload a listing file">Upload</a></div></div>
       <div class="card"><div class="list-bar" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="nlShop">${opt2(d.shops, f.shop, 'All shops')}</select><select id="nlType">${opt2(d.types, f.type, 'All types')}</select>
         <select id="nlPreset">${opt2(d.presets, f.preset, 'All preset groups')}</select><select id="nlPack">${opt2(d.packings, f.packing, 'All packings')}</select></div>
@@ -2075,6 +2076,15 @@
     });
   }
 
+  async function pageListingsImport() {      /* R-D-59 eBay active listings: diff against the shop's listings, Undo per batch */
+    busy(true); let d; try { d = await api('listings-import'); } finally { busy(false); }
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/not-listed">Products not listed</a> ›</div><h1>Import active listings</h1><div class="sub">The eBay "active listings" file of one shop; the file name starts with the shop no (e.g. 101_products.csv). New SKUs become ACTIVE listings, SKUs no longer in the file are ended, changed titles are updated.</div></div>
+      <div class="actions"><label class="btn primary">Choose the file<input type="file" id="liF" accept=".csv" style="display:none"></label></div></div>
+      <div id="liRes"></div><div class="card"><div class="card-h"><h3>Batches</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Batch</th><th>Shop</th><th>When</th><th class="num">Changes</th><th>Status</th><th></th></tr></thead><tbody>${d.rows.map(j => `<tr><td>${esc(j.no)}</td><td>${esc(j.shop || '')}</td><td>${esc(j.at)}</td><td class="num">${j.changes}</td><td>${esc(j.status)}</td><td>${j.status === 'APPLIED' ? `<button class="btn sm" data-liu="${j.id}">Undo</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">No batch yet.</td></tr>'}</tbody></table></div></div>`;
+    $('#liF').onchange = async e => { const fd = new FormData(); fd.append('file', e.target.files[0]); try { const r = await fetch('/api/listings-import', { method: 'POST', body: fd, headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content || '', Accept: 'application/json' } }); const j = await r.json(); if (!r.ok) throw new Error(j.message);
+      toast(j.message); await pageListingsImport(); if (j.unknown.length) $('#liRes').innerHTML = `<div class="card" style="margin-bottom:12px"><div class="card-b small">Not a product SKU yet (no listing made): ${esc(j.unknown.join(', '))}</div></div>`; } catch (x) { toast(x.message, 'err'); } };
+    $$('[data-liu]').forEach(b => b.onclick = async () => { try { toast((await api('listings-import/' + b.dataset.liu + '/undo', { method: 'POST' })).message); } catch (e) { toast(e.message, 'err'); } pageListingsImport(); });
+  }
   async function pagePurchaseAudit() {      /* R-A_SALES-60 … 64: runs; a run = eBay file, notes, file vs sales, supplier audits */
     const qs = new URLSearchParams(location.hash.split('?')[1] || ''), id = +(qs.get('run') || 0), re = () => pagePurchaseAudit(), money = n => n == null ? '' : '£' + (+n).toFixed(2);
     const upload = async (url, file) => { const fd = new FormData(); fd.append('file', file); const r = await fetch('/api/' + url, { method: 'POST', body: fd, headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content || '', Accept: 'application/json' } }); const j = await r.json(); if (!r.ok) throw new Error(j.message || 'Upload failed'); return j; };
@@ -2770,8 +2780,11 @@
     busy(true); let d; try { d = await api('money/report-board'); } finally { busy(false); }
     const tone = { 'needs upload': 'err', 'up to date': 'done', loaded: 'plain', 'nothing yet': 'warn' };
     $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/bank">Bank & cash</a> ›</div><h1>Report status</h1><div class="sub">Each shop's reports and each bank account: when the data ends and whether a new file is due. A settlement older than ${d.limits.SETTLEMENT} days or a bank file older than ${d.limits.BANK} days needs an upload.</div></div><div class="actions"><a class="btn primary" href="#/import">Import a file</a></div></div>
+      <div class="card" style="margin-bottom:12px"><div class="card-h"><h3>Load an Amazon report</h3></div><div class="card-b" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select class="q" id="frS">${(d.shops || []).map(s => `<option value="${s.id}">${esc(s.shop_no + ' ' + (s.shop_name || ''))}</option>`).join('')}</select><select class="q" id="frT">${Object.entries(d.types || {}).map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('')}</select><label class="btn">Choose the file<input type="file" id="frF" accept=".csv,.txt,.tsv" style="display:none"></label></div></div>
       <div class="card"><div class="card-h"><h3>Reports</h3><span class="small muted">${d.needs_upload} need an upload</span></div><div class="tbl-wrap"><table class="t" id="rbT"><thead><tr><th>Shop / bank account</th><th>Report</th><th>Data until</th><th class="num">Days</th><th>Last import</th><th>State</th></tr></thead><tbody>
         ${d.rows.map(r => `<tr><td>${esc(r.shop)}</td><td>${esc(r.type)}</td><td>${esc(r.data_until || '—')}</td><td class="num">${r.days === null ? '' : r.days}</td><td>${esc(r.last_import || '')}</td><td><span class="chip ${tone[r.state] || 'plain'}">${esc(r.state)}</span></td></tr>`).join('')}</tbody></table>${d.rows.length ? '' : '<div class="empty">No shop or bank account yet.</div>'}</div></div>`;
+    $('#frF').onchange = async e => { const fd = new FormData(); fd.append('file', e.target.files[0]); fd.append('shop', $('#frS').value); fd.append('type', $('#frT').value);      /* R-FIN-22 */
+      try { const r = await fetch('/api/money/finance-report', { method: 'POST', body: fd, headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content || '', Accept: 'application/json' } }); const j = await r.json(); if (!r.ok) throw new Error(j.message); toast(j.message + (j.same_file ? ' ' + j.same_file : '')); pageReportBoard(); } catch (x) { toast(x.message, 'err'); } };
   }
   async function pageFinAlerts(f = {}) {
     busy(true); let d; try { d = await api('money/alerts?' + new URLSearchParams(Object.entries(f).filter(([, v]) => v))); } catch (e) { busy(false); toast(e.message, 'err'); return; } busy(false);

@@ -39,4 +39,10 @@ class PurchaseAuditController extends Controller
         return ['message' => 'Saved.'];
     }
     public function suppliers(Request $r) { \App\Services\Perm::need($r->user(), 'orders.SEE'); return ['rows' => DB::table('t_vendors')->where('f_active', 1)->orderBy('vendor_name')->limit(500)->get(['id', 'vendor_name', 'iso_vendor', 'audit_profile'])]; }
+
+    /* R-D-59 eBay active listings per shop */
+    public function listings(Request $r) { return $this->run(fn () => \App\Services\ListingsImport::import((string) $r->file('file')?->getClientOriginalName(), $this->text($r), $r->user())); }
+    public function listingsUndo(Request $r, int $job) { return $this->run(fn () => \App\Services\ListingsImport::undo($job, $r->user())); }
+    public function listingBatches(Request $r) { return ['rows' => DB::table('bulk_jobs')->where('list_key', 'listing_import')->orderByDesc('id')->limit(30)->get(['id', 'job_no', 'status', 'row_count', 'created_at', 'change_json'])->map(fn ($j) => ['id' => (int) $j->id, 'no' => $j->job_no, 'status' => $j->status, 'changes' => (int) $j->row_count, 'at' => (string) $j->created_at,
+        'shop' => DB::table('t_branches')->where('id', json_decode((string) $j->change_json, true)['shop'] ?? 0)->value('shop_no')])->all()]; }
 }

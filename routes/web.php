@@ -549,6 +549,10 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('compliance/{id}', [\App\Http\Controllers\InvoicesController::class, 'complianceUpdate'])->whereNumber('id');      // R-ACC-10
         Route::post('compliance/{id}/document', [\App\Http\Controllers\InvoicesController::class, 'complianceDocument'])->whereNumber('id');
         Route::post('compliance/generate', [\App\Http\Controllers\InvoicesController::class, 'complianceGenerate']);
+        Route::get('listings-import', [\App\Http\Controllers\PurchaseAuditController::class, 'listingBatches']);      // R-D-59
+        Route::post('listings-import', [\App\Http\Controllers\PurchaseAuditController::class, 'listings']);
+        Route::post('listings-import/{job}/undo', [\App\Http\Controllers\PurchaseAuditController::class, 'listingsUndo'])->whereNumber('job');
+        Route::post('money/finance-report', [\App\Http\Controllers\MoneyController::class, 'financeReport']);      // R-FIN-22
         Route::get('purchase-audit', [\App\Http\Controllers\PurchaseAuditController::class, 'index']);      // R-A_SALES-60 … 64
         Route::post('purchase-audit', [\App\Http\Controllers\PurchaseAuditController::class, 'create']);
         Route::get('purchase-audit/suppliers', [\App\Http\Controllers\PurchaseAuditController::class, 'suppliers']);
