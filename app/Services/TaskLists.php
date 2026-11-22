@@ -168,7 +168,7 @@ class TaskLists
 
     public static function dashboard(object $u, array $f = []): array
     {
-        if (! self::boss($u)) throw new \InvalidArgumentException('Refused: the tasks dashboard is for a Partner or Manager.');
+        TaskRoles::need($u, 'TASK_DASH');      // R-G_CORE-20
         $count = fn (string $chip) => (clone self::query($u, $chip, $f))->reorder()->count('t.id');
         $tz = new \DateTimeZone((string) (Settings::get('COMPANY_TIMEZONE', (int) Context::ent(), 'Europe/London') ?: 'Europe/London'));
         $monday = (new \DateTimeImmutable('monday this week', $tz))->setTime(0, 0)->setTimezone(new \DateTimeZone(date_default_timezone_get()))->format('Y-m-d H:i:s');

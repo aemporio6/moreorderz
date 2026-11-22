@@ -62,7 +62,7 @@ class TaskListsTest extends TestCase
         $d = TaskLists::dashboard($mgr, ['person' => $va->id]);
         $this->assertSame([2, 'of which 1 no proof'], [$d['tiles']['closed_week'], $d['tiles']['closed_week_line']]);
         $this->assertArrayHasKey('modules', $d); $this->assertArrayHasKey('attention', $d);
-        try { TaskLists::dashboard($va); $this->fail(); } catch (\InvalidArgumentException $e) { $this->assertSame('Refused: the tasks dashboard is for a Partner or Manager.', $e->getMessage()); }
+        try { TaskLists::dashboard($va); $this->fail(); } catch (\InvalidArgumentException $e) { $this->assertSame('That page is for Partners and Managers.', $e->getMessage()); /* R-G_CORE-20 */ }
         // data-quality rule tasks (new): one a day while an open task is not linked to a record (due_at is required in this database, so "No due date" stays 0)
         $this->task(['owner_user_id' => $va->id, 'linked_module' => null]);
         $this->assertContains('TASK_NOT_LINKED', TaskLists::dataQuality(1)); $this->assertSame([], array_values(array_intersect(['TASK_NOT_LINKED'], TaskLists::dataQuality(1))), 'once a day');

@@ -174,6 +174,7 @@ class Perm
         $c['print.testPage'] = ['Print a printer test page', 'Printing', ['OWNER', 'MANAGER', 'WAREHOUSE']];
         foreach (self::PRINT_KINDS as $k => $roles) $c["print.kind_$k"] = ['Print: ' . ucfirst(strtolower(str_replace('_', ' ', $k))), 'Printing', $roles];
         $c['admin.permissions'] = ['Change roles and rights', 'Users and system', ['OWNER']];
+        foreach (TaskRoles::SCREENS as $k => $l) $c["work.$k"] = ["Open: $l (tasks, bosses)", 'Tasks', ['OWNER', 'PARTNER', 'MANAGER']];      // R-G_CORE-20
         $c['orders.saleEdit'] = ['Change a sale line (order no, customer, quantity, price)', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
         $c['orders.saleCarrier'] = ['Change the carrier and packing of a sale line', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
         $c['orders.saleRefund'] = ['Refund a sale line with the nature of the loss', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];

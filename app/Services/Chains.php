@@ -92,17 +92,19 @@ class Chains
                 $label = $r->company_name . ($d ? ' – [' . implode(', ', $d) . ']' : '');
                 if ($q === null || $q === '' || mb_stripos($label, $q) !== false) $out[] = [(string) $r->id, $label];
             }
-            return ['options' => $out, 'narrowed_by' => ['fk_id_owner']];
+            return ['options' => $out, 'narrowed_by' => ['fk_id_owner']] + ($out || ($q !== null && $q !== '') ? [] : ['hint' => 'No company for this owner – press + Add']);
         }
         if ($kind !== 'own' || ! str_starts_with($arg, 't_account_')) return null;
-        if (! collect($fields)->contains(fn ($x) => $x['column_name'] === 'fk_id_account')) return null;      // a form without a person field keeps the general list
+        $shopOwner = in_array($formKey, ['shop', 't_branch'], true) && in_array($arg, ['t_account_addresses', 't_account_mobiles'], true);      // R-G_CORE-76: the shop owner's own addresses / mobiles
+        if ($shopOwner) { $person = self::pv($parents, $fields, 'fk_id_owner'); if ($person === null) return ['options' => [], 'narrowed_by' => ['fk_id_owner'], 'hint' => 'Choose the owner first.']; }
+        elseif (! collect($fields)->contains(fn ($x) => $x['column_name'] === 'fk_id_account')) return null;      // a form without a person field keeps the general list
 
         // every "own" list: this person's rows only
         if ($person === null) return ['options' => [], 'narrowed_by' => ['fk_id_account'], 'hint' => 'Choose the person first.'];
         $t = $arg; $lc = match ($t) { 't_account_mobiles' => 'mobile_no', 't_account_emails' => 'email', 't_account_banks' => 'account_no', 't_account_credit_cards' => 'card_last4', 't_account_addresses' => 'line1', default => Registry::labelColumn($t) ?: 'id' };
         if (! Registry::hasColumn($t, $lc)) $lc = Registry::labelColumn($t) ?: 'id';
         $x = DB::table($t)->where($t . '.fk_id_account', (int) $person); if (Registry::hasColumn($t, 'f_active')) $x->where(fn ($w) => $w->whereNull($t . '.f_active')->orWhere($t . '.f_active', 1));
-        $narrow = ['fk_id_account'];
+        $narrow = [$shopOwner ? 'fk_id_owner' : 'fk_id_account'];
         if ($formKey === 't_account_mobile' && $col === 'fk_id_address' && ($c = self::pv($parents, $fields, 'fk_id_country')) !== null) { $x->where($t . '.fk_id_country', (int) $c); $narrow[] = 'fk_id_country'; }
         if (isset(self::BANK_OF["$formKey.$name"])) {
             $bf = self::BANK_OF["$formKey.$name"]; $b = self::pv($parents, $fields, $bf);

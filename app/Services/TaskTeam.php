@@ -63,7 +63,7 @@ class TaskTeam
 
     public static function page(object $u, ?string $month = null): array
     {
-        if (! in_array($u->role_code, TaskScore::BOSS, true)) throw new \InvalidArgumentException('Refused: the Team page is for a Partner or Manager.');
+        TaskRoles::need($u, 'TASK_TEAM');      // R-G_CORE-20 a rights entry
         $ent = (int) Context::ent();
         $load = [];
         foreach (DB::table('t_users')->where('f_active', 1)->orderBy('display_name')->get(['id', 'display_name']) as $p) {

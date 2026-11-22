@@ -82,7 +82,9 @@
     bar.innerHTML = `<span class="small muted">How to do this:</span>` + list.map((p, i) => `<button class="btn sm" data-pb="${i}">${ic('play')} ${esc(p.title)}</button>`).join('') + (d.can_edit ? ` <a class="small" href="#/playbooks">${list.length ? 'edit' : 'No playbook written for these steps yet – add one'}</a>` : '');
     head.insertAdjacentElement('afterend', bar); $$('[data-pb]', bar).forEach(b => b.onclick = () => openPlaybook(list[+b.dataset.pb])); }
   // after every page: remember it (recent pages), paint the star, show the playbooks
-  let navTimer; function afterRender(route) { paintFav(); playbookBar(route); stepPager(route); clearTimeout(navTimer);
+  /** R-G_CORE-20 the header line of every task screen: "Company · Task Management · Sunday 22 November 2026 · viewing as Manager (Sajjad)". */
+  function taskHead(route) { if (!/^#\/(tasks|task\/|task-templates|help\/tasks)/.test(route) || !S.boot.task_header || $('#tkHead')) return; const h = $('#main .page-head'); if (h) h.insertAdjacentHTML('beforebegin', `<div id="tkHead" class="small muted" style="margin-bottom:4px">${esc(S.boot.task_header)}</div>`); }
+  let navTimer; function afterRender(route) { taskHead(route); paintFav(); playbookBar(route); stepPager(route); clearTimeout(navTimer);
     navTimer = setTimeout(async () => { if (S.route !== route || route === '#/home') return; const h = $('#main h1'); if (!h) return; try { NAV = await api('nav', { method: 'POST', body: { title: h.textContent.trim().slice(0, 150), url: route } }); paintFav(); } catch (e) {} }, 1500); }
   // R-B_SOURCING-20: floating Previous / Next on every step place of a cycle record (cycle page sections, Samples · QC · Customs, the step lists of the cycle); skipped steps are jumped
   async function stepPager(route) {
@@ -336,7 +338,8 @@
       if (r === '#/me') return await pageMe();
       if ((mt = r.match(/^#\/screen\/([\d.]+)/))) return pageScreen(mt[1]);
       return await pageHome();
-    } catch (e) { m.innerHTML = `<div class="card"><div class="empty">${ic('alert')}<div>${esc(e.message)}</div></div></div>`; }
+    } catch (e) { if (e.message === 'That page is for Partners and Managers.') { toast(e.message, 'warn'); return go('#/tasks'); }      /* R-G_CORE-20: back to My tasks */
+      m.innerHTML = `<div class="card"><div class="empty">${ic('alert')}<div>${esc(e.message)}</div></div></div>`; }
   }
   function findItem(pred) { for (const s of S.boot.menu) for (const i of s.items) if (pred(i)) return [s, i]; return [null, null]; }
 
@@ -2087,7 +2090,7 @@
   }
   async function pageTaskTeam() {
     const qs = new URLSearchParams(location.hash.split('?')[1] || '');
-    busy(true); let d; try { d = await api('tasks/team' + (qs.get('month') ? '?month=' + qs.get('month') : '')); } catch (e) { busy(false); return toast(e.message, 'err'); } busy(false);
+    busy(true); let d; try { d = await api('tasks/team' + (qs.get('month') ? '?month=' + qs.get('month') : '')); } catch (e) { busy(false); if (e.message === 'That page is for Partners and Managers.') throw e; return toast(e.message, 'err'); } busy(false);
     const lb = d.leaderboard, card = (h, body, act) => `<div class="card"><div class="card-h"><h3>${h}</h3>${act || ''}</div>${body}</div>`;
     $('#main').innerHTML = `<div class="page-head"><div><h1>Team &amp; settings</h1><div class="sub">Workload, moved due dates, SLA per category, absence, delegations, recurring tasks and the monthly leaderboard.</div></div><div class="actions"><a class="btn" href="#/task-templates">Templates</a><div class="seg"><button type="button" data-sc="mine">Mine</button><button type="button" data-sc="all">All tasks</button><button type="button" data-sc="dashboard">Dashboard</button><button type="button" class="on">Team</button><button type="button" data-sc="weekly">Weekly report</button></div></div></div>
       <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px">
@@ -2125,7 +2128,7 @@
   // R-G_CORE-38 tasks dashboard (bosses) with R-G_CORE-39 "Needs attention today"
   async function pageTaskDash() {
     const qs = new URLSearchParams(location.hash.split('?')[1] || ''); const F = {}; ['person', 'shop'].forEach(k => { if (qs.get(k)) F[k] = qs.get(k); });
-    busy(true); let d, base; try { [d, base] = await Promise.all([api('tasks/dashboard?' + new URLSearchParams(F).toString()), api('tasks?scope=to_approve')]); } catch (e) { busy(false); return toast(e.message, 'err'); } busy(false);
+    busy(true); let d, base; try { [d, base] = await Promise.all([api('tasks/dashboard?' + new URLSearchParams(F).toString()), api('tasks?scope=to_approve')]); } catch (e) { busy(false); if (e.message === 'That page is for Partners and Managers.') throw e; return toast(e.message, 'err'); } busy(false);
     const t = d.tiles, tile = (l, v, chip, cls, foot) => `<a class="card kpi ${cls || ''}" href="#/tasks?scope=all&chip=${chip}" style="text-decoration:none;color:inherit"><div class="bar"></div><div class="lbl">${l}</div><div class="val">${v}</div>${foot ? `<div class="foot">${esc(foot)}</div>` : ''}</a>`;
     $('#main').innerHTML = `<div class="page-head"><div><h1>Tasks dashboard</h1><div class="sub">Every tile opens the list with that chip.</div></div><div class="actions"><div class="seg"><button type="button" data-sc="mine">Mine</button><button type="button" data-sc="all">All tasks</button><button type="button" class="on">Dashboard</button><button type="button" data-sc="team">Team</button><button type="button" data-sc="weekly">Weekly report</button></div>
       <select id="tdP" style="max-width:180px"><option value="">Everyone</option>${base.all_people.map(p => `<option value="${p.id}" ${String(F.person || '') === String(p.id) ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>${(base.shops || []).length ? `<select id="tdS" style="max-width:180px"><option value="">Every shop</option>${base.shops.map(s => `<option value="${s.id}" ${String(F.shop || '') === String(s.id) ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select>` : ''}</div></div>

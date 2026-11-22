@@ -30,7 +30,8 @@ class AlertRulesTest extends TestCase
 
         $va = $this->makeUser('VA'); $this->actingAs($va);
         $this->postJson('/api/alerts/rules/N6', ['is_active' => 0])->assertStatus(422)->assertJsonFragment(['message' => 'Refused: only a Partner can change alert rules.']);
-        $this->assertFalse($this->getJson('/api/alerts')->json('can_edit'));
+        $this->getJson('/api/alerts')->assertStatus(403)->assertJsonPath('message', 'That page is for Partners and Managers.');      // R-G_CORE-20: a boss-only screen
+        $this->assertFalse($this->actingAs($this->makeUser('MANAGER'))->getJson('/api/alerts')->json('can_edit'));
     }
 
     public function test_rule_off_sends_nothing_and_stuck_repeats_on_the_rule_days(): void

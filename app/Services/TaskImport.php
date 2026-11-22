@@ -67,7 +67,7 @@ class TaskImport
     /** Check ($apply = false, nothing kept) or import (all-or-nothing). Returns per-line results. */
     public static function run(object $u, string $name, string $bytes, bool $apply, bool $notify = false): array
     {
-        if (! in_array($u->role_code, TaskScore::BOSS, true)) throw new \InvalidArgumentException('Refused: only a Partner or Manager can import tasks.');
+        TaskRoles::need($u, 'TASK_IMPORT', 'Refused: only a Partner or Manager can import tasks.');      // R-G_CORE-20 the right; R-G_CORE-34 text
         [, $rows] = self::read($name, $bytes); $ent = (int) Context::ent(); $out = []; $byRef = []; $ok = true; $ids = [];
         DB::beginTransaction();
         try {

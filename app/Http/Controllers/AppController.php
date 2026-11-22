@@ -30,6 +30,7 @@ class AppController extends Controller
             'view_as' => $va ? $va[1] : null,
             'ent' => Context::ent(), 'companies' => $companies, 'menu' => self::menu($va ? $va[0] : $role), 'create' => self::createCatalogue($va ? $va[0] : $role),
             'setup_open' => $role === 'OWNER' && \App\Services\SetupWizard::open((int) Context::ent()),
+            'task_header' => \App\Services\TaskRoles::header($u),      // R-G_CORE-20
             'tasks_open' => DB::table('tasks')->where('owner_user_id', $u->id)->whereNotIn('status', ['DONE', 'APPROVED', 'CANCELLED'])->count(),
             'product_form' => RecordService::formOfTable('t_product_vendors'), 'person_forms' => \Illuminate\Support\Facades\DB::table('sys_registry')->where('table_name', 't_account')->distinct()->pluck('form_key')->all(), 'base_currency' => Settings::get('BASE_CURRENCY', Context::ent(), 'GBP'), 'today' => date('Y-m-d'),
         ];
@@ -70,6 +71,7 @@ class AppController extends Controller
     {
         $no = (string) $m->screen_no;
         if (str_starts_with($no, '1.')) return '#/home';
+        if ($no === '13.1') return '#/tasks?scope=dashboard';      // R-G_CORE-20 boss-only dashboard
         if ($no === '13.2') return '#/tasks?scope=all';
         if ($no === '13.3') return '#/tasks';
         if ($no === '3.1' || $no === '3.3') return '#/buying';
