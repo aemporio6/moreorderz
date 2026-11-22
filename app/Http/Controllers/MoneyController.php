@@ -179,7 +179,7 @@ class MoneyController extends Controller
     public function bankCreate(Request $r)
     {
         $this->can($r, 'money.EDIT');
-        $d = $r->validate(['bank_name' => 'required|string|max:100', 'account_label' => 'required|string|max:100', 'currency' => 'required|string|size:3', 'opening_balance' => 'nullable|numeric', 'opening_date' => 'nullable|date']);
+        $d = $r->validate(['bank_name' => 'required|string|max:100', 'account_label' => 'required|string|max:100', 'currency' => 'required|string|size:3', 'opening_balance' => 'nullable|numeric', 'opening_date' => 'nullable|date', 'account_kind' => 'nullable|in:BANK,PROVIDER']);
         return $this->run(fn () => ['id' => Money::createBank((int) Context::ent(), array_filter($d, fn ($v) => $v !== null)), 'message' => 'Bank account added']);
     }
 
@@ -266,6 +266,7 @@ class MoneyController extends Controller
             if ($what === 'transfer') { $d = $r->validate(['other' => 'required|integer']); $x = Money::transfer($ent, $id, (int) $d['other']); return ['message' => 'Transfer booked' . ($x['mirror'] ? ' – the line in the other account is linked too' : '')]; }
             if ($what === 'payout') { $d = $r->validate(['branch' => 'required|integer', 'pay_key' => 'required|string|max:40']); Money::matchPayout($ent, $id, (int) $d['branch'], $d['pay_key']); return ['message' => 'Payout matched']; }
             if ($what === 'ignore') { $d = $r->validate(['reason' => 'required|string|max:200']); Money::ignore($ent, $id, $d['reason']); return ['message' => 'Line set aside']; }
+            if ($what === 'many') { $d = $r->validate(['ids' => 'required|array|min:1', 'ids.*' => 'integer']); return \App\Services\BankMatch::matchMany($ent, $id, 'EXPENSE', $d['ids']); }      // R-FIN-70 several payables by hand
             Money::unmatch($ent, $id); return ['message' => 'Match undone'];
         });
     }
@@ -370,5 +371,16 @@ class MoneyController extends Controller
         $this->can($r, 'money.EDIT');
         $d = $r->validate(['shop' => 'required|integer']);
         return $this->run(function () use ($d) { $n = Settle::postAll((int) Context::ent(), (int) $d['shop']); return ['booked' => $n, 'message' => "$n statement(s) booked"]; });
+    }
+
+    /** R-FIN-70: open expenses of the line's account (±30 days) to tick for a match by hand. */
+    public function payables(Request $r, int $id)
+    {
+        $this->can($r, 'money.SEE'); $ent = (int) Context::ent();
+        $l = \Illuminate\Support\Facades\DB::table('fin_bank_transactions')->where('id', $id)->where('company_id', $ent)->first() ?? abort(404);
+        return ['line' => ['id' => (int) $l->id, 'amount' => (float) $l->amount, 'date' => $l->txn_date], 'rows' => \Illuminate\Support\Facades\DB::table('fin_expenses as e')->leftJoin('t_account as a', 'a.id', '=', 'e.fk_id_payee')
+            ->where('e.fk_id_ent', $ent)->where('e.f_active', 1)->whereNull('e.fk_id_bank_line')->where('e.fk_id_paid_from', $l->bank_account_id)
+            ->whereBetween('e.d_expense', [date('Y-m-d', strtotime("$l->txn_date -30 day")), date('Y-m-d', strtotime("$l->txn_date +30 day"))])->orderBy('e.d_expense')->limit(200)
+            ->get(['e.id', 'e.d_expense', 'e.amount', 'e.category_code', 'e.fk_id_payee', \Illuminate\Support\Facades\DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as payee"), 'e.note'])];
     }
 }

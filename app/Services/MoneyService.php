@@ -39,7 +39,7 @@ class MoneyService
     {
         return DB::transaction(function () use ($ent, $d) {
             $open = round((float) ($d['opening_balance'] ?? 0), 2); $date = $d['opening_date'] ?? date('Y-m-d'); $cur = strtoupper($d['currency'] ?? Fx::base($ent));
-            $id = DB::table('fin_bank_accounts')->insertGetId(['company_id' => $ent, 'bank_name' => $d['bank_name'], 'account_label' => $d['account_label'], 'currency' => $cur, 'opening_balance' => $open, 'opening_date' => $date, 'is_active' => 1]);
+            $id = DB::table('fin_bank_accounts')->insertGetId(['company_id' => $ent, 'bank_name' => $d['bank_name'], 'account_label' => $d['account_label'], 'currency' => $cur, 'opening_balance' => $open, 'opening_date' => $date, 'is_active' => 1, 'account_kind' => ($d['account_kind'] ?? 'BANK') === 'PROVIDER' ? 'PROVIDER' : 'BANK']);
             if ($open != 0.0) {
                 $base = round(abs($open) * Fx::rate($cur, $date, $ent), 2); $side = $open > 0 ? ['debit', 'credit'] : ['credit', 'debit'];
                 Ledger::post($ent, $date, 'OPENING_BANK', $id, [['account' => '1000', $side[0] => $base, 'ref_id' => $id, 'amount_cur' => $open], ['account' => '3000', $side[1] => $base]], ['memo' => "Opening balance {$d['account_label']}", 'currency' => $cur]);
@@ -63,7 +63,7 @@ class MoneyService
                     ->orWhere(fn ($x) => $x->where('j.source_type', 'EXPENSE')->whereIn('j.source_id', DB::table('fin_expenses')->where('fk_id_ent', $ent)->whereNull('fk_id_bank_line')->select('id'))))
                 ->selectRaw('COALESCE(SUM(l.debit - l.credit),0) v')->value('v');
             $diff = round($stmt - $books, 2);
-            return ['id' => $b->id, 'bank_name' => $b->bank_name, 'label' => $b->account_label, 'currency' => $b->currency, 'active' => (int) $b->is_active, 'statement_balance' => round((float) $b->opening_balance + (float) $t->s, 2),
+            return ['id' => $b->id, 'kind' => $b->account_kind ?? 'BANK', 'bank_name' => $b->bank_name, 'label' => $b->account_label, 'currency' => $b->currency, 'active' => (int) $b->is_active, 'statement_balance' => round((float) $b->opening_balance + (float) $t->s, 2),
                 'statement_base' => $stmt, 'books_base' => $books, 'difference' => $diff, 'unmatched' => (int) $t->u, 'unmatched_base' => round((float) $t->ug, 2), 'not_on_bank_yet' => round($pending, 2), 'lines' => (int) $t->n, 'last_line' => $t->last,
                 'unexplained' => round($diff - (float) $t->ug + $pending, 2), 'explained' => abs(round($diff - (float) $t->ug + $pending, 2)) < 0.005];   // bank − books = lines not matched − things booked but not on the bank yet
         })->all();
@@ -124,14 +124,17 @@ class MoneyService
                 $pays = $near(DB::table('t_src_payments as p')->join('gl_journals as j', fn ($j) => $j->on('j.source_id', '=', 'p.id')->where('j.source_type', 'PAYMENT')->whereNull('j.reverses_id')->whereNull('j.reversed_by_id'))
                     ->join('gl_lines as gl', 'gl.journal_id', '=', 'j.id')->join('gl_accounts as a', fn ($j) => $j->on('a.id', '=', 'gl.account_id')->where('a.code', '1000'))
                     ->where('p.fk_id_ent', $ent)->where('p.f_active', 1)->whereNull('p.fk_id_bank_line')->where('gl.ref_id', $bankId)->where(fn ($w) => $w->where('gl.amount_cur', $amt)->orWhere('gl.credit', abs((float) $l->amount_gbp))), 'p.payment_date', $l->txn_date, $dSup)->distinct()->pluck('p.id');
-                if ($pays->count() === 1) { DB::table('t_src_payments')->where('id', $pays[0])->update(['fk_id_bank_line' => $l->id]); self::link($l, 'PAYMENT', (int) $pays[0], 'AMOUNT_DATE_ACCOUNT'); $n++; continue; }
+                if ($pays->count() === 1) { DB::table('t_src_payments')->where('id', $pays[0])->update(['fk_id_bank_line' => $l->id]); self::link($l, 'PAYMENT', (int) $pays[0], 'M2'); $n++; continue; }
                 $exp = $near(DB::table('fin_expenses')->where('fk_id_ent', $ent)->where('f_active', 1)->whereNull('fk_id_bank_line')->where('fk_id_paid_from', $bankId)->where('amount', abs($amt)), 'd_expense', $l->txn_date, $dSup)->pluck('id');
-                if ($exp->count() === 1) { DB::table('fin_expenses')->where('id', $exp[0])->update(['fk_id_bank_line' => $l->id]); self::link($l, 'EXPENSE', (int) $exp[0], 'AMOUNT_DATE_ACCOUNT'); $n++; continue; }
+                if ($exp->count() === 1) { DB::table('fin_expenses')->where('id', $exp[0])->update(['fk_id_bank_line' => $l->id]); self::link($l, 'EXPENSE', (int) $exp[0], 'M3'); $n++; continue; }
             } else {
                 $c = SettlementService::payoutCandidates($ent, $amt, (string) $l->currency, $l->txn_date, $dPay);
                 if (count($c) > 1) { $same = array_values(array_filter($c, fn ($x) => $x->pay_date === $l->txn_date)); if (count($same) === 1) $c = $same; }   // several payouts of the same amount: the one dated the same day
-                if (count($c) === 1) { $first = SettlementService::paid($ent, (int) $c[0]->fk_id_branch, (string) $c[0]->pay_key, $l); self::link($l, 'PAYOUT', $first, 'PAYOUT_AMOUNT_DATE'); $n++; continue; }
+                if (count($c) === 1) { $first = SettlementService::paid($ent, (int) $c[0]->fk_id_branch, (string) $c[0]->pay_key, $l); self::link($l, 'PAYOUT', $first, 'M1'); $n++; continue; }
             }
+            if (BankMatch::invoice($ent, $l)) { $n++; continue; }      // R-FIN-70 M6 invoice receipt / payment
+            if ($amt < 0 && BankMatch::sum($ent, $l, $dSup)) { $n++; continue; }      // R-FIN-70 sum matching: several open payables of one payee
+            if (BankMatch::providerFee($ent, $l)) { $n++; continue; }      // R-FIN-70 payment-provider profile: fee lines
         }
         return $n;
     }
@@ -290,10 +293,13 @@ class MoneyService
             switch ($l->matched_to_type) {
                 case 'PAYMENT': DB::table('t_src_payments')->where('id', $l->matched_to_id)->update(['fk_id_bank_line' => null]); break;
                 case 'EXPENSE':
-                    $e = DB::table('fin_expenses')->where('id', $l->matched_to_id)->first();
-                    if ($e && $e->source === 'BANK') { $rev('EXPENSE', (int) $e->id); DB::table('fin_expenses')->where('id', $e->id)->update(['f_active' => 0, 'fk_id_bank_line' => null]); }
-                    else DB::table('fin_expenses')->where('id', $l->matched_to_id)->update(['fk_id_bank_line' => null]);
+                    foreach (array_filter(array_map('intval', explode(',', (string) $l->matched_to_id))) as $eid) {      /* a sum match links several expenses (R-FIN-70) */
+                        $e = DB::table('fin_expenses')->where('id', $eid)->first();
+                        if ($e && $e->source === 'BANK') { $rev('EXPENSE', (int) $e->id); DB::table('fin_expenses')->where('id', $e->id)->update(['f_active' => 0, 'fk_id_bank_line' => null]); }
+                        else DB::table('fin_expenses')->where('id', $eid)->update(['fk_id_bank_line' => null]);
+                    }
                     break;
+                case 'INVOICE': BankMatch::undoInvoice((int) $l->id); break;
                 case 'CATEGORY': $rev('BANK_LINE', (int) $l->id); break;
                 case 'SPLIT':
                     $rev('BANK_SPLIT', (int) $l->id);

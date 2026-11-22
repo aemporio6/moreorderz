@@ -332,11 +332,12 @@ class BuyingService
             $ship = DB::table('t_src_shipments')->where('id', $g->fk_id_shipment)->first();
             $po = self::po((int) $ship->fk_id_po);
             $rate = (float) ($po->exchange_rate ?: Fx::rate(Fx::code($po->fk_id_currency, $ent), $po->po_date, $ent));
-            $lines = []; $owner = DB::table('t_src_cycles')->where('id', $g->fk_id_cycle)->value('fk_id_owner');
+            $lines = []; $owner = DB::table('t_src_cycles')->where('id', $g->fk_id_cycle)->value('fk_id_owner') ?: ((int) Settings::get('DEFAULT_STOCK_OWNER', $ent, '0') ?: null);
+            $shares = LotOwners::shares($ent, (int) $po->id, $g->grn_date);      // R-B_SOURCING-61 owners pro rata to the ACTIVE PO-scope agreements, else the cycle owner
             foreach (DB::table('t_src_grn_lines as l')->leftJoin('t_src_po_lines as p', 'p.id', '=', 'l.fk_id_po_line')->where('l.fk_id_grn', $grnId)->get(['l.*', 'p.unit_price']) as $l) {
                 if ($l->received_qty <= 0) continue;
-                $lines[] = ['product' => (int) $l->fk_id_product, 'qty' => (int) $l->received_qty, 'damaged_qty' => (int) $l->damaged_qty, 'location' => WarehouseMode::receiveTo($ent, (int) $l->fk_id_product, (int) $l->fk_id_location), 'unit_cost' => round((float) $l->unit_price * $rate, 4),
-                    'received_date' => $g->grn_date, 'owner' => $owner ?: null, 'po_id' => $po->id, 'cycle_id' => $g->fk_id_cycle];
+                array_push($lines, ...LotOwners::lines(['product' => (int) $l->fk_id_product, 'qty' => (int) $l->received_qty, 'damaged_qty' => (int) $l->damaged_qty, 'location' => WarehouseMode::receiveTo($ent, (int) $l->fk_id_product, (int) $l->fk_id_location), 'unit_cost' => round((float) $l->unit_price * $rate, 4),
+                    'received_date' => $g->grn_date, 'owner' => $owner ?: null, 'po_id' => $po->id, 'cycle_id' => $g->fk_id_cycle], $shares));
                 DB::table('t_product_vendors')->where('id', $l->fk_id_product)->where('f_active', 0)->where('SKU_VENDOR', 'like', 'DRAFT-%')->update(['f_active' => 1]);   // a draft product that has stock is live
             }
             if (! $lines) throw new \RuntimeException('Nothing was received on this GRN.');

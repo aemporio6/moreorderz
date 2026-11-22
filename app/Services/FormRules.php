@@ -74,6 +74,7 @@ class FormRules
         if ($table === 't_src_landed_cost') return self::landedManual($data, $old, $id);      // R-B_SOURCING-43 manual landed line      // form standard: money categories get a form
         if ($table === 't_product_vendors') return CentralInventory::check($data, $old, $id) + ProductFamily::check($data, $old, $id) + ProductStockFlag::formCheck($data, $old, $id) + SkuCheck::onSave($data, $old, $id) + self::productCodes($data, $old);      // R-D-10, R-D-3, R-D-7      // R-D-1 family coding / checks, R-D-2 exact SKU in the company
         if (in_array($table, ['t_src_products', 't_product_vendors'], true)) return self::productCodes($data, $old);
+        if ($table === 'cat_account_types') return RoleMaster::check($data, $old, $id);      // R-C-43 one roles master: names, fixed codes, flags
         if ($table === 'cat_ip_burgers') return self::isp($data);
         if ($table === 't_account_job_history') return self::jobHistory($data, $old, $id);
         if ($table === 't_src_cycles' || $table === 't_src_po') return self::srcDuplicate($table, $data, $old, $id);

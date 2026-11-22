@@ -360,7 +360,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('settings/finance', [MoneyController::class, 'financeSettingSave']);
         Route::post('settings/finance/company', [MoneyController::class, 'financeCompanySave']);
         Route::post('bank/{id}/match', [MoneyController::class, 'rematch'])->whereNumber('id');
-        Route::post('bank-lines/{id}/{what}', [MoneyController::class, 'lineAction'])->whereNumber('id')->whereIn('what', ['categorise', 'transfer', 'ignore', 'unmatch', 'payout']);
+        Route::post('bank-lines/{id}/{what}', [MoneyController::class, 'lineAction'])->whereNumber('id')->whereIn('what', ['categorise', 'transfer', 'ignore', 'unmatch', 'payout', 'many']);
+        Route::get('bank-lines/{id}/payables', [MoneyController::class, 'payables'])->whereNumber('id');      // R-FIN-70
         Route::get('bank-lines/{id}/payouts', [MoneyController::class, 'payouts'])->whereNumber('id');
         Route::get('money/export/ledger', [MoneyController::class, 'exportLedger']);
         Route::get('money/export/valuation', [MoneyController::class, 'exportValuation']);

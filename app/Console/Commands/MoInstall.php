@@ -36,13 +36,15 @@ class MoInstall extends Command
         return 0;
     }
 
-    public static function loadRegistry(): int
+    /** All forms, or only $form (a migration that adds fields to one form). */
+    public static function loadRegistry(?string $form = null): int
     {
         $fh = fopen(database_path('meta/field_registry.csv'), 'r');
         $head = fgetcsv($fh);
         $rows = [];
         while (($r = fgetcsv($fh)) !== false) {
             $a = array_combine($head, array_pad($r, count($head), ''));
+            if ($form !== null && $a['form_key'] !== $form) continue;
             $rows[] = [
                 'form_key' => $a['form_key'], 'form_title' => $a['form_title'], 'form_kind' => $a['form_kind'], 'section' => $a['section'] ?: null,
                 'section_no' => (int) $a['section_no'] ?: 1, 'field_no' => (int) $a['field_no'] ?: 1, 'field_name' => $a['field_name'], 'label' => $a['label'],
@@ -55,8 +57,8 @@ class MoInstall extends Command
             ];
         }
         fclose($fh);
-        DB::transaction(function () use ($rows) {
-            DB::table('sys_registry')->delete();
+        DB::transaction(function () use ($rows, $form) {
+            DB::table('sys_registry')->when($form !== null, fn ($q) => $q->where('form_key', $form))->delete();
             foreach (array_chunk($rows, 300) as $chunk) DB::table('sys_registry')->insert($chunk);
         });
         Registry::forget();

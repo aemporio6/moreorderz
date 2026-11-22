@@ -23,7 +23,7 @@ class EngineTest extends TestCase
 
     public function test_registry_is_loaded_and_every_data_form_has_a_table(): void
     {
-        $this->assertSame(4109, DB::table('sys_registry')->count());
+        $this->assertSame(4112, DB::table('sys_registry')->count());
         $forms = DB::table('sys_registry')->distinct()->pluck('form_key');
         $this->assertCount(323, $forms);
         $noTable = $forms->filter(fn ($k) => ! Registry::table($k) || ! Registry::columns(Registry::table($k)))->values()->all();
