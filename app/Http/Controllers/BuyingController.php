@@ -45,10 +45,10 @@ class BuyingController extends Controller
         $ent = (int) Context::ent();
         // R-F_SETUP-15: every block on its own; a failing one is named in the "could not load" box, the rest of the page works
         // R-F_SETUP-18 filters (supplier / search / stage tile) from the URL; the last ones are the user's saved view (Reset clears it)
-        $uid = (int) $r->user()->id; $pk = 'view:buying_cycles'; $f = array_filter(['supplier' => (int) $r->query('supplier') ?: null, 'q' => trim((string) $r->query('q')) ?: null, 'stage' => (string) $r->query('stage') ?: null]);
+        $uid = (int) $r->user()->id; $pk = 'view:buying_cycles'; $f = array_filter(['supplier' => (int) $r->query('supplier') ?: null, 'q' => trim((string) $r->query('q')) ?: null, 'stage' => (string) $r->query('stage') ?: null, 'investor' => (int) $r->query('investor') ?: null, 'from' => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $r->query('from')) ? (string) $r->query('from') : null, 'to' => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $r->query('to')) ? (string) $r->query('to') : null]);
         if ($r->boolean('reset')) { DB::table('t_user_column_prefs')->where('fk_id_user', $uid)->where('page_key', $pk)->delete(); $f = []; }
         elseif ($f) DB::table('t_user_column_prefs')->updateOrInsert(['fk_id_user' => $uid, 'page_key' => $pk], ['prefs_json' => json_encode($f), 'hidden_columns' => '', 'updated_at' => now()]);
-        elseif (! $r->has('supplier') && ! $r->has('q') && ! $r->has('stage')) $f = json_decode((string) DB::table('t_user_column_prefs')->where('fk_id_user', $uid)->where('page_key', $pk)->value('prefs_json'), true) ?: [];
+        elseif (! $r->has('supplier') && ! $r->has('q') && ! $r->has('stage') && ! $r->has('investor') && ! $r->has('from') && ! $r->has('to')) $f = json_decode((string) DB::table('t_user_column_prefs')->where('fk_id_user', $uid)->where('page_key', $pk)->value('prefs_json'), true) ?: [];
         $st = \App\Services\DashCards::run($ent, 'stages', 'Open cycles', fn () => \App\Services\CycleAlerts::dashboard($ent, max(1, (int) $r->query('page', 1)), 60, $f));      // R-F_SETUP-19: one stage engine for every cycle row
         $kp = \App\Services\DashCards::run($ent, 'kpi', 'Buying figures', function () use ($ent, $r) { $d = Buy::dashboard($ent);
             if (! \App\Services\Perm::has($r->user(), 'buying.MONEY')) unset($d['pay_due_base'], $d['supplier_advances'], $d['supplier_payables']); return $d; });

@@ -48,8 +48,9 @@ class SettlementTest extends TestCase
             [null, null, 'Adjustments', null, null, '-6'], [null, null, null, 'Chargeback', null, '-6']];
         if (isset($change['row'])) $rows[0][14] = $change['row'];
         if (isset($change['payment'])) $pay[1][2] = $change['payment'];
+        if (isset($change['rename'])) { $head[1] = 'Statement number'; }
         $wb = new Spreadsheet(); $wb->removeSheetByIndex(0);
-        foreach (['Order details' => array_merge([$head], $rows), 'Statements' => $st, 'Reports' => $rep, 'Payments' => $pay] as $name => $data) {
+        foreach ([($change['sheet'] ?? 'Order details') => array_merge([$head], $rows), 'Statements' => $st, 'Reports' => $rep, 'Payments' => $pay] as $name => $data) {
             $ws = $wb->createSheet(); $ws->setTitle($name);
             foreach ($data as $r => $cells) foreach ($cells as $c => $v) if ($v !== null) $ws->setCellValueExplicit([$c + 1, $r + 1], (string) $v, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
         }
@@ -143,5 +144,28 @@ class SettlementTest extends TestCase
             $this->assertSame([-6.97, 1.5, -0.66], [(float) $by['TT_CHARGEBACK'], (float) $by['TT_ADJUSTMENT'], (float) $by['TT_FULFIL_STORAGE']]);
         }
         $tb = Ledger::trialBalance(1); $this->assertSame($tb['debit'], $tb['credit']);
+    }
+    /** R-A_SALES-87 the TikTok workbook layout is profile data: a renamed sheet and a renamed column are read after a profile change, no code change. */
+    public function test_tiktok_layout_is_profile_data(): void
+    {
+        $mp = (int) DB::table('t_branches')->where('id', $this->shop)->value('fk_id_marketplace');
+        DB::table('cat_marketplaces')->where('id', $mp)->update(['marketplace_short' => 'TikTok', 'marketplace_descr' => 'TikTok Shop']);
+        $pid = \App\Services\Profiles::ensureForMarketplace($mp); DB::table('t_branches')->where('id', $this->shop)->update(['fk_id_mp_profile' => $pid]);
+        $lay = \App\Services\Profiles::layouts($pid);
+        $this->assertSame(['Order details'], $lay['TIKTOK_SETTLEMENT']['map']['sheet:order details'] ?? null, 'the sheet names are rows of the profile');
+        $file = $this->workbook(['sheet' => 'Orders', 'rename' => 1]);
+        try { Settle::importTikTok(1, $this->shop, $file, 'tt.xlsx'); $this->fail('renamed without the profile'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('the sheet "Order details" is missing', $e->getMessage()); }
+        $row = DB::table('mp_profile_report_types')->where('fk_id_mp_profile', $pid)->where('report_type', 'TIKTOK_SETTLEMENT')->first();
+        $map = json_decode((string) $row->column_map_json, true); $map['sheet:order details'] = ['Orders']; $map['statement id'] = ['Statement ID', 'Statement number'];
+        DB::table('mp_profile_report_types')->where('id', $row->id)->update(['column_map_json' => json_encode($map)]);
+        $this->assertSame('TIKTOK', \App\Services\MarketplaceFiles::read($file, 'xlsx', ['layouts' => \App\Services\Profiles::layouts($pid)])['format'], 'recognised by the profile\'s sheet name');
+        $r = Settle::importTikTok(1, $this->shop, $file, 'tt.xlsx');
+        $this->assertSame(2, DB::table('mo_settlements')->where('fk_id_branch', $this->shop)->count(), 'both statements loaded from the renamed sheet and column');
+        DB::table('mp_profiles')->where('id', $pid)->update(['overdue_days' => 400]);
+        \App\Services\MoneyService::staleTasks(1);
+        $this->assertFalse(\App\Services\TaskEngine::isOpen('FIN_SETTLEMENT_OVERDUE', [$this->shop]), 'the profile\'s overdue days (400) win over the finance setting');
+        DB::table('mp_profiles')->where('id', $pid)->update(['overdue_days' => 5]);
+        \App\Services\MoneyService::staleTasks(1);
+        $this->assertTrue(\App\Services\TaskEngine::isOpen('FIN_SETTLEMENT_OVERDUE', [$this->shop]));
     }
 }

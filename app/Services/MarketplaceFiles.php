@@ -53,6 +53,10 @@ class MarketplaceFiles
             'columns' => ['settlement-id', 'settlement-start-date', 'settlement-end-date', 'deposit-date', 'total-amount', 'currency', 'transaction-type', 'order-id', 'sku', 'quantity-purchased', 'amount-type', 'amount-description', 'amount', 'posted-date', 'posted-date-time']],
         'EBAY' => ['shape' => 'PAYOUT_ROWS', 'report_types' => ['EBAY_TRANSACTIONS', 'EBAY_TRANSACTION'], 'detect' => ['transaction creation date', 'payout id'],
             'columns' => ['transaction creation date', 'type', 'order number', 'custom label', 'quantity', 'description', 'gross transaction amount', 'net amount', 'payout id', 'payout date', 'payout currency', 'payout method', 'transaction currency', 'exchange rate', 'seller']],
+        'TIKTOK' => ['shape' => 'WORKBOOK', 'report_types' => ['TIKTOK_SETTLEMENT'], 'detect' => ['sheet:order details', 'sheet:statements'],
+            'sheets' => ['order details' => 'Order details', 'statements' => 'Statements', 'reports' => 'Reports', 'payments' => 'Payments'],
+            'columns' => ['statement id', 'payment id', 'statement date', 'type', 'order/adjustment id', 'sku id', 'quantity', 'order created date', 'total settlement amount', 'net sales', 'gross sales', 'gross sales refund', 'seller discount', 'seller discount refund',
+                'shipping', 'fees', 'adjustment amount', 'adjustment reason', 'related order id', 'payment amount', 'payment completion date', 'status', 'adjustments', 'reserve amount', 'payable amount']],
         'AMAZON_TXN' => ['shape' => 'COLUMN_GROUPS', 'report_types' => ['AMAZON_TRANSACTIONS', 'AMAZON_TRANSACTION'], 'detect' => ['date/time', 'settlement id', 'selling fees'],
             'columns' => ['date/time', 'settlement id', 'type', 'order id', 'sku', 'description', 'quantity', 'product sales', 'selling fees', 'other transaction fees', 'total']],
     ];
@@ -60,6 +64,7 @@ class MarketplaceFiles
     /** format => [file header (key) => role] from the shop profile's report types. */
     public static array $alias = [];
     private static array $detect = [];
+    private static array $sheets = [];
 
     /** The first lines of a text file as rows (detection never parses the whole file). */
     private static function headRows(string $path): array
@@ -74,15 +79,24 @@ class MarketplaceFiles
     /** A header row in role names: a header the profile renames becomes its role. */
     private static function hdr(array $row, string $fmt): array { return array_map(fn ($x) => self::$alias[$fmt][self::key($x)] ?? self::key($x), $row); }
 
+    /** R-A_SALES-87 a workbook sheet by its role: the profile may give it another name (map key "sheet:<role>"). */
+    public static function sheetName(string $fmt, string $role): string { return self::$sheets[$fmt][$role] ?? (self::LAYOUTS[$fmt]['sheets'][$role] ?? $role); }
+
+    /** A workbook header in role names (lower case, the profile's renames applied). */
+    public static function roleOf(string $fmt, mixed $h): string { return self::$alias[$fmt][self::key($h)] ?? strtolower(trim((string) $h)); }
+
     /** The profile's report types (report_type => [map, detect]) → the aliases and the recognising headers of each layout. */
     public static function useLayouts(array $types): array
     {
-        self::$alias = []; $det = [];
+        self::$alias = []; self::$sheets = []; $det = [];
         foreach (self::LAYOUTS as $fmt => $L) {
             $det[$fmt] = $L['detect'];
             foreach ($L['report_types'] as $rt) {
                 if (! isset($types[$rt])) continue;
-                foreach ((array) ($types[$rt]['map'] ?? []) as $role => $names) foreach ((array) $names as $n) if (($k = self::key($n)) !== '' && $k !== self::key($role)) self::$alias[$fmt][$k] = self::key($role);
+                foreach ((array) ($types[$rt]['map'] ?? []) as $role => $names) {
+                    if (str_starts_with((string) $role, 'sheet:')) { if (($n = trim((string) (((array) $names)[0] ?? ''))) !== '') self::$sheets[$fmt][substr((string) $role, 6)] = $n; continue; }
+                    foreach ((array) $names as $n) if (($k = self::key($n)) !== '' && $k !== self::key($role)) self::$alias[$fmt][$k] = self::key($role);
+                }
                 if (! empty($types[$rt]['detect'])) $det[$fmt] = array_map(fn ($x) => self::key($x), (array) $types[$rt]['detect']);
             }
         }
@@ -140,11 +154,11 @@ class MarketplaceFiles
     {
         if (in_array($ext, ['xlsx', 'xls'], true)) {
             $names = IOFactory::createReaderForFile($path)->listWorksheetNames($path);
-            return in_array('Order details', $names, true) && in_array('Statements', $names, true) ? 'TIKTOK' : 'MAPPED';
+            return in_array(self::sheetName('TIKTOK', 'order details'), $names, true) && in_array(self::sheetName('TIKTOK', 'statements'), $names, true) ? 'TIKTOK' : 'MAPPED';      /* sheet names from the profile (R-A_SALES-87) */
         }
         /* R-FIN-69: a layout is recognised by its headers (the profile's detect headers, else the layout's), each found as itself or as a name the profile gives it */
         $rows = self::headRows($path);
-        foreach (self::$detect ?: array_map(fn ($L) => $L['detect'], self::LAYOUTS) as $fmt => $need) foreach ($rows as $r) {
+        foreach (self::$detect ?: array_map(fn ($L) => $L['detect'], self::LAYOUTS) as $fmt => $need) if (($L = self::LAYOUTS[$fmt] ?? null) && $L['shape'] !== 'WORKBOOK') foreach ($rows as $r) {
             $h = self::hdr($r, $fmt); if (! array_diff(array_map(fn ($x) => self::$alias[$fmt][self::key($x)] ?? self::key($x), $need), $h)) return $fmt;
         }
         return 'MAPPED';

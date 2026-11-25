@@ -55,11 +55,11 @@ class SettlementService
     public static function readTikTok(string $path, float $tol = 0.0): array
     {
         $wb = IOFactory::createReaderForFile($path)->setReadDataOnly(true)->load($path);
-        $sheet = function (string $name) use ($wb) { $s = $wb->getSheetByName($name) ?? throw new \InvalidArgumentException("This is not a TikTok settlement file: the sheet \"$name\" is missing."); return $s->toArray(null, false, false, false); };
+        $sheet = function (string $name) use ($wb) { $name = MarketplaceFiles::sheetName('TIKTOK', strtolower($name)); $s = $wb->getSheetByName($name) ?? throw new \InvalidArgumentException("This is not a TikTok settlement file: the sheet \"$name\" is missing."); return $s->toArray(null, false, false, false); };
         $eq = fn (float $a, float $b) => abs(round($a - $b, 2)) <= $tol + 0.00001;
 
         // Order details: groups are found by the position of their head columns, so a new column lands in its group by itself
-        $od = $sheet('Order details'); $head = array_map(fn ($h) => strtolower(trim((string) $h)), $od[0] ?? []); $ix = array_flip(array_filter($head, fn ($h) => $h !== ''));
+        $od = $sheet('Order details'); $head = array_map(fn ($h) => MarketplaceFiles::roleOf('TIKTOK', $h), $od[0] ?? []); $ix = array_flip(array_filter($head, fn ($h) => $h !== ''));
         foreach (['statement id', 'type', 'order/adjustment id', 'total settlement amount', 'net sales', 'shipping', 'fees', 'adjustment amount'] as $must) if (! isset($ix[$must])) throw new \InvalidArgumentException("Column \"$must\" is missing on the sheet Order details.");
         $shipCols = array_slice($head, $ix['shipping'] + 1, $ix['fees'] - $ix['shipping'] - 1, true); $feeCols = array_slice($head, $ix['fees'] + 1, $ix['adjustment amount'] - $ix['fees'] - 1, true);
         $newCols = array_values(array_filter($feeCols, fn ($c) => self::feeBucket($c) === 'TT_OTHER_FEE'));
@@ -87,11 +87,11 @@ class SettlementService
         }
 
         // Payments
-        $pays = []; $pm = $sheet('Payments'); $ph = array_flip(array_map(fn ($h) => strtolower(trim((string) $h)), $pm[0] ?? []));
+        $pays = []; $pm = $sheet('Payments'); $ph = array_flip(array_map(fn ($h) => MarketplaceFiles::roleOf('TIKTOK', $h), $pm[0] ?? []));
         foreach (array_slice($pm, 1) as $r) { $id = trim((string) ($r[$ph['payment id']] ?? '')); if ($id !== '') $pays[$id] = ['amount' => self::money($r[$ph['payment amount']] ?? 0), 'date' => self::day($r[$ph['payment completion date']] ?? '') ?: self::day($r[$ph['payment initiation date']] ?? ''), 'status' => trim((string) ($r[$ph['status']] ?? '')), 'bank' => trim((string) ($r[$ph['bank account']] ?? ''))]; }
 
         // Statements
-        $statements = []; $sm = $sheet('Statements'); $sh = array_flip(array_map(fn ($h) => strtolower(trim((string) $h)), $sm[0] ?? [])); $stBad = [];
+        $statements = []; $sm = $sheet('Statements'); $sh = array_flip(array_map(fn ($h) => MarketplaceFiles::roleOf('TIKTOK', $h), $sm[0] ?? [])); $stBad = [];
         foreach (array_slice($sm, 1) as $r) {
             $id = trim((string) ($r[$sh['statement id']] ?? '')); if ($id === '') continue;
             $s = ['statement_id' => $id, 'payout_id' => trim((string) ($r[$sh['payment id']] ?? '')), 'statement_date' => self::day($r[$sh['statement date']] ?? ''), 'status' => trim((string) ($r[$sh['status']] ?? ''))];
@@ -141,6 +141,7 @@ class SettlementService
     {
         $shop = DB::table('t_branches')->where('id', $branchId)->where('fk_id_ent', $ent)->first() ?? throw new \InvalidArgumentException('Choose the shop this file belongs to.');
         self::$pfColumns = [];
+        MarketplaceFiles::useLayouts(($lp = Profiles::ofShop($branchId)) ? Profiles::layouts((int) $lp->id) : []);      /* R-A_SALES-87 the TikTok workbook layout (sheet and column names) from the shop profile */
         if ($p = Profiles::ofShop($branchId)) foreach (DB::table('mp_profile_fee_buckets')->where('fk_id_mp_profile', $p->id)->where('f_active', 1)->where('bucket_code', 'like', 'TT\\_%')->whereNotNull('file_columns')->get(['bucket_code', 'file_columns']) as $b)
             foreach (array_filter(array_map('trim', explode(',', (string) $b->file_columns))) as $c) self::$pfColumns[MarketplaceFiles::keyOf($c)] = $b->bucket_code;
         $x = self::readTikTok($path, (float) Settings::get('TT_SETTLEMENT_TOLERANCE', $ent, 0));

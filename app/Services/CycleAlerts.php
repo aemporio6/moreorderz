@@ -88,6 +88,8 @@ class CycleAlerts
         $hit = function (object $c) use ($q) {
             if ($q === '') return true;
             if (str_contains(mb_strtolower((string) $c->cycle_code), $q)) return true;
+            if (DB::table('t_src_cycles')->where('id', $c->id)->whereRaw('LOWER(COALESCE(order_ref, \'\')) LIKE ?', ["%$q%"])->exists()) return true;      /* R-B_SOURCING-50 supplier order reference */
+            if (DB::table('t_src_payments')->where('fk_id_cycle', $c->id)->where('f_active', 1)->whereRaw('LOWER(COALESCE(txn_ref, \'\')) LIKE ?', ["%$q%"])->exists()) return true;      /* bank / Wise reference of a payment */
             if (DB::table('t_src_po')->where('fk_id_cycle', $c->id)->where('f_active', 1)->where(fn ($w) => $w->whereRaw('LOWER(po_number) LIKE ?', ["%$q%"])->orWhereRaw('LOWER(po_code) LIKE ?', ["%$q%"]))->exists()) return true;
             if (DB::table('t_src_cycle_products')->where('fk_id_cycle', $c->id)->where('f_active', 1)->where(fn ($w) => $w->whereRaw('LOWER(product_name) LIKE ?', ["%$q%"])->orWhereRaw('LOWER(sku) LIKE ?', ["%$q%"]))->exists()) return true;
             return DB::table('t_src_po_lines as l')->join('t_product_vendors as p', 'p.id', '=', 'l.fk_id_product')->where('l.fk_id_cycle', $c->id)->where('l.f_active', 1)->where(fn ($w) => $w->whereRaw('LOWER(p.product_name_vendor) LIKE ?', ["%$q%"])->orWhereRaw('LOWER(p.SKU_VENDOR) LIKE ?', ["%$q%"]))->exists();
@@ -97,6 +99,9 @@ class CycleAlerts
             $sups = $supOf((int) $c->id); $okQ = $hit($c);
             if ($okQ) foreach ($sups as $s) $supCount[$s] = ($supCount[$s] ?? 0) + 1;
             if (! $okQ || ($sup && ! in_array($sup, $sups, true))) continue;
+            if (! empty($f['investor']) && ! DB::table('t_src_investments')->where('fk_id_cycle', $c->id)->where('f_active', 1)->where('fk_id_investor', (int) $f['investor'])->exists()) continue;      /* R-B_SOURCING-50 deep filters */
+            if (! empty($f['from']) && (string) $c->sourcing_date < $f['from']) continue;
+            if (! empty($f['to']) && (string) $c->sourcing_date > $f['to'] . ' 23:59:59') continue;
             $pl = self::pipeline($c); $pls[$c->id] = $pl; if ($pl['current']) $tiles[$pl['current']]++;
             if ($stage !== '' && $pl['current'] !== $stage) continue;
             $keep[] = $c;
@@ -116,7 +121,7 @@ class CycleAlerts
         }
         $supNames = $supCount ? DB::table('t_src_suppliers')->whereIn('id', array_keys($supCount))->orderBy('supplier_name')->pluck('supplier_name', 'id') : collect();
         return ['tiles' => array_map(fn ($k) => ['key' => $k, 'name' => self::GROUPS[$k], 'open' => $tiles[$k]], array_keys(self::GROUPS)), 'rows' => $rows, 'total' => count($keep), 'page' => $page, 'per_page' => $per,
-            'filters' => ['supplier' => $sup ?: null, 'q' => $f['q'] ?? '', 'stage' => $stage ?: null, 'stage_name' => self::GROUPS[$stage] ?? null], 'empty' => 'No open cycles match the filter.',
+            'filters' => ['supplier' => $sup ?: null, 'q' => $f['q'] ?? '', 'stage' => $stage ?: null, 'investor' => $f['investor'] ?? null, 'from' => $f['from'] ?? null, 'to' => $f['to'] ?? null, 'stage_name' => self::GROUPS[$stage] ?? null], 'empty' => 'No open cycles match the filter.',
             'suppliers' => $supNames->map(fn ($n, $id) => ['id' => (int) $id, 'name' => $n, 'count' => $supCount[$id]])->values()->all(),
             'legend' => [['Done', self::STRIP['done']], ['Current', self::STRIP['current']], ['Pending', self::STRIP['pending']], ['Record missing', self::STRIP['missing']], ['Skipped', 'hatched']]];
     }

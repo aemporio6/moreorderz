@@ -41,6 +41,15 @@ class CycleFiltersTeamTest extends TestCase
         $this->assertSame(1, collect($d['tiles'])->firstWhere('key', 'qc')['open']);
         $this->assertSame(['Alpha Co' => 1, 'Beta Co' => 1], collect($d['suppliers'])->pluck('count', 'name')->all(), 'count next to each supplier');
         $this->assertSame([], $codes(['q' => 'nothing-like-this']));
+        // R-B_SOURCING-50 deep filters: a payment's bank reference, the supplier order reference, the investor, the sourcing date
+        $this->f('t_src_payments', ['fk_id_cycle' => $b, 'payment_code' => 'PAY-F', 'txn_ref' => 'WISE-88412', 'f_active' => 1]);
+        DB::table('t_src_cycles')->where('id', $a)->update(['order_ref' => 'PI-7731', 'sourcing_date' => '2026-03-01']); DB::table('t_src_cycles')->whereIn('id', [$b, $e])->update(['sourcing_date' => '2026-09-01']);
+        $this->assertSame([['SC-BBB-2'], ['SC-AAA-1']], [$codes(['q' => 'wise-88412']), $codes(['q' => 'pi-7731'])], 'the test of the rule: a payment ref finds its cycle');
+        $inv = $this->f('t_account', ['fk_id_ent' => 1, 'account_code' => 'INV-F', 'first_name' => 'Iris', 'f_active' => 1]);
+        $this->f('t_src_investments', ['fk_id_cycle' => $a, 'invest_code' => 'INV-F1', 'fk_id_investor' => $inv, 'invest_amount' => 100, 'f_active' => 1]);
+        $this->assertSame(['SC-AAA-1'], $codes(['investor' => $inv]));
+        $this->assertSame(['SC-AAA-1'], $codes(['to' => '2026-06-30']));
+        $this->assertSame(['SC-EMPTY-4', 'SC-BBB-2'], $codes(['from' => '2026-06-01']));
         // URL filters are the user's saved view; Reset clears it
         $this->getJson('/api/buying?q=led')->assertOk();
         $this->assertSame(['SC-AAA-1'], array_column($this->getJson('/api/buying')->json('cycles'), 'code'), 'saved view');
