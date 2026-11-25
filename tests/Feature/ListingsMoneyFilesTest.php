@@ -102,5 +102,20 @@ class ListingsMoneyFilesTest extends TestCase
         $q = collect(\App\Services\ListingQty::rows(1, $this->shop)['rows'])->keyBy('sku');
         $this->assertSame([0, 'END'], [$q['QA-2PK']['qty'], $q['QA-2PK']['action']], 'available 1 above the buffer → push 0; the profile ends the listing');
         $this->assertStringContainsString('"QA-2PK","","0","END"', \App\Services\ListingQty::csv(1, $this->shop));
+        /* R-H-20 rule example 2: available 1 → push 0 at once and event PRODUCT_OOS (not at the next schedule) */
+        DB::table('t_product_listings')->where('id', $two)->update(['stock_buffer_override' => null]);
+        $bin2 = $this->bin; \App\Services\Context::set(1, null);
+        Stock::adjust(1, $a, $bin2, -9, 'Damage');
+        \App\Services\ProductStockFlag::apply($a);
+        $this->assertSame(1, DB::table('sys_events')->where('event_code', 'PRODUCT_OOS')->where('entity_id', $a)->count());
+        \App\Services\EventBus::runQueue();      /* in production the event runs after the commit; the test transaction holds it */
+        $rows = DB::table('stock_push_queue')->where('fk_id_branch', $this->shop)->orderBy('id')->get();
+        $this->assertSame([[$two, 0, 'END', 'FILE', 'PENDING'], [$bun, 0, 'END', 'FILE', 'PENDING']], $rows->map(fn ($r) => [(int) $r->fk_id_listing, (int) $r->qty, $r->action, $r->via, $r->status])->all(), 'both listings that use the product get their 0 at once');
+        $this->assertTrue(\App\Services\TaskEngine::isOpen('LIST_OOS_PUSH', [$this->shop]));
+        $this->assertSame(0, \App\Services\ListingQty::pushZero($a), 'never queued twice while waiting');
+        $preview = \App\Services\ListingQty::zeroCsv(1, $this->shop, true);
+        $this->assertSame(2, DB::table('stock_push_queue')->where('status', 'PENDING')->count(), 'the preview writes nothing');
+        $this->assertStringContainsString('"QA-2PK","","0","END"', \App\Services\ListingQty::zeroCsv(1, $this->shop));
+        $this->assertSame([0, false], [DB::table('stock_push_queue')->where('status', 'PENDING')->count(), \App\Services\TaskEngine::isOpen('LIST_OOS_PUSH', [$this->shop])]);
     }
 }

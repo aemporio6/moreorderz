@@ -582,6 +582,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('preset-groups/{id}/history', [\App\Http\Controllers\PresetGroupController::class, 'history'])->whereNumber('id');
         Route::get('listings-qty', [\App\Http\Controllers\PurchaseAuditController::class, 'listingQty']);      // R-H-20
         Route::get('listings-qty/export', [\App\Http\Controllers\PurchaseAuditController::class, 'listingQtyCsv']);
+        Route::get('listings-qty/zero', [\App\Http\Controllers\PurchaseAuditController::class, 'listingZero']);
+        Route::post('listings-qty/zero', [\App\Http\Controllers\PurchaseAuditController::class, 'listingZeroCsv']);
         Route::get('listings-import', [\App\Http\Controllers\PurchaseAuditController::class, 'listingBatches']);      // R-D-59
         Route::post('listings-import', [\App\Http\Controllers\PurchaseAuditController::class, 'listings']);
         Route::post('listings-import/{job}/undo', [\App\Http\Controllers\PurchaseAuditController::class, 'listingsUndo'])->whereNumber('job');

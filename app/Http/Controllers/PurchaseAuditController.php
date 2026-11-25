@@ -49,5 +49,8 @@ class PurchaseAuditController extends Controller
     /* R-H-20 stock quantity per listing (outbound) */
     private function shopOk(Request $r): int { \App\Services\Perm::need($r->user(), 'orders.SEE'); $s = (int) $r->query('shop'); if (! \App\Services\Perm::shopAllowed($r->user(), $s)) abort(403, ' User has no rights for that shop'); return $s; }
     public function listingQty(Request $r) { $s = $this->shopOk($r); return \App\Services\ListingQty::rows((int) \App\Services\Context::ent(), $s) + ['shops' => DB::table('t_branches')->where('fk_id_ent', (int) \App\Services\Context::ent())->where('f_active', 1)->orderBy('shop_no')->get(['id', 'shop_no', 'shop_name'])]; }
+    /* R-H-20 the waiting 0-quantity rows: GET = preview (never writes), POST = the file, marked exported */
+    public function listingZero(Request $r) { $s = $this->shopOk($r); return ['waiting' => DB::table('stock_push_queue')->where('fk_id_branch', $s)->where('status', 'PENDING')->count(), 'csv' => \App\Services\ListingQty::zeroCsv((int) \App\Services\Context::ent(), $s, true)]; }
+    public function listingZeroCsv(Request $r) { $s = $this->shopOk($r); \App\Services\Perm::need($r->user(), 'orders.ENTER'); return response(\App\Services\ListingQty::zeroCsv((int) \App\Services\Context::ent(), $s), 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => 'attachment; filename="listing_zero_' . $s . '.csv"']); }
     public function listingQtyCsv(Request $r) { $s = $this->shopOk($r); return response(\App\Services\ListingQty::csv((int) \App\Services\Context::ent(), $s), 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => 'attachment; filename="listing_quantities_' . $s . '.csv"']); }
 }

@@ -38,7 +38,8 @@ class SalesService
                     'd_order' => $l['d_order'], 'cust_name' => (string) ($l['cust_name'] ?? ''), 'cust_contacts' => (string) ($l['cust_contacts'] ?? ''), 'sku' => $sku, 'product_info' => (string) ($l['product_info'] ?? ($product->product_name_vendor ?? '')),
                     'qty' => $qty * $pack, 'sale_rate' => $pack > 1 ? round($rate / $pack, 2) : $rate, 'total_amount' => $total, 'raw_price' => $period->raw_price ?? 0, 'fk_id_price_period' => $period->id ?? null, 'f_out_of_period' => $product && ! $period ? 1 : 0,
                     'status' => 'Pending', 'sale_source' => $product ? 'active' : 'unmatched', 'fk_id_listing' => $listing->id ?? null, 'fk_id_currency' => BuyingService::currencyId($cur), 'total_amount_gbp' => Fx::toBase($total, $cur, $l['d_order'], $ent),
-                    'fk_id_batch' => $batch, 'line_status' => 'OPEN', 'fulfilment_channel' => $l['fulfilment_channel'] ?? ($shop->fulfilment_channel ?: 'SELF'), 'fk_id_sell_location' => $shop->fk_id_main_location,
+                    'fk_id_batch' => $batch, 'line_status' => 'OPEN', 'fulfilment_channel' => ($ch = $l['fulfilment_channel'] ?? (isset($listing->fulfilment_channel) && $listing->fulfilment_channel ? $listing->fulfilment_channel : ($shop->fulfilment_channel ?: 'SELF'))),
+                    'fk_id_sell_location' => $ch === 'SELF' ? $shop->fk_id_main_location : FcLocations::sellLocation($shop, $ch),      /* R-D-87 the channel picks the selling location */
                     'tracking_no' => $l['tracking_no'] ?? null, 'ship_to_name' => $l['ship_to_name'] ?? ($l['cust_name'] ?? null), 'ship_to_phone' => $l['ship_to_phone'] ?? null, 'ship_to_address' => $l['ship_to_address'] ?? null,
                     'ship_to_city' => $l['ship_to_city'] ?? null, 'ship_to_postcode' => $l['ship_to_postcode'] ?? null, 'ship_to_country_code' => isset($l['ship_to_country_code']) ? strtoupper(substr($l['ship_to_country_code'], 0, 2)) : null,
                     'dispatch_by' => $l['dispatch_by'] ?? DispatchDeadline::compute($ent, (int) $shop->id, (string) ($l['order_time'] ?? ($l['d_order'] === date('Y-m-d') ? date('Y-m-d H:i:s') : $l['d_order'] . ' 00:00:00'))),      // R-H-24: from the file, else handling days in working days
@@ -88,6 +89,9 @@ class SalesService
         foreach ($lines as $s) {
             if ($s->status === 'Refunded') { $refunded++; continue; }
             if ($s->sale_source !== 'active' || ! $s->fk_product_id) { $unmatched++; continue; }
+            if (in_array($s->fulfilment_channel, ['MARKETPLACE_FC', 'THREE_PL'], true)) {      /* R-D-87 FC / 3PL lines confirm from the centre's stock */
+                $fc[$s->fulfilment_channel . ':' . $s->fk_product_id] = ($fc[$s->fulfilment_channel . ':' . $s->fk_product_id] ?? 0) + (int) $s->qty; continue;
+            }
             if (($s->fulfilment_channel ?: 'SELF') !== 'SELF') continue;
             $out = (int) $s->qty_shipped - (int) $s->qty_returned_unconfirmed; $never = max(0, (int) $s->qty - (int) $s->qty_shipped);      /* R-H-38: a unit returned before Confirm is not "unshipped" */
             if ($never > 0) $unshipped[] = ['id' => $s->id, 'order_no' => $s->order_no, 'sku' => $s->sku, 'qty' => $never, 'wh_status' => $s->wh_status];
@@ -104,6 +108,8 @@ class SalesService
                 $short[] = ['product' => (int) $pid, 'sku' => $p->SKU_VENDOR, 'name' => $p->product_name_vendor, 'in_stock' => $inShipped + $onShelf, 'needed' => $t['shipped'] + $t['unshipped']];
             }
         }
+        foreach ($fc ?? [] as $k => $need) { [$ch, $pid] = explode(':', $k); $have = FcLocations::units($branchId, $ch, (int) $pid);
+            if ($need > $have) { $p = DB::table('t_product_vendors')->where('id', $pid)->first(['SKU_VENDOR', 'product_name_vendor']); $short[] = ['product' => (int) $pid, 'sku' => $p->SKU_VENDOR, 'name' => $p->product_name_vendor, 'in_stock' => $have, 'needed' => $need, 'where' => $ch === 'MARKETPLACE_FC' ? 'fulfilment centre' : '3PL']; } }
         $pending = $lines->where('status', 'Pending');
         return ['month' => $month, 'lines' => $lines->count(), 'to_confirm' => $pending->count(), 'refunded_kept' => $refunded, 'unmatched' => $unmatched, 'units_out' => array_sum(array_map(fn ($t) => $t['shipped'] + $t['unshipped'], $take)),
             'sales_total' => round((float) $pending->sum('total_amount_gbp'), 2), 'unshipped' => $unshipped, 'shortages' => $short, 'already_confirmed' => $lines->isEmpty() && DB::table('t_sales')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->whereRaw("DATE_FORMAT(d_order,'%Y-%m') = ?", [$month])->where('status', 'Confirmed')->exists()];
@@ -149,6 +155,10 @@ class SalesService
                         $r = DB::table('wh_reservations')->where('fk_id_sale', $s->id)->orderByDesc('id')->first(); $own = ($r->fk_id_owner_seg ?? 0) ?: null;
                         $cost = Bundles::confirm($ent, $s, $comps, $shipped, $own, $postDate, fn ($pid, $q) => self::shelfBins($pid, $ent, $q));
                         $upd += ['f_stock_deducted' => 1, 'cost_gbp' => $cost, 'buy_amount' => $cost, 'buy_rate' => $s->qty > 0 ? round($cost / $s->qty, 2) : 0, 'cost_source' => 'lots', 'profit' => round((float) $s->total_amount_gbp - $cost, 2), 'wh_status' => 'CONFIRMED', 'qty_shipped' => (int) $s->qty];
+                        $units += (int) $s->qty; $cogs += $cost;
+                    } elseif ($s->sale_source === 'active' && $s->fk_product_id && in_array($s->fulfilment_channel, ['MARKETPLACE_FC', 'THREE_PL'], true)) {      /* R-D-87 from the centre's lots */
+                        $own = DispatchService::ownerRule($s); $cost = FcLocations::consume($ent, $s, (int) $s->qty, $own, $postDate);
+                        $upd += ['f_stock_deducted' => 1, 'cost_gbp' => $cost, 'buy_amount' => $cost, 'buy_rate' => $s->qty > 0 ? round($cost / $s->qty, 2) : 0, 'cost_source' => 'lots', 'profit' => round((float) $s->total_amount_gbp - $cost, 2)];
                         $units += (int) $s->qty; $cogs += $cost;
                     } elseif ($s->sale_source === 'active' && $s->fk_product_id && ($s->fulfilment_channel ?: 'SELF') === 'SELF') {
                         $r = DB::table('wh_reservations')->where('fk_id_sale', $s->id)->orderByDesc('id')->first();
