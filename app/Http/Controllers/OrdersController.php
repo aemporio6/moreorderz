@@ -217,12 +217,12 @@ class OrdersController extends Controller
 
     public function pickRelease(Request $r, int $id)
     {
-        $this->can($r, 'orders.WAREHOUSE');
+        $this->can($r, 'wh.picklist.reassign');      /* R-H-58 */
         abort_unless(DB::table('wh_pick_tasks')->where('id', $id)->where('fk_id_ent', Context::ent())->exists(), 404);
         return $this->run(fn () => ['message' => \App\Services\PickLists::abandon($id, 'released by ' . ($r->user()->display_name ?? 'user')) . ' line(s) released to the queue; picked units stay in DISPATCH.']);
     }
 
-    public function pickReassign(Request $r, int $id) { $this->can($r, 'orders.WAREHOUSE'); return $this->run(fn () => \App\Services\PickLists::reassign($id, (int) $r->input('user'), $r->user())); }
+    public function pickReassign(Request $r, int $id) { $this->can($r, 'wh.picklist.reassign'); return $this->run(fn () => \App\Services\PickLists::reassign($id, (int) $r->input('user'), $r->user())); }
 
     public function pick(Request $r, int $lineId)
     {
@@ -301,7 +301,7 @@ class OrdersController extends Controller
     }
 
     /** R-H-17 put back the picked units of a cancelled line; R-H-35 un-scan a parcel the carrier did not take. */
-    public function putback(Request $r, int $id) { $this->can($r, 'orders.WAREHOUSE'); return $this->run(fn () => Dispatch::putback($id, $r->input('bin') ? (int) $r->input('bin') : null)); }
+    public function putback(Request $r, int $id) { $this->can($r, 'wh.work.move'); return $this->run(fn () => Dispatch::putback($id, $r->input('bin') ? (int) $r->input('bin') : null)); }
 
     /** R-H-50 slotting suggestions: list, approve / reject. */
     public function slotting(Request $r) { $this->can($r, 'orders.SEE'); return ['rows' => \App\Services\WarehouseSlotting::list((int) Context::ent())]; }
@@ -317,13 +317,13 @@ class OrdersController extends Controller
     }
 
     /** R-H-32 void a label, put a new one on, address change after the label. */
-    public function voidLabel(Request $r, int $id) { $this->can($r, 'orders.WAREHOUSE'); return $this->run(fn () => Dispatch::voidLabel($id, (string) $r->input('reason', ''))); }
+    public function voidLabel(Request $r, int $id) { $this->can($r, 'wh.label.void'); return $this->run(fn () => Dispatch::voidLabel($id, (string) $r->input('reason', ''))); }
 
-    public function newLabel(Request $r, int $id) { $this->can($r, 'orders.WAREHOUSE'); return $this->run(fn () => Dispatch::newLabel($id, (string) $r->input('tracking_no', ''), (string) $r->input('reason', 'VOIDED_REPLACED'))); }
+    public function newLabel(Request $r, int $id) { $this->can($r, 'wh.label.print'); return $this->run(fn () => Dispatch::newLabel($id, (string) $r->input('tracking_no', ''), (string) $r->input('reason', 'VOIDED_REPLACED'))); }
 
     public function address(Request $r, int $id) { $this->can($r, 'orders.ENTER'); return $this->run(fn () => Dispatch::addressChanged($id, array_filter($r->only(['ship_to_name', 'ship_to_address', 'ship_to_city', 'ship_to_postcode']), fn ($v) => $v !== null && $v !== ''))); }
 
-    public function unscan(Request $r, int $id) { $this->can($r, 'orders.WAREHOUSE'); return $this->run(fn () => Dispatch::unscan($id, (int) $r->input('parcel'), (string) $r->input('reason', ''))); }
+    public function unscan(Request $r, int $id) { $this->can($r, 'wh.handover.reopen'); return $this->run(fn () => Dispatch::unscan($id, (int) $r->input('parcel'), (string) $r->input('reason', ''))); }
 
     public function closeHandover(Request $r, int $id)
     {

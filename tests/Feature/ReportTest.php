@@ -84,14 +84,14 @@ class ReportTest extends TestCase
         $this->assertSame([], $this->actingAs($va)->getJson('/api/reports')->assertOk()->json('reports'));
         $this->getJson('/api/reports/sales_shop')->assertStatus(403);
         $list = array_column($this->actingAs($wh)->getJson('/api/reports')->json('reports'), 'key');
-        $this->assertSame(['in_transit', 'stock', 'stock_location'], array_values(array_intersect(['in_transit', 'stock', 'stock_location'], $list))); $this->assertCount(10, $list, 'warehouse: stock, stock by location, goods on the way + the 7 warehouse reports (R-H-59); never money reports');
+        $this->assertSame(['in_transit', 'stock', 'stock_location'], array_values(array_intersect(['in_transit', 'stock', 'stock_location'], $list))); $this->assertCount(19, $list, 'warehouse: stock, stock by location, goods on the way + 16 warehouse reports (R-H-59; valuation and sync health are not for this role); never money reports');
         $s = $this->getJson('/api/reports/stock')->assertOk()->json();
         $this->assertNotContains('value', array_column($s['columns'], 'key'), 'warehouse sees units, not money');
         $this->assertArrayNotHasKey('value', $s['rows'][0]);
         $this->getJson('/api/reports/cash')->assertStatus(403);
         $this->actingAs($fin)->getJson('/api/reports/nonsense')->assertStatus(403);
         $this->getJson("/api/reports/cash?from={$this->to}&to={$this->from}")->assertStatus(422);
-        $this->assertCount(20, $this->getJson('/api/reports')->json('reports'), 'Finance: all but research, supplier performance, price changes, tasks, logins, menu (+ Team engagements, R-C-40)');
+        $this->assertCount(21, $this->getJson('/api/reports')->json('reports'), 'Finance: all but research, supplier performance, price changes, tasks, logins, menu (+ Team engagements, R-C-40; + stock valuation by site and owner, R-H-59)');
         $csv = $this->get("/api/reports/sales_shop/csv?from={$this->from}&to={$this->to}")->assertOk()->streamedContent();
         $lines = array_values(array_filter(explode("\n", trim($csv))));
         $this->assertStringContainsString('Shop,Orders,Units,"Confirmed sales"', $lines[0]);

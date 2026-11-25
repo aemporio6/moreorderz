@@ -67,7 +67,7 @@ class PickLists
     /** Give the list to another picker. */
     public static function reassign(int $taskId, int $userId, ?object $u): array
     {
-        Perm::need($u, 'orders.WAREHOUSE'); $ent = (int) Context::ent();
+        Perm::need($u, 'wh.picklist.reassign'); $ent = (int) Context::ent();      /* R-H-58 */
         $t = DB::table('wh_pick_tasks')->where('id', $taskId)->where('fk_id_ent', $ent)->first() ?? throw new \InvalidArgumentException('Pick list not found.');
         if (! in_array($t->status, self::OPEN, true)) throw new \InvalidArgumentException("Pick list {$t->task_code} is " . strtolower($t->status) . ' – it cannot be reassigned.');
         $p = DB::table('t_users')->where('id', $userId)->where('fk_id_ent', $ent)->where('f_active', 1)->first(['id', 'display_name']) ?? throw new \InvalidArgumentException('Choose an active user.');

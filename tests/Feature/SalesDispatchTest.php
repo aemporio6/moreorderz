@@ -430,6 +430,7 @@ class SalesDispatchTest extends TestCase
         \App\Services\SkuHomes::set(1, $this->p, $this->binA, 'PRIMARY'); \App\Services\SkuHomes::set(1, $q, $prime, 'PRIMARY');
         foreach (['O1', 'O2', 'O3'] as $no) { $this->order($no, 1); }
         $t = Dispatch::buildPickList(1); foreach (DB::table('wh_pick_task_lines')->where('fk_id_pick_task', $t)->pluck('id') as $l) Dispatch::pick($l);
+        DB::table('cat_inventory_locations')->where('id', $this->binA)->update(['pick_seq' => 9]);      /* the A-class home is 8 bins further than the prime bin */
         $r = \App\Services\WarehouseSlotting::compute(1);
         $this->assertSame(['A', 'C'], [DB::table('wh_product_stats')->where('fk_id_product', $this->p)->value('abc_class'), DB::table('wh_product_stats')->where('fk_id_product', $q)->value('abc_class')]);
         $this->assertSame(2, $r['suggestions'], 'one swap = a row each way');
@@ -437,6 +438,7 @@ class SalesDispatchTest extends TestCase
         $this->assertTrue(TaskEngine::isOpen('WH_SLOTTING', [$site, date('o-W')]));
         $sa = DB::table('wh_slotting_suggestions')->where('fk_id_product', $this->p)->first();
         $this->assertStringContainsString('BOWL-01 is A-class', $sa->reason);
+        $this->assertStringContainsString('saves about 24 bin-steps', $sa->reason, '3 pick lines × 8 bins nearer');
         $this->assertSame([0, 4], [Stock::balance($this->p, $prime), Stock::balance($this->p, $this->binA) + 3]);
         \App\Services\WarehouseSlotting::decide(1, (int) $sa->id, true, $u);
         $this->assertSame([1, 0, 'APPROVED'], [Stock::balance($this->p, $prime) - 0, Stock::balance($this->p, $this->binA), DB::table('wh_slotting_suggestions')->where('id', $sa->id)->value('status')], 'BOWL-01 home and its 1 unit moved to the prime bin');
@@ -480,5 +482,11 @@ class SalesDispatchTest extends TestCase
         $this->assertSame([['shop' => 'Shop A', 'month' => '2026-08', 'lines' => 1, 'units' => 3]], $sa['rows']);
         $this->assertSame(3, Stock::balance($this->p, Stock::systemLocation(1, 'SHIPPED')), 'equals the SHIPPED bin');
         $this->assertFalse(\App\Services\ReportService::allowed('wh_sku', 'VA'));
+        $val = $R::run(1, 'wh_value_owner', '2026-08-01', '2026-08-31', 'OWNER');
+        $this->assertSame(Ledger::balance(1, '1200'), $val['totals']['value'], 'valuation by site and owner = the stock account');
+        $this->assertFalse(in_array('value', array_column($R::run(1, 'wh_value_owner', '2026-08-01', '2026-08-31', 'WAREHOUSE')['columns'], 'key'), true), 'money hidden from the warehouse role');
+        $this->assertSame(1, $R::run(1, 'wh_pick_speed', date('Y-m-d'), date('Y-m-d'), 'WAREHOUSE')['rows'][0]['lines']);
+        $this->assertEquals(['scanned' => 1, 'expected' => 1], array_intersect_key($R::run(1, 'wh_manifests', date('Y-m-d'), date('Y-m-d'), 'WAREHOUSE')['rows'][0], ['scanned' => 1, 'expected' => 1]));
+        $this->assertSame([], $R::run(1, 'wh_recon', '2026-08-01', '2026-08-31', 'WAREHOUSE')['rows'], 'books and bins agree');
     }
 }

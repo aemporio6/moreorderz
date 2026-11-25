@@ -40,8 +40,10 @@ class WarehouseSlotting
                 if (! isset($slow[$i])) break; $c = $slow[$i];
                 if (DB::table('wh_slotting_suggestions')->where('status', 'OPEN')->whereIn('fk_id_product', [$a, $c])->exists()) continue;
                 $sku = fn ($p) => DB::table('t_product_vendors')->where('id', $p)->value('SKU_VENDOR'); $name = fn ($b) => DB::table('cat_inventory_locations')->where('id', $b)->value('location_name');
+                $seq = fn ($b) => (int) DB::table('cat_inventory_locations')->where('id', $b)->value('pick_seq'); $picks = (int) DB::table('wh_product_stats')->where('fk_id_product', $a)->where('fk_id_site', $site)->value('pick_lines_period');
+                $saved = max(0, $seq($list[$a]['bin']) - $seq($list[$c]['bin'])) * $picks;      /* expected walking saved = pick lines × bins nearer in the pick sequence */
                 DB::table('wh_slotting_suggestions')->insert([
-                    ['fk_id_site' => $site, 'fk_id_product' => $a, 'fk_id_from_location' => $list[$a]['bin'], 'fk_id_to_location' => $list[$c]['bin'], 'reason' => mb_substr("Swap: {$sku($a)} is A-class (fast) but sits in {$name($list[$a]['bin'])}; prime bin {$name($list[$c]['bin'])} holds C-class {$sku($c)}", 0, 255), 'status' => 'OPEN', 'created_at' => $now],
+                    ['fk_id_site' => $site, 'fk_id_product' => $a, 'fk_id_from_location' => $list[$a]['bin'], 'fk_id_to_location' => $list[$c]['bin'], 'reason' => mb_substr("Swap: {$sku($a)} is A-class (fast) but sits in {$name($list[$a]['bin'])}; prime bin {$name($list[$c]['bin'])} holds C-class {$sku($c)} – saves about $saved bin-steps per period", 0, 255), 'status' => 'OPEN', 'created_at' => $now],
                     ['fk_id_site' => $site, 'fk_id_product' => $c, 'fk_id_from_location' => $list[$c]['bin'], 'fk_id_to_location' => $list[$a]['bin'], 'reason' => mb_substr("Swap: {$sku($c)} is C-class (slow) and takes prime bin {$name($list[$c]['bin'])} – move it to {$name($list[$a]['bin'])}", 0, 255), 'status' => 'OPEN', 'created_at' => $now]]);
                 $made += 2;
             }
@@ -56,7 +58,7 @@ class WarehouseSlotting
     /** The manager decides: approve = Move home with the units (two shelf labels), reject = no change. */
     public static function decide(int $ent, int $id, bool $approve, ?object $u): array
     {
-        Perm::need($u, 'stock.adjust_owner');
+        Perm::need($u, 'wh.slotting.approve');      /* R-H-58 */
         return DB::transaction(function () use ($ent, $id, $approve, $u) {
             $s = DB::table('wh_slotting_suggestions as s')->join('t_product_vendors as v', 'v.id', '=', 's.fk_id_product')->where('s.id', $id)->where('v.fk_id_ent', $ent)->lockForUpdate()->first(['s.*']) ?? throw new \InvalidArgumentException('Suggestion not found.');
             if ($s->status !== 'OPEN') throw new \InvalidArgumentException('This suggestion is already ' . strtolower($s->status) . '.');

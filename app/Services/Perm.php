@@ -174,6 +174,14 @@ class Perm
         $c['print.testPage'] = ['Print a printer test page', 'Printing', ['OWNER', 'MANAGER', 'WAREHOUSE']];
         foreach (self::PRINT_KINDS as $k => $roles) $c["print.kind_$k"] = ['Print: ' . ucfirst(strtolower(str_replace('_', ' ', $k))), 'Printing', $roles];
         $c['admin.permissions'] = ['Change roles and rights', 'Users and system', ['OWNER']];
+        /* R-H-58 warehouse rights per action – STOCK (warehouse manager) is the MANAGER role here, ADMIN the OWNER */
+        $wh = ['OWNER', 'MANAGER', 'WAREHOUSE']; $boss = ['OWNER', 'MANAGER'];
+        foreach (['receive' => 'Receive goods', 'putaway' => 'Put goods away', 'pick' => 'Pick', 'pack' => 'Pack', 'handover' => 'Hand parcels over', 'return' => 'Book returns', 'move' => 'Move stock and put back', 'count' => 'Count bins'] as $k => $l) $c["wh.work.$k"] = ["Work screen: $l", 'Warehouse', $wh];
+        $c['wh.label.print'] = ['Print labels', 'Warehouse', $wh]; $c['wh.label.reprint'] = ['Reprint a label (with a reason)', 'Warehouse', $wh]; $c['wh.label.void'] = ['Void a label', 'Warehouse', $wh];
+        $c['wh.picklist.build'] = ['Make pick lists', 'Warehouse', $wh]; $c['wh.picklist.reassign'] = ['Give a pick list to another picker or release its lines', 'Warehouse', $boss]; $c['wh.handover.reopen'] = ['Un-scan a parcel of a closed handover', 'Warehouse', $boss];
+        $c['wh.count.create'] = ['Start a stock count', 'Warehouse', $wh];
+        foreach (['location.edit' => 'Change locations', 'location.generate' => 'Generate locations', 'location.deactivate' => 'Switch locations off', 'sku_home.edit' => 'Set SKU homes', 'slotting.approve' => 'Approve slotting suggestions', 'reservation.override' => 'Cover from pool or release another user\'s reservation'] as $k => $l) $c["wh.$k"] = [$l, 'Warehouse', $boss];
+        foreach (['site.share' => 'Share a site with another company', 'settings.edit' => 'Change warehouse settings', 'migration.run' => 'Run the warehouse go-live migration'] as $k => $l) $c["wh.$k"] = [$l, 'Warehouse', ['OWNER']];
         foreach (TaskRoles::SCREENS as $k => $l) $c["work.$k"] = ["Open: $l (tasks, bosses)", 'Tasks', ['OWNER', 'PARTNER', 'MANAGER']];      // R-G_CORE-20
         $c['orders.saleEdit'] = ['Change a sale line (order no, customer, quantity, price)', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];
         $c['orders.saleCarrier'] = ['Change the carrier and packing of a sale line', 'Orders and dispatch', ['OWNER', 'MANAGER', 'TL', 'VA']];

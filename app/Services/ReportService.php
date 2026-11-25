@@ -25,6 +25,17 @@ class ReportService
         'wh_ready' => ['Warehouse', 'Parcels ready, not handed over', 'Ready parcels with carrier, tracking and when they were packed (R-H-59 #8).', ['OWNER', 'MANAGER', 'WAREHOUSE', 'STOCK'], false],
         'wh_abc' => ['Warehouse', 'ABC analysis', 'ABC class, pick lines and units per SKU and site from the last nightly run (R-H-59 #11).', ['OWNER', 'MANAGER', 'WAREHOUSE', 'STOCK'], false],
         'wh_returns' => ['Warehouse', 'Returns by grade', 'Returns received in the period per grade and SKU (R-H-59 #17).', ['OWNER', 'MANAGER', 'WAREHOUSE', 'STOCK'], true],
+        'wh_owner' => ['Warehouse', 'Stock by owner', 'Book units per owner and site (lots on the books), as Finance sees them (R-H-59 #3).', ['OWNER', 'MANAGER', 'WAREHOUSE', 'STOCK'], false],
+        'wh_value_owner' => ['Warehouse', 'Stock valuation by site and owner', 'Book units × lot cost per site and owner (R-H-59 #4).', ['OWNER', 'MANAGER', 'STOCK', 'FINANCE', 'ACCOUNTANT'], false],
+        'wh_moves' => ['Warehouse', 'Movement history', 'Every stock movement of the period: SKU, bin, type, units, by whom (R-H-59 #5).', ['OWNER', 'MANAGER', 'WAREHOUSE', 'STOCK'], true],
+        'wh_pick_speed' => ['Warehouse', 'Pick accuracy and speed', 'Per picker in the period: lines, units, short picks, lines per hour (R-H-59 #6).', ['OWNER', 'MANAGER', 'WAREHOUSE', 'STOCK'], true],
+        'wh_manifests' => ['Warehouse', 'Handover manifests', 'Every handover of the period: carrier, expected, scanned, exceptions, driver (R-H-59 #9).', ['OWNER', 'MANAGER', 'WAREHOUSE', 'STOCK'], true],
+        'wh_count_var' => ['Warehouse', 'Count variances', 'Counted lines of the period with a difference: bin, SKU, system, counted, value (R-H-59 #12).', ['OWNER', 'MANAGER', 'WAREHOUSE', 'STOCK'], true],
+        'wh_replen' => ['Warehouse', 'Replenishment needs', 'Homes below their minimum and where the units can come from (R-H-59 #13).', ['OWNER', 'MANAGER', 'WAREHOUSE', 'STOCK'], false],
+        'wh_sync' => ['Warehouse', 'Channel sync health', 'Per connection: last sync, status, last error, runs of the period (R-H-59 #14).', ['OWNER', 'MANAGER', 'STOCK'], true],
+        'wh_unmapped' => ['Warehouse', 'Unmapped SKUs', 'Open order lines whose SKU matches no product (R-H-59 #15).', ['OWNER', 'MANAGER', 'WAREHOUSE', 'STOCK'], false],
+        'wh_recon' => ['Warehouse', 'Reconciliation status', 'Negative bins and lots whose units differ from their bins (R-H-59 #16, R-H-54).', ['OWNER', 'MANAGER', 'WAREHOUSE', 'STOCK'], false],
+        'wh_lost' => ['Warehouse', 'Lost-parcel cases and claims', 'Parcels with a claim: carrier, claim ref, amount, status (R-H-59 #18).', ['OWNER', 'MANAGER', 'WAREHOUSE', 'STOCK'], false],
         'wh_shipped_awaiting' => ['Warehouse', 'Shipped awaiting confirm', 'Per shop and month: units shipped and still waiting for Month Confirm (R-H-59 #19).', ['OWNER', 'MANAGER', 'WAREHOUSE', 'STOCK'], false],
         'purchases' => ['Buying', 'Purchase orders', 'Each purchase order of the period: ordered, received, paid and still open.', ['OWNER', 'MANAGER', 'SOURCING', 'FINANCE', 'ACCOUNTANT'], true],
         'suppliers' => ['Buying', 'Supplier balances', 'Per supplier today: paid in advance for goods not received, and owed for goods received.', ['OWNER', 'MANAGER', 'FINANCE', 'ACCOUNTANT'], false],
@@ -181,6 +192,96 @@ class ReportService
             ->groupBy('r.grade', 'p.SKU_VENDOR')->orderBy('r.grade')->selectRaw('r.grade, p.SKU_VENDOR sku, COUNT(*) n, SUM(COALESCE(r.qty,0)) units')->get();
         return [[['grade', 'Grade', 'text'], ['sku', 'SKU', 'text'], ['count', 'Returns', 'int'], ['units', 'Units', 'int']],
             $rows->map(fn ($r) => ['grade' => DispatchService::GRADES[$r->grade] ?? ($r->grade ?: 'Not matched yet'), 'sku' => $r->sku ?? '', 'count' => (int) $r->n, 'units' => (int) $r->units])->all(), null];
+    }
+
+    private static function ownerName(?int $id): string { return $id ? (string) (DB::table('t_account')->where('id', $id)->selectRaw("CONCAT_WS(' ', first_name, sur_name) n")->value('n') ?? "Owner $id") : 'Pool / company'; }
+
+    private static function r_wh_owner(int $ent, string $from, string $to): array
+    {
+        $rows = DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->join('cat_inventory_locations as c', 'c.id', '=', 'b.fk_id_location')->leftJoin('cat_inventory_locations as s', 's.id', '=', 'c.fk_id_site')->join('t_product_vendors as p', 'p.id', '=', 'l.fk_id_product')
+            ->where('l.company_id', $ent)->where('b.qty', '<>', 0)->groupBy('l.fk_id_owner', 's.location_name', 'p.SKU_VENDOR')->orderBy('l.fk_id_owner')->selectRaw('l.fk_id_owner owner, s.location_name site, p.SKU_VENDOR sku, SUM(b.qty) units')->get();
+        return [[['owner', 'Owner', 'text'], ['site', 'Site', 'text'], ['sku', 'SKU', 'text'], ['units', 'Units', 'int']],
+            $rows->map(fn ($r) => ['owner' => self::ownerName($r->owner ? (int) $r->owner : null), 'site' => $r->site ?? '', 'sku' => $r->sku, 'units' => (int) $r->units])->all(), 'As it stands now.'];
+    }
+
+    private static function r_wh_value_owner(int $ent, string $from, string $to): array
+    {
+        $rows = DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->join('cat_inventory_locations as c', 'c.id', '=', 'b.fk_id_location')->leftJoin('cat_inventory_locations as s', 's.id', '=', 'c.fk_id_site')
+            ->where('l.company_id', $ent)->where('b.qty', '<>', 0)->groupBy('s.location_name', 'l.fk_id_owner')->selectRaw('s.location_name site, l.fk_id_owner owner, SUM(b.qty) units, SUM(b.qty * l.unit_cost_gbp) value')->get();
+        return [[['site', 'Site', 'text'], ['owner', 'Owner', 'text'], ['units', 'Units', 'int'], ['value', 'Value at cost', 'money']],
+            $rows->map(fn ($r) => ['site' => $r->site ?? 'No site', 'owner' => self::ownerName($r->owner ? (int) $r->owner : null), 'units' => (int) $r->units, 'value' => round((float) $r->value, 2)])->all(), 'As it stands now: the total equals the stock account in the books.'];
+    }
+
+    private static function r_wh_moves(int $ent, string $from, string $to): array
+    {
+        $rows = DB::table('t_stock_movements as m')->join('t_product_vendors as p', 'p.id', '=', 'm.fk_id_product')->leftJoin('cat_inventory_locations as c', 'c.id', '=', 'm.fk_id_location')->leftJoin('t_users as u', 'u.id', '=', 'm.created_by')
+            ->where('m.fk_id_ent', $ent)->whereBetween(DB::raw('DATE(m.created_at)'), [$from, $to])->orderByDesc('m.id')->limit(5000)->get(['m.created_at', 'p.SKU_VENDOR', 'c.location_name', 'm.movement_type', 'm.qty_change', 'u.display_name', 'm.notes']);
+        return [[['when', 'When', 'text'], ['sku', 'SKU', 'text'], ['bin', 'Bin', 'text'], ['type', 'Type', 'text'], ['units', 'Units', 'int'], ['who', 'By', 'text'], ['note', 'Note', 'text']],
+            $rows->map(fn ($r) => ['when' => substr((string) $r->created_at, 0, 16), 'sku' => $r->SKU_VENDOR, 'bin' => $r->location_name ?? '', 'type' => str_replace('_', ' ', (string) $r->movement_type), 'units' => (int) $r->qty_change, 'who' => $r->display_name ?? '', 'note' => $r->notes ?? ''])->all(), 'The newest 5,000 movements of the period.'];
+    }
+
+    private static function r_wh_pick_speed(int $ent, string $from, string $to): array
+    {
+        $rows = DB::table('wh_pick_task_lines as l')->join('wh_pick_tasks as t', 't.id', '=', 'l.fk_id_pick_task')->leftJoin('t_users as u', 'u.id', '=', 'l.done_by')->where('t.fk_id_ent', $ent)->whereIn('l.line_status', ['DONE', 'SHORT'])
+            ->whereBetween(DB::raw('DATE(l.done_at)'), [$from, $to])->groupBy('l.done_by', 'u.display_name')
+            ->selectRaw("u.display_name who, COUNT(*) n_lines, SUM(l.qty_done) units, SUM(l.line_status = 'SHORT') shorts, TIMESTAMPDIFF(SECOND, MIN(l.done_at), MAX(l.done_at)) secs")->get();
+        return [[['who', 'Picker', 'text'], ['lines', 'Lines', 'int'], ['units', 'Units', 'int'], ['short', 'Short picks', 'int'], ['per_hour', 'Lines per hour', 'text']],
+            $rows->map(fn ($r) => ['who' => $r->who ?? '—', 'lines' => (int) $r->n_lines, 'units' => (int) $r->units, 'short' => (int) $r->shorts, 'per_hour' => (int) $r->secs > 0 ? (string) round($r->n_lines / ($r->secs / 3600), 1) : ''])->all(),
+            'Lines per hour = lines ÷ the time from the first to the last confirm of the period. Wrong scans are not logged per picker yet.'];
+    }
+
+    private static function r_wh_manifests(int $ent, string $from, string $to): array
+    {
+        $rows = DB::table('wh_handover_sessions as h')->leftJoin('t_carriers as c', 'c.id', '=', 'h.fk_id_carrier')->where('h.fk_id_ent', $ent)->whereBetween(DB::raw('DATE(h.opened_at)'), [$from, $to])->orderByDesc('h.id')
+            ->get(['h.session_code', 'c.carrier_name', 'h.status', 'h.expected_count', 'h.scanned_count', 'h.exception_count', 'h.driver_name', 'h.closed_at', 'h.manifest_file']);
+        return [[['code', 'Handover', 'text'], ['carrier', 'Carrier', 'text'], ['status', 'Status', 'text'], ['expected', 'Expected', 'int'], ['scanned', 'Scanned', 'int'], ['exceptions', 'Exceptions', 'int'], ['driver', 'Driver', 'text'], ['closed', 'Closed', 'text'], ['pdf', 'Manifest PDF', 'text']],
+            $rows->map(fn ($r) => ['code' => $r->session_code, 'carrier' => $r->carrier_name ?? '', 'status' => $r->status, 'expected' => (int) $r->expected_count, 'scanned' => (int) $r->scanned_count, 'exceptions' => (int) $r->exception_count, 'driver' => $r->driver_name ?? '', 'closed' => substr((string) $r->closed_at, 0, 16), 'pdf' => $r->manifest_file ? 'yes' : ''])->all(), null];
+    }
+
+    private static function r_wh_count_var(int $ent, string $from, string $to): array
+    {
+        $rows = DB::table('t_stock_count_lines as l')->join('t_stock_counts as c', 'c.id', '=', 'l.fk_id_count')->join('t_product_vendors as p', 'p.id', '=', 'l.fk_id_product')->leftJoin('cat_inventory_locations as b', 'b.id', '=', 'l.fk_id_location')->leftJoin('t_users as u', 'u.id', '=', 'l.counted_by')
+            ->where('c.fk_id_ent', $ent)->whereBetween('c.d_count', [$from, $to])->whereNotNull('l.qty_counted')->whereRaw('l.qty_counted <> l.qty_system')
+            ->get(['c.count_code', 'b.location_name', 'p.SKU_VENDOR', 'l.qty_system', 'l.qty_counted', 'u.display_name', 'p.id as pid']);
+        return [[['count', 'Count', 'text'], ['bin', 'Bin', 'text'], ['sku', 'SKU', 'text'], ['system', 'System', 'int'], ['counted', 'Counted', 'int'], ['diff', 'Difference', 'int'], ['counter', 'Counter', 'text'], ['value', 'Value', 'money']],
+            $rows->map(function ($r) { $cost = (float) (DB::table('fin_lots')->where('fk_id_product', $r->pid)->orderByDesc('received_date')->value('unit_cost_gbp') ?? 0); $d = (int) $r->qty_counted - (int) $r->qty_system;
+                return ['count' => $r->count_code, 'bin' => $r->location_name ?? '', 'sku' => $r->SKU_VENDOR, 'system' => (int) $r->qty_system, 'counted' => (int) $r->qty_counted, 'diff' => $d, 'counter' => $r->display_name ?? '', 'value' => round($d * $cost, 2)]; })->all(), 'Value = difference × the latest lot cost.'];
+    }
+
+    private static function r_wh_replen(int $ent, string $from, string $to): array
+    {
+        return [[['sku', 'SKU', 'text'], ['bin', 'Home bin', 'text'], ['in_bin', 'In the bin', 'int'], ['min', 'Minimum', 'int'], ['target', 'Fill to', 'int'], ['can', 'Can move now', 'int'], ['from', 'From', 'text']],
+            array_map(fn ($n) => ['sku' => $n['sku'], 'bin' => $n['bin_name'], 'in_bin' => $n['in_bin'], 'min' => $n['min'], 'target' => $n['target'], 'can' => $n['can_move'], 'from' => implode(', ', array_map(fn ($f) => $f['name'] . ' (' . $f['qty'] . ')', $n['from']))], SkuHomes::refillNeeds($ent)), 'As it stands now.'];
+    }
+
+    private static function r_wh_sync(int $ent, string $from, string $to): array
+    {
+        $rows = DB::table('api_connections as a')->leftJoin('t_branches as b', 'b.id', '=', 'a.fk_id_branch')->where('a.fk_id_ent', $ent)->orderBy('a.provider')
+            ->get(['a.id', 'a.provider', 'a.label', 'b.shop_name', 'a.status', 'a.last_sync_at', 'a.last_error']);
+        return [[['connection', 'Connection', 'text'], ['shop', 'Shop', 'text'], ['status', 'Status', 'text'], ['last', 'Last sync', 'text'], ['runs', 'Runs in period', 'int'], ['failed', 'Failed runs', 'int'], ['error', 'Last error', 'text']],
+            $rows->map(function ($r) use ($from, $to) { $q = fn () => DB::table('api_sync_runs')->where('fk_id_connection', $r->id)->whereBetween(DB::raw('DATE(started_at)'), [$from, $to]);
+                return ['connection' => trim($r->provider . ' ' . ($r->label ?? '')), 'shop' => $r->shop_name ?? '', 'status' => $r->status ?? '', 'last' => substr((string) $r->last_sync_at, 0, 16), 'runs' => $q()->count(), 'failed' => $q()->whereNotIn('status', ['OK', 'DONE', 'SUCCESS'])->count(), 'error' => mb_substr((string) $r->last_error, 0, 120)]; })->all(), null];
+    }
+
+    private static function r_wh_unmapped(int $ent, string $from, string $to): array
+    {
+        $rows = \App\Services\Perm::mine(DB::table('t_sales as s'), 's.fk_id_branch')->leftJoin('t_branches as b', 'b.id', '=', 's.fk_id_branch')->where('s.fk_id_ent', $ent)->where('s.status', 'Pending')->where(fn ($w) => $w->whereNull('s.fk_product_id')->orWhere('s.fk_product_id', 0))
+            ->groupBy('b.shop_name', 's.sku')->selectRaw('b.shop_name, s.sku, COUNT(*) n, SUM(s.qty) units, MIN(s.d_order) first_order')->orderByDesc('n')->get();
+        return [[['shop', 'Shop', 'text'], ['sku', 'SKU on the order', 'text'], ['count', 'Lines', 'int'], ['units', 'Units', 'int'], ['first', 'First order', 'text']],
+            $rows->map(fn ($r) => ['shop' => $r->shop_name ?? '', 'sku' => $r->sku ?? '', 'count' => (int) $r->n, 'units' => (int) $r->units, 'first' => (string) $r->first_order])->all(), 'Map them in Needs Attention (task SAL_UNMATCHED).'];
+    }
+
+    private static function r_wh_recon(int $ent, string $from, string $to): array
+    {
+        return [[['check', 'Problem', 'text']], array_map(fn ($p) => ['check' => $p['title']], WarehouseAlerts::recon($ent)), 'Empty = the books and the bins agree.'];
+    }
+
+    private static function r_wh_lost(int $ent, string $from, string $to): array
+    {
+        $rows = DB::table('wh_parcels as p')->leftJoin('t_carriers as c', 'c.id', '=', 'p.fk_id_carrier')->where('p.fk_id_ent', $ent)->where(fn ($w) => $w->whereNotNull('p.claim_status')->orWhere('p.status', 'LOST'))->orderByDesc('p.id')
+            ->get(['p.parcel_code', 'p.order_no', 'c.carrier_name', 'p.tracking_no', 'p.status', 'p.claim_ref', 'p.claim_amount', 'p.claim_status']);
+        return [[['parcel', 'Parcel', 'text'], ['order', 'Order', 'text'], ['carrier', 'Carrier', 'text'], ['tracking', 'Tracking', 'text'], ['status', 'Parcel', 'text'], ['claim', 'Claim ref', 'text'], ['amount', 'Claimed', 'money'], ['claim_status', 'Claim status', 'text']],
+            $rows->map(fn ($r) => ['parcel' => $r->parcel_code, 'order' => $r->order_no, 'carrier' => $r->carrier_name ?? '', 'tracking' => $r->tracking_no ?? '', 'status' => $r->status, 'claim' => $r->claim_ref ?? '', 'amount' => round((float) $r->claim_amount, 2), 'claim_status' => $r->claim_status ?? ''])->all(), null];
     }
 
     private static function r_wh_shipped_awaiting(int $ent, string $from, string $to): array

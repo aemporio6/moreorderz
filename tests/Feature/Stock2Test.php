@@ -42,7 +42,7 @@ class Stock2Test extends TestCase
         $me = (int) Context::userId(); $other = $this->makeUser('WAREHOUSE'); Context::set(1, $other->id); Count::recount($id, $this->p, 18); Context::set(1, $me);
         $s = Count::submit($id);
         $this->assertSame([-8.00, true], [$s['variance_value'], $s['needs_approval']]);
-        try { Count::approve($id); $this->fail('self approval'); } catch (\RuntimeException $e) { $this->assertStringContainsString('Somebody else', $e->getMessage()); }
+        try { Count::approve($id); $this->fail('self approval'); } catch (\RuntimeException $e) { $this->assertStringContainsString('Another person must approve this count.', $e->getMessage()); }
         try { Count::post($id); $this->fail('posted without approval'); } catch (\RuntimeException $e) { $this->assertStringContainsString('SUBMITTED', $e->getMessage()); }
         $mgr = $this->makeUser('MANAGER'); Context::set(1, $mgr->id);
         Count::approve($id);

@@ -83,7 +83,7 @@ class CountService
     public static function approve(int $countId): void
     {
         $c = self::get($countId, ['SUBMITTED']);
-        if ((int) $c->counted_by === (int) Context::userId()) throw new \RuntimeException('You counted this yourself. Somebody else has to approve it.');
+        if ((int) $c->counted_by === (int) Context::userId()) throw new \RuntimeException('Another person must approve this count.');
         DB::table('t_stock_counts')->where('id', $countId)->update(['status' => 'APPROVED', 'approved_by' => Context::userId(), 'approved_at' => now()]);
         Audit::log('t_stock_counts', $countId, 'APPROVE', ['variance_value' => $c->variance_value], null, (int) $c->fk_id_ent);
         TaskEngine::close('FIN_APPROVE', ['COUNT', $c->count_code], 'Approved');
