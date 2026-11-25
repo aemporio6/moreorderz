@@ -85,4 +85,20 @@ class InvestorSettleTest extends TestCase
         DB::table('t_sale_imports')->where('id', $this->imp)->update(['status' => 'Pending']);
         try { InvestorSettle::calc(1, $this->imp); $this->fail(); } catch (\InvalidArgumentException $e) { $this->assertSame('Sales for Shop 101 - October 2026 are not confirmed yet (status: Pending). Confirm them in Sales > Imported months first.', $e->getMessage()); }
     }
+    /** R-D-82 / IC-11 the VA salary comes from the job-history row valid on the month end; the old method (latest row) is shown beside it. */
+    public function test_r82_va_salary_from_the_row_valid_on_the_month_end(): void
+    {
+        $this->actingAs($this->owner);
+        $va = $this->f('t_account', ['fk_id_ent' => 1, 'account_code' => 'VA1', 'first_name' => 'Vee', 'f_active' => 1]);
+        DB::table('t_sale_imports')->where('id', $this->imp)->update(['fk_id_va_account' => $va]);
+        DB::table('t_inv_profit_splits')->update(['va_mode' => 'SALARY']);
+        $this->f('t_account_job_history', ['fk_id_account' => $va, 'fk_id_marketplace' => $this->mp, 'd_job_start_date' => '2026-01-01', 'salary' => 300, 'pound_exchange_rate' => 0, 'f_active' => 1]);
+        $this->f('t_account_job_history', ['fk_id_account' => $va, 'fk_id_marketplace' => $this->mp, 'd_job_start_date' => '2026-12-01', 'salary' => 450, 'pound_exchange_rate' => 0, 'f_active' => 1]);
+        $this->sale(['qty' => 5, 'total_amount' => 100, 'raw_price' => 4, 'carrier_rate' => 6, 'packing_rate' => 1, 'profit' => 63]);
+        $c = InvestorSettle::calc(1, $this->imp, []);
+        $this->assertSame([300.0, 'MONTH_END', 450.0, true], [$c['va_salary'], $c['va_job']['source'], $c['va_job']['old_method_salary'], $c['va_job']['differs']], 'the December raise does not rewrite October');
+        $this->assertNotEmpty(array_filter($c['warnings'], fn ($w) => str_contains($w, 'old method (latest row) gave 450.00')));
+        Choices::set('INV_VA_JOB_ROW', 'LATEST', 1);
+        $this->assertSame(450.0, InvestorSettle::calc(1, $this->imp, [])['va_salary'], 'the old method when chosen');
+    }
 }

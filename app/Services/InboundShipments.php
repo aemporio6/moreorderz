@@ -56,7 +56,9 @@ class InboundShipments
         }
         if ($err) throw new ValidationErrors($err);
         return DB::transaction(function () use ($ent, $d, $shop, $from, $cartons) {
-            $dest = (int) ($d['dest_location'] ?? 0) ?: StockService::systemLocation($ent, 'TRANSIT');
+            /* R-D-87: a typed centre code (e.g. LTN4) is the destination child under the shop's FC parent, made on first use – the stock then counts as the shop's FC stock */
+            $centre = trim((string) ($d['centre'] ?? ''));
+            $dest = $centre !== '' ? FcLocations::child($shop, $centre) : ((int) ($d['dest_location'] ?? 0) ?: StockService::systemLocation($ent, 'TRANSIT'));
             $id = (int) DB::table('fba_shipments')->insertGetId(['fk_id_ent' => $ent, 'shipment_ref' => mb_substr(trim((string) ($d['shipment_ref'] ?? '')) ?: Numbering::next('FBA', $ent), 0, 60), 'fk_id_branch' => $shop,
                 'fk_id_from_location' => $from, 'fk_id_dest_location' => $dest, 'd_created' => date('Y-m-d'), 'status' => 'DRAFT', 'notes' => $d['notes'] ?? null, 'created_by' => Context::userId(), 'created_at' => now()]);
             foreach ($cartons as $n => $c) {

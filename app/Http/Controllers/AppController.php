@@ -137,7 +137,7 @@ class AppController extends Controller
     public function formLive(\Illuminate\Http\Request $r, string $key)
     {
         Rights::check('VIEW', $key);
-        return \App\Services\FormRules::live($key, (string) $r->query('field'), (string) $r->query('value'), (int) $r->query('id') ?: null);
+        return \App\Services\FormRules::live($key, (string) $r->query('field'), (string) $r->query('value'), (int) $r->query('id') ?: null, array_filter($r->only(['country_id', 'fk_id_country'])));
     }
 
     /** Job history of a person (R-C-39): newest first, renewal amber within 30 days. */

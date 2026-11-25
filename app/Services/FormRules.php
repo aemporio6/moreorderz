@@ -80,6 +80,7 @@ class FormRules
     private static function checkForm(string $formKey, array &$data, array $old, ?int $id, array $already = []): array
     {
         $table = Registry::table($formKey);
+        if (isset(MasterCodes::RULES[$table]) && ($w = MasterCodes::check($table, $data, $old, $id))) return $w;      // R-F_SETUP-39 typed codes: format + unique
         if ($table === 'wa_templates' && array_key_exists('params_json', $data) && trim((string) $data['params_json']) !== '') {      // R-G_CORE-53 ordered params
             $p = json_decode((string) $data['params_json'], true);
             if (! is_array($p) || array_values($p) !== $p || array_filter($p, fn ($x) => ! is_string($x) || ! preg_match('/^\w+$/', $x))) return ['params_json' => 'Parameters must be a list of names, e.g. ["first_name","task_ref"].'];
@@ -286,7 +287,7 @@ class FormRules
 
     /** Fields checked live while the person types. */
     public static function liveFields(string $formKey): array { return array_values(array_unique(array_merge(self::liveOwn($formKey), self::liveTyped($formKey)))); }
-    private static function liveOwn(string $formKey): array { $t = Registry::table($formKey); if ($t === 't_account') return ['account_code']; return $formKey === 'cat_company_house' ? array_keys(self::COMPANY) : ($t === 't_product_vendors' ? ['hs_code', 'sku_vendor'] : ($t === 't_src_products' ? ['hs_code'] : ($t === 'cat_ip_burgers' ? ['isp_code'] : ($t === 't_src_cycles' ? ['order_ref'] : [])))); }
+    private static function liveOwn(string $formKey): array { $t = Registry::table($formKey); if (isset(MasterCodes::RULES[$t])) return array_values(array_filter(array_map(fn ($f) => in_array($f['column_name'], MasterCodes::fields($t), true) ? $f['field_name'] : null, Registry::fields($formKey)))); if ($t === 't_account') return ['account_code']; return $formKey === 'cat_company_house' ? array_keys(self::COMPANY) : ($t === 't_product_vendors' ? ['hs_code', 'sku_vendor'] : ($t === 't_src_products' ? ['hs_code'] : ($t === 'cat_ip_burgers' ? ['isp_code'] : ($t === 't_src_cycles' ? ['order_ref'] : [])))); }
 
     /** Live fields checked 500 ms after the last key (not only when the field is left). */
     public static function liveTyping(string $formKey): array { return Registry::table($formKey) === 't_product_vendors' ? ['sku_vendor'] : []; }
@@ -319,8 +320,10 @@ class FormRules
     }
 
     /** Live check while typing (the old screen's message). */
-    public static function live(string $formKey, string $field, string $value, ?int $id): array
+    public static function live(string $formKey, string $field, string $value, ?int $id, array $row = []): array
     {
+        $t = Registry::table($formKey); $col = collect(Registry::fields($formKey))->firstWhere('field_name', $field)['column_name'] ?? $field;
+        if ($t && isset(MasterCodes::RULES[$t][$col])) return MasterCodes::live($t, $col, $value, $id, $row);      // R-F_SETUP-39
         if (in_array($field, ['hs_code', 'isp_code'], true)) { $d = [$field => $value]; $e = $field === 'hs_code' ? self::productCodes($d, []) : self::isp($d); return ['ok' => ! $e, 'message' => $e[$field] ?? null, 'value' => $d[$field] ?? $value]; }
         if ($field === 'account_code' && Registry::table($formKey) === 't_account') { $d = ['account_code' => $value]; $e = AccountCode::check($formKey, $d, [], $id); return ['ok' => ! $e, 'message' => $e['account_code'] ?? null, 'value' => $d['account_code'] ?? $value]; }      // R-C-4 in the browser
         if ($field === 'sku_vendor' && Registry::table($formKey) === 't_product_vendors') return SkuCheck::check((int) Context::ent(), $value, $id);      // R-D-2 live (block / warn / available)

@@ -94,6 +94,53 @@ class InvestorDocs
         return ['made' => $r['made'], 'message' => $r['made'] ? 'Invoice generated.' : 'Your invoice already exists.'];
     }
 
+    /** R-D-84 / R-G_CORE-86 portal: the party of this login with portal access, else the old refusal. */
+    public static function portalParty(int $ent, object $u): object
+    {
+        $acc = (int) ($u->fk_id_account ?? 0);
+        return ($acc ? DB::table('t_inv_parties')->where('fk_id_ent', $ent)->where('fk_id_account', $acc)->where('f_portal_access', 1)->where('f_active', 1)->first() : null)
+            ?? throw new \InvalidArgumentException('Your login does not have investor portal access. Please contact the administrator.');
+    }
+
+    /** The portal's documents: only his own (issuer, recipient or investor share); what he may do on each (PORTAL_CAN_RECORD_PAYMENT / PORTAL_CAN_SEND_INVOICE, default yes; generate: PORTAL_CAN_GENERATE, default no). */
+    public static function portalList(int $ent, object $u): array
+    {
+        $p = self::portalParty($ent, $u); $acc = (int) $p->fk_id_account;
+        $canPay = Settings::get('PORTAL_CAN_RECORD_PAYMENT', $ent, 'Y') === 'Y'; $canSend = Settings::get('PORTAL_CAN_SEND_INVOICE', $ent, 'Y') === 'Y'; $canGen = Settings::get('PORTAL_CAN_GENERATE', $ent, 'N') === 'Y';
+        $docs = DB::table('t_invoices')->where('fk_id_ent', $ent)->where(fn ($w) => $w->where('fk_issuer_party', $p->id)->orWhere('fk_recipient_party', $p->id)->orWhere('fk_id_investor_account', $acc))->orderByDesc('d_invoice')->orderByDesc('id')->limit(300)
+            ->get(['id', 'invoice_no', 'invoice_type', 'd_invoice', 'd_due', 'total', 'amount_paid', 'status', 'sent_at'])
+            ->map(fn ($d) => ['id' => (int) $d->id, 'no' => $d->invoice_no, 'type' => self::TYPES[$d->invoice_type][0] ?? $d->invoice_type, 'date' => $d->d_invoice, 'due' => $d->d_due, 'total' => (float) $d->total, 'paid' => (float) $d->amount_paid,
+                'balance' => round((float) $d->total - (float) $d->amount_paid, 2), 'status' => $d->status, 'badge' => self::badge($d), 'sent_at' => $d->sent_at,
+                'can_pay' => $canPay && in_array($d->status, ['UNPAID', 'PART_PAID'], true), 'can_send' => $canSend && ! in_array($d->status, ['CANCELLED', 'CREDITED'], true)])->all();
+        $mine = DB::table('t_inv_period_investors')->where('fk_id_investor_account', $acc)->pluck('fk_id_period')->all();
+        $open = $canGen ? DB::table('t_inv_periods as pe')->leftJoin('t_branches as b', 'b.id', '=', 'pe.fk_id_branch')->where('pe.fk_id_ent', $ent)->where('pe.status', 'CONFIRMED')->whereIn('pe.id', $mine ?: [0])
+            ->whereNotExists(fn ($q) => $q->from('t_invoices as i')->whereColumn('i.fk_id_period', 'pe.id')->where('i.fk_id_investor_account', $acc)->whereNotIn('i.status', ['CANCELLED', 'CREDITED']))
+            ->get(['pe.id', 'b.shop_name', 'pe.period_month', 'pe.period_year'])->map(fn ($x) => ['id' => (int) $x->id, 'label' => ($x->shop_name ?? '') . ' · ' . date('F Y', mktime(0, 0, 0, (int) $x->period_month, 1, (int) $x->period_year))])->all() : [];
+        return ['party' => $p->display_name, 'docs' => $docs, 'can_generate' => $canGen, 'months' => $open];
+    }
+
+    private static function portalDoc(int $ent, int $id, object $u): object
+    {
+        $p = self::portalParty($ent, $u);
+        return DB::table('t_invoices')->where('id', $id)->where('fk_id_ent', $ent)->where(fn ($w) => $w->where('fk_issuer_party', $p->id)->orWhere('fk_recipient_party', $p->id)->orWhere('fk_id_investor_account', (int) $p->fk_id_account))->first()
+            ?? throw new \InvalidArgumentException('Invoice not found.');
+    }
+
+    public static function portalPay(int $ent, int $id, array $v, ?UploadedFile $proof, object $u): string
+    {
+        self::portalDoc($ent, $id, $u);
+        if (Settings::get('PORTAL_CAN_RECORD_PAYMENT', $ent, 'Y') !== 'Y') throw new \InvalidArgumentException('Recording payments is not allowed.');
+        return self::pay($ent, $id, $v, $proof, $u);
+    }
+
+    public static function portalEmail(int $ent, int $id, object $u): string
+    {
+        self::portalDoc($ent, $id, $u);
+        if (Settings::get('PORTAL_CAN_SEND_INVOICE', $ent, 'Y') !== 'Y') throw new \InvalidArgumentException('Sending is not allowed.');
+        self::email($ent, $id, null, $u);
+        return 'Invoice e-mailed to the Account Owner.';
+    }
+
     public static function generate(int $ent, int $periodId, object $u, ?int $only = null): array
     {
         return DB::transaction(function () use ($ent, $periodId, $u, $only) {
@@ -255,7 +302,7 @@ class InvestorDocs
         $d = DB::table('t_invoices')->where('id', $id)->where('fk_id_ent', $ent)->first();
         if (! $d || in_array($d->status, ['CANCELLED', 'CREDITED'], true)) throw new \InvalidArgumentException('Invoice not found or cancelled.');
         $rc = json_decode((string) $d->recipient_json, true) ?: []; $is = json_decode((string) $d->issuer_json, true) ?: [];
-        $to = trim((string) ($to ?: ($rc['email'] ?? '')));
+        $to = trim((string) ($to ?: (($rc['email'] ?? '') ?: DB::table('t_inv_parties')->where('id', $d->fk_recipient_party)->value('email'))));      /* the snapshot, else the party's e-mail now */
         if (! filter_var($to, FILTER_VALIDATE_EMAIL)) throw new \InvalidArgumentException('The recipient has no valid e-mail address. Add it in Invoicing > Parties.');
         $file = null;
         if (class_exists(PrintService::$maker)) { try { $file = 'invoices/' . $d->invoice_no . '.pdf'; Storage::disk('local')->put($file, PrintService::pdf(self::html($id), 210, 297)); } catch (\Throwable) { $file = null; } }

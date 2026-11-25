@@ -152,4 +152,16 @@ class InboundShipmentsTest extends TestCase
         $this->postJson('/api/print', ['kind' => 'FBA_CARTON', 'ids' => [$id]])->assertStatus(422);
         @unlink(storage_path('app/' . $j['file']));
     }
+    /** R-D-87 the destination of an inbound shipment = a child of the shop's FC parent (made on first use, reused after). */
+    public function test_centre_code_makes_the_fc_child_as_destination(): void
+    {
+        $this->actingAs($this->owner);
+        $mk = fn () => $this->postJson('/api/inbound', ['shop' => $this->shop, 'from_location' => $this->site, 'centre' => ' ltn4 ', 'cartons' => [['items' => [['product' => $this->b, 'qty' => 1]], 'weight_kg' => 1]]])->assertOk()->json('id');
+        $a = $mk(); $b = $mk();
+        $d1 = (int) DB::table('fba_shipments')->where('id', $a)->value('fk_id_dest_location');
+        $this->assertSame($d1, (int) DB::table('fba_shipments')->where('id', $b)->value('fk_id_dest_location'), 'reused');
+        $l = DB::table('cat_inventory_locations')->where('id', $d1)->first();
+        $this->assertSame(['LTN4', 'MARKETPLACE_FULFILMENT', \App\Services\FcLocations::parent($this->shop, false)], [$l->location_name, $l->kind, (int) $l->fk_id_parent]);
+        $this->assertContains($d1, \App\Services\FcLocations::holding($this->shop, 'MARKETPLACE_FC'));
+    }
 }

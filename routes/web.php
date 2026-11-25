@@ -320,6 +320,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('bank-lines/{id}/split', [MoneyController::class, 'split'])->whereNumber('id');
         Route::get('split-targets', [MoneyController::class, 'splitTargets']);
         Route::get('cash-forecast', [MoneyController::class, 'forecast']);
+        Route::get('supplier-schedule', [MoneyController::class, 'supplierSchedule']);
         Route::post('grn/{id}/post', [BuyingController::class, 'postGrn'])->whereNumber('id');
         Route::match(['get', 'post'], 'fx', [BuyingController::class, 'fx']);
         Route::get('reports', [ReportController::class, 'index']);
@@ -618,6 +619,9 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('invoices', [\App\Http\Controllers\InvoicesController::class, 'index']);      // R-D-83 / 84
         Route::get('invoices/{id}', [\App\Http\Controllers\InvoicesController::class, 'show'])->whereNumber('id');
         Route::post('invoices/generate/{period}', [\App\Http\Controllers\InvoicesController::class, 'generate'])->whereNumber('period');
+        Route::get('portal/invoices', [\App\Http\Controllers\InvoicesController::class, 'portal']);
+        Route::post('portal/invoices/{id}/pay', [\App\Http\Controllers\InvoicesController::class, 'portalPay'])->whereNumber('id');
+        Route::post('portal/invoices/{id}/email', [\App\Http\Controllers\InvoicesController::class, 'portalEmail'])->whereNumber('id');
         Route::post('portal/invoices/generate/{period}', [\App\Http\Controllers\InvoicesController::class, 'portalGenerate'])->whereNumber('period');      // R-D-83 portal
         Route::get('invoices/settle/{import}', [\App\Http\Controllers\InvoicesController::class, 'settlePreview'])->whereNumber('import');      // R-D-81 / 82 (preview never writes)
         Route::post('invoices/settle/{import}', [\App\Http\Controllers\InvoicesController::class, 'settle'])->whereNumber('import');

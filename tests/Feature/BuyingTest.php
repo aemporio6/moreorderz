@@ -235,4 +235,23 @@ class BuyingTest extends TestCase
         $this->assertSame([1500.0, 3600.0], DB::table('t_src_payment_terms')->where('fk_id_po', $po)->orderBy('term_no')->pluck('planned_amount')->map(fn ($x) => (float) $x)->all(), 'the paid term keeps its amount; the last unpaid term takes the rest – the schedule adds up');
         $this->assertSame(0.0, Buy::recomputeTerms($po));
     }
+    /** R-FIN-61 the Finance schedule is a view of the PO terms: base at the PO rate, remaining = amount − paid, task flag, owed per supplier. */
+    public function test_finance_supplier_schedule_is_a_view_of_the_terms(): void
+    {
+        $this->actingAs($this->owner);
+        $go = Buy::go($this->research()); Buy::acceptRfq($go['rfqs'][0]);
+        $po = Buy::createPo(['rfq' => $go['rfqs'][0], 'qty' => 1000, 'date' => '2026-08-01']);
+        Buy::confirmPo($po);
+        $before = DB::table('t_src_payment_terms')->count();
+        $v = $this->getJson('/api/supplier-schedule')->assertOk()->json();
+        $mine = array_values(array_filter($v['rows'], fn ($r) => $r['po'] === $po));
+        $this->assertSame([[1200.0, 0.0, 1200.0, true], [2800.0, 0.0, 2800.0, true]], array_map(fn ($r) => [(float) $r['amount'], (float) $r['paid'], (float) $r['remaining'], $r['task_open']], $mine), '1,500 / 3,500 USD at 0.80');
+        $t = DB::table('t_src_payment_terms')->where('fk_id_po', $po)->orderBy('term_no')->first();
+        Buy::pay(['term' => $t->id, 'amount' => 500, 'date' => '2026-08-01', 'bank' => $this->bank]);
+        $r = collect(\App\Services\SupplierSchedule::view(1, ['status' => 'ALL'])['rows'])->firstWhere('id', (int) $t->id);
+        $this->assertSame([1200.0, 400.0, 800.0], [(float) $r['amount'], (float) $r['paid'], (float) $r['remaining']], 'part paid: the line stays with its remaining');
+        $owe = collect(\App\Services\SupplierSchedule::view(1)['owe'])->firstWhere('supplier_id', (int) DB::table('t_src_po')->where('id', $po)->value('fk_id_supplier'));
+        $this->assertSame(3600.0, (float) $owe['owed']);
+        $this->assertSame($before, DB::table('t_src_payment_terms')->count(), 'a view – nothing copied');
+    }
 }

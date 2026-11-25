@@ -100,8 +100,18 @@ class InvestorSettle
         $mode = fn ($m) => strtoupper((string) $m);
         $oMode = $mode($split->owner_mode ?: 'SHARE'); $vMode = $mode($split->va_mode ?: 'SHARE'); $hMode = $mode($split->handler_mode ?: 'SHARE');
         $num = fn (string $k, float $def) => array_key_exists($k, $in) && $in[$k] !== '' && $in[$k] !== null ? round((float) $in[$k], 2) : $def;
-        $jh = $va ? DB::table('t_account_job_history')->where('fk_id_account', $va)->where('fk_id_marketplace', $imp->fk_id_marketplace)->orderByDesc('id')->first(['salary', 'pound_exchange_rate']) : null;      /* old: the latest row by id */
-        $jobSalary = $jh ? ((float) $jh->pound_exchange_rate > 0 ? round((float) $jh->salary / (float) $jh->pound_exchange_rate, 2) : (float) $jh->salary) : 0.0;
+        /* R-D-82 / IC-11: the VA job-history row valid on the month end (start ≤ month end, no end or end ≥ month end; latest start), Settings › Choices INV_VA_JOB_ROW (default MONTH_END, never locked);
+           the old method (the latest row by id) is worked out beside it and shown when it differs. */
+        $jq = fn () => DB::table('t_account_job_history')->where('fk_id_account', $va)->where('fk_id_marketplace', $imp->fk_id_marketplace)->where(fn ($w) => $w->whereNull('f_active')->orWhere('f_active', 1));
+        $sal = fn ($r) => $r ? ((float) $r->pound_exchange_rate > 0 ? round((float) $r->salary / (float) $r->pound_exchange_rate, 2) : (float) $r->salary) : 0.0;
+        $jhOld = $va ? $jq()->orderByDesc('id')->first(['id', 'salary', 'pound_exchange_rate']) : null;
+        $jhEnd = $va ? $jq()->where(fn ($w) => $w->whereNull('d_job_start_date')->orWhere('d_job_start_date', '<=', $to))->where(fn ($w) => $w->whereNull('d_end_date')->orWhere('d_end_date', '>=', $to))
+            ->orderByRaw('d_job_start_date IS NULL')->orderByDesc('d_job_start_date')->orderByDesc('id')->first(['id', 'salary', 'pound_exchange_rate']) : null;
+        $byEnd = self::c($ent, 'INV_VA_JOB_ROW') !== 'LATEST';
+        $jh = $byEnd ? ($jhEnd ?? $jhOld) : $jhOld; $jobSalary = $sal($jh);
+        $vaJob = ['source' => $byEnd ? 'MONTH_END' : 'LATEST', 'row' => $jh->id ?? null, 'salary' => $jobSalary, 'old_method_row' => $jhOld->id ?? null, 'old_method_salary' => $sal($jhOld), 'differs' => round($sal($jhOld) - $jobSalary, 2) != 0.0];
+        if ($vaJob['differs'] && in_array(strtoupper((string) ($split->va_mode ?: 'SHARE')), ['SALARY', 'SALARY_SHARE'], true) && ! $split->va_salary_override)
+            $warn[] = 'VA salary: the job-history row valid on ' . $to . ' gives ' . number_format($jobSalary, 2) . '; the old method (latest row) gave ' . number_format($vaJob['old_method_salary'], 2) . '.';
         $vaSalary = in_array($vMode, ['SALARY', 'SALARY_SHARE'], true) ? $num('va_salary', (float) ($split->va_salary_override ?: $jobSalary)) : 0.0;
         if (in_array($vMode, ['SALARY', 'SALARY_SHARE'], true) && $vaSalary == 0.0) $warn[] = 'VA is on a salary but no salary was found in the VA job history. Enter it below.';
         $ownerFixed = in_array($oMode, ['FIXED', 'FIXED_SHARE'], true) ? $num('owner_fixed', (float) $split->owner_fixed) : 0.0;
@@ -135,7 +145,7 @@ class InvestorSettle
         foreach ($pos as $a => $x) { $inv[$a]['weight'] = round(100 * $x['profit'] / $sum, 4); $inv[$a]['share'] = round($sh['investor'] * $x['profit'] / $sum, 2); }
         if ($pos && $sh['investor'] > 0) { $big = collect($pos)->sortByDesc('profit')->keys()->first();      /* the rounding remainder goes to the largest share */ $inv[$big]['share'] = round($inv[$big]['share'] + $sh['investor'] - array_sum(array_column($inv, 'share')), 2); }
         return ['import' => (int) $importId, 'shop' => $shop->shop_name ?? '', 'month' => $mon, 'from' => $from, 'to' => $to, 'totals' => $tot, 'marketplace_fee' => $mpFee, 'advertising' => $adv, 'other_expenses' => $other, 'extra_3pl' => $extra,
-            'va_salary' => $vaSalary, 'owner_fixed' => $ownerFixed, 'handler_fixed' => $handlerFixed, 'gross_profit' => $gross, 'final_net_profit' => $fnp, 'loss_bf' => $lossBf, 'distributable' => $dist, 'loss_cf' => $lossCf,
+            'va_salary' => $vaSalary, 'va_job' => $vaJob, 'owner_fixed' => $ownerFixed, 'handler_fixed' => $handlerFixed, 'gross_profit' => $gross, 'final_net_profit' => $fnp, 'loss_bf' => $lossBf, 'distributable' => $dist, 'loss_cf' => $lossCf,
             'pct' => $pct, 'shares' => $sh, 'modes' => ['owner' => $oMode, 'va' => $vMode, 'handler' => $hMode], 'split' => (int) $split->id, 'owner' => (int) $shop->fk_id_owner, 'va' => $va ? (int) $va : null, 'handler' => (int) $handler,
             'investors' => array_values($inv), 'lines' => $lines, 'warnings' => $warn];
     }

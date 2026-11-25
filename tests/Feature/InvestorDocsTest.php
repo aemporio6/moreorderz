@@ -96,4 +96,23 @@ class InvestorDocsTest extends TestCase
         $this->actingAs($this->owner)->postJson('/api/invoices/generate/' . $this->period)->assertOk()->assertJsonPath('message', '2 document(s) generated.');
         $this->assertSame(1, DB::table('t_invoices')->where('fk_id_period', $this->period)->where('invoice_type', 'INVESTOR')->count(), 'the office run skips the existing one');
     }
+    /** R-D-84 / R-G_CORE-86 portal: own documents only; "Record payment" and "E-mail invoice" yes, "Generate" no by default. */
+    public function test_r84_portal_sees_own_documents_records_payment_and_emails(): void
+    {
+        $u = $this->makeUser('PARTNER'); DB::table('t_users')->where('id', $u->id)->update(['fk_id_account' => $this->inv]); $u->refresh();
+        $this->actingAs($u)->getJson('/api/portal/invoices')->assertStatus(422)->assertJsonPath('message', 'Your login does not have investor portal access. Please contact the administrator.');
+        $this->actingAs($this->owner)->postJson('/api/invoices/generate/' . $this->period)->assertOk();
+        DB::table('t_inv_parties')->where('fk_id_account', $this->inv)->update(['f_portal_access' => 1, 'email' => 'investor@example.test']);
+        DB::table('t_inv_parties')->whereNotIn('fk_id_account', [$this->inv])->orWhereNull('fk_id_account')->update(['email' => 'owner@example.test']);
+        $l = $this->actingAs($u)->getJson('/api/portal/invoices')->assertOk()->json();
+        $this->assertSame([1, true, true, false], [count($l['docs']), $l['docs'][0]['can_pay'], $l['docs'][0]['can_send'], $l['can_generate']], 'only his INVESTOR document');
+        $id = $l['docs'][0]['id']; $others = DB::table('t_invoices')->where('id', '<>', $id)->value('id');
+        if ($others) $this->actingAs($u)->postJson("/api/portal/invoices/$others/email")->assertStatus(422)->assertJsonPath('message', 'Invoice not found.');
+        $pr = $this->actingAs($u)->postJson("/api/portal/invoices/$id/pay", ['amount' => 1, 'date' => date('Y-m-d'), 'method' => 'BANK']); $this->assertSame(200, $pr->status(), (string) $pr->json('message'));
+        $this->assertSame(1.0, (float) DB::table('t_invoices')->where('id', $id)->value('amount_paid'));
+        $this->actingAs($u)->postJson("/api/portal/invoices/$id/email")->assertOk()->assertJsonPath('message', 'Invoice e-mailed to the Account Owner.');
+        \App\Services\Settings::set('PORTAL_CAN_RECORD_PAYMENT', 'N', 1); \App\Services\Settings::set('PORTAL_CAN_SEND_INVOICE', 'N', 1);
+        $this->actingAs($u)->postJson("/api/portal/invoices/$id/pay", ['amount' => 1, 'date' => date('Y-m-d')])->assertStatus(422)->assertJsonPath('message', 'Recording payments is not allowed.');
+        $this->actingAs($u)->postJson("/api/portal/invoices/$id/email")->assertStatus(422)->assertJsonPath('message', 'Sending is not allowed.');
+    }
 }

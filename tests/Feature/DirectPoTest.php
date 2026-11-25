@@ -50,7 +50,16 @@ class DirectPoTest extends TestCase
         $r2 = $this->postJson('/api/direct-po', ['supplier' => $s, 'paid_in_full' => true, 'lines' => [['product' => $a, 'qty' => 10]]])->assertOk()->json();
         $this->assertSame([[1, 100.0]], DB::table('t_src_payment_terms')->where('fk_id_po', $r2['po'])->get(['term_no', 'pct'])->map(fn ($t) => [(int) $t->term_no, (float) $t->pct])->all());
         $this->assertEquals(2.10, (float) DB::table('t_src_po_lines')->where('fk_id_po', $r2['po'])->value('unit_price'), 'no price typed → the last price paid to this supplier');
-        $this->assertSame($before + 2, DB::table('t_src_cycles')->count());
-        $this->assertSame(2.10, DirectPo::lastPrice(1, $s, $a));
+        $this->assertSame(['Full Payment', 'PENDING'], [(string) DB::table('t_src_payment_terms')->where('fk_id_po', $r2['po'])->value('milestone'), (string) DB::table('t_src_payment_terms')->where('fk_id_po', $r2['po'])->value('status')], 'R-B_SOURCING-3');
+        // no deposit % and no tick → no terms; the Payments step shows the hint
+        $r3 = $this->postJson('/api/direct-po', ['supplier' => $s, 'lines' => [['product' => $a, 'qty' => 10, 'unit_price' => 2]]])->assertOk()->json();
+        $this->assertSame(0, DB::table('t_src_payment_terms')->where('fk_id_po', $r3['po'])->count());
+        $pay = collect(\App\Services\CycleAlerts::pipeline(DB::table('t_src_cycles')->where('id', $r3['cycle'])->first())['steps'])->firstWhere('key', 'pay');
+        $this->assertSame('Add the payment schedule', $pay['hint'] ?? null);
+        // deposit due = PO date, balance due = Expected ready
+        $r4 = $this->postJson('/api/direct-po', ['supplier' => $s, 'deposit_pct' => 25, 'expected_ready' => '2026-12-15', 'required_delivery' => '2027-01-20', 'lines' => [['product' => $a, 'qty' => 10, 'unit_price' => 3.33]]])->assertOk()->json();
+        $this->assertSame([[8.33, date('Y-m-d')], [24.97, '2026-12-15']], DB::table('t_src_payment_terms')->where('fk_id_po', $r4['po'])->orderBy('term_no')->get()->map(fn ($t) => [(float) $t->planned_amount, $t->due_date])->all(), 'balance = total − deposit');
+        $this->assertSame($before + 4, DB::table('t_src_cycles')->count());
+        $this->assertSame(3.33, DirectPo::lastPrice(1, $s, $a), "the latest price paid");
     }
 }

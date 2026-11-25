@@ -173,10 +173,18 @@ class BuyingService
                 foreach ($tpl as [$no, $ms, $pct, $amt, $due, $rule]) $terms[] = DB::table('t_src_payment_terms')->insertGetId(['fk_id_ent' => $ent, 'fk_id_cycle' => $po->fk_id_cycle, 'fk_id_po' => $poId, 'term_no' => $no, 'milestone' => $ms, 'pct' => $pct, 'planned_amount' => $amt, 'paid_amount' => 0,
                     'remaining_amount' => $amt, 'completion_pct' => 0, 'status' => 'DUE', 'created_by' => Context::userId(), 'f_active' => 1, 'created_at' => now(), 'due_date' => $due, 'due_rule' => $rule]);
                 $depAmt = (float) ($tpl[0][3] ?? 0); $balAmt = round($po->po_total - $depAmt, 2);
-            } else
-            foreach (array_filter([[1, 'Deposit', $dep, $depAmt, $po->po_date, 'ON_CONFIRM'], [2, 'Balance', 100 - $dep, $balAmt, $po->required_ship_date ?: date('Y-m-d', strtotime($po->po_date . ' +30 days')), 'BEFORE_SHIP']], fn ($t) => $t[3] > 0) as [$no, $ms, $pct, $amt, $due, $rule]) {
+            } else {
+            /* R-B_SOURCING-3: "paid in full" → one term "Full Payment" 100 %, status Pending (the tick wins over Deposit %); a Direct PO with Deposit % empty, 0 or ≥ 100 and no tick → no terms
+               (the Payments step then shows "Add the payment schedule"); deposit due = PO date, balance due = Expected ready (else Required delivery, else PO date + 30). */
+            $direct = strtoupper((string) DB::table('t_src_cycles')->where('id', $po->fk_id_cycle)->value('cycle_type')) === 'DIRECT';
+            $balDue = $po->expected_production_date ?: ($po->required_ship_date ?: date('Y-m-d', strtotime($po->po_date . ' +30 days')));
+            $plan = (int) $po->f_paid_in_full ? [[1, 'Full Payment', 100, round((float) $po->po_total, 2), $po->po_date, 'ON_CONFIRM', 'PENDING']]
+                : ($direct && ($dep <= 0 || $dep >= 100) ? [] : [[1, 'Deposit', $dep, $depAmt, $po->po_date, 'ON_CONFIRM', 'DUE'], [2, 'Balance', 100 - $dep, $balAmt, $balDue, 'BEFORE_SHIP', 'DUE']]);
+            if ((int) $po->f_paid_in_full) { $depAmt = 0.0; $balAmt = round((float) $po->po_total, 2); }
+            foreach (array_filter($plan, fn ($t) => $t[3] > 0) as [$no, $ms, $pct, $amt, $due, $rule, $tst]) {
                 $terms[] = DB::table('t_src_payment_terms')->insertGetId(['fk_id_ent' => $ent, 'fk_id_cycle' => $po->fk_id_cycle, 'fk_id_po' => $poId, 'term_no' => $no, 'milestone' => $ms, 'pct' => $pct, 'planned_amount' => $amt, 'paid_amount' => 0,
-                    'remaining_amount' => $amt, 'completion_pct' => 0, 'status' => 'DUE', 'created_by' => Context::userId(), 'f_active' => 1, 'created_at' => now(), 'due_date' => $due, 'due_rule' => $rule]);
+                    'remaining_amount' => $amt, 'completion_pct' => 0, 'status' => $tst, 'created_by' => Context::userId(), 'f_active' => 1, 'created_at' => now(), 'due_date' => $due, 'due_rule' => $rule]);
+            }
             }
             DB::table('t_src_po')->where('id', $poId)->update(['status' => 'CONFIRMED', 'exchange_rate' => $rate, 'deposit_amount' => $depAmt, 'balance_amount' => $balAmt, 'approved_by' => (string) Context::userId(), 'approval_date' => date('Y-m-d')]);
             PoLines::resyncPo($poId);      // FEE / COST / SAMPLE at the order rate (R-B_SOURCING-6)

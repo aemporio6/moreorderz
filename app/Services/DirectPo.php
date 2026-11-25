@@ -55,7 +55,7 @@ class DirectPo
             return DB::transaction(function () use ($ent, $d, $lines) {
                 $s = DB::table('t_src_suppliers')->where('id', (int) $d['supplier'])->where('fk_id_ent', $ent)->first() ?? throw new \InvalidArgumentException('Select the Supplier');
                 $cur = strtoupper((string) ($d['currency'] ?? '')) ?: ($s->fk_id_currency ? Fx::code($s->fk_id_currency, $ent) : Fx::base($ent));
-                $full = ! empty($d['paid_in_full']); $dep = $full ? 100 : max(0, min(100, (float) ($d['deposit_pct'] ?? 30)));
+                $full = ! empty($d['paid_in_full']); $dep = $full ? 100 : (($d['deposit_pct'] ?? '') === '' || $d['deposit_pct'] === null ? 0 : max(0, min(100, (float) $d['deposit_pct'])));      /* R-B_SOURCING-3 empty Deposit % → no terms */
                 $first = DB::table('t_product_vendors')->where('id', (int) $lines[0]['product'])->first();
                 $cycle = (int) DB::table('t_src_cycles')->insertGetId(['fk_id_ent' => $ent, 'cycle_code' => Numbering::next('CYC', $ent), 'sourcing_date' => date('Y-m-d'), 'requested_by' => Context::userId(), 'product_name' => mb_substr((string) ($first->product_name_vendor ?? 'Direct PO'), 0, 200),
                     'target_qty' => array_sum(array_map(fn ($l) => (float) $l['qty'], $lines)), 'required_delivery_date' => $d['required_delivery'] ?? null, 'priority' => 'NORMAL', 'status' => 'OPEN', 'notes' => $d['notes'] ?? null,

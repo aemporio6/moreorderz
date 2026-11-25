@@ -200,6 +200,13 @@ class MoneyController extends Controller
                 ->get(['t.id', 'p.po_number', 't.milestone', 't.remaining_amount', 'c.currency_code as currency'])];
     }
 
+    /** R-FIN-61 supplier payment schedule (view over the PO terms) + R-FIN-64 what we owe suppliers. */
+    public function supplierSchedule(Request $r)
+    {
+        $this->can($r, 'money.forecast');
+        return \App\Services\SupplierSchedule::view((int) Context::ent(), $r->only(['status', 'supplier']));
+    }
+
     public function forecast(Request $r)
     {
         $this->can($r, 'money.forecast');
