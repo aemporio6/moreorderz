@@ -306,6 +306,16 @@ class StockService
     }
 
     /** Units that can be sold: sellable locations only, minus what is reserved. */
+    /** R-H-15 owner-rule available for a Private owner: that owner's lots in sellable bins − his open commitments; never more than the physical available. */
+    public static function availableFor(int $productId, ?int $owner): int
+    {
+        $all = self::available($productId); if (! $owner) return $all;
+        $mine = (int) DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->join('cat_inventory_locations as c', 'c.id', '=', 'b.fk_id_location')->where('l.fk_id_product', $productId)->where('l.fk_id_owner', $owner)
+            ->where(fn ($w) => $w->whereNull('c.kind')->orWhereNotIn('c.kind', self::NOT_SELLABLE))->where(fn ($w) => $w->whereNull('c.f_sellable')->orWhere('c.f_sellable', 1))->sum('b.qty');
+        $held = (int) DB::table('wh_reservations')->where('fk_id_product', $productId)->where('owner_rule', 'PRIVATE')->where('fk_id_owner_seg', $owner)->whereIn('status', ['OPEN', 'ALLOCATED'])->sum(DB::raw('qty - COALESCE(qty_picked,0)'));
+        return max(0, min($all, $mine - $held));
+    }
+
     public static function available(int $productId): int
     {
         $sellable = (int) DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->join('cat_inventory_locations as c', 'c.id', '=', 'b.fk_id_location')

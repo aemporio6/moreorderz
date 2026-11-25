@@ -24,9 +24,10 @@ class DispatchService
             DB::table('t_product_vendors')->where('id', $s->fk_product_id)->lockForUpdate()->first();          // two intakes of the last unit wait here
             $r = DB::table('wh_reservations')->where('fk_id_sale', $saleId)->whereNotIn('status', ['RELEASED', 'SHIPPED'])->first();
             $have = $r ? (int) $r->qty : 0; $need = (int) $s->qty;
-            $extra = min(max(0, $need - $have), StockService::available((int) $s->fk_product_id));
-            $qty = $have + ($need > $have ? $extra : $need - $have); $short = $need - $qty;
             $owner = self::ownerRule($s);
+            $extra = min(max(0, $need - $have), StockService::availableFor((int) $s->fk_product_id, $owner));      /* R-H-15 owner-rule available */
+            $qty = $have + ($need > $have ? $extra : $need - $have); $short = $need - $qty;
+            $otherOwner = $owner && $short > 0 && StockService::available((int) $s->fk_product_id) - $extra > 0;      /* R-H-18 units on the shelf belong to another owner */
             if ($r) {
                 DB::table('wh_reservations')->where('id', $r->id)->update(['qty' => $qty, 'qty_short' => $short, 'updated_at' => now()]);
                 self::hist($r->id, $r->status, $r->status, $have, $qty, 'Quantity changed');
@@ -37,7 +38,7 @@ class DispatchService
                 self::hist($rid, null, 'OPEN', null, $qty, 'Reserved at intake');
             }
             DB::table('t_sales')->where('id', $saleId)->update(['wh_status' => $short > 0 ? 'SHORT' : 'RESERVED']);
-            if ($short > 0) TaskEngine::open('WH_ORDER_SHORT', [$saleId], "Order {$s->order_no}: $short of $need × {$s->sku} not in stock", ['ent' => $ent, 'module' => 't_sales', 'record_id' => $saleId]);
+            if ($short > 0) TaskEngine::open('WH_ORDER_SHORT', [$saleId], $otherOwner ? "Order {$s->order_no}: $short of $need × {$s->sku} – stock belongs to another owner – cover from pool?" : "Order {$s->order_no}: $short of $need × {$s->sku} not in stock", ['ent' => $ent, 'module' => 't_sales', 'record_id' => $saleId]);
             else TaskEngine::close('WH_ORDER_SHORT', [$saleId], 'Stock reserved');
             EventBus::fire('STOCK_RESERVED', 't_sales', $saleId, ['qty' => $qty, 'short' => $short], $ent);
             return $rid;
@@ -521,7 +522,9 @@ class DispatchService
     {
         return \App\Services\Perm::mine(DB::table('t_sales as s'), 's.fk_id_branch')->leftJoin('wh_reservations as r', fn ($j) => $j->on('r.fk_id_sale', '=', 's.id')->whereNotIn('r.status', ['RELEASED'])->whereRaw('r.resend_no = (SELECT MAX(x.resend_no) FROM wh_reservations x WHERE x.fk_id_sale = r.fk_id_sale AND x.status <> "RELEASED")'))->leftJoin('t_branches as b', 'b.id', '=', 's.fk_id_branch')
             ->where('s.fk_id_ent', $ent)->where(fn ($w) => $w->where('s.status', 'Pending')->orWhere('s.wh_status', 'PUTBACK'))->where('s.sale_source', 'active')      /* R-H-17: cancelled lines waiting for a putback stay on the board */->whereRaw("COALESCE(s.wh_status,'') NOT IN ('SHIPPED','RELEASED')")->orderByRaw('s.dispatch_by IS NULL, s.dispatch_by')->orderBy('s.id')->limit(500)
-            ->get(['s.id', 's.order_no', 's.d_order', 's.sku', 's.qty', 's.wh_status', 's.fk_id_branch', 'b.shop_name as shop', 's.ship_to_name', 's.dispatch_by', 's.carrier_service_text', 'r.status as reservation', 'r.qty as reserved', 'r.qty_short', 'r.qty_picked'])
+            ->get(['s.id', 's.order_no', 's.d_order', 's.sku', 's.qty', 's.wh_status', 's.fk_id_branch', 'b.shop_name as shop', 's.ship_to_name', 's.dispatch_by', 's.carrier_service_text', 'r.status as reservation', 'r.qty as reserved', 'r.qty_short', 'r.qty_picked',
+                DB::raw("(SELECT MAX(pl.fk_id_parcel) FROM wh_parcel_lines pl JOIN wh_parcels pp ON pp.id = pl.fk_id_parcel WHERE pl.fk_id_sale = s.id AND pp.status IN ('READY','PACKED')) as parcel_id"),
+                DB::raw("(SELECT pp.label_status FROM wh_parcel_lines pl JOIN wh_parcels pp ON pp.id = pl.fk_id_parcel WHERE pl.fk_id_sale = s.id AND pp.status IN ('READY','PACKED') ORDER BY pp.id DESC LIMIT 1) as label_status")])      /* R-H-32 buttons */
             ->pipe(fn ($c) => DispatchDeadline::sort($c->all()));      // overdue → due before collection → due today → later; express first; order time (R-H-24)
     }
 
@@ -542,6 +545,7 @@ class DispatchService
     {
         $type = DB::table('t_product_vendors')->where('id', $sale->fk_product_id)->value('e_product_type');
         if ($type !== 'private') return null;
+        if ($shopOwner = (int) DB::table('t_branches')->where('id', $sale->fk_id_branch)->value('fk_id_owner')) return $shopOwner;      /* R-H-15: the shop's owner rule; the oldest private lot only when the shop has no owner */
         $o = DB::table('fin_lots')->where('fk_id_product', $sale->fk_product_id)->where('visibility', 'PRIVATE')->whereNotNull('fk_id_owner')->where('qty_left', '>', 0)->orderBy('received_date')->orderBy('id')->value('fk_id_owner');
         return $o ? (int) $o : null;
     }

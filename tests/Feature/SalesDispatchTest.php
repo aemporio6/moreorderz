@@ -349,4 +349,46 @@ class SalesDispatchTest extends TestCase
         $t = Dispatch::buildPickList(1);
         $this->assertSame([[$this->binB, 3]], DB::table('wh_pick_task_lines')->where('fk_id_pick_task', $t)->get()->map(fn ($l) => [(int) $l->fk_id_from_location, (int) $l->qty])->all(), 'the bin is chosen at pick time – the new home');
     }
+
+    /** R-H-55 anomaly alerts: each check opens its task and closes it when the problem is gone. */
+    public function test_anomaly_alerts_open_and_close_their_tasks(): void
+    {
+        $A = \App\Services\WarehouseAlerts::class; $open = fn (string $c) => DB::table('tasks')->where('rule_code', $c)->whereNotIn('status', ['DONE', 'APPROVED', 'CANCELLED'])->count();
+        $A::run(1);
+        $this->assertSame([0, 0, 0, 0, 0], [$open('WH_RECON_MISMATCH'), $open('WH_ADJUST_UNUSUAL'), $open('WH_DISPATCH_DUE'), $open('WH_UNASSIGNED_STOCK'), $open('WH_HOLD_AGED')], 'clean books, no alert');
+        $lot = DB::table('fin_lots')->where('fk_id_product', $this->p)->orderBy('id')->value('id');
+        DB::table('fin_lots')->where('id', $lot)->increment('qty_left', 2);
+        foreach (range(1, 4) as $n) Stock::adjust(1, $this->p, $this->binB, -1, "Damage $n");
+        $id = $this->order('ORD-1', 1, ['dispatch_by' => date('Y-m-d') . ' 12:00:00']);
+        DB::table('t_sales')->where('id', $id)->update(['dispatch_by' => date('Y-m-d') . ' 12:00:00']);
+        $dam = Stock::systemLocation(1, 'DAMAGED');
+        Stock::transfer(1, $this->p, 1, $this->binA, $dam, 'Damaged in the bin', ['source_type' => 'ADJUST']);
+        DB::table('fin_lot_balances')->where('fk_id_location', $dam)->update(['updated_at' => now()->subDays(15)]);
+        $A::run(1);
+        $this->assertSame([1, 2, 1, 1], [$open('WH_RECON_MISMATCH'), $open('WH_ADJUST_UNUSUAL'), $open('WH_DISPATCH_DUE'), $open('WH_HOLD_AGED')], 'lot ≠ bins, 4 adjustments by one user and on one SKU (> 3), a line due today not packed, damaged units 15 days');
+        $this->assertStringContainsString('BOWL-01 was adjusted 4 times in 7 days', (string) DB::table('tasks')->where('rule_code', 'WH_ADJUST_UNUSUAL')->pluck('title')->implode(' | '));
+        DB::table('fin_lots')->where('id', $lot)->decrement('qty_left', 2);
+        DB::table('t_sales')->where('id', $id)->update(['wh_status' => 'PACKED']);
+        $A::run(1);
+        $this->assertSame([0, 0, 1], [$open('WH_RECON_MISMATCH'), $open('WH_DISPATCH_DUE'), $open('WH_HOLD_AGED')], 'fixed problems close on the next sweep');
+    }
+
+    /** R-H-18 / R-H-15 / R-H-60: owner running out while another owner has stock → reserve only his units, short "stock belongs to another owner – cover from pool?". */
+    public function test_owner_running_out_while_another_owner_has_stock_is_an_owner_rule_short(): void
+    {
+        $f = fn ($t, $d) => DB::table($t)->insertGetId(RecordService::fillNotNull($t, $d));
+        $a = $f('t_account', ['fk_id_ent' => 1, 'first_name' => 'Owner A', 'f_active' => 1]); $b = $f('t_account', ['fk_id_ent' => 1, 'first_name' => 'Owner B', 'f_active' => 1]);
+        $pp = $f('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'PRIV-01', 'product_name_vendor' => 'Private cup', 'stock' => 0, 'f_active' => 1, 'e_product_type' => 'private']);
+        Stock::receive(1, [['product' => $pp, 'qty' => 2, 'location' => $this->binA, 'unit_cost' => 3.00, 'owner' => $a, 'received_date' => '2026-08-01'], ['product' => $pp, 'qty' => 5, 'location' => $this->binB, 'unit_cost' => 3.00, 'owner' => $b, 'received_date' => '2026-07-01']], 'GRN', 9);
+        DB::table('fin_lots')->where('fk_id_product', $pp)->update(['visibility' => 'PRIVATE']);
+        DB::table('t_branches')->where('id', $this->shop)->update(['fk_id_owner' => $a]);
+        PriceService::set($pp, $this->mp, 8, 9.99, '2026-08-01');
+        $id = Sales::intake($this->shop, [['order_no' => 'ORD-P', 'd_order' => '2026-08-10', 'sku' => 'PRIV-01', 'qty' => 4, 'sale_rate' => 9.99, 'cust_name' => 'Test Buyer']])['ids'][0];
+        $r = DB::table('wh_reservations')->where('fk_id_sale', $id)->first();
+        $this->assertSame(['PRIVATE', $a, 2, 2], [$r->owner_rule, (int) $r->fk_id_owner_seg, (int) $r->qty, (int) $r->qty_short], 'the shop owner A (not B, the oldest private lot) – only his 2 units');
+        $this->assertSame([0, 7], [Stock::availableFor($pp, $a), Stock::available($pp) + 2], 'A has nothing left; 5 of B stay on the shelf');
+        $this->assertStringContainsString('stock belongs to another owner – cover from pool?', (string) DB::table('tasks')->where('rule_code', 'WH_ORDER_SHORT')->where('dedupe_key', 'WH_ORDER_SHORT:' . $id)->value('title'));
+        $t = Dispatch::buildPickList(1);
+        $this->assertSame([[$this->binA, 2]], DB::table('wh_pick_task_lines')->where('fk_id_pick_task', $t)->get()->map(fn ($l) => [(int) $l->fk_id_from_location, (int) $l->qty])->all(), "nobody picks B's units silently");
+    }
 }
