@@ -292,6 +292,7 @@ class BuyingService
             $t = DB::table('t_src_payment_terms')->where('id', $d['term'])->where('fk_id_ent', $ent)->lockForUpdate()->first() ?? throw new \RuntimeException('Payment term not found.');
             $po = self::po((int) $t->fk_id_po);
             if (! in_array($po->status, ['CONFIRMED', 'SHIPPED', 'RECEIVED'], true)) throw new \RuntimeException('Confirm the PO before paying.');
+            SupplierBanks::assertPayable($ent, (int) $po->fk_id_supplier);      /* SUP_BANK: payments to unapproved bank details are blocked */
             $amt = round((float) $d['amount'], 2); $tol = (float) Settings::get('SRC_MONEY_TOL', $ent, 0.009);
             if ($amt <= 0) throw new \InvalidArgumentException('The amount must be more than zero.');
             if ($amt > $t->remaining_amount + $tol && empty($d['_overpay_ok'])) throw new \RuntimeException('This is more than the ' . number_format($t->remaining_amount, 2) . ' still open on this term.');

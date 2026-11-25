@@ -348,6 +348,11 @@ class MoneyController extends Controller
         $this->can($r, 'money.SEE');
         $rows = Approvals::pending((int) Context::ent()); $me = (int) $r->user()->id; $ok = \App\Services\Perm::has($r->user(), 'money.approve');
         foreach ($rows as $a) $a->can_decide = $ok && $a->status === 'PENDING' && (int) $a->requested_by !== $me;
+        foreach ($rows as $a) if ($a->action_code === 'SUP_BANK' && $a->status === 'PENDING') {      /* SUP_BANK: the phone check of a second person comes first, then the Owner */
+            $b = DB::table('t_account_banks')->where('id', $a->entity_id)->first(['id', 'bank_changed_by', 'phone_checked_at', 'phone_check_note', 'beneficiary_name']);
+            $a->bank = $b ? ['id' => (int) $b->id, 'beneficiary' => $b->beneficiary_name, 'phone_checked' => (bool) $b->phone_checked_at, 'note' => $b->phone_check_note, 'can_phone' => ! $b->phone_checked_at && (int) $b->bank_changed_by !== $me] : null;
+            $a->can_decide = $a->can_decide && $b && $b->phone_checked_at && ($r->user()->role_code ?? '') === 'OWNER';
+        }
         return ['rows' => $rows, 'waiting' => count(array_filter($rows, fn ($a) => $a->status === 'PENDING')), 'base' => Fx::base((int) Context::ent())];
     }
 

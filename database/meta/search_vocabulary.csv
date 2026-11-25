@@ -154,12 +154,16 @@ bandq,marketplace operations hubs,VOCAB,#/hubs
 bank,bank and cash,VOCAB,#/bank
 bank account,bank and cash,VOCAB,#/bank
 bank accounts,bank and cash,VOCAB,#/bank
+bank change,supplier bank approval,VOCAB,#/approvals
 bank csv,bank and cash,VOCAB,#/bank
+bank details approval,supplier bank approval,VOCAB,#/approvals
 bank feed,bank and cash,VOCAB,#/bank
+bank fraud check,supplier bank approval,VOCAB,#/approvals
 bank holiday,non working days,VOCAB,#/list/non_working_day
 bank holidays,non working days,VOCAB,#/list/non_working_day
 bank import,bank and cash,VOCAB,#/bank
 bank layout,bank statement profiles,VOCAB,#/list/bank_statement_profile
+bank letter,supplier bank approval,VOCAB,#/approvals
 bank lines,bank and cash,VOCAB,#/bank
 bank list,catalog masters,VOCAB,#/list/cat_country
 bank profile,bank statement profiles,VOCAB,#/list/bank_statement_profile
@@ -190,6 +194,8 @@ bay,locations and bins,VOCAB,#/list/location
 bbe,lots and owners,VOCAB,#/stock/lots
 bbl,loans,VOCAB,#/loans
 below standard,account health,VOCAB,#/shop-health
+beneficiary,supplier bank approval,VOCAB,#/approvals
+beneficiary name,supplier bank approval,VOCAB,#/approvals
 best before,lots and owners,VOCAB,#/stock/lots
 best sellers,detailed sale report,VOCAB,#/sales-detailed
 best sellers rank,research board,VOCAB,#/list/src_research
@@ -333,6 +339,7 @@ cfr,freight,VOCAB,#/list/t_src_freight
 change address,orders to dispatch,VOCAB,#/orders
 change log,audit log,VOCAB,#/audit
 change password,my account,VOCAB,#/me
+changed bank details,supplier bank approval,VOCAB,#/approvals
 channel advisor,api connections,VOCAB,#/connections
 channel health,marketplace operations hubs,VOCAB,#/hubs
 channel manager,marketplace operations hubs,VOCAB,#/hubs
@@ -410,6 +417,7 @@ compliance,certificates,VOCAB,#/list/product_certificate
 composition,products,VOCAB,#/list/product
 config,settings,VOCAB,#/settings
 configuration,settings,VOCAB,#/settings
+confirm bank by phone,supplier bank approval,VOCAB,#/approvals
 confirm batch,month confirm,VOCAB,#/confirm
 confirm month,month confirm,VOCAB,#/confirm
 confirm po,purchase orders,VOCAB,#/list/t_src_po
@@ -774,6 +782,7 @@ form,field registry,VOCAB,#/registry
 form builder,field registry,VOCAB,#/registry
 forms,field registry,VOCAB,#/registry
 forwarder,freight,VOCAB,#/list/t_src_freight
+forwarder bank,supplier bank approval,VOCAB,#/approvals
 forwarder list,suppliers and forwarders,VOCAB,#/list/supplier
 forwarding,freight,VOCAB,#/list/t_src_freight
 found stock,stock ledger,VOCAB,#/stock/ledger
@@ -1352,6 +1361,8 @@ pay slip,va statements,VOCAB,#/va-statements
 pay supplier,payments and terms,VOCAB,#/list/src_payment
 payables,supplier payment schedule,VOCAB,#/supplier-schedule
 paye,tax and filings,VOCAB,#/compliance
+payee bank,supplier bank approval,VOCAB,#/approvals
+payment blocked,supplier bank approval,VOCAB,#/approvals
 payment dispute,refunds and refund proposals,VOCAB,#/refunds
 payment hold,payouts and settlements,VOCAB,#/settlements
 payment provider,payment provider profiles,VOCAB,#/list/payment_provider_profile
@@ -1387,6 +1398,7 @@ persons,people and companies,VOCAB,#/list/party
 petrol,expenses,VOCAB,#/expenses
 phone,account kit,VOCAB,#/list/t_mobile_device
 phone bill,expenses,VOCAB,#/expenses
+phone check,supplier bank approval,VOCAB,#/approvals
 phone number,people and companies,VOCAB,#/list/party
 phone screen,work screen phone,VOCAB,#/work
 physical count,stock counts,VOCAB,#/stock/counts
@@ -1946,6 +1958,7 @@ summary,all reports,VOCAB,#/reports
 super admin,roles and rights,VOCAB,#/permissions
 supplier,suppliers and forwarders,VOCAB,#/list/supplier
 supplier balance,supplier payment schedule,VOCAB,#/supplier-schedule
+supplier bank approval,supplier bank approval,VOCAB,#/approvals
 supplier bill,expenses,VOCAB,#/expenses
 supplier claim,inbound and grn,VOCAB,#/list/t_src_grn
 supplier contact,suppliers and forwarders,VOCAB,#/list/supplier
@@ -2090,6 +2103,7 @@ typed rate,rate difference,VOCAB,#/fx
 uk rep,legal label texts,VOCAB,#/list/label_legal_text
 ukca,certificates,VOCAB,#/list/product_certificate
 ukca mark,certificates,VOCAB,#/list/product_certificate
+unapproved bank,supplier bank approval,VOCAB,#/approvals
 unbranded,products,VOCAB,#/list/product
 undo import,import history,VOCAB,#/import-history
 unfulfillable,held stock,VOCAB,#/stock/held

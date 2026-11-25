@@ -89,6 +89,10 @@ class FormAssist
             if (Registry::hasColumn($t, 'f_active')) $x->where('f_active', 1);
             $opts = $x->orderBy($lc)->limit($limit)->get()->map(fn ($r) => [(string) $r->id, (string) ($r->lbl ?? $r->id)])->all();
         }
+        if ($t === 't_src_suppliers' && $opts) {      /* R-B_SOURCING-66 a supplier rated D carries the warning in every supplier dropdown (shown, never blocked) */
+            $bad = DB::table('t_src_suppliers')->whereIn('id', array_map(fn ($o) => (int) $o[0], $opts))->whereRaw("UPPER(LEFT(TRIM(COALESCE(rating, '')), 1)) = 'D'")->pluck('id')->map(fn ($x) => (string) $x)->all();
+            if ($bad) $opts = array_map(fn ($o) => in_array((string) $o[0], $bad, true) ? [$o[0], $o[1] . ' ⚠ ' . BuyingService::RATED_D] + $o : $o, $opts);
+        }
         if ($q && ! $filters && ! in_array(explode(':', (string) $f['source'])[0], ['ref', 'table', 'own', 'party'], true)) $opts = array_values(array_filter($opts, fn ($o) => mb_stripos($o[1], $q) !== false || mb_stripos($o[0], $q) !== false));
         return ['options' => $opts, 'more' => count($opts) >= $limit, 'narrowed_by' => array_keys($filters), 'recent' => self::recent($formKey, $name)] + ($q && ! $opts && ! $filters ? ['did_you_mean' => self::closest($f, $ent, $q)] : []);
     }

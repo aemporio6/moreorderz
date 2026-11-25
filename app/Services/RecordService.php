@@ -125,7 +125,7 @@ class RecordService
 
     /** Insert or update. Returns ['id' => .., 'created' => bool]. Throws ValidationException with a message per field. */
     /** R-B_SOURCING-54 required fields of the sourcing module with the old messages (table.column => message). */
-    public const SYSTEM_USER_FIELDS = ['t_src_cycles.requested_by', 't_src_po.requested_by'];
+    public const SYSTEM_USER_FIELDS = ['t_src_cycles.requested_by', 't_src_po.requested_by', 'fin_withdrawals.requested_by'];
     public const SPEC_REQUIRED = [
         'cat_src_lov.lov_group' => 'LOV Group is required', 'cat_src_lov.lov_value' => 'LOV Value is required',
         't_product_vendors.product_name_vendor' => 'Product Name is required', 't_src_products.product_name' => 'Product Name is required', 't_src_cycle_products.product_name' => 'Product Name is required',
@@ -174,6 +174,7 @@ class RecordService
 
         $data = StepFormulas::apply($table, $data, $old);      /* R-B_SOURCING-33 the live formulas, recomputed on the server */
         try { $data = Fx::fillRow($table, $data, $old, (int) Context::ent()); } catch (\RuntimeException $e) { throw ValidationException::withMessages(['exchange_rate' => $e->getMessage()]); }      /* R-B_SOURCING-32 */
+        if ($table === 't_account_banks') $data = array_merge($data, SupplierBanks::beforeSave($data, $old, $id));      /* SUP_BANK: a new or changed supplier / forwarder bank waits for the phone check and the Owner */
         if ($table === 'drp_items') foreach (['ship_address', 'ship_phone'] as $mc) if (isset($data[$mc]) && Vault::isMasked($data[$mc])) unset($data[$mc]);      // a masked value shown to the person is never saved back over the real one
         $vault = Vault::prepare($table, $data, $id);   // secrets go to the vault, card numbers keep 4 digits, CVV / PIN are dropped
         try {
@@ -221,6 +222,7 @@ class RecordService
             if (! empty($opt['event'])) EventBus::fire($opt['event'], $table, $id, ['form' => $formKey, 'created' => $created], $ent);
             FormAssist::remember($formKey, $data);   // for the "you used this last time" chips
             if ($table === 't_src_po_lines') PoLines::sync((int) $id);
+            if ($table === 't_account_banks') SupplierBanks::afterSave((int) $id);
             if ($table === 't_src_payments') { PaymentTerms::sync((int) DB::table($table)->where($pk, $id)->value('fk_id_term')); if (! empty($old['fk_id_term']) && (int) $old['fk_id_term'] !== (int) ($data['fk_id_term'] ?? $old['fk_id_term'])) PaymentTerms::sync((int) $old['fk_id_term']); }      /* R-B_SOURCING-30 both terms of a moved payment */
             if ($table === 't_src_payment_terms' && $id) PaymentTerms::sync((int) $id);
             if ($table === 'tax_periods') AccHubAdmin::periodSaved((int) $id);      // R-ACC-21 / R-TAX-4 a tax period status ticks the matching filing

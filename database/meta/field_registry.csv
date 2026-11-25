@@ -469,6 +469,7 @@ supplier_bank,Supplier › Bank accounts,child,Bank,1,5,iban_no,IBAN,text,,,,,,,
 supplier_bank,Supplier › Bank accounts,child,Bank,1,6,swift_code,SWIFT / BIC,text,,,,,,,all,,upper,,,,Typed as on the source document (never numbered). Upper case; checked for duplicates.,,,t_account_banks,swift_code,,QUICK:t_account_bank,,,,
 supplier_bank,Supplier › Bank accounts,child,Bank,1,7,fk_currency_id,Currency,select,table:cat_currency,,Y,,,,all,,,,,,,,,t_account_banks,fk_currency_id,cat_currency,QUICK:t_account_bank,,,,
 supplier_bank,Supplier › Bank accounts,child,Bank,1,8,f_active,Active,check,,,,,1,,all,,,,,,,const:1,,t_account_banks,f_active,,QUICK:t_account_bank,,,,
+supplier_bank,Supplier › Bank accounts,child,Bank,1,9,beneficiary_name,Beneficiary name,text,,,Y,,,,all,,,,,,Name exactly as on the bank letter – shown on the payment screen and confirmed in the phone check.,,,t_account_banks,beneficiary_name,,Y,,,,t_account
 api_connection,API connection,module,Connection,1,1,fk_id_branch,Shop,select,table:t_branches,,Y,Y,,,all,,,,,,,,,api_connections,fk_id_branch,t_branch,Y,,,,
 api_connection,API connection,module,Connection,1,2,provider,Provider,text,,,Y,Y,,,all,,,,,,"Free text name of the provider (not a fixed list, IC-0).",,,api_connections,provider,,Y,,,,
 api_connection,API connection,module,Connection,1,3,fk_id_mp_profile,Profile,select,table:mp_profiles,,,,,,all,,,,,,,,,api_connections,fk_id_mp_profile,mp_profile,Y,,,,
@@ -3223,7 +3224,7 @@ fin_withdrawal,Withdrawal request,module,Details,1,1,investor_id,Investor,select
 fin_withdrawal,Withdrawal request,module,Details,1,2,company_id,Company,select,table:cat_company_house,,,,,,all,,,,,,,,,fin_withdrawals,company_id,cat_company_house,Y,,,,finance_partners
 fin_withdrawal,Withdrawal request,module,Details,1,3,amount,Amount,money,,,Y,Y,,,all,,,,,,,,,fin_withdrawals,amount,,Y,,,,finance_partners
 fin_withdrawal,Withdrawal request,module,Details,1,4,currency,Currency,select,table:cat_currency,,,,,,all,,,,,,,,,fin_withdrawals,currency,cat_currency,Y,,,,finance_partners
-fin_withdrawal,Withdrawal request,module,Details,1,5,requested_by,Requested by,select,table:t_account?login=1,,,,session.user,,all,auto,,,,,,session.user,,fin_withdrawals,requested_by,,Y,,,,finance_partners
+fin_withdrawal,Withdrawal request,module,Details,1,5,requested_by,Requested by,select,table:t_users,,,,session.user,,all,Y,,,,,The person logged in when it was asked – set by the system.,session.user,,fin_withdrawals,requested_by,,Y,,,,finance_partners
 fin_withdrawal,Withdrawal request,module,Details,1,6,requested_at,Requested at,date,,,,,,,all,auto,,,,,,,,fin_withdrawals,requested_at,,Y,,,,finance_partners
 fin_withdrawal,Withdrawal request,module,Details,1,7,status,Status,select,list:WITHDRAWAL_STATUS,,,,,,all,auto,,,,,,,,fin_withdrawals,status,,Y,,,,finance_partners
 fin_withdrawal,Withdrawal request,module,Details,1,8,approved_by,Approved by,select,table:t_account?login=1,,,,,,all,auto,,,,,,,,fin_withdrawals,approved_by,,Y,,,,finance_partners

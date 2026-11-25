@@ -341,6 +341,12 @@ class BuyingController extends Controller
             return $cur === \App\Services\Fx::base((int) Context::ent()) ? '' : ' · ' . \App\Services\Fx::rateNote($cur, $d['date'], (float) $d['amount'], isset($d['rate']) ? (float) $d['rate'] : null, (int) Context::ent())['text']; } catch (\Throwable $e) { return ''; }
     }
 
+    /** SUP_BANK / R-B_SOURCING-66: the supplier's bank details as the payment screen shows them (beneficiary, bank, last 4, status) – reads only; the phone check of a second person. */
+    public function payBankInfo(Request $r) { $this->can($r, 'buying.SEE'); $po = DB::table('t_src_po')->where('id', DB::table('t_src_payment_terms')->where('id', (int) $r->query('term'))->where('fk_id_ent', Context::ent())->value('fk_id_po'))->first() ?? abort(404);
+        $rows = \App\Services\SupplierBanks::ofSupplier((int) $po->fk_id_supplier); $ok = (bool) array_filter($rows, fn ($x) => $x['status'] === 'APPROVED') && ! array_filter($rows, fn ($x) => $x['status'] === 'PENDING');
+        return ['banks' => $rows, 'payable' => ! $rows ? \App\Services\Choices::get('SUP_BANK_NO_DETAILS', (int) Context::ent()) !== 'BLOCK' : $ok, 'note' => ! $rows ? 'No bank details recorded for this supplier.' : ($ok ? null : \App\Services\SupplierBanks::BLOCKED)]; }
+    public function bankPhoneCheck(Request $r, int $id) { $this->can($r, 'buying.SEE'); $d = $r->validate(['note' => 'required|string|max:250']); return $this->run(fn () => \App\Services\SupplierBanks::phoneCheck($id, $d['note'], $r->user())); }
+
     /** R-B_SOURCING-32 the rate line of a money row before it is saved (reads only). */
     public function fxNote(Request $r) { $this->can($r, 'buying.SEE'); $d = $r->validate(['currency' => 'required|string|size:3', 'date' => 'required|date', 'amount' => 'required|numeric', 'rate' => 'nullable|numeric|gt:0']);
         return $this->run(fn () => \App\Services\Fx::rateNote($d['currency'], $d['date'], (float) $d['amount'], isset($d['rate']) ? (float) $d['rate'] : null, (int) Context::ent())); }

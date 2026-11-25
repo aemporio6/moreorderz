@@ -307,6 +307,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('landed-lines/{lineId}/override', [BuyingController::class, 'landedOverride'])->whereNumber('lineId');
         Route::post('pay', [BuyingController::class, 'pay']);
         Route::get('fx/note', [BuyingController::class, 'fxNote']);
+        Route::get('pay/bank-info', [BuyingController::class, 'payBankInfo']);
+        Route::post('supplier-banks/{id}/phone-check', [BuyingController::class, 'bankPhoneCheck'])->whereNumber('id');
         Route::post('shipment', [BuyingController::class, 'shipment']);
         Route::get('shipment/{id}/lines', [BuyingController::class, 'shipmentLines'])->whereNumber('id');
         Route::get('receive/open', [BuyingController::class, 'receiveOpen']);      // R-H-21 phone receiving
