@@ -45,7 +45,7 @@ class InvoicesController extends Controller
         catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
     }
     public function complianceRebuild(Request $r, int $company) { Perm::need($r->user(), 'money.EDIT'); return ['message' => \App\Services\AccCompliance::rebuild($this->ent(), $company)]; }
-    public function index(Request $r) { Perm::need($r->user(), 'money.SEE'); return Docs::page($this->ent(), $r->only(['period', 'status'])); }
+    public function index(Request $r) { Perm::need($r->user(), 'money.SEE'); return Docs::page($this->ent(), $r->only(['period', 'status', 'marketplace', 'shop', 'type', 'issuer', 'recipient', 'from', 'to', 'q', 'size'])); }
     public function show(Request $r, int $id)
     {
         Perm::need($r->user(), 'money.SEE');
@@ -58,6 +58,23 @@ class InvoicesController extends Controller
     public function settle(Request $r, int $import) { Perm::need($r->user(), 'money.approve'); return $this->run(fn () => \App\Services\InvestorSettle::settle($this->ent(), $import, $r->only(self::IN), $r->user())); }
     public function generate(Request $r, int $period) { Perm::need($r->user(), 'money.EDIT'); return $this->run(fn () => Docs::generate($this->ent(), $period, $r->user())); }
     public function portalGenerate(Request $r, int $period) { return $this->run(fn () => Docs::portalGenerate($this->ent(), $period, $r->user())); }      /* R-D-83: guarded inside – setting + own share */
+    /** R-INV-12 who owes whom (open documents). */
+    public function outstanding(Request $r) { Perm::need($r->user(), 'money.SEE'); return \App\Services\InvoiceReports::outstanding($this->ent(), $r->only(['marketplace', 'shop', 'overdue'])); }
+    /** R-INV-3 hidden margin – HIDDEN_MARGIN_ROLES only; ?csv=1 downloads the 9-column file. */
+    public function margin(Request $r)
+    {
+        $d = \App\Services\InvoiceReports::margin($this->ent(), $r->only(['from', 'to', 'marketplace', 'shop', 'investor']), $r->user());
+        if ($r->query('csv') === '1') return response(\App\Services\InvoiceReports::marginCsv($d), 200, ['Content-Type' => 'text/csv; charset=UTF-8', 'Content-Disposition' => 'attachment; filename="' . $d['file'] . '"']);
+        return $d;
+    }
+    /** R-INV-9 the document as a PDF file "<number>.pdf" (A4 portrait); a portal user only his own. */
+    public function pdf(Request $r, int $id)
+    {
+        $d = \Illuminate\Support\Facades\DB::table('t_invoices')->where('id', $id)->where('fk_id_ent', $this->ent())->first() ?? abort(404);
+        if (! Perm::has($r->user(), 'money.SEE')) { try { Docs::portalList($this->ent(), $r->user()); } catch (\InvalidArgumentException) { abort(403); } if (! collect(Docs::portalList($this->ent(), $r->user())['docs'])->firstWhere('id', $id)) abort(404); }
+        try { $pdf = \App\Services\PrintService::pdf(Docs::html($id), 210, 297, false); } catch (\Throwable $e) { return response()->json(['message' => $e->getMessage()], 422); }
+        return response($pdf, 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="' . $d->invoice_no . '.pdf"']);
+    }
     public function portal(Request $r) { return $this->run(fn () => Docs::portalList($this->ent(), $r->user())); }      /* R-D-84 / R-G_CORE-86: own documents only – guarded inside */
     public function portalPay(Request $r, int $id) { return $this->run(fn () => Docs::portalPay($this->ent(), $id, $r->only(['amount', 'date', 'method', 'received_into', 'reference', 'notes']), $r->file('proof'), $r->user())); }
     public function portalEmail(Request $r, int $id) { return $this->run(fn () => Docs::portalEmail($this->ent(), $id, $r->user())); }

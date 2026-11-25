@@ -316,15 +316,26 @@ class InvestorDocs
     /** The list page. */
     public static function page(int $ent, array $f = []): array
     {
-        $q = DB::table('t_invoices as i')->leftJoin('t_inv_periods as p', 'p.id', '=', 'i.fk_id_period')->leftJoin('t_branches as b', 'b.id', '=', 'p.fk_id_branch')->where('i.fk_id_ent', $ent)
-            ->when(! empty($f['period']), fn ($x) => $x->where('i.fk_id_period', (int) $f['period']))->when(! empty($f['status']), fn ($x) => $x->where('i.status', $f['status']))->orderByDesc('i.id')->limit(300);
-        $rows = $q->get(['i.*', 'b.shop_name', 'p.d_to'])->map(fn ($d) => ['id' => (int) $d->id, 'no' => $d->invoice_no, 'type' => self::TYPES[$d->invoice_type][0] ?? $d->invoice_type, 'type_code' => $d->invoice_type, 'shop' => $d->shop_name, 'month' => $d->d_to ? date('M Y', strtotime((string) $d->d_to)) : '',
+        /* R-INV-11 list filters: marketplace, shop, type, status, issuer, recipient, invoice date from / to, search */
+        $q = DB::table('t_invoices as i')->leftJoin('t_inv_periods as p', 'p.id', '=', 'i.fk_id_period')->leftJoin('t_branches as b', 'b.id', '=', 'p.fk_id_branch')
+            ->leftJoin('t_inv_parties as fi', 'fi.id', '=', 'i.fk_issuer_party')->leftJoin('t_inv_parties as fr', 'fr.id', '=', 'i.fk_recipient_party')->where('i.fk_id_ent', $ent)
+            ->when(! empty($f['period']), fn ($x) => $x->where('i.fk_id_period', (int) $f['period']))->when(! empty($f['status']), fn ($x) => $x->where('i.status', $f['status']))
+            ->when(! empty($f['marketplace']), fn ($x) => $x->where('p.fk_id_marketplace', (int) $f['marketplace']))->when(! empty($f['shop']), fn ($x) => $x->where('p.fk_id_branch', (int) $f['shop']))
+            ->when(! empty($f['type']), fn ($x) => $x->where('i.invoice_type', $f['type']))->when(! empty($f['issuer']), fn ($x) => $x->where('i.fk_issuer_party', (int) $f['issuer']))->when(! empty($f['recipient']), fn ($x) => $x->where('i.fk_recipient_party', (int) $f['recipient']))
+            ->when(! empty($f['from']), fn ($x) => $x->where('i.d_invoice', '>=', $f['from']))->when(! empty($f['to']), fn ($x) => $x->where('i.d_invoice', '<=', $f['to']))
+            ->when(trim((string) ($f['q'] ?? '')) !== '', fn ($x) => $x->where(fn ($w) => $w->where('i.invoice_no', 'like', '%' . trim($f['q']) . '%')->orWhere('i.reference', 'like', '%' . trim($f['q']) . '%')->orWhere('fr.display_name', 'like', '%' . trim($f['q']) . '%')->orWhere('fi.display_name', 'like', '%' . trim($f['q']) . '%')))
+            ->orderByDesc('i.id')->limit(in_array((int) ($f['size'] ?? 50), [10, 20, 50, 100], true) ? (int) ($f['size'] ?? 50) : 50);
+        $rows = $q->get(['i.*', 'b.shop_name', 'p.d_to', 'fi.display_name as issuer_name', 'fr.display_name as recipient_name'])->map(fn ($d) => ['issuer' => $d->issuer_name, 'recipient' => $d->recipient_name, 'balance' => in_array($d->status, ['UNPAID', 'PART_PAID'], true) ? round((float) $d->total - (float) $d->amount_paid, 2) : null,'id' => (int) $d->id, 'no' => $d->invoice_no, 'type' => self::TYPES[$d->invoice_type][0] ?? $d->invoice_type, 'type_code' => $d->invoice_type, 'shop' => $d->shop_name, 'month' => $d->d_to ? date('M Y', strtotime((string) $d->d_to)) : '',
             'date' => $d->d_invoice, 'due' => $d->d_due, 'total' => (float) $d->total, 'paid' => (float) $d->amount_paid, 'status' => $d->status, 'badge' => self::badge($d), 'sent' => $d->sent_at, 'reference' => $d->reference])->all();
         $periods = DB::table('t_inv_periods as p')->leftJoin('t_branches as b', 'b.id', '=', 'p.fk_id_branch')->where('p.fk_id_ent', $ent)->orderByDesc('p.d_to')->limit(60)->get(['p.id', 'p.status', 'p.d_to', 'b.shop_name'])
             ->map(fn ($p) => ['id' => (int) $p->id, 'name' => ($p->shop_name ?: 'Shop') . ' · ' . date('M Y', strtotime((string) $p->d_to)), 'status' => $p->status, 'documents' => DB::table('t_invoices')->where('fk_id_period', $p->id)->whereNotIn('status', ['CANCELLED', 'CREDITED'])->count()])->all();
         $months = DB::table('t_sale_imports as i')->leftJoin('t_branches as b', 'b.id', '=', 'i.fk_id_branch')->where('i.fk_id_ent', $ent)->whereIn('i.status', ['Confirmed', 'CONFIRMED'])
             ->whereNotExists(fn ($w) => $w->from('t_inv_periods as p')->whereColumn('p.fk_id_import', 'i.id')->where('p.status', 'CONFIRMED'))->orderByDesc('i.period_year')->orderByDesc('i.period_month')->limit(60)
             ->get(['i.id', 'i.period_month', 'i.period_year', 'b.shop_name'])->map(fn ($m) => ['id' => (int) $m->id, 'name' => ($m->shop_name ?: 'Shop') . ' · ' . date('M Y', mktime(0, 0, 0, (int) $m->period_month, 1, (int) $m->period_year))])->all();      // R-D-82 confirmed sales months to settle
-        return ['rows' => $rows, 'periods' => $periods, 'methods' => self::METHODS, 'to_settle' => $months];
+        $c = collect($rows); $money = $c->whereIn('status', ['UNPAID', 'PART_PAID', 'PAID']); $open = $c->whereIn('status', ['UNPAID', 'PART_PAID']); $today = date('Y-m-d');
+        $totals = ['count' => $c->count(), 'total' => round($money->sum('total'), 2), 'paid' => round($money->sum('paid'), 2), 'balance' => round($open->sum('balance'), 2), 'overdue' => round($open->filter(fn ($r) => $r['due'] && $r['due'] < $today)->sum('balance'), 2)];
+        return ['rows' => $rows, 'totals' => $totals, 'periods' => $periods, 'methods' => self::METHODS, 'to_settle' => $months, 'types' => array_map(fn ($t) => $t[0], self::TYPES),
+            'parties' => DB::table('t_inv_parties')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('display_name')->get(['id', 'display_name as name'])->all(),
+            'shops' => DB::table('t_branches')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name as name'])->all()];
     }
 }

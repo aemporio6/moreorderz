@@ -62,21 +62,21 @@ FIN-72|F|form:payment_provider_profile|form only
 FIN-73|P|function categorise|category codes exist; re-coding of old lines / withdrawal bank + date not built
 FIN-74|B|function lotsOf|Profit by Lot / Batch (PO) / Investor (lot owner) / Shop / SKU / Month / Partner-VA share, all cut from the same confirmed lines, lot costs and fees (an order's fees follow its sales), equal grand totals, view never saves; dropdown on Profit views and on the month-close screen; one route per shop-month (route table + ONE_PROFIT_ROUTE) (ProfitViewsTest)
 FIN-75|B|function stack|stacking rule per agreement – spec example 460 / 400 / 450 / 500 passes
-INV-1|M||settle a sales month (old invoicing) not built – the waterfall on the locked month is used instead
-INV-2|M||investor lines + hidden margin not built
-INV-3|M||hidden margin report not built
+INV-1|B|class InvestorSettle|settle a sales month (old invoicing): confirmed import, preview writes nothing, tick, month inputs, stored period + investors, old messages (7e-149/174, InvestorSettleTest)
+INV-2|B|function line|investor lines: Confirmed + Refunded lines, capital = raw × qty, landing (actual) cost, packing / storage fee per product + marketplace, investors per product share equally; per investor capital, actual, direct, refunds, allocated, profit, weight, share (InvestorSettleTest r81 / r82)
+INV-3|B|function margin|hidden margin report per investor × shop × settled month: units, raw cost, landing cost, margin = raw − landing, share, total earned, "no landing price" flag, totals; default range 11 months back … end of this month; filters; CSV hidden_margin_<from>_<to>.csv 9 columns with BOM; only HIDDEN_MARGIN_ROLES (Choice, default Owner) else 403 "This report is restricted." (7e-175, InvestorDocsTest invoicing_reports)
 INV-4|P|class Rights|cost columns hidden from Warehouse; field-level visible_to on prints partly
 INV-5|B|function saveSplit|profit split rules per shop: 4 % = 100, modes, retire
 INV-6|P|function vaSalary|split by month end, VA salary from job history, loss brought forward; one payable per VA not built
 INV-7|B|class InvestorDocs|generate only for CONFIRMED months, only the missing documents ("All invoices for this month already exist."), numbering as R-D-83 under a row lock, reopen keeps the sales confirmed; the Invoices page lists the settled months with their documents (7e-148, InvestorDocsTest r83 / r84)
-INV-8|F|form:invoice_document|form only
-INV-9|M||invoice PDF not built
-INV-10|F|form:invoice_payment|form only
-INV-11|F|form:invoice_document|list only
-INV-12|M||who owes whom not built
+INV-8|B|const TYPES|document types (INVESTOR, SELF_SETTLEMENT, OWNER_STATEMENT, VA, SBS_3PL, SBS_HANDLER, CREDIT_NOTE) with titles and numbering; statuses UNPAID / PART_PAID / PAID / NOT_REQUIRED / CANCELLED / CREDITED with badge and computed Overdue (InvestorDocsTest r83 / r84)
+INV-9|B|function pdf|invoice PDF A4 portrait from the one document html (issuer / recipient blocks, lines, totals, stamps, profit-share box, payment details), file "<number>.pdf", portal users only their own (7e-175, InvestorDocsTest invoicing_reports)
+INV-10|B|function pay|payments (UNPAID / PART_PAID only, ≤ balance + 0.004, dates, proof files ≤ 5 MB, soft delete), send by e-mail with stamps, cancel / credit note with reason (InvestorDocsTest r84)
+INV-11|B|function page|invoice list filters marketplace, shop, type, status, issuer, recipient, date from / to, search, page sizes 10 / 20 / 50 / 100 (default 50); issuer, recipient, balance (open only); footer count + total / paid over UNPAID / PART_PAID / PAID, balance and overdue over UNPAID / PART_PAID (7e-175)
+INV-12|B|function outstanding|who owes whom: one row per recipient × issuer over UNPAID / PART_PAID – invoices, total, paid, balance, overdue; filters marketplace, shop, overdue only; totals; per-document list with days overdue (7e-175, InvestorDocsTest invoicing_reports)
 INV-13|M||month status side panel not built
 INV-14|M||invoice party print details not built
-INV-15|M||portal dashboard / my sales not built
+INV-15|P|function portalList|portal: own documents, record payment, e-mail, generate own month (Choice); open: the portal dashboard and "my sales" view
 INV-16|M||portal exports not built
 INV-17|M||invoicing conventions (shop label) not built
 ACC-1|B|function periods|incorporation = incorporate_date else creation_date; year end from the Hub settings, else File Return Date − 9 months, else the incorporation month end; first period end = Hub first_period_end else the year-end date closest to incorporation + 12 months (after incorporation, ≤ + 18 months); periods until the window end (max 40); no incorporation → 6 years back (7e-150); AccComplianceTest r1

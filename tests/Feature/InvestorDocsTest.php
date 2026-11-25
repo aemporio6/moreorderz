@@ -115,4 +115,29 @@ class InvestorDocsTest extends TestCase
         $this->actingAs($u)->postJson("/api/portal/invoices/$id/pay", ['amount' => 1, 'date' => date('Y-m-d')])->assertStatus(422)->assertJsonPath('message', 'Recording payments is not allowed.');
         $this->actingAs($u)->postJson("/api/portal/invoices/$id/email")->assertStatus(422)->assertJsonPath('message', 'Sending is not allowed.');
     }
+    /** R-INV-12 who owes whom, R-INV-3 hidden margin (restricted, CSV), R-G_CORE-86 one Invoicing menu group. */
+    public function test_invoicing_reports_and_menu_group(): void
+    {
+        $this->actingAs($this->owner);
+        DB::table('t_inv_period_investors')->where('fk_id_period', $this->period)->update(['actual_cost' => 150]);
+        $this->postJson('/api/invoices/generate/' . $this->period)->assertOk();
+        $or = $this->getJson('/api/invoices/outstanding'); $this->assertSame(200, $or->status(), (string) json_encode($or->json())); $o = $or->json();
+        $this->assertSame([2, 312.5], [$o['totals']['invoices'], (float) $o['totals']['balance']], 'investor 300 + 3PL 12.50 open; the owner statement needs no payment');
+        $this->assertSame(['Alpha', 300.0], [$o['rows'][0]['issuer'], (float) $o['rows'][0]['balance']]);
+        $this->assertSame(0, $this->getJson('/api/invoices/outstanding?overdue=1')->json('totals.invoices'), 'not due yet');
+        $l = $this->getJson('/api/invoices?type=INVESTOR')->assertOk()->json();
+        $this->assertSame([1, 300.0, 300.0, 'Alpha'], [count($l['rows']), (float) $l['totals']['total'], (float) $l['totals']['balance'], $l['rows'][0]['issuer']], 'R-INV-11 filters and totals');
+        $this->assertSame(3, $this->getJson('/api/invoices?q=101')->json('totals.count'), 'search on number / reference');
+        $pdf = $this->get('/api/invoices/' . $l['rows'][0]['id'] . '/pdf');
+        $this->assertSame(['application/pdf', 'inline; filename="INV-ALP-101-202610-001.pdf"'], [$pdf->headers->get('Content-Type'), $pdf->headers->get('Content-Disposition')], 'R-INV-9');
+        $this->assertStringStartsWith('%PDF', $pdf->getContent());
+        $m = $this->getJson('/api/invoices/margin?from=2026-01-01&to=2026-12-31')->assertOk()->json();
+        $this->assertSame([[200.0, 150.0, 50.0, 100.0, 150.0, false]], array_map(fn ($r) => [(float) $r['raw'], (float) $r['landing'], (float) $r['margin'], (float) $r['share'], (float) $r['earned'], $r['no_landing']], $m['rows']));
+        $csv = $this->get('/api/invoices/margin?from=2026-01-01&to=2026-12-31&csv=1');
+        $this->assertStringContainsString('hidden_margin_2026-01-01_2026-12-31.csv', (string) $csv->headers->get('Content-Disposition'));
+        $this->assertStringStartsWith("\xEF\xBB\xBFInvestor,Shop,Month,Units,\"Raw cost (paid to investor)\"", $csv->getContent());
+        $this->actingAs($this->makeUser('FINANCE'))->getJson('/api/invoices/margin')->assertStatus(403)->assertJsonPath('message', 'This report is restricted.');
+        $all = collect($this->actingAs($this->owner)->getJson('/api/boot')->json('menu')); $menu = $all->firstWhere('name', 'Invoicing'); $this->assertNotNull($menu, json_encode($all->pluck('name')));
+        $this->assertSame(['#/invoices', '#/invoices?show=settle', '#/invoices?show=months', '#/invoice-outstanding', '#/invoice-margin', '#/waterfall', '#/my-invoices'], array_column($menu['items'], 'route'), json_encode(array_column($menu['items'], 'route')));
+    }
 }

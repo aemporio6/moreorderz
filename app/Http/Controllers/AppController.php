@@ -74,6 +74,7 @@ class AppController extends Controller
         if ($no === '3.5') return '#/old-entry';      /* R-B_SOURCING-5 / 13 old purchases */
         if ($no === '10.4') return '#/purchase-audit';      /* R-A_SALES-60 … 64 audit runs */
         if ($no === '10.7') return '#/invoices';
+        if (in_array($no, ['10.11', '10.12', '10.13', '10.14', '10.15', '10.16'], true) && $m->url) return (string) $m->url;      /* R-G_CORE-86 Invoicing group */
         if ($no === '10.8') return '#/compliance';      /* R-ACC compliance calendar */      /* R-D-83 / 84 investor documents */
         if ($no === '13.1') return '#/tasks?scope=dashboard';      // R-G_CORE-20 boss-only dashboard
         if ($no === '13.2') return '#/tasks?scope=all';

@@ -619,6 +619,9 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('invoices', [\App\Http\Controllers\InvoicesController::class, 'index']);      // R-D-83 / 84
         Route::get('invoices/{id}', [\App\Http\Controllers\InvoicesController::class, 'show'])->whereNumber('id');
         Route::post('invoices/generate/{period}', [\App\Http\Controllers\InvoicesController::class, 'generate'])->whereNumber('period');
+        Route::get('invoices/{id}/pdf', [\App\Http\Controllers\InvoicesController::class, 'pdf'])->whereNumber('id');
+        Route::get('invoices/outstanding', [\App\Http\Controllers\InvoicesController::class, 'outstanding']);
+        Route::get('invoices/margin', [\App\Http\Controllers\InvoicesController::class, 'margin']);
         Route::get('portal/invoices', [\App\Http\Controllers\InvoicesController::class, 'portal']);
         Route::post('portal/invoices/{id}/pay', [\App\Http\Controllers\InvoicesController::class, 'portalPay'])->whereNumber('id');
         Route::post('portal/invoices/{id}/email', [\App\Http\Controllers\InvoicesController::class, 'portalEmail'])->whereNumber('id');
