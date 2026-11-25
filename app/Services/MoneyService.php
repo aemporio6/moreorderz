@@ -132,9 +132,12 @@ class MoneyService
                 if (count($c) > 1) { $same = array_values(array_filter($c, fn ($x) => $x->pay_date === $l->txn_date)); if (count($same) === 1) $c = $same; }   // several payouts of the same amount: the one dated the same day
                 if (count($c) === 1) { $first = SettlementService::paid($ent, (int) $c[0]->fk_id_branch, (string) $c[0]->pay_key, $l); self::link($l, 'PAYOUT', $first, 'M1'); $n++; continue; }
             }
+            if ($amt < 0 && BankMatch::withdrawal($ent, $l)) { $n++; continue; }      // R-FIN-27 M3W partner withdrawal
+            if ($amt > 0 && BankMatch::capitalCall($ent, $l)) { $n++; continue; }      // R-FIN-27 MC capital call
             if (BankMatch::invoice($ent, $l)) { $n++; continue; }      // R-FIN-70 M6 invoice receipt / payment
             if ($amt < 0 && BankMatch::sum($ent, $l, $dSup)) { $n++; continue; }      // R-FIN-70 sum matching: several open payables of one payee
             if (BankMatch::providerFee($ent, $l)) { $n++; continue; }      // R-FIN-70 payment-provider profile: fee lines
+            if (BankMatch::intercompany($ent, $l)) { $n++; continue; }      // R-FIN-27 M4 inter-company, last
         }
         return $n;
     }
@@ -313,6 +316,8 @@ class MoneyService
                     break;
                 case 'INVOICE': BankMatch::undoInvoice((int) $l->id); break;
                 case 'LOAN': BankMatch::undoLoan((int) $l->matched_to_id); break;
+                case 'WITHDRAWAL': DB::table('fin_withdrawals')->where('id', (int) $l->matched_to_id)->update(['bank_txn_id' => null]); break;
+                case 'CAPITAL_CALL': BankMatch::undoCapitalCall((string) $l->matched_to_id); break;
                 case 'CLAIM': $rev('CLAIM_REFUND', (int) $l->id); break;
                 case 'CATEGORY': $rev('BANK_LINE', (int) $l->id); DB::table('t_src_freight_costs')->where('fk_id_bank_line', $l->id)->whereNull('source_po_line_id')->update(['f_active' => 0]); DB::table('t_src_customs')->where('fk_id_bank_line', $l->id)->where('import_vat', 0)->where('duty_amount', '>', 0)->where('status', 'CLEARED')->whereNull('declaration_number')->update(['f_active' => 0]); break;
                 case 'SPLIT':

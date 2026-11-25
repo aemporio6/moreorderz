@@ -55,6 +55,65 @@ class BankMatch
         }
     }
 
+    /**
+     * R-FIN-27 the old rule set, finished: M3W partner withdrawal (OUT, a PAID withdrawal paid from this account with no bank line yet, amount equal ±0.01,
+     * paid within match_withdrawal_days, oldest first – the withdrawal was booked when it was approved, the line only links to it); MC capital call
+     * (IN, an ACCEPTED answer of an OPEN call of this company, |amount − accepted| ≤ payout_tolerance, no date window – the capital is booked from the line
+     * and the answer becomes RECEIVED); M4 inter-company (either sign, an UNMATCHED line of another own company with the opposite amount ±0.01 within
+     * match_intercompany_days – both lines are booked INTERCOMPANY_OUT / _IN). M5 reserve release has no own rule: a released reserve is part of the next
+     * settlement payable, so the payout match (M1) takes it.
+     */
+    public static function withdrawal(int $ent, object $l): bool
+    {
+        $amt = round((float) $l->amount, 2); if ($amt >= 0) return false; $days = FinanceSettings::int($ent, 'match_withdrawal_days');
+        $w = DB::table('fin_withdrawals')->where('company_id', $ent)->where('status', 'PAID')->whereNull('bank_txn_id')->where(fn ($q) => $q->whereNull('fk_id_pay_to_bank')->orWhere('fk_id_pay_to_bank', $l->bank_account_id))
+            ->whereRaw('ABS(amount - ?) <= 0.01', [abs($amt)])->whereBetween(DB::raw('DATE(COALESCE(paid_at, approved_at))'), [date('Y-m-d', strtotime("{$l->txn_date} -$days day")), date('Y-m-d', strtotime("{$l->txn_date} +$days day"))])
+            ->orderBy('approved_at')->orderBy('id')->first();
+        if (! $w) return false;
+        DB::table('fin_withdrawals')->where('id', $w->id)->update(['bank_txn_id' => (string) $l->id]);
+        self::link($l, 'WITHDRAWAL', (string) $w->id, 'M3W', 'AUTO', 'PARTNER_WITHDRAWAL');
+        return true;
+    }
+
+    public static function capitalCall(int $ent, object $l): bool
+    {
+        $amt = round((float) $l->amount, 2); if ($amt <= 0) return false; $tol = (float) FinanceSettings::num($ent, 'payout_tolerance');
+        $c = DB::table('fin_capital_call_responses as r')->join('fin_capital_calls as c', 'c.id', '=', 'r.call_id')->where('c.company_id', $ent)->where('c.status', 'OPEN')->where('r.status', 'ACCEPTED')
+            ->whereRaw('ABS(r.amount_accepted - ?) <= ?', [$amt, $tol + 0.0001])->get(['r.id', 'r.investor_id', 'r.call_id', 'c.reason']);
+        if ($c->count() !== 1) return false;
+        $r = $c[0];
+        DB::transaction(function () use ($ent, $l, $amt, $r) {
+            $lid = PartnerService::capitalIn($ent, (int) $r->investor_id, $amt, (int) $l->bank_account_id, (string) $l->txn_date, 'Capital call: ' . $r->reason);
+            DB::table('fin_capital_call_responses')->where('id', $r->id)->update(['status' => 'RECEIVED', 'amount_received' => DB::raw('amount_received + ' . $amt), 'bank_txn_id' => (string) $l->id, 'responded_at' => now()]);
+            if (! DB::table('fin_capital_call_responses')->where('call_id', $r->call_id)->whereIn('status', ['SENT', 'ACCEPTED'])->exists()) DB::table('fin_capital_calls')->where('id', $r->call_id)->update(['status' => 'CLOSED']);
+            self::link($l, 'CAPITAL_CALL', $r->id . ':' . $lid, 'MC', 'AUTO', 'PARTNER_CAPITAL');
+        });
+        return true;
+    }
+
+    public static function undoCapitalCall(string $ids): void
+    {
+        [$rid, $lid] = array_map('intval', explode(':', $ids . ':0'));
+        foreach (DB::table('gl_journals')->where('source_type', 'PARTNER_CAPITAL')->where('source_id', $lid)->whereNull('reverses_id')->whereNull('reversed_by_id')->pluck('id') as $j) Ledger::reverse((int) $j, null, 'Bank match undone');
+        $amt = (float) DB::table('fin_investor_ledger')->where('id', $lid)->value('amount');
+        DB::table('fin_investor_ledger')->where('id', $lid)->delete();
+        $r = DB::table('fin_capital_call_responses')->where('id', $rid)->first();
+        if ($r) { DB::table('fin_capital_call_responses')->where('id', $rid)->update(['status' => 'ACCEPTED', 'amount_received' => max(0, round((float) $r->amount_received - $amt, 2)), 'bank_txn_id' => null]); DB::table('fin_capital_calls')->where('id', $r->call_id)->update(['status' => 'OPEN']); }
+    }
+
+    public static function intercompany(int $ent, object $l): bool
+    {
+        $amt = round((float) $l->amount, 2); if ($amt == 0.0) return false; $days = FinanceSettings::int($ent, 'match_intercompany_days');
+        $o = DB::table('fin_bank_transactions')->where('company_id', '<>', $ent)->where('match_status', 'UNMATCHED')->whereRaw('ABS(amount + ?) <= 0.01', [$amt])
+            ->whereBetween('txn_date', [date('Y-m-d', strtotime("{$l->txn_date} -$days day")), date('Y-m-d', strtotime("{$l->txn_date} +$days day"))])->get();
+        if ($o->count() !== 1) return false;
+        $x = $o[0];
+        foreach ([[$ent, $l], [(int) $x->company_id, $x]] as [$e, $line])
+            MoneyService::categorise($e, (int) $line->id, ['category' => (float) $line->amount > 0 ? 'INTERCOMPANY_IN' : 'INTERCOMPANY_OUT', 'note' => 'Inter-company transfer (M4)']);
+        DB::table('fin_bank_transactions')->whereIn('id', [$l->id, $x->id])->update(['match_rule' => 'M4', 'match_status' => 'AUTO']);
+        return true;
+    }
+
     /** Subsets (≤ 12 items) whose amounts add up to $target ±0.01. */
     public static function subsets(array $amounts, float $target): array
     {

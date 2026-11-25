@@ -3753,7 +3753,7 @@
     const k = d.kpi || {}, fail = (lbl, key) => `<div class="card" data-failed="${esc(lbl)}"><div class="card-b muted">${esc(lbl)}: This section could not load – the admin has been told. <a href="#" data-retry="${key}">Retry</a></div></div>`, card = (lbl, val, foot, tone, goto) => `<div class="card kpi ${tone || ''}" ${goto ? `data-go="${goto}" style="cursor:pointer"` : ''}><div class="bar"></div><div class="lbl">${lbl}</div><div class="val">${val}</div><div class="foot">${foot || ''}</div></div>`;
     const qs = new URLSearchParams(Object.fromEntries(Object.entries({ supplier: F.supplier || '', q: F.q || '', stage: F.stage || '' }).filter(([, v]) => v))).toString();
     $('#main').innerHTML = `${buyTabs('sourcing', qs)}<div class="page-head"><div><h1>Buying</h1><div class="sub">From an idea to stock on the shelf. Each open cycle shows where it stands.</div></div>
-      <div class="actions">${d.rights.buy ? `<a class="btn" href="#/quick-buy">${ic('plus')} Quick buy</a><button class="btn" id="bRes">${ic('plus')} New research</button><button class="btn" id="bPo">${ic('plus')} Direct PO</button>` : ''}</div></div>
+      <div class="actions">${d.rights.buy ? `<a class="btn" href="#/quick-buy">${ic('plus')} Quick buy</a><button class="btn" id="bRes">${ic('plus')} New research</button><button class="btn" id="bPo">${ic('plus')} Direct PO</button><button class="btn" id="bCyCsv">Import cycles (CSV)</button><input type="file" id="bCyFile" accept=".csv,text/csv" style="display:none">` : ''}</div></div>
       <div id="bFailed"></div>
       ${d.kpi ? `<div class="kpis">${card('Research open', k.research_open, 'ideas not decided yet', '', '#/list/src_research')}${card('Cycles open', k.cycles_open, '', '', '#/list/t_src_cycles')}${card('POs to confirm', k.po_draft, 'drafts', k.po_draft ? 'warn' : 'done', '#/list/t_src_po')}
         ${card('Payments due', k.pay_due_count, k.pay_due_base !== undefined ? money(k.pay_due_base) + ' open on confirmed POs' : '', k.pay_due_count ? 'err' : 'done')}${card('On the way', k.in_transit, k.overdue ? k.overdue + ' overdue' : 'none overdue', k.overdue ? 'err' : '')}
@@ -3779,7 +3779,13 @@
     if (d.stages) { $$('[data-tile]').forEach(t => t.onclick = () => fgo({ stage: t.dataset.tile })); $('#cfSup').onchange = () => fgo({ supplier: $('#cfSup').value });
       $('#cfQ').onkeydown = e => { if (e.key === 'Enter') fgo({ q: $('#cfQ').value.trim() }); }; if ($('#cfClear')) $('#cfClear').onclick = e => { e.preventDefault(); fgo({ stage: '' }); };
       $('#cfReset').onclick = e => { e.preventDefault(); go('#/buying?reset=1'); }; }
-    if (d.rights.buy) { $('#bRes').onclick = () => openForm('src_research', null, { onSaved: r => go('#/research/' + r.id) }); $('#bPo').onclick = () => directPo(); }
+    if (d.rights.buy) { $('#bRes').onclick = () => openForm('src_research', null, { onSaved: r => go('#/research/' + r.id) }); $('#bPo').onclick = () => directPo();
+      $('#bCyCsv').onclick = () => $('#bCyFile').click();      /* R-B_SOURCING-14: check first (nothing saved), then import; the batch can be undone */
+      $('#bCyFile').onchange = async e => { const file = e.target.files[0]; if (!file) return; const send = async step => { const fd = new FormData(); fd.append('file', file); const r = await fetch('/api/cycles/csv/' + step, { method: 'POST', body: fd, headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content || '', Accept: 'application/json' } }); const j = await r.json(); if (!r.ok) throw new Error(j.message || 'Import failed'); return j; };
+        let c; try { c = await send('check'); } catch (x) { e.target.value = ''; return toast(x.message, 'err'); }
+        const m = modal('Import cycles (CSV)', c.message, `<pre class="small" style="max-height:240px;overflow:auto;white-space:pre-wrap">${esc((c.log || []).join('\n') || 'No warnings.')}</pre><div class="small"><a href="/api/cycles/csv/template">Template</a></div>`, '<button class="btn" id="cyNo">Cancel</button><button class="btn primary" id="cyGo">Import</button>', false);
+        $('#cyNo', m.ov).onclick = () => { m.close(); e.target.value = ''; };
+        $('#cyGo', m.ov).onclick = async () => { try { const j = await send('import'); m.close(); toast(j.message); e.target.value = ''; pageBuying(); } catch (x) { toast(x.message, 'err'); } }; }; }
   }
   // ---------- Direct PO in one save (R-B_SOURCING-2) ----------
   async function directPo() { go('#/direct-po'); }

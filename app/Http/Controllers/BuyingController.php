@@ -545,5 +545,16 @@ class BuyingController extends Controller
         catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
     }
     public function oldEntryUndo(Request $r, int $job) { \App\Services\Perm::need($r->user(), 'buying.BUY'); try { return \App\Services\HistoricalPurchase::undo($job, $r->user()); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
+    /** R-B_SOURCING-14 cycle CSV import: check (never writes), import, undo, template. */
+    public function cycleCsv(Request $r, string $step)
+    {
+        \App\Services\Perm::need($r->user(), 'buying.BUY'); $ent = (int) \App\Services\Context::ent();
+        if (! $r->hasFile('file')) return response()->json(['message' => 'No file uploaded'], 422);
+        $t = (string) file_get_contents($r->file('file')->getRealPath());
+        try { return $step === 'check' ? \App\Services\CycleImport::check($ent, $t) : \App\Services\CycleImport::import($ent, $t, $r->user()); }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+    }
+    public function cycleCsvUndo(Request $r, int $job) { \App\Services\Perm::need($r->user(), 'buying.BUY'); try { return \App\Services\CycleImport::undo($job); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
+    public function cycleCsvTemplate() { return response(\App\Services\CycleImport::template(), 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => 'attachment; filename="SRC_CYCLES_template.csv"']); }
     public function oldEntryTemplate() { return response(\App\Services\HistoricalPurchase::template(), 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => 'attachment; filename="SRC_HISTORICAL_template.csv"']); }
 }

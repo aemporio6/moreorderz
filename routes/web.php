@@ -573,6 +573,9 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('old-entry/csv/check', [\App\Http\Controllers\BuyingController::class, 'oldEntryCheck']);      // dry run – never writes
         Route::post('old-entry/csv', [\App\Http\Controllers\BuyingController::class, 'oldEntryCsv']);
         Route::post('old-entry/csv/{job}/undo', [\App\Http\Controllers\BuyingController::class, 'oldEntryUndo'])->whereNumber('job');
+        Route::post('cycles/csv/{step}', [\App\Http\Controllers\BuyingController::class, 'cycleCsv'])->whereIn('step', ['check', 'import']);      // R-B_SOURCING-14 (check never writes)
+        Route::post('cycles/csv/{job}/undo', [\App\Http\Controllers\BuyingController::class, 'cycleCsvUndo'])->whereNumber('job');
+        Route::get('cycles/csv/template', [\App\Http\Controllers\BuyingController::class, 'cycleCsvTemplate']);
         Route::get('old-entry/template', [\App\Http\Controllers\BuyingController::class, 'oldEntryTemplate']);
         Route::get('preset-groups', [\App\Http\Controllers\PresetGroupController::class, 'index']);      // R-D-62
         Route::post('preset-groups', [\App\Http\Controllers\PresetGroupController::class, 'store']);

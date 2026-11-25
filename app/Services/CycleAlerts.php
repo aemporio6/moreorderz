@@ -17,6 +17,9 @@ class CycleAlerts
     ];
     /** R-F_SETUP-19 strip colours: done teal, current black, pending grey, missing amber, skipped teal hatched */
     public const STRIP = ['done' => '#0F5E63', 'current' => '#16181D', 'pending' => '#E1E4DE', 'missing' => '#E8A33D', 'skipped' => 'hatched'];
+    /** R-B_SOURCING-1 the four cycle types and the steps each one skips from the start (a record added to a skipped step un-skips it, R-17). */
+    public const TYPE_SKIPS = ['FULL' => '', 'DIRECT' => 'rfq,samples,production,qc', 'QUICK' => 'rfq,samples,production,qc,shipment,freight,customs,landed_cost', 'HISTORICAL' => 'rfq,samples,production,qc'];
+
     public const CODES = ['SRC_PAY_DUE', 'SRC_QC_FAILED', 'SRC_SHIP_ARRIVING', 'SRC_SHIP_OVERDUE', 'SRC_GRN_SHORT', 'SRC_LOT_NO_COST', 'SRC_QTY_MISMATCH', 'SRC_OVER_ALLOC', 'SRC_STEP_MISSING', 'SRC_DOC_MISSING', 'STK_NO_LOCATION', 'STK_NO_COST', 'STK_LEDGER_MISMATCH'];
     private const HISTORICAL_ONLY = ['SRC_PAY_DUE', 'SRC_GRN_SHORT', 'SRC_SHIP_OVERDUE', 'SRC_LOT_NO_COST'];
     public const DOC_STEPS = ['po' => ['t_src_po', 'po_number', 'fk_id_po', 'PO'], 'shipment' => ['t_src_shipments', 'shipment_code', 'fk_id_shipment', 'Shipment'], 'qc' => ['t_src_qc', 'qc_code', 'fk_id_qc', 'QC'], 'customs' => ['t_src_customs', 'customs_code', 'fk_id_customs', 'Customs'], 'grn' => ['t_src_grn', 'grn_number', 'fk_id_grn', 'GRN'], 'sample' => ['t_src_samples', 'sample_code', 'fk_id_sample', 'Sample']];

@@ -59,7 +59,7 @@ class DirectPo
                 $first = DB::table('t_product_vendors')->where('id', (int) $lines[0]['product'])->first();
                 $cycle = (int) DB::table('t_src_cycles')->insertGetId(['fk_id_ent' => $ent, 'cycle_code' => Numbering::next('CYC', $ent), 'sourcing_date' => date('Y-m-d'), 'requested_by' => Context::userId(), 'product_name' => mb_substr((string) ($first->product_name_vendor ?? 'Direct PO'), 0, 200),
                     'target_qty' => array_sum(array_map(fn ($l) => (float) $l['qty'], $lines)), 'required_delivery_date' => $d['required_delivery'] ?? null, 'priority' => 'NORMAL', 'status' => 'OPEN', 'notes' => $d['notes'] ?? null,
-                    'cycle_type' => 'DIRECT', 'skipped_steps' => 'rfq,samples,production,qc', 'approval_status' => 'APPROVED', 'approved_by' => Context::userId(), 'approved_at' => now(), 'order_ref' => ! empty($d['order_ref']) ? mb_substr(SrcDuplicate::clean($d['order_ref']), 0, 100) : null,
+                    'cycle_type' => 'DIRECT', 'skipped_steps' => CycleAlerts::TYPE_SKIPS['DIRECT'], 'approval_status' => 'APPROVED', 'approved_by' => Context::userId(), 'approved_at' => now(), 'order_ref' => ! empty($d['order_ref']) ? mb_substr(SrcDuplicate::clean($d['order_ref']), 0, 100) : null,
                     'created_by' => Context::userId(), 'f_active' => 1, 'created_at' => now()]);
                 $poLines = [];
                 foreach ($lines as $l) {

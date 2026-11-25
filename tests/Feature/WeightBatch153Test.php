@@ -140,4 +140,27 @@ class WeightBatch153Test extends TestCase
         $this->assertEqualsWithDelta(1000, (float) DB::table('fin_loans')->where('id', $loan)->value('balance'), 0.001);
         $this->assertSame(0, DB::table('fin_loan_payments')->where('fk_id_loan', $loan)->count());
     }
+    /** R-FIN-27 the old rules finished: M3W withdrawal, MC capital call, M4 inter-company; each stores its rule code; undo takes it back. */
+    public function test_fin27_withdrawal_capital_call_and_intercompany(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id); $bank = $this->bank();
+        $p = $this->person('Partner P');
+        $w = DB::table('fin_withdrawals')->insertGetId(['investor_id' => $p, 'company_id' => 1, 'amount' => 500, 'currency' => 'GBP', 'requested_by' => $this->owner->id, 'requested_at' => '2026-10-08', 'status' => 'PAID', 'approved_at' => '2026-10-08', 'paid_at' => '2026-10-08', 'fk_id_pay_to_bank' => $bank]);
+        $call = DB::table('fin_capital_calls')->insertGetId(['company_id' => 1, 'amount_requested' => 1000, 'reason' => 'New PO', 'created_by' => $this->owner->id, 'created_at' => now(), 'status' => 'OPEN']);
+        $resp = DB::table('fin_capital_call_responses')->insertGetId(['call_id' => $call, 'investor_id' => $p, 'amount_asked' => 1000, 'amount_accepted' => 1000, 'amount_received' => 0, 'status' => 'ACCEPTED']);
+        if (! DB::table('t_enterprise')->where('id', 2)->exists()) DB::table('t_enterprise')->insert(['id' => 2, 'fk_id_module' => 0, 'iso_ent' => 'TS2', 'ent_name' => 'Sister Ltd', 'ent_address' => 'x', 'f_active' => 1, 'ent_short' => 'TS2']);
+        $bank2 = MoneyService::createBank(2, ['bank_name' => 'Sister Bank', 'account_label' => 'S ' . uniqid(), 'currency' => 'GBP']);
+        $wl = $this->line($bank, -500.00, 'PARTNER P'); $cl = $this->line($bank, 999.50, 'P CAPITAL'); $il = $this->line($bank, -250.00, 'TO SISTER');
+        $other = DB::table('fin_bank_transactions')->insertGetId(RecordService::fillNotNull('fin_bank_transactions', ['batch_id' => 0, 'bank_txn_id' => uniqid('T'), 'bank_account_id' => $bank2, 'company_id' => 2, 'txn_date' => '2026-10-11', 'amount' => 250, 'currency' => 'GBP', 'amount_gbp' => 250, 'description' => 'FROM TEST CO', 'match_status' => 'UNMATCHED']));
+        MoneyService::autoMatch(1, $bank);
+        $r = fn ($id) => DB::table('fin_bank_transactions')->where('id', $id)->first(['match_rule', 'matched_to_type', 'category_code']);
+        $this->assertSame(['M3W', 'WITHDRAWAL', 'PARTNER_WITHDRAWAL'], array_values((array) $r($wl->id)));
+        $this->assertSame(['MC', 'CAPITAL_CALL', 'PARTNER_CAPITAL'], array_values((array) $r($cl->id)), 'within the payout tolerance (1)');
+        $this->assertSame(['RECEIVED', 999.5, 'CLOSED'], [DB::table('fin_capital_call_responses')->where('id', $resp)->value('status'), (float) DB::table('fin_capital_call_responses')->where('id', $resp)->value('amount_received'), DB::table('fin_capital_calls')->where('id', $call)->value('status')]);
+        $this->assertSame([['M4', 'INTERCOMPANY_OUT'], ['M4', 'INTERCOMPANY_IN']], [[ $r($il->id)->match_rule, $r($il->id)->category_code], [$r($other)->match_rule, $r($other)->category_code]], 'both companies');
+        MoneyService::unmatch(1, $cl->id);
+        $this->assertSame(['ACCEPTED', 0.0, 'OPEN'], [DB::table('fin_capital_call_responses')->where('id', $resp)->value('status'), (float) DB::table('fin_capital_call_responses')->where('id', $resp)->value('amount_received'), DB::table('fin_capital_calls')->where('id', $call)->value('status')]);
+        MoneyService::unmatch(1, $wl->id);
+        $this->assertNull(DB::table('fin_withdrawals')->where('id', $w)->value('bank_txn_id'));
+    }
 }
