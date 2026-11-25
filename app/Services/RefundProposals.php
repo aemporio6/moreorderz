@@ -39,7 +39,7 @@ class RefundProposals
     private static function findSale(int $ent, int $shopId, string $order, ?string $sku): ?object
     {
         $q = DB::table('t_sales')->where('fk_id_ent', $ent)->where('fk_id_branch', $shopId)->where('order_no', $order)->whereNotIn('sale_source', ['history', 'summary']);
-        if ($sku !== null && $sku !== '') return (clone $q)->where('sku', $sku)->orderBy('id')->first();
+        if ($sku !== null && $sku !== '') return (clone $q)->where('sku', $sku)->orderBy('id')->first();      // per order + SKU when the money file names the SKU; no such line = a refund without a matching line
         $rows = $q->orderBy('id')->limit(2)->get(); return $rows->count() >= 1 ? $rows[0] : null;      // the money file names only the order: its (first) line
     }
 
@@ -58,7 +58,14 @@ class RefundProposals
         $base = ['fk_id_batch' => $r['batch'] ?? null, 'refund_id' => $rid, 'amount' => $amount, 'fk_id_branch' => (int) $shop->id, 'order_no' => $order, 'sku' => $sku ?: null, 'report_sale_amount' => $r['report_sale'] ?? null, 'd_refund' => $date, 'created_at' => now()];
         if (! $sale) { DB::table('t_sale_refund_proposals')->insert(RecordService::fillNotNull('t_sale_refund_proposals', $base + ['refund_kind' => 'TO_CLASSIFY', 'status' => 'UNKNOWN', 'f_sku_unknown' => 1]) + ['fk_id_sale' => null]); return 'unknown'; }
         $total = ! empty($r['order_level']) && (float) $sale->total_amount > 0 ? round((float) DB::table('t_sales')->where('fk_id_ent', $ent)->where('fk_id_branch', $shop->id)->where('order_no', $order)->whereNotIn('sale_source', ['history', 'summary'])->sum('total_amount'), 2) : self::totalFor($sale, isset($r['report_sale']) ? (float) $r['report_sale'] : null);
-        DB::table('t_sale_refund_proposals')->insert(RecordService::fillNotNull('t_sale_refund_proposals', $base + ['fk_id_sale' => $sale->id, 'refund_kind' => self::kind($total, $amount, $shop->fk_id_mp_profile ? (int) $shop->fk_id_mp_profile : null), 'line_total' => $total, 'status' => 'PROPOSED', 'kind_source' => (float) $sale->total_amount > 0 ? 'LINE' : ($total ? 'REPORT' : null)]));
+        $kind = self::kind($total, $amount, $shop->fk_id_mp_profile ? (int) $shop->fk_id_mp_profile : null);
+        $pid = (int) DB::table('t_sale_refund_proposals')->insertGetId(RecordService::fillNotNull('t_sale_refund_proposals', $base + ['fk_id_sale' => $sale->id, 'refund_kind' => $kind, 'line_total' => $total, 'status' => 'PROPOSED', 'kind_source' => (float) $sale->total_amount > 0 ? 'LINE' : ($total ? 'REPORT' : null)]));
+        /* R-A_SALES-86 / 34: a refund of a confirmed (locked) line is never a proposal on that line – it is an adjustment charge in the next open month (Choice REFUND_ON_CONFIRMED, per shop) */
+        if (($sale->status === 'Confirmed' || (int) $sale->f_locked) && $kind !== 'TO_CLASSIFY' && Choices::get('REFUND_ON_CONFIRMED', $ent, (int) $shop->id) === 'ADJUST') {
+            try { SettlementService::refund($ent, (int) $sale->id, $kind === 'FULL' ? null : $amount, 'Marketplace money file – ' . (self::LABELS[$kind] ?? $kind) . ' refund of a confirmed line', $pid);
+                DB::table('t_sale_refund_proposals')->where('id', $pid)->update(['status' => 'ADJUSTED', 'decided_at' => now()]); return 'adjusted'; }
+            catch (\Exception $e) { DB::table('t_sale_refund_proposals')->where('id', $pid)->update(['reject_reason' => mb_substr('Not adjusted: ' . $e->getMessage(), 0, 250)]); }      // e.g. already refunded in full: a person decides
+        }
         return 'proposal';
     }
 

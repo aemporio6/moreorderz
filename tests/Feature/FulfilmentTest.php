@@ -69,6 +69,27 @@ class FulfilmentTest extends TestCase
         $this->actingAs($this->va); $this->postJson('/api/fulfilment', ['shop' => $this->shop, 'order_no' => '', 'd_order' => ''])->assertStatus(422)->assertJsonValidationErrors(['order_no', 'd_order']); $this->getJson('/api/fulfilment?q=x')->assertStatus(422)->assertJsonPath('message', 'Please select an option first');
     }
 
+    /** R-A_SALES-77 carrier layouts (Click & Drop / Evri / DPD) from any order selection; parcel from the line, else from the product pack; phones national per country. */
+    public function test_r77_carrier_layouts_from_any_selection_with_pack_parcel(): void
+    {
+        $this->world(); $id = $this->order()['id']; $this->actingAs($this->tl);
+        $x = Fulfilment::export(['template' => 'CLICK_DROP'], $this->tl, '2026-07-10 15:04:05'); $this->assertSame('CLICK_DROP_20260710150405.csv', $x['name']);
+        $l = array_map(fn ($r) => str_getcsv($r, ',', '"', ''), array_filter(explode("\n", $x['body']))); $row = array_combine($l[0], $l[1]);
+        $this->assertSame(['TT-1', 'Ann Lee', '1 High St', 'GB', '07700900123', 'PC-1', '2'], [$row['Order reference'], $row['Full name'], $row['Address line 1'], $row['Country code'], $row['Phone'], $row['Product SKU'], $row['Quantity']]);
+        // no parcel on the line → the product pack: 120 g × 2 units, 300 × 200 × 40 mm
+        $pid = DB::table('t_product_vendors')->insertGetId(\App\Services\RecordService::fillNotNull('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'PACK-1', 'product_name_vendor' => 'Packed', 'pack_weight_g' => 120, 'pack_l_mm' => 300, 'pack_w_mm' => 200, 'pack_h_mm' => 40, 'f_active' => 1]));
+        DB::table('t_sales')->where('id', $id)->update(['fk_product_id' => $pid, 'parcel_weight_g' => null, 'parcel_l_cm' => null, 'parcel_w_cm' => null, 'parcel_h_cm' => null]);
+        $e = Fulfilment::export(['template' => 'EVRI', 'ids' => [$id]], $this->tl); $l = array_map(fn ($r) => str_getcsv($r, ',', '"', ''), array_filter(explode("\n", $e['body']))); $row = array_combine($l[0], $l[1]);
+        $this->assertSame(['0.240', '30', '20', '4'], [$row['Weight (kg)'], $row['Length (cm)'], $row['Width (cm)'], $row['Height (cm)']]);
+        $this->assertSame('Small parcel', \App\Services\CarrierFiles::packageSize(['weight_g' => 240, 'length' => 30, 'width' => 20, 'height' => 4]));
+        $this->assertSame('Large letter', \App\Services\CarrierFiles::packageSize(['weight_g' => 200, 'length' => 30, 'width' => 20, 'height' => 2]));
+        // from the sales list (any selection): the DPD layout of the ticked line
+        $this->actingAs($this->owner); $r = $this->get('/api/sales/carrier-file?template=DPD&ids=' . $id . '&from=2026-07-01&to=2026-07-31&marketplace=' . DB::table('t_sales')->where('id', $id)->value('fk_id_marketplace'));
+        $r->assertOk(); $this->assertStringContainsString('"Reference 1","Reference 2","Contact name"', $r->getContent()); $this->assertStringContainsString('TT-1', $r->getContent());
+        try { \App\Services\CarrierFiles::build('NOPE', DB::table('t_sales as s')); $this->fail(); } catch (\InvalidArgumentException $e) { $this->assertSame('Choose a carrier layout.', $e->getMessage()); }
+        $this->assertArrayHasKey('CARRIER_FILE_DEFAULT', \App\Services\Choices::LIST);
+    }
+
     /** The rule's first example: 101T (daily-only profile) – 3 daily orders, the money report prices 2 → Close daily orders fills 2, Confirm refused for the third. */
     public function test_close_daily_orders_fills_prices_from_the_money_report(): void
     {

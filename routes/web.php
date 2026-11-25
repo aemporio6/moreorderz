@@ -446,6 +446,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('sales/export/job/{id}', [OrdersController::class, 'saleExportJob'])->whereNumber('id');
         Route::get('sales/export/check', [OrdersController::class, 'saleExportCheck']);
         Route::get('sales/export', [OrdersController::class, 'saleExport']);
+        Route::get('sales/carrier-file', [OrdersController::class, 'saleCarrierFile']);
         Route::get('gen1', [OrdersController::class, 'gen1List']);
         Route::get('gen1/{id}/{view}', [OrdersController::class, 'gen1'])->whereNumber('id')->whereIn('view', ['summary', 'sales', 'buys']);
         Route::get('sales/unlock', [OrdersController::class, 'saleUnlockInfo']);

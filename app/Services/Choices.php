@@ -52,6 +52,10 @@ class Choices
             '0' => ['0 %', ''], '5' => ['5 %', ''], '10' => ['10 %', 'Suggested.'], '12' => ['12 %', ''], '15' => ['15 %', ''], '20' => ['20 %', ''], '25' => ['25 %', ''], '30' => ['30 %', '']]],
         'FULFIL_PHONE_FORMAT' => ['Carrier file: how are phone numbers written?', 'National: the country code becomes 0 and only digits stay (+44 (7700) 900123 → 07700900123). Old: only +44 → 0 and brackets removed, spaces stay (0 7700 900123).', 'NATIONAL', [
             'NATIONAL' => ['National, digits only', 'Suggested: carriers accept it without changes.'], 'OLD' => ['As the old tool wrote it', 'Spaces stay in the number.']]],
+        'REFUND_ON_CONFIRMED' => ['Money report: a refund of a line that is already confirmed – what happens?', 'The confirmed line is never changed. Adjust: the refund is booked at once as an adjustment line in the next open month. Ask first: it waits as a proposal a person accepts or rejects.', 'ADJUST', [
+            'ADJUST' => ['Book the adjustment in the next open month', 'Suggested (the rule): nothing waits, the locked month stays as it is.'], 'PROPOSE' => ['Ask a person first', 'The refund waits in Money › Refunds until accepted.']]],
+        'CARRIER_FILE_DEFAULT' => ['Carrier file: which layout is offered first?', 'The file for the carrier from any order selection (sales list, fulfilment queue). Each layout has the carrier\'s own bulk-upload columns; parcel data comes from the line, else from the product pack.', 'TIKTOK', [
+            'TIKTOK' => ['TikTok / standard (25 columns)', 'Suggested: the old file, read by most label tools.'], 'CLICK_DROP' => ['Royal Mail Click & Drop', 'Order import of Click & Drop, with the package size worked out.'], 'EVRI' => ['Evri', 'Evri bulk upload with weight and size.'], 'DPD' => ['DPD', 'DPD bulk shipments.']]],
         'VA_EXPENSES_BEFORE_SHARE' => ['VA statement: are the shop expenses taken off before or after the VA share?', 'After: VA share = VA % × after-fee profit, then the expenses come off the store part. Before: the share is worked out on after-fee profit less expenses.', '0', [
             '0' => ['After the VA share', 'The VA share does not carry the shop expenses.'], '1' => ['Before the VA share', 'The VA shares the shop expenses.']]],
         'TEMU_SALE_VALUE' => ['Temu order list: which price is the sale value of a line?', 'Temu pays the seller its base price; the buyer pays the retail price (with Temu\'s own margin and VAT). The money file later settles what was really paid.', 'BASE', [
@@ -208,7 +212,7 @@ class Choices
     }
 
     /** Choices a shop can have its own value for (several shops, several values); the company value is the default for every other shop. */
-    public const PER_SHOP = ['STOCK_COST_LAYER', 'PROFIT_SHARE_AFTER_OVERHEADS', 'CLOSE_FIRST_FILE_PARTIAL', 'LATE_LINES_LOCKED_MONTH', 'WH_UNSHIPPED_AT_CONFIRM', 'DEFAULT_PROFIT_ROUTE', 'LOT_OWNER_SHARE', 'TEMU_SALE_VALUE', 'DS_MIN_MARGIN', 'VA_EXPENSES_BEFORE_SHARE', 'VA_SALARY_SOURCE', 'OUTPUT_VAT_MODE', 'STATEMENT_SEND'];
+    public const PER_SHOP = ['STOCK_COST_LAYER', 'CARRIER_FILE_DEFAULT', 'REFUND_ON_CONFIRMED', 'PROFIT_SHARE_AFTER_OVERHEADS', 'CLOSE_FIRST_FILE_PARTIAL', 'LATE_LINES_LOCKED_MONTH', 'WH_UNSHIPPED_AT_CONFIRM', 'DEFAULT_PROFIT_ROUTE', 'LOT_OWNER_SHARE', 'TEMU_SALE_VALUE', 'DS_MIN_MARGIN', 'VA_EXPENSES_BEFORE_SHARE', 'VA_SALARY_SOURCE', 'OUTPUT_VAT_MODE', 'STATEMENT_SEND'];
 
     /** The shop's own value if it has one, else the company default, else the recommended option. No company yet (first sign-in after install) → the global value or the recommended one. */
     public static function get(string $key, ?int $ent, ?int $shop = null): string

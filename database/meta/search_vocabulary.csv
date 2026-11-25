@@ -45,6 +45,7 @@ address book,people and companies,VOCAB,#/list/party
 address change,orders to dispatch,VOCAB,#/orders
 adjust stock,stock on hand,VOCAB,#/stock
 adjustment history,stock ledger,VOCAB,#/stock/ledger
+adjustment next month,refund on confirmed line,VOCAB,#/choices
 admin,roles and rights,VOCAB,#/permissions
 administrator,roles and rights,VOCAB,#/permissions
 ads cost,payouts and settlements,VOCAB,#/settlements
@@ -280,8 +281,10 @@ capital on tap,loans,VOCAB,#/loans
 card payment,bank and cash,VOCAB,#/bank
 cargo insurance,freight,VOCAB,#/list/t_src_freight
 carrier,carriers and postage rates,VOCAB,#/carriers
+carrier csv,carrier file layouts,VOCAB,#/fulfilment
 carrier label,carrier labels,VOCAB,#/labels
 carrier labels,carrier labels,VOCAB,#/labels
+carrier layout,carrier file layouts,VOCAB,#/fulfilment
 carriers,carriers and postage rates,VOCAB,#/carriers
 carton,packaging and box sizes,VOCAB,#/list/product_packaging
 carton label,label templates,VOCAB,#/list/label_template
@@ -353,7 +356,9 @@ claim with supplier,inbound and grn,VOCAB,#/list/t_src_grn
 claims,inbound and grn,VOCAB,#/list/t_src_grn
 clearance agent,customs,VOCAB,#/list/t_src_customs
 click & drop,carrier labels,VOCAB,#/labels
+click & drop csv,carrier file layouts,VOCAB,#/fulfilment
 click and drop,carrier labels,VOCAB,#/labels
+click and drop file,carrier file layouts,VOCAB,#/fulfilment
 client,customers,VOCAB,#/list/crm_customer
 clients,customers,VOCAB,#/list/crm_customer
 close checks,month close,VOCAB,#/close
@@ -444,6 +449,7 @@ country of origin,products,VOCAB,#/list/product
 counts,stock counts,VOCAB,#/stock/counts
 courier,carriers and postage rates,VOCAB,#/carriers
 courier collection,orders to dispatch,VOCAB,#/orders
+courier file,carrier file layouts,VOCAB,#/fulfilment
 courier handover,orders to dispatch,VOCAB,#/orders
 couriers,carriers and postage rates,VOCAB,#/carriers
 cover,task rules,VOCAB,#/list/task_category
@@ -578,6 +584,8 @@ double entry,ledger,VOCAB,#/ledger
 download orders,import sales,VOCAB,#/sales-import
 download report,all reports,VOCAB,#/reports
 dpd,carriers and postage rates,VOCAB,#/carriers
+dpd bulk upload,carrier file layouts,VOCAB,#/fulfilment
+dpd file,carrier file layouts,VOCAB,#/fulfilment
 dpd label,carrier labels,VOCAB,#/labels
 dpd local,carriers and postage rates,VOCAB,#/carriers
 drawings,partners,VOCAB,#/partners
@@ -661,6 +669,8 @@ eur,fx rates,VOCAB,#/list/fin_fx_rate
 eur to gbp,exchange rates,VOCAB,#/fx
 euro,fx rates,VOCAB,#/list/fin_fx_rate
 evri,carriers and postage rates,VOCAB,#/carriers
+evri bulk upload,carrier file layouts,VOCAB,#/fulfilment
+evri file,carrier file layouts,VOCAB,#/fulfilment
 evri label,carrier labels,VOCAB,#/labels
 excel,all reports,VOCAB,#/reports
 excel upload,import a file,VOCAB,#/import
@@ -832,6 +842,7 @@ helium subscription,subscriptions,VOCAB,#/subscriptions
 helium10,research board,VOCAB,#/list/src_research
 helpdesk,customer service cases,VOCAB,#/list/customer_case
 hermes,carriers and postage rates,VOCAB,#/carriers
+hermes file,carrier file layouts,VOCAB,#/fulfilment
 hermes label,carrier labels,VOCAB,#/labels
 hidden margin,hidden margin,VOCAB,#/invoice-margin
 highlands surcharge,carriers and postage rates,VOCAB,#/carriers
@@ -953,6 +964,7 @@ kpi,all reports,VOCAB,#/reports
 kpis,all reports,VOCAB,#/reports
 lab test,certificates,VOCAB,#/list/product_certificate
 label,print queue,VOCAB,#/print-queue
+label file for carrier,carrier file layouts,VOCAB,#/fulfilment
 label pdf,carrier labels,VOCAB,#/labels
 label printer,print queue,VOCAB,#/print-queue
 label regulations,label regulation profiles,VOCAB,#/list/label_regulation_profile
@@ -1012,6 +1024,7 @@ location,locations and bins,VOCAB,#/list/location
 locations,locations and bins,VOCAB,#/list/location
 lock month,month close,VOCAB,#/close
 lock sales,month confirm,VOCAB,#/confirm
+locked month refund,refund on confirmed line,VOCAB,#/choices
 locker,carriers and postage rates,VOCAB,#/carriers
 log out all,sessions and ip allow list,VOCAB,#/sessions
 logged in,sessions and ip allow list,VOCAB,#/sessions
@@ -1276,6 +1289,7 @@ p&l account,ledger,VOCAB,#/ledger
 pack,orders to dispatch,VOCAB,#/orders
 pack size,products,VOCAB,#/list/product
 pack station,orders to dispatch,VOCAB,#/orders
+package size,carrier file layouts,VOCAB,#/fulfilment
 packaging,packaging and box sizes,VOCAB,#/list/product_packaging
 packaging cost,packaging and box sizes,VOCAB,#/list/product_packaging
 packaging design,product pack artwork,VOCAB,#/list/product_artwork_file
@@ -1293,6 +1307,7 @@ pallet location,locations and bins,VOCAB,#/list/location
 paperwork,documents,VOCAB,#/list/document
 parcel,orders to dispatch,VOCAB,#/orders
 parcel locker,carriers and postage rates,VOCAB,#/carriers
+parcel weight from product,carrier file layouts,VOCAB,#/fulfilment
 parcelforce,carriers and postage rates,VOCAB,#/carriers
 parcelforce label,carrier labels,VOCAB,#/labels
 parcels,orders to dispatch,VOCAB,#/orders
@@ -1532,6 +1547,9 @@ reference list,reference register,VOCAB,#/list/reference_value
 referral fee,marketplaces and their questions,VOCAB,#/marketplaces
 reformat file,convert file,VOCAB,#/csv-convert
 refund,refunds and refund proposals,VOCAB,#/refunds
+refund adjustment,refund on confirmed line,VOCAB,#/choices
+refund after confirm,refund on confirmed line,VOCAB,#/choices
+refund on confirmed line,refund on confirmed line,VOCAB,#/choices
 refund proposal,refunds and refund proposals,VOCAB,#/refunds
 refund reason,refunds and refund proposals,VOCAB,#/refunds
 refund request,refunds and refund proposals,VOCAB,#/refunds
@@ -1619,6 +1637,7 @@ roi calculator,marketplace calculator,VOCAB,#/calculator
 role,roles and rights,VOCAB,#/permissions
 roles,roles and rights,VOCAB,#/permissions
 royal mail,carriers and postage rates,VOCAB,#/carriers
+royal mail import file,carrier file layouts,VOCAB,#/fulfilment
 royal mail label,carrier labels,VOCAB,#/labels
 royal mail tracked 24,carriers and postage rates,VOCAB,#/carriers
 rrp,prices and price log,VOCAB,#/reports/price_log
@@ -1735,6 +1754,7 @@ shipment label,orders to dispatch,VOCAB,#/orders
 shipments,shipments,VOCAB,#/list/t_src_shipments
 shipped status,tracking upload,VOCAB,#/tracking-upload
 shipping agent,freight,VOCAB,#/list/t_src_freight
+shipping file,carrier file layouts,VOCAB,#/fulfilment
 shipping from china,shipments,VOCAB,#/list/t_src_shipments
 shipping label,carrier labels,VOCAB,#/labels
 shipping preset,carriers and postage rates,VOCAB,#/carriers

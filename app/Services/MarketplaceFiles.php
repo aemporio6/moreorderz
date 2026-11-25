@@ -203,7 +203,7 @@ class MarketplaceFiles
             $order = $g($r, 'order-id');
             $lines[] = ['statement_id' => $sid, 'order_id' => $order, 'sku' => $g($r, 'sku'), 'qty' => (int) self::num($g($r, 'quantity-purchased')), 'txn' => $txn, 'code' => $code, 'desc' => trim($g($r, 'amount-type') . ' / ' . $g($r, 'amount-description'), ' /'), 'amount' => $amt,
                 'date' => self::day($g($r, 'posted-date-time')) ?? self::day($g($r, 'posted-date'))];
-            if ($code === 'NET_SALES' && $order !== '' && str_contains(mb_strtolower($txn), 'refund')) $refund[$sid . '|' . $order] = round(($refund[$sid . '|' . $order] ?? 0) + $amt, 2);
+            if ($code === 'NET_SALES' && $order !== '' && str_contains(mb_strtolower($txn), 'refund')) { $rk = $sid . '|' . $order . '|' . $g($r, 'sku'); $refund[$rk] = round(($refund[$rk] ?? 0) + $amt, 2); }      /* R-A_SALES-86 per order + SKU */
         }
         if (! $st) throw new \InvalidArgumentException('The file has no settlement summary line (the first data line with the total and the deposit date).');
         $sum = []; foreach ($lines as $l) $sum[$l['statement_id']] = round(($sum[$l['statement_id']] ?? 0) + $l['amount'], 2);
@@ -258,7 +258,7 @@ class MarketplaceFiles
                 $v = self::num($r[$i] ?? ''); if ($v == 0.0) continue; $parts = round($parts + $v, 2);
                 $code = $code0 ?? $colCode[$i]; if ($code === 'MP_OTHER') $unknown[$type . ' / ' . $rows[$hi][$i] . ($g($r, 'description') !== '' ? ' / ' . mb_substr($g($r, 'description'), 0, 40) : '')] = true;
                 $lines[] = ['statement_id' => $sid, 'order_id' => $order, 'sku' => $g($r, 'sku'), 'qty' => (int) self::num($g($r, 'quantity')), 'txn' => $type, 'code' => $code, 'desc' => trim((string) $rows[$hi][$i] . ($code0 ? ' – ' . $g($r, 'description') : '')), 'amount' => $v, 'date' => $date];
-                if ($isRefund && $code === 'NET_SALES' && $order !== '') $refund[$sid . '|' . $order] = round(($refund[$sid . '|' . $order] ?? 0) + $v, 2);
+                if ($isRefund && $code === 'NET_SALES' && $order !== '') { $rk = $sid . '|' . $order . '|' . $g($r, 'sku'); $refund[$rk] = round(($refund[$rk] ?? 0) + $v, 2); }
             }
             if (abs(round($parts - $total, 2)) >= 0.005) $bad++;
             $sum[$sid] = round(($sum[$sid] ?? 0) + $parts, 2);
@@ -305,7 +305,7 @@ class MarketplaceFiles
                 foreach ($fees as $col => $code) { $v = round(self::num($g($r, $col)) * $rate, 2); if ($v != 0.0) { $add($code, $v, ucfirst($col)); $sum = round($sum + $v, 2); } }
                 $rest = round($net - $sum, 2);
                 if ($rest != 0.0) { if ($tc !== $pc && abs($rest) <= 0.05) $add('MP_FX', $rest, 'Rounding of the exchange rate'); else { $add('MP_OTHER', $rest, 'Difference between the net amount and gross + fees'); $bad++; } }
-                if ($type === 'refund' && $order !== '' && $gross < 0) $refund['EBAY-' . $pid . '|' . $order] = round(($refund['EBAY-' . $pid . '|' . $order] ?? 0) + $gross, 2);
+                if ($type === 'refund' && $order !== '' && $gross < 0) { $rk = 'EBAY-' . $pid . '|' . $order . '|' . $g($r, 'custom label'); $refund[$rk] = round(($refund[$rk] ?? 0) + $gross, 2); }
                 continue;
             }
             $code = self::pfLong($g($r, 'type') . ' ' . $desc) ?? match (true) {      /* the profile's words first */
@@ -510,9 +510,9 @@ class MarketplaceFiles
             // refunds in the file → proposals a person decides (never an automatic refund)
             $proposals = 0; $noSale = 0;
             foreach ($x['refunds'] as $key => $amt) {
-                [$sid, $order] = explode('|', $key, 2); if (isset($latePaid[$sid])) continue;
+                [$sid, $order, $rsku] = array_pad(explode('|', $key, 3), 3, ''); if (isset($latePaid[$sid])) continue;
                 // one place decides the kind (Full / Half / Partial), keeps a refund without a matching line, and never adds the same refund twice (R-A_SALES-86)
-                $res = RefundProposals::fromReport($ent, ['shop' => (int) $shop->id, 'order_no' => $order, 'sku' => '', 'refund_id' => mb_substr($sid . ':' . $order, 0, 80), 'amount' => abs($amt), 'batch' => $batch, 'date' => $x['period'][1] ?? date('Y-m-d'), 'order_level' => true]);
+                $res = RefundProposals::fromReport($ent, ['shop' => (int) $shop->id, 'order_no' => $order, 'sku' => $rsku, 'refund_id' => mb_substr($sid . ':' . $order, 0, 80), 'amount' => abs($amt), 'batch' => $batch, 'date' => $x['period'][1] ?? date('Y-m-d'), 'order_level' => $rsku === '']);
                 if ($res === 'proposal') $proposals++; elseif ($res === 'unknown') $noSale++;
             }
             DB::table('fin_import_batches')->where('id', $batch)->update(['rows_total' => $new + $dup, 'rows_new' => $new, 'rows_duplicate' => $dup, 'rows_error' => array_sum($latePaid)]);

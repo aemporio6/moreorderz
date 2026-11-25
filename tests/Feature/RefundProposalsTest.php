@@ -56,6 +56,20 @@ class RefundProposalsTest extends TestCase
         RP::rejectUnknown($q, 'not ours', $this->owner); $this->assertNull($block());
     }
 
+    /** A refund of a confirmed line is an adjustment of the next open month, never a proposal on the locked line (Choice REFUND_ON_CONFIRMED); two SKUs of one order are two refunds. */
+    public function test_r86_confirmed_line_becomes_an_adjustment_and_refunds_are_per_sku(): void
+    {
+        $this->world(); $c = $this->sale('C-1', 'C1', 20); DB::table('t_sales')->where('id', $c)->update(['status' => 'Confirmed', 'sale_source' => 'active', 'f_locked' => 1]);
+        $this->assertSame('adjusted', $this->refund('C-1', 'C1', 10, 'RC1'));
+        $p = DB::table('t_sale_refund_proposals')->where('refund_id', 'RC1')->first(); $this->assertSame(['ADJUSTED', 'HALF'], [$p->status, $p->refund_kind]);
+        $this->assertEquals(-10.0, DB::table('t_sale_charges')->where('fk_id_sale', $c)->where('kind', 'REFUND_ADJ')->value('amount')); $this->assertSame('Confirmed', DB::table('t_sales')->where('id', $c)->value('status'));
+        $this->assertNull(RP::confirmBlock($this->shop, '2026-07'));
+        \App\Services\Choices::set('REFUND_ON_CONFIRMED', 'PROPOSE', 1); $this->assertSame('proposal', $this->refund('C-1', 'C1', 2, 'RC2'));      // ask a person first
+        $this->sale('M-1', 'M1', 10); $this->sale('M-1', 'M2', 30);
+        $this->assertSame(['proposal', 'proposal'], [$this->refund('M-1', 'M1', 10, 'RM'), $this->refund('M-1', 'M2', 15, 'RM')]);
+        $this->assertSame(['FULL', 'HALF'], DB::table('t_sale_refund_proposals')->where('refund_id', 'RM')->orderBy('id')->pluck('refund_kind')->all());
+    }
+
     public function test_a_line_without_price_uses_the_reports_sale_amount_or_waits_to_be_classified(): void
     {
         $this->world(); $d = $this->sale('T-1', 'D1', 0); $w = $this->sale('T-2', 'D2', 0);

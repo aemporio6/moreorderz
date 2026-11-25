@@ -59,7 +59,7 @@ class Fulfilment
     {
         Perm::need($u, 'orders.fulfilSee'); $mg = self::manages($u); $per = min(200, max(10, (int) ($f['per_page'] ?? 50))); $page = max(1, (int) ($f['page'] ?? 1)); $q = self::query($f, $u, $today); $n = (clone $q)->count();
         $rows = $q->join('t_branches as b', 'b.id', '=', 's.fk_id_branch')->orderByDesc('s.d_order')->orderByDesc('s.id')->offset(($page - 1) * $per)->limit($per)->get(self::cols()); [$from, $to] = self::range($f, $mg, $today);
-        return ['rows' => $rows->map(fn ($r) => self::row($r, $mg))->all(), 'count' => $n, 'page' => $page, 'pages' => max(1, (int) ceil($n / $per)), 'manager' => $mg, 'can_add' => Perm::has($u, 'orders.fulfilAdd'), 'can_export' => Perm::has($u, 'orders.fulfilExport'), 'from' => $from, 'to' => $to, 'presets' => $mg ? self::PRESETS : null,
+        return ['rows' => $rows->map(fn ($r) => self::row($r, $mg))->all(), 'count' => $n, 'page' => $page, 'pages' => max(1, (int) ceil($n / $per)), 'manager' => $mg, 'can_add' => Perm::has($u, 'orders.fulfilAdd'), 'layouts' => CarrierFiles::list(), 'layout_default' => Choices::get('CARRIER_FILE_DEFAULT', (int) Context::ent(), ! empty($f['shop']) ? (int) $f['shop'] : null), 'can_export' => Perm::has($u, 'orders.fulfilExport'), 'from' => $from, 'to' => $to, 'presets' => $mg ? self::PRESETS : null,
             'search' => array_map(fn ($s) => $s[0], array_filter(self::SEARCH, fn ($s) => $mg || ! $s[2])), 'shops' => array_map(fn ($s) => ['id' => $s['id'], 'name' => $s['label']], self::shops($u)), 'defaults' => ['length' => 25, 'width' => 20, 'height' => 2, 'country_code' => 'GB', 'qty' => 1, 'd_order' => $today ?? date('Y-m-d')],
             'services' => DB::table('t_carrier_pkg_svc as cv')->join('t_carriers as c', 'c.id', '=', 'cv.fk_id_carrier')->whereIn('c.fk_id_ent', [0, (int) Context::ent()])->where('cv.f_active', 1)->orderBy('c.carrier_name')->orderBy('cv.pkg_svc_name')->get([DB::raw("CONCAT(c.carrier_name, '-', cv.pkg_svc_name) as name")])->pluck('name')->all()];
     }
@@ -135,6 +135,8 @@ class Fulfilment
     public static function export(array $f, ?object $u, ?string $now = null): array
     {
         Perm::need($u, 'orders.fulfilExport'); $q = self::query($f, $u); if (! empty($f['ids'])) $q->whereIn('s.id', array_map('intval', (array) $f['ids'])); $mode = Choices::get('FULFIL_PHONE_FORMAT', Context::ent());
+        if (($t = strtoupper((string) ($f['template'] ?? ''))) !== '' && $t !== 'TIKTOK') { $ids = $q->pluck('s.id')->all();      /* R-A_SALES-77 another carrier's layout over the same rows */
+            $x = CarrierFiles::build($t, DB::table('t_sales as s')->whereIn('s.id', $ids ?: [0]), $now); Audit::log('mo_sale_fulfilment', null, 'EXPORT', ['rows' => $x['rows'], 'layout' => $t]); return $x; }
         $h = fopen('php://temp', 'w+'); fputcsv($h, self::EXPORT_HEAD, ',', '"', ''); $n = 0;
         foreach ($q->join('t_branches as b', 'b.id', '=', 's.fk_id_branch')->orderBy('s.d_order')->orderBy('s.id')->limit(20000)->get(self::cols()) as $r) { $n++; $cc = (string) $r->ship_to_country_code ?: 'GB';
             fputcsv($h, array_map(fn ($v) => DsMatch::guard((string) $v), [$r->order_no, date('d/m/Y', strtotime((string) $r->d_order)), str_starts_with((string) $r->sku, 'NOSKU-') ? '' : $r->sku, $r->item_name, (int) $r->qty, $r->buyer_first_name, $r->buyer_last_name, $r->buyer_email, self::phone($r->buyer_phone, $cc, $mode), $r->recipient_first_name, $r->recipient_last_name, self::phone($r->recipient_phone, $cc, $mode),

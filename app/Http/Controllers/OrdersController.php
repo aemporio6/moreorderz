@@ -468,6 +468,14 @@ class OrdersController extends Controller
         });
     }
 
+    /** R-A_SALES-77 the carrier file of the sales list's filters (or ticked ids): Click & Drop / Evri / DPD / TikTok layout. Reads only. */
+    public function saleCarrierFile(Request $r)
+    {
+        return $this->run(function () use ($r) { $this->can($r, 'orders.saleExport'); $t = strtoupper((string) $r->query('template', 'CLICK_DROP'));
+            $q = \App\Services\SaleLines::query($this->saleFilters($r), $r->user()); if ($ids = array_filter(array_map('intval', explode(',', (string) $r->query('ids', ''))))) $q->whereIn('s.id', $ids);
+            if ($t === 'TIKTOK') $t = 'CLICK_DROP';
+            $x = \App\Services\CarrierFiles::build($t, $q); return response($x['body'], 200, ['Content-Type' => 'text/csv; charset=UTF-8', 'Content-Disposition' => 'attachment; filename="' . $x['name'] . '"']); });
+    }
     public function saleExport(Request $r)
     {
         return $this->run(function () use ($r) {
@@ -574,7 +582,7 @@ class OrdersController extends Controller
     }
 
     // ---------- daily fulfilment orders (R-A_SALES-75 / 76 / 77) ----------
-    private function fulfilFilters(Request $r): array { return $r->only(['shop', 'status', 'date', 'from', 'to', 'preset', 'range', 'by', 'q', 'page', 'per_page', 'ids']); }
+    private function fulfilFilters(Request $r): array { return $r->only(['shop', 'status', 'date', 'from', 'to', 'preset', 'range', 'by', 'q', 'page', 'per_page', 'ids', 'template']); }
     public function fulfilment(Request $r)
     {
         return $this->run(function () use ($r) { if ($r->query('format') !== 'csv') return \App\Services\Fulfilment::list($this->fulfilFilters($r), $r->user());
