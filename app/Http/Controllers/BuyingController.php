@@ -556,5 +556,13 @@ class BuyingController extends Controller
     }
     public function cycleCsvUndo(Request $r, int $job) { \App\Services\Perm::need($r->user(), 'buying.BUY'); try { return \App\Services\CycleImport::undo($job); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
     public function cycleCsvTemplate() { return response(\App\Services\CycleImport::template(), 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => 'attachment; filename="SRC_CYCLES_template.csv"']); }
+    /** R-A_SALES-80 supplier order history (Amazon Business layout): check (never writes) / import / template. */
+    public function supplierOrders(Request $r, string $step)
+    {
+        if (! $r->hasFile('file')) return response()->json(['message' => 'No file uploaded'], 422);
+        try { return \App\Services\SupplierOrders::import((int) \App\Services\Context::ent(), $r->file('file')->getClientOriginalName(), (string) file_get_contents($r->file('file')->getRealPath()), $r->user(), $step === 'import'); }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+    }
+    public function supplierOrdersTemplate() { return response(\App\Services\SupplierOrders::template(), 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => 'attachment; filename="1.csv"']); }
     public function oldEntryTemplate() { return response(\App\Services\HistoricalPurchase::template(), 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => 'attachment; filename="SRC_HISTORICAL_template.csv"']); }
 }

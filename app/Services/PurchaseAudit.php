@@ -60,21 +60,45 @@ class PurchaseAudit
     public static function runs(object $u, array $f = []): array
     {
         Perm::need($u, 'orders.SEE'); $shops = Perm::shops($u);
-        $rows = DB::table('t_audit_main as a')->join('t_branches as b', 'b.id', '=', 'a.fk_id_branch')->when($shops !== null, fn ($q) => $q->whereIn('a.fk_id_branch', $shops ?: [0]))
-            ->orderByDesc('a.d_yr_mon')->orderBy('b.shop_no')->limit(300)->get(['a.*', 'b.shop_no', 'b.shop_name'])
+        /* R-A_SALES-59 chips: period current / previous / "start to" two months ago × status All / Pending / Sale-loaded */
+        $cur = date('Y-m-01'); $prev = date('Y-m-01', strtotime('first day of last month')); $m2 = date('Y-m-01', strtotime('first day of -2 months'));
+        $per = (string) ($f['period'] ?? ''); $st = strtoupper((string) ($f['status'] ?? ''));
+        $rows = DB::table('t_audit_main as a')->join('t_branches as b', 'b.id', '=', 'a.fk_id_branch')->leftJoin('t_vendors as v', 'v.id', '=', 'a.fk_id_vendor')->when($shops !== null, fn ($q) => $q->whereIn('a.fk_id_branch', $shops ?: [0]))
+            ->when($per === 'current', fn ($q) => $q->where('a.d_yr_mon', $cur))->when($per === 'previous', fn ($q) => $q->where('a.d_yr_mon', $prev))->when($per === 'start', fn ($q) => $q->where('a.d_yr_mon', '<=', $m2))
+            ->when(in_array($st, ['PENDING', 'SALE-LOADED', 'COMPLETED', 'SKIP'], true), fn ($q) => $q->where('a.e_audit_status', $st))
+            ->orderByDesc('a.d_yr_mon')->orderBy('b.shop_no')->limit(300)->get(['a.*', 'b.shop_no', 'b.shop_name', 'v.vendor_name', 'v.audit_profile'])
             ->map(fn ($r) => ['id' => (int) $r->id, 'shop' => trim($r->shop_no . ' ' . $r->shop_name), 'month' => substr((string) $r->d_yr_mon, 0, 7), 'status' => $r->e_audit_status,
+                'supplier' => $r->vendor_name, 'tiles' => ['ebay' => true, 'amazon' => $r->audit_profile === 'AMAZON', 'gd' => $r->audit_profile === 'GD'],
                 'lines' => DB::table('ebay_audit')->where('fk_id_audit_main', $r->id)->count()])->all();
         $vendors = DB::table('t_vendors')->where('f_active', 1)->whereIn('audit_profile', ['AMAZON', 'GD'])->orderBy('vendor_name')->get(['id', 'vendor_name', 'iso_vendor', 'audit_profile']);
         $branches = DB::table('t_branches')->where('f_active', 1)->when($shops !== null, fn ($q) => $q->whereIn('id', $shops ?: [0]))->orderBy('shop_no')->get(['id', 'shop_no', 'shop_name']);
         return ['rows' => $rows, 'vendors' => $vendors, 'shops' => $branches, 'can_run' => Perm::has($u, 'orders.CONFIRM')];
     }
 
-    public static function createRun(int $shop, string $ym, object $u): int
+    public static function createRun(int $shop, string $ym, object $u, ?int $vendor = null): int
     {
         Perm::need($u, 'orders.CONFIRM'); if (! Perm::shopAllowed($u, $shop)) throw new \InvalidArgumentException(' User has no rights for that shop');
         if (! preg_match('/^(\d{4})-(\d{2})$/', $ym, $m) || (int) $m[2] < 1 || (int) $m[2] > 12) throw new \InvalidArgumentException('Choose the month.');
         $ex = DB::table('t_audit_main')->where('fk_id_branch', $shop)->where('yr', (int) $m[1])->where('mon', (int) $m[2])->value('id'); if ($ex) return (int) $ex;
-        return (int) DB::table('t_audit_main')->insertGetId(['mon' => (int) $m[2], 'yr' => (int) $m[1], 'd_yr_mon' => "$ym-01", 'fk_id_branch' => $shop, 'e_audit_status' => 'PENDING']);
+        return (int) DB::table('t_audit_main')->insertGetId(['mon' => (int) $m[2], 'yr' => (int) $m[1], 'd_yr_mon' => "$ym-01", 'fk_id_branch' => $shop, 'fk_id_vendor' => $vendor ?: null, 'e_audit_status' => 'PENDING']);
+    }
+
+    /** R-A_SALES-59 the run's status by hand: COMPLETED or SKIP (or back to PENDING / SALE-LOADED). */
+    public static function setStatus(int $runId, string $status, object $u): array
+    {
+        Perm::need($u, 'orders.CONFIRM'); self::run($runId, $u); $status = strtoupper(trim($status));
+        if (! in_array($status, ['PENDING', 'SALE-LOADED', 'COMPLETED', 'SKIP'], true)) throw new \InvalidArgumentException('Choose a status.');
+        if ($status === 'SALE-LOADED' && ! DB::table('ebay_audit')->where('fk_id_audit_main', $runId)->exists()) throw new \InvalidArgumentException('No eBay file is loaded for this run yet.');
+        DB::table('t_audit_main')->where('id', $runId)->update(['e_audit_status' => $status]);
+        return ['message' => "Run set to $status."];
+    }
+
+    /** Delete a run with the audit lines it loaded (eBay file, Amazon and GD purchase files). Sales are never touched. */
+    public static function deleteRun(int $runId, object $u): array
+    {
+        Perm::need($u, 'orders.CONFIRM'); self::run($runId, $u);
+        DB::transaction(function () use ($runId) { foreach (['ebay_audit', 'pur_audit', 'pur_audit_gd'] as $t) DB::table($t)->where('fk_id_audit_main', $runId)->delete(); DB::table('t_audit_main')->where('id', $runId)->delete(); });
+        return ['message' => 'Audit run deleted with its loaded lines.'];
     }
 
     /* ---------------- R-A_SALES-61 note parser ---------------- */

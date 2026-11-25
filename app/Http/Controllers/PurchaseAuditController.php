@@ -12,14 +12,17 @@ class PurchaseAuditController extends Controller
     private function run(callable $fn) { try { $r = $fn(); return is_array($r) ? $r : ['message' => $r]; } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
     private function text(Request $r): string { if (! $r->hasFile('file')) throw new \InvalidArgumentException('Choose the file.'); return (string) file_get_contents($r->file('file')->getRealPath()); }
 
-    public function index(Request $r) { return A::runs($r->user()); }
-    public function create(Request $r) { return $this->run(fn () => ['id' => A::createRun((int) $r->input('shop'), (string) $r->input('month'), $r->user()), 'message' => 'Run ready.']); }
+    public function index(Request $r) { return A::runs($r->user(), $r->only(['period', 'status'])); }
+    public function status(Request $r, int $id) { return $this->run(fn () => A::setStatus($id, (string) $r->input('status'), $r->user())); }      // R-A_SALES-59
+    public function destroy(Request $r, int $id) { return $this->run(fn () => A::deleteRun($id, $r->user())); }
+    public function create(Request $r) { return $this->run(fn () => ['id' => A::createRun((int) $r->input('shop'), (string) $r->input('month'), $r->user(), (int) $r->input('vendor') ?: null), 'message' => 'Run ready.']); }
     public function show(Request $r, int $id)
     {
         return $this->run(function () use ($r, $id) {
             $run = DB::table('t_audit_main as a')->join('t_branches as b', 'b.id', '=', 'a.fk_id_branch')->where('a.id', $id)->first(['a.*', 'b.shop_no', 'b.shop_name']) ?? throw new \InvalidArgumentException('Audit run not found.');
             $vendors = DB::table('t_vendors')->where('f_active', 1)->whereIn('audit_profile', ['AMAZON', 'GD'])->orderBy('vendor_name')->get(['id', 'vendor_name', 'audit_profile']);
-            $v = (int) $r->query('vendor', 0); $prof = $v ? $vendors->firstWhere('id', $v)?->audit_profile : null;
+            $v = (int) $r->query('vendor', 0) ?: (int) ($run->fk_id_vendor ?? 0); $prof = $v ? $vendors->firstWhere('id', $v)?->audit_profile : null;      /* R-A_SALES-59 the run's supplier opens its own tiles */
+            if ($run->fk_id_vendor ?? null) $vendors = $vendors->where('id', (int) $run->fk_id_vendor)->values();
             return ['run' => ['id' => (int) $run->id, 'shop' => trim($run->shop_no . ' ' . $run->shop_name), 'shop_no' => $run->shop_no, 'month' => substr((string) $run->d_yr_mon, 0, 7), 'status' => $run->e_audit_status],
                 'invalid' => A::invalidNotes($id, $r->user()), 'compare' => A::compare($id, $r->user()), 'vendors' => $vendors,
                 'vendor' => $v, 'amazon' => $prof === 'AMAZON' ? A::amazon($id, $v, $r->user()) : null, 'gd' => $prof === 'GD' ? A::gd($id, $v, $r->user()) : null];

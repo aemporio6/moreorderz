@@ -118,4 +118,23 @@ class PurchaseAuditTest extends TestCase
         DB::table('ebay_audit')->where('fk_id_audit_main', $run)->where('pur_ref_no', 'PB-10')->update(['pur_rate' => 3.50, 'tot_pur_amount' => 7.00]);
         $this->assertSame(['[Rate]', '[Total Pur]'], A::gd($run, $this->gdv, $this->owner)['checks'][4]['rows'][0]['tags']);
     }
+    /** R-A_SALES-59 the rule test: a run with supplier Amazon shows the Amazon tiles, not the GD ones; chips; status by hand; delete removes the loaded lines only. */
+    public function test_r59_run_supplier_chips_status_delete(): void
+    {
+        $this->actingAs($this->owner);
+        $run = $this->postJson('/api/purchase-audit', ['shop' => $this->shop, 'month' => date('Y-m'), 'vendor' => $this->amz])->assertOk()->json('id');
+        $old = A::createRun($this->shop, date('Y-m', strtotime('first day of -3 months')), $this->owner);
+        $row = collect($this->getJson('/api/purchase-audit')->json('rows'))->firstWhere('id', $run);
+        $this->assertSame(['Amazon UK', true, false], [$row['supplier'], $row['tiles']['amazon'], $row['tiles']['gd']]);
+        $this->assertSame([$run], array_column($this->getJson('/api/purchase-audit?period=current')->json('rows'), 'id'));
+        $this->assertSame([$old], array_column($this->getJson('/api/purchase-audit?period=start')->json('rows'), 'id'));
+        $this->assertSame([], $this->getJson('/api/purchase-audit?status=SALE-LOADED')->json('rows'));
+        $this->postJson("/api/purchase-audit/$run/status", ['status' => 'SALE-LOADED'])->assertStatus(422)->assertJsonPath('message', 'No eBay file is loaded for this run yet.');
+        $this->postJson("/api/purchase-audit/$old/status", ['status' => 'SKIP'])->assertOk();
+        $this->assertSame('SKIP', DB::table('t_audit_main')->where('id', $old)->value('e_audit_status'));
+        $this->assertSame([(int) $this->amz], array_map(fn ($v) => (int) $v['id'], $this->getJson("/api/purchase-audit/$run")->json('vendors')), 'only the run\'s supplier');
+        A::importEbay($run, '105_x.csv', $this->file([$this->line('1', 'O-1', 'A', 1, '5.00')]), $this->owner);
+        $this->postJson("/api/purchase-audit/$run/delete")->assertOk();
+        $this->assertSame([0, 0], [DB::table('t_audit_main')->where('id', $run)->count(), DB::table('ebay_audit')->where('fk_id_audit_main', $run)->count()]);
+    }
 }
