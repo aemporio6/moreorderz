@@ -172,6 +172,7 @@ class RecordService
         $errors = FormRules::check($formKey, $data, $old, $id, $errors) + $errors;      // a form's own message (old texts) wins over the general one      // typed codes, shares, uniqueness of this form (R-F_SETUP-35)
         if ($errors) throw ValidationException::withMessages($errors);
 
+        $data = StepFormulas::apply($table, $data, $old);      /* R-B_SOURCING-33 the live formulas, recomputed on the server */
         try { $data = Fx::fillRow($table, $data, $old, (int) Context::ent()); } catch (\RuntimeException $e) { throw ValidationException::withMessages(['exchange_rate' => $e->getMessage()]); }      /* R-B_SOURCING-32 */
         if ($table === 'drp_items') foreach (['ship_address', 'ship_phone'] as $mc) if (isset($data[$mc]) && Vault::isMasked($data[$mc])) unset($data[$mc]);      // a masked value shown to the person is never saved back over the real one
         $vault = Vault::prepare($table, $data, $id);   // secrets go to the vault, card numbers keep 4 digits, CVV / PIN are dropped

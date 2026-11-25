@@ -45,7 +45,9 @@ class Approvals
             $u = \Illuminate\Support\Facades\Auth::user();
             $viaDelegation = $u && ! Perm::has($u, 'money.approve') && Choices::get('DELEGATION_ALL_MONEY', (int) (Context::ent() ?: 0) ?: null) === '1' && DB::table('tm_delegations')->where('to_user_id', $u->id)->where('rights', 'ALL')->where('from_date', '<=', date('Y-m-d'))->where(fn ($w) => $w->whereNull('to_date')->orWhere('to_date', '>=', date('Y-m-d')))
                 ->pluck('from_user_id')->contains(fn ($f) => ($x = \App\Models\User::find($f)) && Perm::has($x, 'money.approve') && (int) $f !== (int) $a->requested_by);      // R-G_CORE-17 (new): an ALL delegation covers money approvals too
-            if (! $viaDelegation && ! ($u ? Perm::has($u, 'money.approve') : in_array(Context::role(), self::APPROVERS, true))) throw new \InvalidArgumentException('Only the Owner or a Manager can decide this.');
+            $oldEntry = $a->action_code === 'SRC_HISTORICAL' && $u;      /* R-B_SOURCING-55 an old purchase entry is decided by sourcing.approve_old_entry (Owner / Partner), not by the money approvers */
+            if (! $oldEntry && ! $viaDelegation && ! ($u ? Perm::has($u, 'money.approve') : in_array(Context::role(), self::APPROVERS, true))) throw new \InvalidArgumentException('Only the Owner or a Manager can decide this.');
+            if ($a->action_code === 'SRC_HISTORICAL' && $u && ! Perm::has($u, 'sourcing.approve_old_entry')) throw new \InvalidArgumentException('Partner / Manager only');      /* R-B_SOURCING-55 */
             if ((int) $a->requested_by === (int) Context::userId()) throw new \InvalidArgumentException('You asked for this yourself – a second person must decide it.');
             if (! $approve && ! trim((string) $reason)) throw new \InvalidArgumentException('Give the reason for saying no.');
             DB::table('sys_approvals')->where('id', $a->id)->update(['status' => $approve ? 'APPROVED' : 'REJECTED', 'decided_by' => Context::userId(), 'decided_at' => now(), 'reason' => $reason]);

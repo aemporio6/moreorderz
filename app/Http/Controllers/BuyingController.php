@@ -258,7 +258,7 @@ class BuyingController extends Controller
         $this->can($r, 'buying.SEE');
         $w = Buy::cycle($id);
         $w['stages'] = \App\Services\CycleAlerts::pipeline(DB::table('t_src_cycles')->where('id', $id)->first());      // R-F_SETUP-19: the cycle header reads the same stage engine
-        if (! \App\Services\Perm::has($r->user(), 'buying.MONEY')) { foreach (['rfqs' => ['price'], 'pos' => ['po_total'], 'landed' => ['freight_cost', 'customs_duty', 'other_cost', 'total_cost', 'landed_cost_per_unit']] as $k => $cols) foreach ($w[$k] as $row) foreach ($cols as $c) unset($row->$c); $w['terms'] = []; }
+        if (! \App\Services\Perm::has($r->user(), 'buying.MONEY')) { foreach (['rfqs' => ['price'], 'pos' => ['po_total'], 'terms' => ['planned_amount', 'paid_amount', 'remaining_amount'], 'landed' => ['freight_cost', 'customs_duty', 'other_cost', 'total_cost', 'landed_cost_per_unit']] as $k => $cols) foreach ($w[$k] ?? [] as $row) foreach ($cols as $c) unset($row->$c);      /* R-B_SOURCING-55 sourcing.money: no money field leaves the server */ $w['terms'] = []; }
         return $w + ['rights' => $this->rights($r)];
     }
 

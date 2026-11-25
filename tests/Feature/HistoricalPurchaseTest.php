@@ -97,10 +97,18 @@ class HistoricalPurchaseTest extends TestCase
         $this->assertTrue($r['pending']); $this->assertSame('Saved PENDING APPROVAL - stock unaffected until a Partner approves. Opening cycle...', $r['message']);
         $this->assertSame(0, DB::table('fin_lots')->where('fk_id_cycle', $r['cycle'])->count(), 'stock unaffected until approved');
         $a = DB::table('sys_approvals')->where('action_code', 'SRC_HISTORICAL')->where('entity_id', $r['cycle'])->first();
+        $mgr = \App\Models\User::create(['login_id' => 'mg' . uniqid() . '@t', 'password_hash' => bcrypt('x-password-1'), 'role_code' => 'MANAGER', 'display_name' => 'Mgr', 'fk_id_ent' => 1, 'f_active' => 1]);
+        $this->actingAs($mgr); Context::set(1, $mgr->id);      // R-B_SOURCING-55: a money approver without sourcing.approve_old_entry cannot decide it
+        try { \App\Services\Approvals::decide((int) $a->id, true); $this->fail(); } catch (\InvalidArgumentException $e) { $this->assertSame('Partner / Manager only', $e->getMessage()); }
+        $this->assertTrue(\App\Services\Perm::has($this->owner, 'sourcing.approve_old_entry')); $this->assertFalse(\App\Services\Perm::has($src, 'sourcing.approve_old_entry')); $this->assertFalse(\App\Services\Perm::has($src, 'sourcing.landed.final'));
         $this->actingAs($this->owner); Context::set(1, $this->owner->id);
         \App\Services\Approvals::decide((int) $a->id, true);
         $this->assertSame(10, (int) DB::table('fin_lots')->where('fk_id_cycle', $r['cycle'])->sum('qty'), 'approved → the lot is made');
         $this->assertSame(['APPROVED', 'COMPLETED'], array_values((array) DB::table('t_src_cycles')->where('id', $r['cycle'])->first(['approval_status', 'status'])));
+        $wh = \App\Models\User::create(['login_id' => 'wh' . uniqid() . '@t', 'password_hash' => bcrypt('x-password-1'), 'role_code' => 'WAREHOUSE', 'display_name' => 'WH', 'fk_id_ent' => 1, 'f_active' => 1]);
+        $j = $this->actingAs($wh)->getJson('/api/cycle/' . $r['cycle'])->assertOk()->json(); $txt = json_encode([$j['pos'], $j['terms'], $j['landed']]);      // R-B_SOURCING-55 no sourcing.money: the API returns no money fields
+        foreach (['po_total', 'planned_amount', 'paid_amount', 'remaining_amount', 'landed_cost_per_unit'] as $k) $this->assertStringNotContainsString('"' . $k . '"', $txt);
+        $this->assertStringContainsString('po_total', json_encode($this->actingAs($this->owner)->getJson('/api/cycle/' . $r['cycle'])->json('pos')));
     }
 
     public function test_r13_check_screen_writes_nothing_and_force_imports(): void

@@ -167,7 +167,8 @@ class HistoricalPurchase
     }
 
     /** Settings › Choices OLD_ENTRY_APPROVAL: NOT_OWNER (default) = an old entry with received goods made by anyone but the Owner waits for approval. */
-    public static function needsApproval(int $ent, object $u): bool { return Choices::get('OLD_ENTRY_APPROVAL', $ent) === 'NOT_OWNER' && ($u->role_code ?? '') !== 'OWNER'; }
+    /** R-B_SOURCING-55: an entry waits (PENDING) unless the person has sourcing.approve_old_entry (Owner / Partner by default); Choice OLD_ENTRY_APPROVAL can turn the wait off. */
+    public static function needsApproval(int $ent, object $u): bool { return Choices::get('OLD_ENTRY_APPROVAL', $ent) === 'NOT_OWNER' && ! Perm::has($u, 'sourcing.approve_old_entry'); }
 
     /** Post the GRN of an entry: lots, drafts live, cycle completed when every PRODUCT line is received. */
     public static function postReceived(int $cycle, int $grn, array $drafts, array $extra = []): bool
