@@ -152,8 +152,7 @@ class SupplierClaims
             $pid = (int) DB::table('t_src_payments')->insertGetId(['fk_id_ent' => $ent, 'payment_code' => Numbering::next('PAY', $ent, $date), 'fk_id_cycle' => $po->fk_id_cycle, 'fk_id_po' => $po->id, 'fk_id_supplier' => $po->fk_id_supplier, 'fk_id_term' => $t->id,
                 'payment_type' => 'CREDIT_NOTE', 'payment_method' => 'CREDIT_NOTE', 'payment_amount' => $amt, 'fk_id_currency' => $po->fk_id_currency, 'exchange_rate' => $amt > 0 ? round($base / $amt, 6) : 1, 'base_amount' => $base, 'payment_date' => $date,
                 'status' => 'PAID', 'txn_ref' => $g->claim_reference, 'created_by' => Context::userId(), 'f_active' => 1, 'created_at' => now(), 'paid_via' => 'CREDIT_NOTE', 'fk_id_grn' => $grnId, 'notes' => 'Paid from claim ' . ($g->grn_number ?: $g->grn_code)]);
-            $paid = round($t->paid_amount + $amt, 2); $left = round($t->planned_amount - $paid, 2);
-            DB::table('t_src_payment_terms')->where('id', $t->id)->update(['paid_amount' => $paid, 'remaining_amount' => max(0, $left), 'completion_pct' => $t->planned_amount > 0 ? round($paid / $t->planned_amount * 100, 2) : 100, 'status' => $left <= $tol ? 'PAID' : 'PART_PAID']);
+            $left = round((float) $t->planned_amount - (float) PaymentTerms::sync((int) $t->id)['paid_amount'], 2);      /* R-B_SOURCING-30 */
             if ($left <= $tol) TaskEngine::close('SRC_PAY_DUE', CycleAlerts::key('SRC_PAY_DUE', (int) $t->id), 'Term paid');
             Audit::log('t_src_payments', $pid, 'INSERT', ['credit_note' => $amt, 'claim' => $grnId], null, $ent);
             self::refresh($ent, $grnId);

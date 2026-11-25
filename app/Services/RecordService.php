@@ -167,9 +167,12 @@ class RecordService
         if (in_array($table . '.requested_by', self::SYSTEM_USER_FIELDS, true)) { if (! $id) $data['requested_by'] = Context::userId(); else unset($data['requested_by']); }
         if ($table === 't_src_cycle_products' && array_key_exists('fk_id_product', $data + $old) && empty($data['fk_id_product'] ?? $old['fk_id_product'] ?? null))
             $errors['fk_id_product'] = 'Pick the product (or + Add product) for this line.';      /* PO lines: FormRules */
+        if ($table === 'cat_src_lov' && ($why = SrcLists::guard($data, $old))) $errors['f_active'] = $why;      /* R-B_SOURCING-52 */
+        if ($table === 'cat_src_lov' && ! $id && SrcLists::isSystem((string) ($data['lov_group'] ?? ''), (string) ($data['lov_value'] ?? ''))) $data['f_system'] = 1;
         $errors = FormRules::check($formKey, $data, $old, $id, $errors) + $errors;      // a form's own message (old texts) wins over the general one      // typed codes, shares, uniqueness of this form (R-F_SETUP-35)
         if ($errors) throw ValidationException::withMessages($errors);
 
+        try { $data = Fx::fillRow($table, $data, $old, (int) Context::ent()); } catch (\RuntimeException $e) { throw ValidationException::withMessages(['exchange_rate' => $e->getMessage()]); }      /* R-B_SOURCING-32 */
         if ($table === 'drp_items') foreach (['ship_address', 'ship_phone'] as $mc) if (isset($data[$mc]) && Vault::isMasked($data[$mc])) unset($data[$mc]);      // a masked value shown to the person is never saved back over the real one
         $vault = Vault::prepare($table, $data, $id);   // secrets go to the vault, card numbers keep 4 digits, CVV / PIN are dropped
         try {
@@ -217,6 +220,8 @@ class RecordService
             if (! empty($opt['event'])) EventBus::fire($opt['event'], $table, $id, ['form' => $formKey, 'created' => $created], $ent);
             FormAssist::remember($formKey, $data);   // for the "you used this last time" chips
             if ($table === 't_src_po_lines') PoLines::sync((int) $id);
+            if ($table === 't_src_payments') { PaymentTerms::sync((int) DB::table($table)->where($pk, $id)->value('fk_id_term')); if (! empty($old['fk_id_term']) && (int) $old['fk_id_term'] !== (int) ($data['fk_id_term'] ?? $old['fk_id_term'])) PaymentTerms::sync((int) $old['fk_id_term']); }      /* R-B_SOURCING-30 both terms of a moved payment */
+            if ($table === 't_src_payment_terms' && $id) PaymentTerms::sync((int) $id);
             if ($table === 'tax_periods') AccHubAdmin::periodSaved((int) $id);      // R-ACC-21 / R-TAX-4 a tax period status ticks the matching filing
             if ($table === 't_product_vendors' && $created) ProductFamily::created((int) $id, (int) ($data['fk_id_ent'] ?? $ent ?? 0));      // R-D-1: a 0.00 price row per marketplace
             if ($table === 'fin_partner_users') PartnerOnboarding::refresh((int) DB::table('fin_partner_users')->where($pk, $id)->value('investor_id'), 'Partner login linked');      // R-FIN-3 login_created

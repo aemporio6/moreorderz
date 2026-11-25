@@ -162,6 +162,7 @@ bank layout,bank statement profiles,VOCAB,#/list/bank_statement_profile
 bank lines,bank and cash,VOCAB,#/bank
 bank list,catalog masters,VOCAB,#/list/cat_country
 bank profile,bank statement profiles,VOCAB,#/list/bank_statement_profile
+bank rate,rate difference,VOCAB,#/fx
 bank rec,bank and cash,VOCAB,#/bank
 bank reconciliation,bank and cash,VOCAB,#/bank
 bank refund to buyer,outside refund,VOCAB,#/refunds
@@ -176,6 +177,7 @@ barcode label,label templates,VOCAB,#/list/label_template
 barcode print,print queue,VOCAB,#/print-queue
 barcode scanner,work screen phone,VOCAB,#/work
 barcodes,products,VOCAB,#/list/product
+base amount,rate difference,VOCAB,#/fx
 batch,lots and owners,VOCAB,#/stock/lots
 batch history,import history,VOCAB,#/import-history
 batch number,lots and owners,VOCAB,#/stock/lots
@@ -401,6 +403,7 @@ competitors,research board,VOCAB,#/list/src_research
 complaint,customer service cases,VOCAB,#/list/customer_case
 complaints,customer service cases,VOCAB,#/list/customer_case
 completed orders,sales lines,VOCAB,#/sales
+completion percent,term paid,VOCAB,#/buying
 compliance,certificates,VOCAB,#/list/product_certificate
 composition,products,VOCAB,#/list/product
 config,settings,VOCAB,#/settings
@@ -681,6 +684,7 @@ excel,all reports,VOCAB,#/reports
 excel upload,import a file,VOCAB,#/import
 exceptions,needs action,VOCAB,#/tasks?scope=all
 exchange rate,fx rates,VOCAB,#/list/fin_fx_rate
+exchange rate difference,rate difference,VOCAB,#/fx
 exchange rates,fx rates,VOCAB,#/list/fin_fx_rate
 expense,expenses,VOCAB,#/expenses
 expenses,expenses,VOCAB,#/expenses
@@ -793,6 +797,7 @@ funds on hold,payouts and settlements,VOCAB,#/settlements
 future cash,cash forecast,VOCAB,#/forecast
 fvf,marketplaces and their questions,VOCAB,#/marketplaces
 fx,fx rates,VOCAB,#/list/fin_fx_rate
+fx difference,rate difference,VOCAB,#/fx
 gated brand,brands,VOCAB,#/list/brand
 gbp,fx rates,VOCAB,#/list/fin_fx_rate
 gdrive,drive folders,VOCAB,#/drive
@@ -1309,6 +1314,7 @@ packing slip,orders to dispatch,VOCAB,#/orders
 packing slip print,print queue,VOCAB,#/print-queue
 packing station,orders to dispatch,VOCAB,#/orders
 padded envelope,packaging and box sizes,VOCAB,#/list/product_packaging
+paid in po currency,term paid,VOCAB,#/buying
 pallet label,label templates,VOCAB,#/list/label_template
 pallet location,locations and bins,VOCAB,#/list/location
 paperwork,documents,VOCAB,#/list/document
@@ -1321,6 +1327,7 @@ parcels,orders to dispatch,VOCAB,#/orders
 parent asin,listings,VOCAB,#/list/listing
 parent sku,products,VOCAB,#/list/product
 partial refund,refunds and refund proposals,VOCAB,#/refunds
+partially paid,term paid,VOCAB,#/buying
 partner,partners,VOCAB,#/partners
 partner ledger,partners,VOCAB,#/partners
 partner statement,partners,VOCAB,#/partners
@@ -1337,6 +1344,7 @@ paye,tax and filings,VOCAB,#/compliance
 payment dispute,refunds and refund proposals,VOCAB,#/refunds
 payment hold,payouts and settlements,VOCAB,#/settlements
 payment provider,payment provider profiles,VOCAB,#/list/payment_provider_profile
+payment term status,term paid,VOCAB,#/buying
 payment terms,payments and terms,VOCAB,#/list/src_payment
 payments to supplier,payments and terms,VOCAB,#/list/src_payment
 payoneer,payments and terms,VOCAB,#/list/src_payment
@@ -1530,12 +1538,15 @@ ra,drop shipping orders,VOCAB,#/ds-orders
 rack,locations and bins,VOCAB,#/list/location
 racks,locations and bins,VOCAB,#/list/location
 rail freight,shipments,VOCAB,#/list/t_src_shipments
+rate difference,rate difference,VOCAB,#/fx
+rate table,rate difference,VOCAB,#/fx
 rate today,exchange rates,VOCAB,#/fx
 re-order,replenishment and icc reorder,VOCAB,#/list/icc
 reach,certificates,VOCAB,#/list/product_certificate
 ready date,production,VOCAB,#/list/t_src_production
 ready to ship,orders to dispatch,VOCAB,#/orders
 real margin,research outcome,VOCAB,#/list/src_research
+real rate,rate difference,VOCAB,#/fx
 receipt,inbound and grn,VOCAB,#/list/t_src_grn
 receipt purchase,quick buy,VOCAB,#/list/quick_buy
 receipts,expenses,VOCAB,#/expenses
@@ -1934,6 +1945,7 @@ switch over,migration switch,VOCAB,#/list/cutover_run
 system health,system health,VOCAB,#/health
 system settings,settings,VOCAB,#/settings
 system status,system health,VOCAB,#/health
+table rate,rate difference,VOCAB,#/fx
 take money out,withdrawals,VOCAB,#/list/withdrawal
 takings,sales lines,VOCAB,#/sales
 tape,packaging and box sizes,VOCAB,#/list/product_packaging
@@ -1962,6 +1974,9 @@ temu orders,import sales,VOCAB,#/sales-import
 temu payout,payouts and settlements,VOCAB,#/settlements
 temu seller,marketplace operations hubs,VOCAB,#/hubs
 temu seller center,marketplace operations hubs,VOCAB,#/hubs
+term paid,term paid,VOCAB,#/buying
+term remaining,term paid,VOCAB,#/buying
+term status,term paid,VOCAB,#/buying
 terminal handling,freight,VOCAB,#/list/t_src_freight
 terms,payments and terms,VOCAB,#/list/src_payment
 test page,printers,VOCAB,#/printers
@@ -2040,6 +2055,7 @@ turn on,choices,VOCAB,#/choices
 turnover,sales lines,VOCAB,#/sales
 two factor,users,VOCAB,#/users
 two layer,lots and owners,VOCAB,#/stock/lots
+typed rate,rate difference,VOCAB,#/fx
 uk rep,legal label texts,VOCAB,#/list/label_legal_text
 ukca,certificates,VOCAB,#/list/product_certificate
 ukca mark,certificates,VOCAB,#/list/product_certificate
@@ -2170,6 +2186,7 @@ wire transfer,payments and terms,VOCAB,#/list/src_payment
 wise,payments and terms,VOCAB,#/list/src_payment
 wise business,bank and cash,VOCAB,#/bank
 wise payment,payments and terms,VOCAB,#/list/src_payment
+wise rate,rate difference,VOCAB,#/fx
 wish,marketplace operations hubs,VOCAB,#/hubs
 withdraw,withdrawals,VOCAB,#/list/withdrawal
 withdrawal,withdrawals,VOCAB,#/list/withdrawal

@@ -288,14 +288,13 @@ class BuyingService
             if ($amt > $t->remaining_amount + $tol && empty($d['_overpay_ok'])) throw new \RuntimeException('This is more than the ' . number_format($t->remaining_amount, 2) . ' still open on this term.');
             $bank = DB::table('fin_bank_accounts')->where('id', $d['bank'])->where('company_id', $ent)->where('is_active', 1)->first() ?? throw new \RuntimeException('Choose a bank account of this company.');
             $cur = Fx::code($po->fk_id_currency, $ent); $date = $d['date'] ?? date('Y-m-d');
-            $rate = Fx::rate($cur, $date, $ent); $base = round($amt * $rate, 2);
+            $note = Fx::rateNote($cur, $date, $amt, isset($d['rate']) && (float) $d['rate'] > 0 ? (float) $d['rate'] : null, $ent); $rate = $note['rate']; $base = $note['base'];      /* R-B_SOURCING-32 the real bank / Wise rate may be typed */
             $row = ['fk_id_ent' => $ent, 'fk_id_cycle' => $po->fk_id_cycle, 'fk_id_po' => $po->id, 'fk_id_supplier' => $po->fk_id_supplier, 'fk_id_term' => $t->id,
                 'payment_type' => $t->milestone, 'payment_method' => $d['method'] ?? 'BANK', 'payment_amount' => $amt, 'fk_id_currency' => $po->fk_id_currency, 'exchange_rate' => $rate, 'base_amount' => $base, 'payment_date' => $date,
                 'status' => 'PAID', 'txn_ref' => $d['txn_ref'] ?? null, 'f_active' => 1, 'paid_via' => 'BANK'];
             if (! empty($d['_pending'])) { $pid = (int) $d['_pending']; DB::table('t_src_payments')->where('id', $pid)->where('status', 'PENDING_APPROVAL')->update($row + ['approved_by' => Context::userId(), 'approved_at' => now()]); }      // R-31: the approved over-payment is booked now
             else $pid = DB::table('t_src_payments')->insertGetId($row + ['payment_code' => Numbering::next('PAY', $ent, $date), 'created_by' => Context::userId(), 'created_at' => now(), 'notes' => $d['notes'] ?? null]);
-            $paid = round($t->paid_amount + $amt, 2); $rem = round($t->planned_amount - $paid, 2);
-            DB::table('t_src_payment_terms')->where('id', $t->id)->update(['paid_amount' => $paid, 'remaining_amount' => max(0, $rem), 'completion_pct' => $t->planned_amount > 0 ? round($paid / $t->planned_amount * 100, 2) : 100, 'status' => $rem <= $tol ? 'PAID' : 'PART_PAID']);
+            $synced = PaymentTerms::sync((int) $t->id); $rem = round((float) $t->planned_amount - (float) $synced['paid_amount'], 2);      /* R-B_SOURCING-30 */
             Ledger::post($ent, $date, 'PAYMENT', $pid, [
                 ['account' => '1300', 'debit' => $base, 'ref_id' => $po->fk_id_supplier, 'amount_cur' => $amt],
                 ['account' => '1000', 'credit' => $base, 'ref_id' => $bank->id, 'amount_cur' => -$amt],

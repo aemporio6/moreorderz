@@ -143,6 +143,8 @@ add('#/choices', 'refund on confirmed line', 'refund on confirmed line|refund af
 add('#/list/src_research', 'research outcome', 'real margin|estimate vs real|estimated vs real margin|research accuracy|what it became|research result|margin after sales')
 add('#/refunds', 'outside refund', 'outside refund|refund paid outside|refund from bank|refund paid by bank|bank refund to buyer|paypal refund to buyer|refunds of this batch|batch refunds')
 add('#/list/src_research', 'requested by', 'requested by|who asked|requester|asked by')
+add('#/fx', 'rate difference', 'rate table|table rate|rate difference|exchange rate difference|wise rate|bank rate|typed rate|real rate|fx difference|base amount')
+add('#/buying', 'term paid', 'term paid|term remaining|term status|partially paid|paid in po currency|payment term status|completion percent')
 add('#/import', 'learn sale columns', 'learn columns|learned mapping|propose columns|column proposal|new file header|header not found|map file headers|standard sheet template|convert file template')
 
 # ---------- reports, setup, system ----------

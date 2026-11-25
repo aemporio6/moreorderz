@@ -324,11 +324,21 @@ class BuyingController extends Controller
         return $this->run(fn () => Buy::confirmPo($id) + ['message' => 'PO confirmed: payment schedule made']);
     }
 
+    private static function rateLine(array $d): string
+    {
+        try { $po = DB::table('t_src_po')->where('id', DB::table('t_src_payment_terms')->where('id', $d['term'])->value('fk_id_po'))->first(); $cur = \App\Services\Fx::code($po->fk_id_currency ?? null, (int) Context::ent());
+            return $cur === \App\Services\Fx::base((int) Context::ent()) ? '' : ' · ' . \App\Services\Fx::rateNote($cur, $d['date'], (float) $d['amount'], isset($d['rate']) ? (float) $d['rate'] : null, (int) Context::ent())['text']; } catch (\Throwable $e) { return ''; }
+    }
+
+    /** R-B_SOURCING-32 the rate line of a money row before it is saved (reads only). */
+    public function fxNote(Request $r) { $this->can($r, 'buying.SEE'); $d = $r->validate(['currency' => 'required|string|size:3', 'date' => 'required|date', 'amount' => 'required|numeric', 'rate' => 'nullable|numeric|gt:0']);
+        return $this->run(fn () => \App\Services\Fx::rateNote($d['currency'], $d['date'], (float) $d['amount'], isset($d['rate']) ? (float) $d['rate'] : null, (int) Context::ent())); }
+
     public function pay(Request $r)
     {
         $this->can($r, 'buying.PAY');
-        $d = $r->validate(['term' => 'required|integer', 'amount' => 'required|numeric|gt:0', 'date' => 'required|date', 'bank' => 'required|integer', 'txn_ref' => 'nullable|string|max:255', 'overpay_reason' => 'nullable|string|max:200']);
-        return $this->run(function () use ($d) { $x = Buy::payOrAsk($d); return $x + ['message' => ! empty($x['overpay']) ? 'More than the term – saved, waiting for the Owner\'s approval (not booked, not matched to the bank yet)' : ($x['status'] === 'WAITING' ? 'Over the limit – the payment waits for approval and is not booked yet' : 'Payment posted to the ledger')]; });
+        $d = $r->validate(['term' => 'required|integer', 'amount' => 'required|numeric|gt:0', 'date' => 'required|date', 'bank' => 'required|integer', 'txn_ref' => 'nullable|string|max:255', 'overpay_reason' => 'nullable|string|max:200', 'rate' => 'nullable|numeric|gt:0']);
+        return $this->run(function () use ($d) { $x = Buy::payOrAsk($d); return $x + ['message' => ! empty($x['overpay']) ? 'More than the term – saved, waiting for the Owner\'s approval (not booked, not matched to the bank yet)' : ($x['status'] === 'WAITING' ? 'Over the limit – the payment waits for approval and is not booked yet' : 'Payment posted to the ledger' . self::rateLine($d))]; });
     }
 
     public function shipment(Request $r)

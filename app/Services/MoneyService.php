@@ -236,8 +236,7 @@ class MoneyService
                     if ($amt > (float) $t->remaining_amount + 0.009) throw new \InvalidArgumentException('Part ' . ($i + 1) . ': more than the ' . number_format((float) $t->remaining_amount, 2) . ' still open on this term.');
                     $pid = DB::table('t_src_payments')->insertGetId(['fk_id_ent' => $ent, 'payment_code' => Numbering::next('PAY', $ent, $l->txn_date), 'fk_id_cycle' => $po->fk_id_cycle, 'fk_id_po' => $po->id, 'fk_id_supplier' => $po->fk_id_supplier, 'fk_id_term' => $t->id, 'payment_type' => $t->milestone, 'payment_method' => 'BANK',
                         'payment_amount' => $amt, 'fk_id_currency' => $po->fk_id_currency, 'exchange_rate' => round($rate, 6), 'base_amount' => $b, 'payment_date' => $l->txn_date, 'status' => 'PAID', 'created_by' => Context::userId(), 'f_active' => 1, 'created_at' => now(), 'paid_via' => 'BANK', 'fk_id_bank_line' => $l->id, 'notes' => 'Part of a split bank line']);
-                    $paid = round((float) $t->paid_amount + $amt, 2); $rem = round((float) $t->planned_amount - $paid, 2);
-                    DB::table('t_src_payment_terms')->where('id', $t->id)->update(['paid_amount' => $paid, 'remaining_amount' => max(0, $rem), 'status' => $rem <= 0.009 ? 'PAID' : 'PART_PAID']);
+                    PaymentTerms::sync((int) $t->id);      /* R-B_SOURCING-30 */
                     $lines[] = ['account' => '1300', 'debit' => $b, 'ref_id' => (int) $po->fk_id_supplier, 'memo' => "Supplier payment {$po->po_number}"];
                     $row['note'] = $row['note'] ?? "PAY:$pid";
                 } else throw new \InvalidArgumentException('Part ' . ($i + 1) . ': unknown kind.');
@@ -327,9 +326,7 @@ class MoneyService
                         if ($s->fk_id_expense) DB::table('fin_expenses')->where('id', $s->fk_id_expense)->update(['f_active' => 0, 'fk_id_bank_line' => null]);
                         if ($s->fk_id_customs) DB::table('t_src_customs')->where('id', $s->fk_id_customs)->update(['pay_status' => 'UNPAID', 'paid_date' => null, 'fk_id_bank_line' => null, 'paid_base_amount' => null, 'status' => 'DECLARED']);
                         if ($s->target_type === 'SUPPLIER' && preg_match('/PAY:(\d+)/', (string) $s->note, $m) && ($pay = DB::table('t_src_payments')->where('id', $m[1])->first())) {
-                            $t = DB::table('t_src_payment_terms')->where('id', $pay->fk_id_term)->first(); $paid = round((float) $t->paid_amount - (float) $pay->payment_amount, 2);
-                            DB::table('t_src_payment_terms')->where('id', $t->id)->update(['paid_amount' => $paid, 'remaining_amount' => round((float) $t->planned_amount - $paid, 2), 'status' => $paid > 0 ? 'PART_PAID' : 'DUE']);
-                            DB::table('t_src_payments')->where('id', $pay->id)->update(['status' => 'CANCELLED', 'f_active' => 0]);
+                            DB::table('t_src_payments')->where('id', $pay->id)->update(['status' => 'CANCELLED', 'f_active' => 0]); PaymentTerms::sync((int) $pay->fk_id_term);      /* R-B_SOURCING-30 re-synced on reversal */
                         }
                     }
                     DB::table('fin_bank_line_splits')->where('fk_id_bank_line', $l->id)->delete();
