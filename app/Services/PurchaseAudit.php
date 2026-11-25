@@ -53,7 +53,7 @@ class PurchaseAudit
         return $r;
     }
 
-    private static function vendorsByIso(): array { return DB::table('t_vendors')->where('f_active', 1)->get(['id', 'iso_vendor', 'audit_profile'])->keyBy(fn ($v) => mb_strtoupper(trim((string) $v->iso_vendor)))->all(); }
+    public static function vendorsByIso(): array { return DB::table('t_vendors')->where('f_active', 1)->get(['id', 'iso_vendor', 'audit_profile'])->keyBy(fn ($v) => mb_strtoupper(trim((string) $v->iso_vendor)))->all(); }
 
     /* ---------------- runs ---------------- */
 
@@ -123,6 +123,16 @@ class PurchaseAudit
         if ($out['qty_pur'] !== null && $out['pur_rate'] !== null) $out['tot_pur_amount'] = round($out['qty_pur'] * $out['pur_rate'], 2);
         if (! $out['d_purchase']) $err[] = "date \"{$w[2]}\" is not dd-mm-yy";
         return [$out, $err ? implode('; ', $err) : null];
+    }
+
+    /** R-A_SALES-61 the "Bought from" fields of a sale line, pre-filled from its buy note (empty when the note is not a purchase record). */
+    public static function boughtFrom(?string $note, string $sku, ?string $saleDate, int $qty, ?array $vendors = null): array
+    {
+        if (trim((string) $note) === '' && ! preg_match('/^(B|VAL)/i', $sku)) return [];
+        [$f] = self::parseNote($note, $sku, $saleDate, $qty, $vendors);
+        if (! $f['f_local'] && ! $f['fk_id_vendor'] && ! $f['reason_by_va']) return [];
+        return ['bought_vendor_id' => $f['fk_id_vendor'], 'bought_ref' => $f['pur_ref_no'], 'bought_ref_hold' => $f['pur_ref_no_gd_hold'], 'bought_date' => $f['d_purchase'] ?: null,
+            'bought_qty' => $f['qty_pur'], 'bought_rate' => $f['pur_rate'], 'bought_total' => $f['tot_pur_amount'], 'bought_reason' => $f['reason_by_va'], 'bought_local' => (int) $f['f_local']];
     }
 
     /* ---------------- R-A_SALES-60 eBay file ---------------- */

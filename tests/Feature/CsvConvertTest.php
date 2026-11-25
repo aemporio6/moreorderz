@@ -32,6 +32,8 @@ class CsvConvertTest extends TestCase
         $this->assertMatchesRegularExpression('/^\d+_\d{14}_[0-9a-f]{8}$/', $s['token']); $this->assertSame(['A', 'B', 'J'], [$s['samples'][0]['letter'], $s['samples'][1]['letter'], $s['samples'][9]['letter']]); $this->assertSame('AA', C::letter(26));
         try { C::saveFormat('Web shop', ['date' => 0] , $this->owner); $this->fail(); } catch (\Illuminate\Validation\ValidationException $e) { $this->assertArrayHasKey('order_id', $e->errors()); }      // all columns must be mapped
         $f = C::saveFormat('Web shop', self::MAP, $this->owner); $this->assertSame(['A', 'B'], array_slice($f['formats'][0]['letters'], 0, 2));
+        $t = DB::table('mo_export_templates')->where('id', $f['template_id'])->first(); $this->assertSame(['sale_line', 'Standard sheet – Web shop', '*'], [$t->list_key, $t->name, $t->shared_role]);      // R-A_SALES-78 also an export template of the sales list
+        [$bytes] = \App\Services\ListExports::run($t); $this->assertStringContainsString('Order', $bytes);
         $x = C::download($s['token'], ['format' => $f['id'], 'price_label' => 'BUY'], $this->owner); $lines = array_map(fn ($l) => str_getcsv($l, ',', '"', ''), array_filter(explode("\n", preg_replace('/^\xEF\xBB\xBF/', '', $x['body']))));
         $this->assertSame(['Date', 'Order ID', 'Item Title', 'Customer', 'Address', 'Quantity', 'Buy Price', 'SKU'], $lines[0]); $this->assertSame(['03.11.2026', 'W-1', 'Dog lead', 'John Smith', '1 High St, Leeds', '2', '9.50', 'LEAD-1'], $lines[1]);      // first + last name → "John Smith"; Buy → "Buy Price"
         $this->assertSame(['05.11.2026', 'Bowl'], [$lines[2][0], $lines[2][2]]); $this->assertSame('Download_orders.csv', $x['name']);      // dates d.m.Y, stray "Â" removed
@@ -45,7 +47,7 @@ class CsvConvertTest extends TestCase
         try { C::rows($s['token'], ['map' => self::MAP], $va); $this->fail(); } catch (\Throwable $e) { $this->assertTrue(true); }      // mapping by hand: Owner / Admin only
         $this->actingAs($mgr); $id = C::saveFormat('Mgr format', self::MAP, $mgr)['id']; try { C::deleteFormat($id, $mgr); $this->fail(); } catch (\InvalidArgumentException $e) { $this->assertSame('Only the Owner can delete a format.', $e->getMessage()); }
         $this->actingAs($va); $this->assertSame('John Smith', C::rows($s['token'], ['format' => $id], $va)['rows'][0]['customer']);      // a saved format can be used by everyone
-        $this->actingAs($this->owner); C::deleteFormat($id, $this->owner); $this->assertSame([], C::formats($this->owner));
+        $this->actingAs($this->owner); C::deleteFormat($id, $this->owner); $this->assertSame([], C::formats($this->owner)); $this->assertFalse(DB::table('mo_export_templates')->where('name', 'Standard sheet – Mgr format')->exists());
     }
 
     public function test_straight_into_the_fulfilment_queue(): void

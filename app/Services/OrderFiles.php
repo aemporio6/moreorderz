@@ -39,7 +39,7 @@ class OrderFiles
         $lines = []; $skipped = []; $cur = strtoupper((string) ($opt['currency'] ?? ''));
         $data = array_slice($rows, $hi + 1);
         if ($fmt === 'EBAY_ORDERS') {
-            $order = null;
+            $order = null; $hdr = $rows[$hi];
             foreach ($data as $n => $r) {
                 $no = $g($r, 'order number'); $item = $g($r, 'item number'); $sku = $g($r, 'custom label') ?: $item;
                 if ($no === '' && $item === '') continue;                                        // blank lines and the "n record(s) downloaded" footer
@@ -52,7 +52,8 @@ class OrderFiles
                 $lines[] = ['order_no' => $o['no'], 'd_order' => $o['date'] ?? date('Y-m-d'), 'sku' => $sku, 'qty' => $qty, 'sale_rate' => $unit, 'product_info' => mb_substr($g($r, 'item title'), 0, 250),
                     'cust_name' => $g($head, 'buyer name'), 'ship_to_name' => $g($head, 'post to name') ?: $g($head, 'buyer name'), 'ship_to_phone' => $g($head, 'post to phone'),
                     'ship_to_address' => trim($g($head, 'post to address 1') . ', ' . $g($head, 'post to address 2'), ', '), 'ship_to_city' => $g($head, 'post to city'), 'ship_to_postcode' => $g($head, 'post to postcode'),
-                    'ship_to_country_code' => self::country($g($head, 'post to country')), 'tracking_no' => $g($r, 'tracking number') ?: null, 'dispatch_by' => MarketplaceFiles::day($g($head, 'post by date')), 'postage' => MarketplaceFiles::num($g($r, 'postage and packaging'))] + ($cur ? ['currency' => $cur] : []);
+                    'ship_to_country_code' => self::country($g($head, 'post to country')), 'tracking_no' => $g($r, 'tracking number') ?: null, 'dispatch_by' => MarketplaceFiles::day($g($head, 'post by date')), 'postage' => MarketplaceFiles::num($g($r, 'postage and packaging') ?: $g($head, 'postage and packaging'))]
+                    + self::ebayNamed($g, $r, $head, $sku, $o['date'], $qty, $hdr) + ($cur ? ['currency' => $cur] : []);
             }
         } elseif ($fmt === 'TEMU_ORDERS') {
             $value = (string) ($opt['temu_value'] ?? 'BASE');
@@ -84,6 +85,17 @@ class OrderFiles
         }
         if (! $lines && ! $skipped) throw new \InvalidArgumentException('No order line was found under the header of this file.');
         return ['format' => $fmt, 'format_name' => self::FORMATS[$fmt], 'lines' => $lines, 'skipped' => $skipped];
+    }
+
+    /** R-A_SALES-16 the named eBay fields – no column is lost: promoted flag, taxes, dispatched on, the item note (with its "Bought from" record, R-A_SALES-61) and the whole row as raw_json (searchable). */
+    private static function ebayNamed(\Closure $g, array $r, array $head, string $sku, ?string $day, int $qty, array $hdr): array
+    {
+        $raw = []; foreach ($hdr as $i => $h) { $h = trim((string) $h); $v = trim((string) ($r[$i] ?? '')); if ($v === '' && isset($head[$i])) $v = trim((string) $head[$i]); if ($h !== '' && $v !== '' && $v !== '--') $raw[$h] = $v; }
+        $note = $g($r, 'my item note') ?: $g($head, 'my item note'); $yes = fn ($v) => in_array(mb_strtolower(trim($v)), ['yes', 'y', 'true', '1'], true);
+        $vat = $g($r, 'vat') ?: $g($head, 'vat'); $tax = $g($r, 'ebay collected tax') ?: $g($head, 'ebay collected tax');
+        return ['f_promoted' => $yes($g($r, 'promoted listings', 'sold via promoted listings')) ? 1 : 0, 'vat_amount' => $vat !== '' ? MarketplaceFiles::num($vat) : null, 'mp_tax_amount' => $tax !== '' ? MarketplaceFiles::num($tax) : null,
+            'tax_status' => mb_substr($g($r, 'tax status') ?: $g($head, 'tax status'), 0, 40) ?: null, 'd_dispatched' => MarketplaceFiles::day($g($r, 'dispatched on date', 'dispatched on') ?: $g($head, 'dispatched on date', 'dispatched on')),
+            'ds_note' => mb_substr($note, 0, 250), 'raw_csv' => json_encode($raw, JSON_UNESCAPED_UNICODE)] + PurchaseAudit::boughtFrom($note !== '' ? $note : null, $sku, $day, $qty);
     }
 
     private static function country(string $c): ?string

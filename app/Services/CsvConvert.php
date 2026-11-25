@@ -57,13 +57,24 @@ class CsvConvert
         $row = ['import_name' => $name, 'system_columns' => json_encode($sys), 'csv_columns' => json_encode($cols), 'import_controller_name' => 'standard_sheet', 'fk_id_account' => (int) ($u->fk_id_account ?? 0), 'created_by' => $u->id, 'created_at' => now()];
         $id = DB::table('csv_generator_history')->where('import_controller_name', 'standard_sheet')->where('import_name', $name)->value('id');
         if ($id) DB::table('csv_generator_history')->where('id', $id)->update($row); else $id = DB::table('csv_generator_history')->insertGetId($row); Audit::log('csv_generator_history', (int) $id, $id ? 'UPDATE' : 'INSERT', ['name' => $name]);
-        return ['message' => "Format \"$name\" saved.", 'id' => (int) $id, 'formats' => self::formats($u)];
+        $tpl = self::asExportTemplate($name, $u);      /* R-A_SALES-78 the format is also an export template of the sales list (List Standard) */
+        return ['message' => "Format \"$name\" saved" . ($tpl ? ' – also an export template of the sales list.' : '.'), 'id' => (int) $id, 'template_id' => $tpl, 'formats' => self::formats($u)];
+    }
+
+    public const TEMPLATE_PREFIX = 'Standard sheet – ';
+    /** The standard sheet's columns in the sales list: Date, Order ID, Item Title, Customer, Address (postcode), Quantity, Price, SKU. */
+    public const TEMPLATE_COLUMNS = ['d_order', 'order_no', 'product_info', 'cust_name', 'ship_to_postcode', 'qty', 'sale_rate', 'sku'];
+
+    public static function asExportTemplate(string $name, ?object $u): ?int
+    {
+        if (! $u || ! Registry::exists('sale_line')) return null;
+        return ListExports::save($u, 'sale_line', ['name' => mb_substr(self::TEMPLATE_PREFIX . $name, 0, 120), 'columns' => self::TEMPLATE_COLUMNS, 'format' => 'CSV', 'shared_role' => Perm::has($u, 'admin.saveView_may') ? '*' : null]);
     }
 
     public static function deleteFormat(int $id, ?object $u): array
     {
         if (($u->role_code ?? '') !== 'OWNER') throw new \InvalidArgumentException('Only the Owner can delete a format.');
-        $f = DB::table('csv_generator_history')->where('id', $id)->where('import_controller_name', 'standard_sheet')->first() ?? throw new \InvalidArgumentException('Format not found.'); DB::table('csv_generator_history')->where('id', $id)->delete(); Audit::log('csv_generator_history', $id, 'DELETE', ['name' => $f->import_name]);
+        $f = DB::table('csv_generator_history')->where('id', $id)->where('import_controller_name', 'standard_sheet')->first() ?? throw new \InvalidArgumentException('Format not found.'); DB::table('csv_generator_history')->where('id', $id)->delete(); Audit::log('csv_generator_history', $id, 'DELETE', ['name' => $f->import_name]); DB::table('mo_export_templates')->where('list_key', 'sale_line')->where('name', self::TEMPLATE_PREFIX . $f->import_name)->delete();
         return ['message' => "Format \"{$f->import_name}\" deleted.", 'formats' => self::formats($u)];
     }
 

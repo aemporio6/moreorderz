@@ -413,6 +413,19 @@ class SaleLines
     /** Night job: the bin is emptied after 30 days. */
     public static function purgeBin(?int $days = null): int { return DB::table('mo_recycle_bin')->where('deleted_at', '<', now()->subDays($days ?? self::binDays()))->delete(); }
 
+    /** R-A_SALES-61 the "Bought from" fields and R-A_SALES-16 the named file fields of one line, with every column of the file row. */
+    public static function details(int $id): array
+    {
+        $s = DB::table('t_sales')->where('id', $id)->where('fk_id_ent', Context::ent())->first() ?? abort(404, 'Sale line not found.');
+        if (! Perm::shopAllowed(Auth::user(), (int) $s->fk_id_branch)) abort(403, 'This shop is not one of your shops.');
+        $v = $s->bought_vendor_id ? DB::table('t_vendors')->where('id', $s->bought_vendor_id)->first(['vendor_name', 'iso_vendor']) : null;
+        $raw = json_decode((string) $s->raw_csv, true);
+        return ['bought' => ['local' => (bool) $s->bought_local, 'supplier' => $v ? trim(($v->iso_vendor ?? '') . ' ' . ($v->vendor_name ?? '')) : null, 'ref' => $s->bought_ref, 'hold_ref' => $s->bought_ref_hold, 'date' => $s->bought_date, 'qty' => $s->bought_qty, 'rate' => $s->bought_rate, 'total' => $s->bought_total, 'reason' => $s->bought_reason, 'note' => $s->ds_note],
+            'named' => ['promoted' => (bool) $s->f_promoted, 'vat' => $s->vat_amount, 'marketplace_tax' => $s->mp_tax_amount, 'tax_status' => $s->tax_status, 'dispatched_on' => $s->d_dispatched, 'tracking' => $s->tracking_no,
+                'postage_charged' => DB::table('t_sale_charges')->where('fk_id_sale', $id)->where('kind', 'POSTAGE_CHARGED')->value('amount')],
+            'file_row' => is_array($raw) ? $raw : []];
+    }
+
     public static function history(int $id): array
     {
         $s = DB::table('t_sales')->where('id', $id)->where('fk_id_ent', Context::ent())->first();

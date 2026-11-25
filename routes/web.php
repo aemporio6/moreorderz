@@ -515,6 +515,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('sales/{id}/refund', [OrdersController::class, 'saleRefund'])->whereNumber('id');
         Route::post('sales/{id}/delete', [OrdersController::class, 'saleDelete'])->whereNumber('id');
         Route::get('sales/{id}/log', [OrdersController::class, 'saleLog'])->whereNumber('id');
+        Route::get('sales/{id}/details', [OrdersController::class, 'saleDetails'])->whereNumber('id');
         Route::post('orders', [OrdersController::class, 'enter']);
         Route::post('orders/import', [OrdersController::class, 'importFile']);
         Route::get('labels', [OrdersController::class, 'labels']);

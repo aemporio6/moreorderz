@@ -394,6 +394,7 @@ class OrdersController extends Controller
     public function saleRefundInfo(Request $r, int $id) { $this->can($r, 'orders.SEE'); return \App\Services\SaleLines::refundInfo($id); }
     public function saleRefund(Request $r, int $id) { return $this->run(fn () => \App\Services\SaleLines::refund($id, $r->only(['sale_rate', 'total_amount', 'nature', 'loss_amount', 'reason']))); }
     public function saleDelete(Request $r, int $id) { return $this->run(fn () => \App\Services\SaleLines::deleteLine($id)); }
+    public function saleDetails(Request $r, int $id) { $this->can($r, 'orders.SEE'); return \App\Services\SaleLines::details($id); }
     public function saleLog(Request $r, int $id) { $this->can($r, 'orders.SEE'); return ['rows' => \App\Services\SaleLines::history($id)]; }
     public function saleMonthInfo(Request $r) { $this->can($r, 'orders.saleDeleteMonth'); $i = \App\Services\SaleLines::monthInfo((int) $r->query('shop'), (string) $r->query('month')); return ['lines' => $i['lines'], 'confirmed' => $i['confirmed'], 'text' => $i['text'], 'month_name' => $i['month_name']]; }
     public function saleDeleteMonth(Request $r) { return $this->run(fn () => \App\Services\SaleLines::deleteMonth((int) $r->input('shop'), (string) $r->input('month'))); }

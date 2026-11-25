@@ -15,6 +15,9 @@ class SalesService
      * optional cust_name, ship_to_*, tracking_no, dispatch_by, currency. The same order line arriving again (shop + order no + SKU) updates
      * the line instead of making a second one. Returns counts and the ids.
      */
+    /** Optional fields an order file may carry onto the line (R-A_SALES-16 eBay named fields, R-A_SALES-61 bought from). */
+    public const EXTRA_KEYS = ['ds_note', 'raw_csv', 'f_promoted', 'vat_amount', 'mp_tax_amount', 'tax_status', 'd_dispatched', 'bought_vendor_id', 'bought_ref', 'bought_ref_hold', 'bought_date', 'bought_qty', 'bought_rate', 'bought_total', 'bought_reason', 'bought_local'];
+
     public static function intake(int $branchId, array $lines, array $opt = []): array
     {
         $ent = (int) Context::ent();
@@ -43,19 +46,22 @@ class SalesService
                     'tracking_no' => $l['tracking_no'] ?? null, 'ship_to_name' => $l['ship_to_name'] ?? ($l['cust_name'] ?? null), 'ship_to_phone' => $l['ship_to_phone'] ?? null, 'ship_to_address' => $l['ship_to_address'] ?? null,
                     'ship_to_city' => $l['ship_to_city'] ?? null, 'ship_to_postcode' => $l['ship_to_postcode'] ?? null, 'ship_to_country_code' => isset($l['ship_to_country_code']) ? strtoupper(substr($l['ship_to_country_code'], 0, 2)) : null,
                     'dispatch_by' => $l['dispatch_by'] ?? DispatchDeadline::compute($ent, (int) $shop->id, (string) ($l['order_time'] ?? ($l['d_order'] === date('Y-m-d') ? date('Y-m-d H:i:s') : $l['d_order'] . ' 00:00:00'))),      // R-H-24: from the file, else handling days in working days
-                    'carrier_service_text' => $l['carrier_service_text'] ?? null];
+                    'carrier_service_text' => $l['carrier_service_text'] ?? null] + array_intersect_key($l, array_flip(self::EXTRA_KEYS));      /* R-A_SALES-16 named fields, R-A_SALES-61 bought from */
                 // expected cost of an own-stock line on its order date: raw, carrier, packing, where it came from; one formula for buy amount and profit (R-A_SALES-27 / 28)
                 if ($product) $row = array_merge($row, SaleLines::intakeCost($product, $shop, (string) $l['d_order'], $row['qty'], (float) $row['sale_rate'], $total, $ent));
                 $old = DB::table('t_sales')->where('fk_id_ent', $ent)->where('fk_id_branch', $shop->id)->where('order_no', $row['order_no'])->where('sku', $sku)->lockForUpdate()->first();
                 if ($old) {
                     if ($old->status !== 'Pending' || $old->f_locked) return ['id' => (int) $old->id, 'kind' => 'locked'];
                     DB::table('t_sales')->where('id', $old->id)->update(array_intersect_key($row, array_flip(['qty', 'sale_rate', 'total_amount', 'total_amount_gbp', 'tracking_no', 'ship_to_name', 'ship_to_phone', 'ship_to_address', 'ship_to_city', 'ship_to_postcode', 'dispatch_by', 'fk_product_id', 'sale_source', 'fk_id_listing', 'fk_id_price_period', 'raw_price'])) + ['updated_at' => now(), 'f_edited' => 1]);
+                    if ($ex = array_intersect_key($row, array_flip(self::EXTRA_KEYS))) DB::table('t_sales')->where('id', $old->id)->update($ex);
                     if ($product) DB::table('t_sales')->where('id', $old->id)->update(array_intersect_key($row, array_flip(['raw_price', 'fk_id_car_pkg_svc', 'carrier_rate', 'fk_id_packing', 'packing_rate', 'cost_source', 'fk_id_price_period', 'buy_rate', 'buy_amount', 'profit'])));
                     $id = (int) $old->id; $kind = 'updated';
                 } else {
                     $id = (int) DB::table('t_sales')->insertGetId(RecordService::fillNotNull('t_sales', $row + ['created_by' => Context::userId(), 'created_at' => now()]));
                     $kind = 'new';
                 }
+                if (($l['postage'] ?? 0) > 0) DB::table('t_sale_charges')->updateOrInsert(['fk_id_sale' => $id, 'kind' => 'POSTAGE_CHARGED'], RecordService::fillNotNull('t_sale_charges', ['fk_id_sale' => $id, 'kind' => 'POSTAGE_CHARGED', 'fk_id_ent' => $ent, 'fk_id_branch' => $shop->id, 'order_no' => $row['order_no'], 'sku' => $sku, 'fk_id_product' => (int) $row['fk_product_id'],
+                    'amount' => round((float) $l['postage'], 2), 'fk_id_currency' => $row['fk_id_currency'], 'amount_gbp' => Fx::toBase(round((float) $l['postage'], 2), $cur, $l['d_order'], $ent), 'd_charge' => $l['d_order'], 'f_estimated' => 1, 'note' => 'Postage paid by the buyer (order file)', 'created_at' => now()]));      /* R-A_SALES-16 */
                 $short = 0;
                 if ($product && $row['fulfilment_channel'] === 'SELF') { DispatchService::reserve($id); $short = (int) DB::table('wh_reservations')->where('fk_id_sale', $id)->whereNotIn('status', ['RELEASED'])->value('qty_short'); }
                 if ($total <= 0 && empty($opt['no_zero_task'])) TaskEngine::open('SAL_ZERO', [$id], "Sale line with zero value: order {$row['order_no']} · $sku", ['ent' => $ent, 'module' => 't_sales', 'record_id' => $id]);

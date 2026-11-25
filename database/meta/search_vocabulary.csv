@@ -63,6 +63,7 @@ alerts list,needs action,VOCAB,#/tasks?scope=all
 alibaba,buying dashboard,VOCAB,#/buying
 aliexpress seller,marketplace operations hubs,VOCAB,#/hubs
 alipay,payments and terms,VOCAB,#/list/src_payment
+all columns of the file,bought from,VOCAB,#/sales
 all cycles,sourcing cycles,VOCAB,#/list/src_cycle
 all orders,sales lines,VOCAB,#/sales
 all orders report,import sales,VOCAB,#/sales-import
@@ -204,6 +205,7 @@ bookkeeping,money dashboard,VOCAB,#/money
 books,money dashboard,VOCAB,#/money
 borrow,loans,VOCAB,#/loans
 borrowing,loans,VOCAB,#/loans
+bought from,bought from,VOCAB,#/sales
 bought from amazon,supplier order history,VOCAB,#/supplier-orders
 bought in shop,quick buy,VOCAB,#/list/quick_buy
 bounce back loan,loans,VOCAB,#/loans
@@ -243,6 +245,7 @@ business orders,supplier order history,VOCAB,#/supplier-orders
 business rules,choices,VOCAB,#/choices
 businesses,companies,VOCAB,#/list/company
 buy box,listings,VOCAB,#/list/listing
+buy evidence,bought from,VOCAB,#/sales
 buy for order,drop shipping orders,VOCAB,#/ds-orders
 buy locally,quick buy,VOCAB,#/list/quick_buy
 buy note,marketplace profiles,VOCAB,#/list/mp_profile
@@ -370,6 +373,7 @@ color,products,VOCAB,#/list/product
 colour,products,VOCAB,#/list/product
 column map,mappings and report types,VOCAB,#/list/imp_report_type
 column mapping,marketplace profiles,VOCAB,#/list/mp_profile
+column proposal,learn sale columns,VOCAB,#/import
 command center,home,VOCAB,#/home
 command centre,home,VOCAB,#/home
 commission rate,marketplaces and their questions,VOCAB,#/marketplaces
@@ -415,6 +419,7 @@ conversion rate,fx rates,VOCAB,#/list/fin_fx_rate
 convert,convert file,VOCAB,#/csv-convert
 convert csv,convert file,VOCAB,#/csv-convert
 convert file,convert file,VOCAB,#/csv-convert
+convert file template,learn sale columns,VOCAB,#/import
 coo,products,VOCAB,#/list/product
 corporation tax,tax and filings,VOCAB,#/compliance
 corporation tax worksheet,taxation,VOCAB,#/list/tax_period
@@ -561,6 +566,7 @@ disbursements,payouts and settlements,VOCAB,#/settlements
 dispatch,orders to dispatch,VOCAB,#/orders
 dispatch by,orders to dispatch,VOCAB,#/orders
 dispatch today,orders to dispatch,VOCAB,#/orders
+dispatched on,bought from,VOCAB,#/sales
 dispute,refunds and refund proposals,VOCAB,#/refunds
 dividend,partners,VOCAB,#/partners
 dividends,partners,VOCAB,#/partners
@@ -605,6 +611,7 @@ easter,non working days,VOCAB,#/list/non_working_day
 ebay,marketplace operations hubs,VOCAB,#/hubs
 ebay api,api connections,VOCAB,#/connections
 ebay case,cases on sales,VOCAB,#/sale-cases
+ebay collected tax,bought from,VOCAB,#/sales
 ebay delivery,carrier labels,VOCAB,#/labels
 ebay fee calculator,marketplace calculator,VOCAB,#/calculator
 ebay item id,listings,VOCAB,#/list/listing
@@ -703,6 +710,7 @@ fields,field registry,VOCAB,#/registry
 fifo,lots and owners,VOCAB,#/stock/lots
 file,documents,VOCAB,#/list/document
 file converter,convert file,VOCAB,#/csv-convert
+file details,bought from,VOCAB,#/sales
 file layout,marketplace profiles,VOCAB,#/list/mp_profile
 files,documents,VOCAB,#/list/document
 filing,tax and filings,VOCAB,#/compliance
@@ -814,6 +822,7 @@ handling time,orders to dispatch,VOCAB,#/orders
 handover,orders to dispatch,VOCAB,#/orders
 haulage,freight,VOCAB,#/list/t_src_freight
 header mapping,mappings and report types,VOCAB,#/list/imp_report_type
+header not found,learn sale columns,VOCAB,#/import
 health,system health,VOCAB,#/health
 health score,account health,VOCAB,#/shop-health
 held funds,payouts and settlements,VOCAB,#/settlements
@@ -923,6 +932,7 @@ item,products,VOCAB,#/list/product
 item code,products,VOCAB,#/list/product
 item id,listings,VOCAB,#/list/listing
 item not received,cases on sales,VOCAB,#/sale-cases
+item note,bought from,VOCAB,#/sales
 item record,product record,VOCAB,#/list/product_variation
 item sold,sales lines,VOCAB,#/sales
 items,products,VOCAB,#/list/product
@@ -967,6 +977,8 @@ launch,products,VOCAB,#/list/product
 lc,landed cost,VOCAB,#/list/t_src_landed_cost
 lcl,shipments,VOCAB,#/list/t_src_shipments
 lead time,replenishment and icc reorder,VOCAB,#/list/icc
+learn columns,learn sale columns,VOCAB,#/import
+learned mapping,learn sale columns,VOCAB,#/import
 leave,task rules,VOCAB,#/list/task_category
 leaving date,staff and employment,VOCAB,#/list/t_account_job_history
 ledger,ledger,VOCAB,#/ledger
@@ -1044,6 +1056,7 @@ manufacturer address,legal label texts,VOCAB,#/list/label_legal_text
 manufacturer part number,products,VOCAB,#/list/product
 manufacturers,buying dashboard,VOCAB,#/buying
 manufacturing,production,VOCAB,#/list/t_src_production
+map file headers,learn sale columns,VOCAB,#/import
 mapping,mappings and report types,VOCAB,#/list/imp_report_type
 mappings,mappings and report types,VOCAB,#/list/imp_report_type
 margin,profit views,VOCAB,#/profit
@@ -1136,6 +1149,7 @@ mws,api connections,VOCAB,#/connections
 my account investor,my investor account,VOCAB,#/my-portal
 my day,home,VOCAB,#/home
 my details,my account,VOCAB,#/me
+my item note,bought from,VOCAB,#/sales
 my profile,my account,VOCAB,#/me
 my settings,my account,VOCAB,#/me
 my share,my investor account,VOCAB,#/my-portal
@@ -1150,6 +1164,7 @@ negotiate,rfq and quotations,VOCAB,#/list/src_rfq
 negotiation,rfq and quotations,VOCAB,#/list/src_rfq
 net profit,profit views,VOCAB,#/profit
 net worth,money dashboard,VOCAB,#/money
+new file header,learn sale columns,VOCAB,#/import
 new orders,orders to dispatch,VOCAB,#/orders
 new product,products,VOCAB,#/list/product
 new user,users,VOCAB,#/users
@@ -1358,6 +1373,7 @@ port,catalog masters,VOCAB,#/list/cat_country
 ports,catalog masters,VOCAB,#/list/cat_country
 pos,purchase orders,VOCAB,#/list/t_src_po
 postage,carriers and postage rates,VOCAB,#/carriers
+postage charged,bought from,VOCAB,#/sales
 postage cost,expenses,VOCAB,#/expenses
 postage label,carrier labels,VOCAB,#/labels
 postage preset,carriers and postage rates,VOCAB,#/carriers
@@ -1447,8 +1463,10 @@ profits,profit views,VOCAB,#/profit
 proforma,rfq and quotations,VOCAB,#/list/src_rfq
 proforma invoice,rfq and quotations,VOCAB,#/list/src_rfq
 projection,cash forecast,VOCAB,#/forecast
+promoted listing,bought from,VOCAB,#/sales
 promoted listing fee,payouts and settlements,VOCAB,#/settlements
 promoted listings,payouts and settlements,VOCAB,#/settlements
+propose columns,learn sale columns,VOCAB,#/import
 proxy,account kit,VOCAB,#/list/t_mobile_device
 psi,qc,VOCAB,#/list/t_src_qc
 psp,payment provider profiles,VOCAB,#/list/payment_provider_profile
@@ -1459,6 +1477,7 @@ purchase invoice,expenses,VOCAB,#/expenses
 purchase order,purchase orders,VOCAB,#/list/t_src_po
 purchase orders,purchase orders,VOCAB,#/list/t_src_po
 purchase pipeline,buying dashboard,VOCAB,#/buying
+purchase record on sale,bought from,VOCAB,#/sales
 purchases,buying dashboard,VOCAB,#/buying
 purchasing,buying dashboard,VOCAB,#/buying
 put away,locations and bins,VOCAB,#/list/location
@@ -1764,6 +1783,7 @@ sold,sales lines,VOCAB,#/sales
 sold for,sales lines,VOCAB,#/sales
 sold items,orders to dispatch,VOCAB,#/orders
 sold orders,sales lines,VOCAB,#/sales
+sold via promoted,bought from,VOCAB,#/sales
 sole trader,companies,VOCAB,#/list/company
 sop,playbooks,VOCAB,#/list/playbook_step
 sops,playbooks,VOCAB,#/list/playbook_step
@@ -1789,6 +1809,7 @@ staff cost,expenses,VOCAB,#/expenses
 staff member,people and companies,VOCAB,#/list/party
 stakeholder,partners,VOCAB,#/partners
 standard operating procedure,playbooks,VOCAB,#/list/playbook_step
+standard sheet template,learn sale columns,VOCAB,#/import
 standing order,bank and cash,VOCAB,#/bank
 starling,bank and cash,VOCAB,#/bank
 start,home,VOCAB,#/home
@@ -1888,6 +1909,7 @@ tasks,my tasks,VOCAB,#/tasks
 tax,tax and filings,VOCAB,#/compliance
 tax calendar,tax and filings,VOCAB,#/compliance
 tax computation,taxation,VOCAB,#/list/tax_period
+tax status,bought from,VOCAB,#/sales
 taxation,taxation,VOCAB,#/list/tax_period
 taxes,tax and filings,VOCAB,#/compliance
 tb,ledger,VOCAB,#/ledger
@@ -2045,6 +2067,7 @@ variations,products,VOCAB,#/list/product
 vat,vat return,VOCAB,#/vat-return
 vat 100,vat return,VOCAB,#/vat-return
 vat number,vat return,VOCAB,#/vat-return
+vat on sale,bought from,VOCAB,#/sales
 vat reclaim,vat return,VOCAB,#/vat-return
 vat registered,vat return,VOCAB,#/vat-return
 vat return,vat return,VOCAB,#/vat-return

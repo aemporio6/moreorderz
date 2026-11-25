@@ -137,6 +137,8 @@ add('#/list/non_working_day', 'non working days', 'bank holiday|bank holidays|ho
 add('#/connections', 'api connections', 'api|apis|integration|integrations|connect|connection|connected apps|sp-api|sp api|mws|ebay api|tiktok api|webhook|token|oauth|linnworks|veeqo|shipstation|channel advisor|sellerdeck|zapier|make.com')
 
 add('#/supplier-orders', 'supplier order history', 'supplier order history|amazon business|amazon business orders|business orders|purchase history|order history from supplier|buying history|bought from amazon|amazon purchases|amazon order history')
+add('#/sales', 'bought from', 'bought from|item note|my item note|buy note|buy evidence|purchase record on sale|promoted listing|promoted listings|sold via promoted|ebay collected tax|vat on sale|tax status|dispatched on|postage charged|file details|all columns of the file')
+add('#/import', 'learn sale columns', 'learn columns|learned mapping|propose columns|column proposal|new file header|header not found|map file headers|standard sheet template|convert file template')
 
 # ---------- reports, setup, system ----------
 add('#/reports', 'all reports', 'report|reports|reporting|analytics|insights|dashboard reports|kpi|kpis|metrics|stats|statistics|export|exports|download report|csv export|excel|spreadsheet|summary|monthly report|weekly report|daily report')

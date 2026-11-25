@@ -79,6 +79,26 @@ class Part4Test extends TestCase
         $this->assertSame(47, Stock::available($this->p));
     }
 
+    /** R-A_SALES-16 the named eBay fields are kept (no column lost); R-A_SALES-61 the item note pre-fills the "Bought from" fields. */
+    public function test_r16_r61_named_ebay_fields_and_bought_from_on_the_line(): void
+    {
+        $vid = DB::table('t_vendors')->insertGetId(RecordService::fillNotNull('t_vendors', ['fk_id_ent' => 1, 'vendor_name' => 'Amazon test', 'iso_vendor' => 'AMZ', 'f_active' => 1]));
+        $h = '"Sales record number","Order number","Buyer name","Post to name","Post to country","Item number","Item title","Custom label","Sold via Promoted listings","Quantity","Sold for","Postage and packaging","VAT","eBay collected tax","Total price","Sale date","Dispatched on date","Tracking number","Transaction ID","My item note"';
+        $csv = $h . "\n" . '"201","09-1-1","Made Up","Made Up","United Kingdom","111","Tyre wax","ALX-127","Yes","2","£4.00","£1.20","£1.33","£0.00","£9.20","Oct-20-26","Oct-21-26","TRK9","T-77","AMZ : 204-555 : 05-07-26 : 2 : 4.50 {late}"' . "\n";
+        $x = OrderFiles::read($this->file('eBay-OrdersReport.csv', $csv), 'csv'); $l = $x['lines'][0];
+        $this->assertSame([1, 1.33, 0.0, '2026-10-21'], [$l['f_promoted'], $l['vat_amount'], $l['mp_tax_amount'], $l['d_dispatched']]);
+        $this->assertSame([$vid, '204-555', '2026-07-05', 2, 4.5, 9.0, 'late'], [$l['bought_vendor_id'], $l['bought_ref'], $l['bought_date'], $l['bought_qty'], $l['bought_rate'], $l['bought_total'], $l['bought_reason']]);
+        $this->assertSame('T-77', json_decode($l['raw_csv'], true)['Transaction ID']);
+        $va = $this->makeUser('VA');
+        $this->actingAs($va)->post('/api/orders/import', ['shop' => $this->shop, 'file' => UploadedFile::fake()->createWithContent('eBay-OrdersReport.csv', $csv)], ['Accept' => 'application/json'])->assertOk();
+        $sale = DB::table('t_sales')->where('order_no', '09-1-1')->first(); $this->assertSame([1, '204-555'], [(int) $sale->f_promoted, $sale->bought_ref]);
+        $this->assertEquals(1.20, DB::table('t_sale_charges')->where('fk_id_sale', $sale->id)->where('kind', 'POSTAGE_CHARGED')->value('amount'));
+        $d = $this->actingAs($this->owner)->getJson("/api/sales/{$sale->id}/details")->assertOk()->json();
+        $this->assertSame([true, 'AMZ Amazon test', 'TRK9'], [$d['named']['promoted'], $d['bought']['supplier'], $d['named']['tracking']]); $this->assertArrayHasKey('My item note', $d['file_row']);
+        $this->assertSame([], \App\Services\PurchaseAudit::boughtFrom('just a note', 'ALX-127', '2026-10-20', 1));      // not a purchase record: nothing set
+        $this->assertSame(1, \App\Services\PurchaseAudit::boughtFrom(null, 'B178-BELT', '2026-10-20', 1)['bought_local']);      // own stock: no buy rate
+    }
+
     /** The exact layout of the owner's real eBay orders report (April 2026): empty first line, full header, a line of "" , dates like 30-Apr-26, amounts with £, a footer. All values made up. */
     public function test_the_real_ebay_orders_report_layout_is_read_line_by_line(): void
     {
