@@ -436,7 +436,14 @@ class OrdersController extends Controller
     public function saleImportDelete(Request $r, int $id) { return $this->run(fn () => \App\Services\SalesImport::deleteBatch($id, $r->user())); }
     public function saleImportRestore(Request $r) { return $this->run(fn () => \App\Services\SalesImport::restoreBatch((string) $r->input('undo'), $r->user())); }
     public function saleColumns(Request $r, int $mp) { $this->can($r, 'orders.saleImport'); $set = strtoupper((string) $r->query('set', 'SALE')); abort_unless(isset(\App\Services\SalesImport::SETS[$set]), 404);
-        return ['set' => $set, 'fields' => \App\Services\SalesImport::SETS[$set][2], 'required' => $set === 'MATCH' ? [] : \App\Services\SalesImport::REQUIRED, 'columns' => array_map(fn ($a) => implode(',', $a), \App\Services\SalesImport::columns($mp, $set)), 'can_save' => \App\Services\Perm::has($r->user(), 'orders.saleColumns')]; }
+        return ['set' => $set, 'fields' => \App\Services\SalesImport::SETS[$set][2], 'required' => $set === 'MATCH' ? [] : \App\Services\SalesImport::REQUIRED, 'columns' => array_map(fn ($a) => implode(',', $a), \App\Services\SalesImport::columns($mp, $set)), 'notes' => \App\Services\SalesImport::FIELD_NOTES, 'can_save' => \App\Services\Perm::has($r->user(), 'orders.saleColumns')]; }
+    /** R-A_SALES-66 the header line of a file → which field each unread header looks like; learn = add it to the field's columns. */
+    public function saleColumnsPropose(Request $r, int $mp) { return $this->run(function () use ($r, $mp) { $this->can($r, 'orders.saleImport');
+        $hs = array_values(array_filter(array_map(fn ($h) => \App\Services\Parse::header($h), str_getcsv(str_contains((string) $r->input('line'), "\t") ? str_replace("\t", ',', (string) $r->input('line')) : (string) $r->input('line'))), fn ($h) => $h !== ''));
+        if (! $hs) throw new \InvalidArgumentException('Paste the first line (the headers) of the file.');
+        $p = \App\Services\SalesImport::propose($hs, \App\Services\SalesImport::columns($mp, 'SALE'));
+        return ['proposals' => $p, 'message' => $p ? count($p) . ' header(s) can be learned.' : 'Every field is already read from this file, or no header looks like a missing one.']; }); }
+    public function saleColumnsLearn(Request $r, int $mp) { return $this->run(function () use ($r, $mp) { $this->can($r, 'orders.saleColumns'); return \App\Services\SalesImport::learn($mp, (string) $r->input('field'), (string) $r->input('header')); }); }
     public function saleColumnsSave(Request $r, int $mp) { return $this->run(function () use ($r, $mp) { $this->can($r, 'orders.saleColumns'); return ['message' => 'Columns saved.', 'columns' => \App\Services\SalesImport::saveColumns($mp, strtoupper((string) $r->input('set', 'SALE')), (array) $r->input('columns', []))]; }); }
 
     private function saleFilters(Request $r): array

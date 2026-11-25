@@ -17,6 +17,38 @@ class SalesImport
     public const MATCH_FIELDS = ['ship_name' => 'Delivered To', 'ship_address' => 'Address', 'ship_city' => 'City', 'ship_postcode' => 'Postcode', 'ship_phone' => 'Phone'];
     public const REQUIRED = ['order_no', 'order_date', 'sku', 'qty', 'sale_rate'];
     public const JOINED = ['cust_name' => ' ', 'cust_contacts' => ', ', 'product_info' => ', '];
+    /** R-A_SALES-66 a note per field (shown next to it in Marketplaces › Sale Columns) and the usual header words, used to propose a mapping a file needs. */
+    public const FIELD_NOTES = ['order_no' => 'The marketplace order number; one order may have several lines (one per SKU).', 'order_date' => 'The order / sale date; a time in it is read in the profile\'s time zone.',
+        'cust_name' => 'Buyer name; several columns are joined with a space.', 'cust_contacts' => 'E-mail / phone; several columns are joined with a comma.', 'sku' => 'Your SKU (custom label); an empty SKU makes a stable NOSKU key.',
+        'product_info' => 'Item title / variation; several columns are joined.', 'qty' => 'Units of the line – a whole number above 0.', 'sale_rate' => 'Price per unit; when empty it is total ÷ qty.', 'total_amount' => 'Line total; when empty it is price × qty.', 'seller_id' => 'The seller / store id in the file – it tells which shop the file is.'];
+    public const FIELD_WORDS = ['order_no' => ['order number', 'order id', 'order no', 'order ref', 'order reference', 'sales record number', 'order'], 'order_date' => ['order date', 'sale date', 'date', 'purchase date', 'created', 'order created', 'paid on date'],
+        'cust_name' => ['buyer name', 'customer name', 'buyer', 'recipient', 'ship to name', 'name'], 'cust_contacts' => ['buyer email', 'email', 'phone', 'buyer phone', 'contact'], 'sku' => ['sku', 'custom label', 'seller sku', 'merchant sku', 'item sku', 'variant sku'],
+        'product_info' => ['item title', 'title', 'product name', 'product', 'item name', 'description'], 'qty' => ['quantity', 'qty', 'units', 'quantity purchased', 'item quantity'], 'sale_rate' => ['sold for', 'item price', 'price', 'unit price', 'sale price'],
+        'total_amount' => ['total price', 'total', 'order total', 'line total', 'amount', 'item subtotal'], 'seller_id' => ['seller id', 'store id', 'shop id', 'merchant id']];
+
+    /** R-A_SALES-66 learned mappings: for each field the file does not cover, the file header that looks most like it (usual words first, then the closest spelling). */
+    public static function propose(array $headers, array $cols): array
+    {
+        $out = []; $taken = [];
+        foreach ($cols as $hs) foreach ($hs as $h) $taken[Parse::header($h)] = 1;
+        foreach (self::FIELDS + self::SELLER_FIELD as $f => $lab) {
+            $have = array_filter($cols[$f] ?? [], fn ($h) => in_array(Parse::header($h), $headers, true)); if ($have) continue;
+            $best = null; $bs = 0;
+            foreach ($headers as $h) { if ($h === '' || isset($taken[$h])) continue;
+                foreach (self::FIELD_WORDS[$f] ?? [] as $i => $w) { $sc = $h === $w ? 100 - $i : (str_contains($h, $w) ? 60 - $i : (levenshtein($h, $w) <= 2 ? 40 : 0)); if ($sc > $bs) { $bs = $sc; $best = $h; } } }
+            if ($best) $out[$f] = ['field' => $f, 'label' => $lab, 'header' => $best, 'required' => in_array($f, self::REQUIRED, true)];
+        }
+        return array_values($out);
+    }
+
+    /** Accept a proposal: the header joins the field's columns in the profile (no other header of the field is removed). */
+    public static function learn(int $marketplaceId, string $field, string $header): array
+    {
+        if (! isset((self::FIELDS + self::SELLER_FIELD)[$field])) throw new \InvalidArgumentException('Unknown field.');
+        $cols = self::columns($marketplaceId, 'SALE'); $now = array_values(array_unique(array_merge($cols[$field] ?? [], [trim($header)])));
+        self::saveColumns($marketplaceId, 'SALE', array_map(fn ($x) => implode(', ', $x), array_merge($cols, [$field => $now])));
+        return ['message' => "\"$header\" is now read as " . (self::FIELDS + self::SELLER_FIELD)[$field] . '.', 'columns' => $now];
+    }
     /** The seller / store id column of a marketplace's own export: the first detector of the shop (R-A_SALES-3). Not required. */
     public const SELLER_FIELD = ['seller_id' => 'Seller ID'];
     public const SETS = ['SALE' => ['marketplace_sale_columns', 'sale_field', self::FIELDS + self::SELLER_FIELD], 'DS' => ['marketplace_ds_columns', 'ds_field', self::FIELDS], 'MATCH' => ['marketplace_5_matching_rule_columns', 'match_field', self::MATCH_FIELDS]];
@@ -282,7 +314,9 @@ class SalesImport
             foreach (self::FIELDS as $f => $lab) { $hs = $cols[$f]; if (! $hs) continue; $found = array_filter($hs, fn ($h) => isset($have[Parse::header($h)]));
                 if (in_array($f, self::REQUIRED, true) && ! $found) $missing[] = "$lab (" . implode(', ', $hs) . ')';
                 elseif (count($found) < count($hs)) $warnings[] = "Column not found for $lab: " . implode(', ', array_diff($hs, $found)); }
-            if ($missing) throw new \InvalidArgumentException('These columns are missing from the CSV: ' . implode('; ', $missing) . '. Check the file is the right marketplace export, or update Sale Columns.');
+            $prop = self::propose($csv['headers'], $cols);
+            if ($missing) throw new \InvalidArgumentException('These columns are missing from the CSV: ' . implode('; ', $missing) . '. Check the file is the right marketplace export, or update Sale Columns.' . ($prop ? ' The file has: ' . implode('; ', array_map(fn ($p) => "\"{$p['header']}\" for {$p['label']}", array_filter($prop, fn ($p) => $p['required']))) . ' – accept it in Sale Columns to read it next time.' : ''));
+            foreach ($prop as $p) if (! $p['required']) $warnings[] = "Column \"{$p['header']}\" looks like {$p['label']} – accept it in Sale Columns to read it.";
         } else $csv = self::totalsCsv($path);
         // which shop and month the file belongs to, against what was chosen: the seller id inside the file first, then the file name (R-A_SALES-3; the same detection as on the screen, on the server too)
         $w = []; $sel = $totals ? ['shop' => null, 'value' => null, 'message' => null] : self::sellerIn($path, (int) $shop->fk_id_marketplace); $fn = self::fileName($fileName, (int) $d['marketplace']);

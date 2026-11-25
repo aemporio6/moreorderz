@@ -563,6 +563,8 @@ class BuyingController extends Controller
         try { return \App\Services\SupplierOrders::import((int) \App\Services\Context::ent(), $r->file('file')->getClientOriginalName(), (string) file_get_contents($r->file('file')->getRealPath()), $r->user(), $step === 'import'); }
         catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
     }
+    public function supplierOrdersMatch(Request $r) { try { return \App\Services\SupplierOrders::match((int) \App\Services\Context::ent(), (int) $r->input('shop', $r->query('shop')), $r->user(), $r->isMethod('post')); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
+    public function supplierOrdersQuickBuy(Request $r) { try { return \App\Services\SupplierOrders::toQuickBuy((int) \App\Services\Context::ent(), (int) $r->input('shop'), (string) $r->input('order'), (int) $r->input('supplier'), (int) $r->input('location'), $r->user()); } catch (\InvalidArgumentException|\RuntimeException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
     public function supplierOrdersTemplate() { return response(\App\Services\SupplierOrders::template(), 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => 'attachment; filename="1.csv"']); }
     public function oldEntryTemplate() { return response(\App\Services\HistoricalPurchase::template(), 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => 'attachment; filename="SRC_HISTORICAL_template.csv"']); }
 }

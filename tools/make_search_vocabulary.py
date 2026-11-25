@@ -136,6 +136,8 @@ add('#/list/t_mobile_device', 'account kit', 'device|devices|phone|sim|sim card|
 add('#/list/non_working_day', 'non working days', 'bank holiday|bank holidays|holiday calendar|non working day|christmas|easter|closed days')
 add('#/connections', 'api connections', 'api|apis|integration|integrations|connect|connection|connected apps|sp-api|sp api|mws|ebay api|tiktok api|webhook|token|oauth|linnworks|veeqo|shipstation|channel advisor|sellerdeck|zapier|make.com')
 
+add('#/supplier-orders', 'supplier order history', 'supplier order history|amazon business|amazon business orders|business orders|purchase history|order history from supplier|buying history|bought from amazon|amazon purchases|amazon order history')
+
 # ---------- reports, setup, system ----------
 add('#/reports', 'all reports', 'report|reports|reporting|analytics|insights|dashboard reports|kpi|kpis|metrics|stats|statistics|export|exports|download report|csv export|excel|spreadsheet|summary|monthly report|weekly report|daily report')
 add('#/reports/price_log', 'prices and price log', 'price|prices|price change|price history|price log|pricing|price list our|cost price|sell price|rrp|msrp')

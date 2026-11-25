@@ -503,6 +503,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('sales/link/{id}', [OrdersController::class, 'saleImportLink'])->whereNumber('id');
         Route::get('sales/columns/{mp}', [OrdersController::class, 'saleColumns'])->whereNumber('mp');
         Route::post('sales/columns/{mp}', [OrdersController::class, 'saleColumnsSave'])->whereNumber('mp');
+        Route::post('sales/columns/{mp}/propose', [OrdersController::class, 'saleColumnsPropose'])->whereNumber('mp');
+        Route::post('sales/columns/{mp}/learn', [OrdersController::class, 'saleColumnsLearn'])->whereNumber('mp');
         Route::get('sales/month', [OrdersController::class, 'saleMonthInfo']);
         Route::post('sales/month/delete', [OrdersController::class, 'saleDeleteMonth']);
         Route::post('sales/restore', [OrdersController::class, 'saleRestore']);
@@ -576,6 +578,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('cycles/csv/{step}', [\App\Http\Controllers\BuyingController::class, 'cycleCsv'])->whereIn('step', ['check', 'import']);      // R-B_SOURCING-14 (check never writes)
         Route::post('cycles/csv/{job}/undo', [\App\Http\Controllers\BuyingController::class, 'cycleCsvUndo'])->whereNumber('job');
         Route::post('supplier-orders/{step}', [\App\Http\Controllers\BuyingController::class, 'supplierOrders'])->whereIn('step', ['check', 'import']);      // R-A_SALES-80
+        Route::match(['get', 'post'], 'supplier-orders/match', [\App\Http\Controllers\BuyingController::class, 'supplierOrdersMatch']);      // GET = check, POST = apply
+        Route::post('supplier-orders/quick-buy', [\App\Http\Controllers\BuyingController::class, 'supplierOrdersQuickBuy']);
         Route::get('supplier-orders/template', [\App\Http\Controllers\BuyingController::class, 'supplierOrdersTemplate']);
         Route::get('cycles/csv/template', [\App\Http\Controllers\BuyingController::class, 'cycleCsvTemplate']);
         Route::get('old-entry/template', [\App\Http\Controllers\BuyingController::class, 'oldEntryTemplate']);

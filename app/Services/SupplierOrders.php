@@ -61,5 +61,45 @@ class SupplierOrders
         return $sum + ['message' => "Done: {$sum['rows']} line(s) – {$sum['found']} found, {$sum['not_found']} not found."];
     }
 
+    private static function money(?string $v): float { return (float) (Parse::money($v) ?: 0); }
+    private static function day(?string $v): ?string { $d = Parse::date((string) $v); return $d === false || $d === '' ? null : $d; }
+
+    /**
+     * R-A_SALES-80 (improved): the order lines against the sales. A sale of the shop whose buy note names this order id (e.g. "AMZ : 204-1 : …") and whose
+     * product is the ASIN's product is the drop-ship sale it was bought for: its buy rate / amount / date come from the order line (base currency at the order
+     * date rate; a Pending sale only). The rest are stock buys – they become Quick buys (below). Check (apply false) writes nothing.
+     */
+    public static function match(int $ent, int $shopId, object $u, bool $apply = false): array
+    {
+        Perm::need($u, 'buying.BUY');
+        $rows = DB::table('t_amazon_orders')->where('fk_id_branch', $shopId)->get();
+        $known = DB::table('t_product_listings')->where('fk_id_ent', $ent)->whereIn('asin', $rows->pluck('ASIN')->filter()->unique()->all() ?: [''])->pluck('fk_id_product', 'asin')->all();
+        $out = ['matched' => [], 'stock' => [], 'unknown' => []];
+        foreach ($rows as $r) {
+            $pid = $known[$r->ASIN] ?? null; if (! $pid) { $out['unknown'][] = ['order' => $r->order_id, 'asin' => $r->ASIN, 'title' => mb_substr((string) $r->Item_title, 0, 60)]; continue; }
+            $sale = DB::table('t_sales')->where('fk_id_branch', $shopId)->where('fk_product_id', $pid)->where('ds_note', 'like', '%' . $r->order_id . '%')->where(fn ($w) => $w->whereNull('line_status')->orWhere('line_status', '<>', 'DELETED'))->orderBy('id')->first();
+            $qty = max(1, (int) self::money($r->item_qty)); $date = self::day($r->order_date) ?? date('Y-m-d');
+            $total = Fx::toBase(self::money($r->item_net_total), strtoupper((string) $r->currency) ?: Fx::base($ent), $date, $ent);
+            $line = ['order' => $r->order_id, 'asin' => $r->ASIN, 'product' => (int) $pid, 'qty' => $qty, 'total' => round($total, 2), 'date' => $date];
+            if (! $sale) { $out['stock'][] = $line; continue; }
+            $line['sale'] = (int) $sale->id; $line['sale_order'] = $sale->order_no; $line['status'] = $sale->status;
+            if ($apply && $sale->status === 'Pending') {
+                DB::table('t_sales')->where('id', $sale->id)->update(['buy_amount' => round($total, 2), 'buy_rate' => round($total / $qty, 2), 'd_buy' => $date, 'cost_source' => 'supplier_order', 'updated_at' => now()]);
+                Audit::log('t_sales', (int) $sale->id, 'UPDATE', ['buy_amount' => [(float) $sale->buy_amount, round($total, 2)], 'from' => 'supplier order ' . $r->order_id], 'supplier order history', $ent);
+            }
+            $out['matched'][] = $line;
+        }
+        return $out + ['counts' => ['matched' => count($out['matched']), 'stock' => count($out['stock']), 'unknown' => count($out['unknown'])], 'message' => ($apply ? 'Done: ' : 'Check: ') . count($out['matched']) . ' line(s) matched to sales, ' . count($out['stock']) . ' stock buy(s), ' . count($out['unknown']) . ' ASIN(s) not on a listing.'];
+    }
+
+    /** The stock buys of one order as a Quick buy (cycle QUICK → PO → GRN → lots at the order's cost); the supplier + order id guard stops a second one. */
+    public static function toQuickBuy(int $ent, int $shopId, string $orderId, int $supplier, int $location, object $u): array
+    {
+        $lines = array_values(array_filter(self::match($ent, $shopId, $u)['stock'], fn ($l) => $l['order'] === $orderId));
+        if (! $lines) throw new \InvalidArgumentException("Order $orderId has no stock line (its lines are matched to sales or their ASIN is on no listing).");
+        return SourcingExtras::quickBuy($ent, ['supplier' => $supplier, 'location' => $location, 'date' => $lines[0]['date'], 'reference' => $orderId, 'currency' => Fx::base($ent),
+            'note' => 'Supplier order history ' . $orderId, 'lines' => array_map(fn ($l) => ['product' => $l['product'], 'qty' => $l['qty'], 'unit_price' => round($l['total'] / $l['qty'], 4)], $lines)]);
+    }
+
     public static function template(): string { return implode(',', self::columns()) . "\n"; }
 }

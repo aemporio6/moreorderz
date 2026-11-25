@@ -118,6 +118,22 @@ class SalesImportTest extends TestCase
         try { $this->go($this->file([$this->row('D-1')]), ['month' => 9, 'sure' => true]); $this->fail('no error'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('Sale Columns are not set for this marketplace: Qty', $e->getMessage()); }
     }
 
+    public function test_r66_a_missing_header_gets_a_proposal_and_learning_it_reads_the_file(): void
+    {
+        $this->world();
+        $head = str_replace(',Quantity', ',Units', self::HEAD);
+        try { $this->go($this->file([$this->row('L-1')], $head)); $this->fail('no error'); }
+        catch (\InvalidArgumentException $e) { $this->assertStringContainsString('"units" for Qty', $e->getMessage()); }
+        $this->assertSame('qty', SalesImport::propose(['units', 'order number'], ['qty' => ['Quantity'], 'order_no' => ['Order number']])[0]['field']);
+        $this->assertArrayHasKey('qty', SalesImport::FIELD_NOTES);
+        $r = SalesImport::learn($this->mp, 'qty', 'Units'); $this->assertContains('Units', $r['columns']); $this->assertContains('Quantity', $r['columns']);
+        $this->go($this->file([$this->row('L-1')], $head)); $this->assertTrue(DB::table('t_sales')->where('order_no', 'L-1')->exists());
+        $u = $this->owner;
+        $o = $this->actingAs($u)->postJson("/api/sales/columns/{$this->mp}/propose", ['line' => "Order number,Sale date,Buyer phone,Item price"])->json(); $this->assertIsArray($o['proposals'] ?? null);
+        $this->assertArrayHasKey('qty', $this->actingAs($u)->getJson("/api/sales/columns/{$this->mp}")->json('notes'));
+        try { SalesImport::learn($this->mp, 'nope', 'X'); $this->fail('no error'); } catch (\InvalidArgumentException $e) { $this->assertSame('Unknown field.', $e->getMessage()); }
+    }
+
     public function test_reader_finds_the_header_under_a_preamble_with_semicolons_and_cp1252(): void
     {
         $this->world(); $p = tempnam(sys_get_temp_dir(), 'si'); $this->files[] = $p;

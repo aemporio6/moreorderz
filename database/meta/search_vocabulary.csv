@@ -72,12 +72,16 @@ allocate overhead,shared expense rules,VOCAB,#/list/aud_expense_rule
 allocation,allocation and platform plan,VOCAB,#/list/t_src_allocations
 allocations,allocation and platform plan,VOCAB,#/list/t_src_allocations
 amazon,marketplace operations hubs,VOCAB,#/hubs
+amazon business,supplier order history,VOCAB,#/supplier-orders
+amazon business orders,supplier order history,VOCAB,#/supplier-orders
 amazon buy,drop shipping orders,VOCAB,#/ds-orders
 amazon buy shipping,carrier labels,VOCAB,#/labels
 amazon eu,marketplace operations hubs,VOCAB,#/hubs
+amazon order history,supplier order history,VOCAB,#/supplier-orders
 amazon order report,import sales,VOCAB,#/sales-import
 amazon payout,payouts and settlements,VOCAB,#/settlements
 amazon pro plan,subscriptions,VOCAB,#/subscriptions
+amazon purchases,supplier order history,VOCAB,#/supplier-orders
 amazon seller,marketplace operations hubs,VOCAB,#/hubs
 amazon seller central,marketplace operations hubs,VOCAB,#/hubs
 amazon settlement,payouts and settlements,VOCAB,#/settlements
@@ -200,6 +204,7 @@ bookkeeping,money dashboard,VOCAB,#/money
 books,money dashboard,VOCAB,#/money
 borrow,loans,VOCAB,#/loans
 borrowing,loans,VOCAB,#/loans
+bought from amazon,supplier order history,VOCAB,#/supplier-orders
 bought in shop,quick buy,VOCAB,#/list/quick_buy
 bounce back loan,loans,VOCAB,#/loans
 box,packaging and box sizes,VOCAB,#/list/product_packaging
@@ -234,6 +239,7 @@ bundles,products,VOCAB,#/list/product
 business,companies,VOCAB,#/list/company
 business card,bank and cash,VOCAB,#/bank
 business loan,loans,VOCAB,#/loans
+business orders,supplier order history,VOCAB,#/supplier-orders
 business rules,choices,VOCAB,#/choices
 businesses,companies,VOCAB,#/list/company
 buy box,listings,VOCAB,#/list/listing
@@ -252,6 +258,7 @@ buyers,customers,VOCAB,#/list/crm_customer
 buying,buying dashboard,VOCAB,#/buying
 buying agent,buying dashboard,VOCAB,#/buying
 buying board,buying dashboard,VOCAB,#/buying
+buying history,supplier order history,VOCAB,#/supplier-orders
 c79,customs,VOCAB,#/list/t_src_customs
 c88,customs,VOCAB,#/list/t_src_customs
 calculator,marketplace calculator,VOCAB,#/calculator
@@ -1203,6 +1210,7 @@ order defect rate,account health,VOCAB,#/shop-health
 order export,import sales,VOCAB,#/sales-import
 order from china,buying dashboard,VOCAB,#/buying
 order history,sales lines,VOCAB,#/sales
+order history from supplier,supplier order history,VOCAB,#/supplier-orders
 order id,sales lines,VOCAB,#/sales
 order import,import sales,VOCAB,#/sales-import
 order intake,fulfilment orders,VOCAB,#/fulfilment
@@ -1446,6 +1454,7 @@ psi,qc,VOCAB,#/list/t_src_qc
 psp,payment provider profiles,VOCAB,#/list/payment_provider_profile
 purchase,buying dashboard,VOCAB,#/buying
 purchase for customer,drop shipping orders,VOCAB,#/ds-orders
+purchase history,supplier order history,VOCAB,#/supplier-orders
 purchase invoice,expenses,VOCAB,#/expenses
 purchase order,purchase orders,VOCAB,#/list/t_src_po
 purchase orders,purchase orders,VOCAB,#/list/t_src_po
@@ -1849,6 +1858,7 @@ supplier creditors,supplier payment schedule,VOCAB,#/supplier-schedule
 supplier list,suppliers and forwarders,VOCAB,#/list/supplier
 supplier order,purchase orders,VOCAB,#/list/t_src_po
 supplier order file,upload drop shipping orders,VOCAB,#/ds-upload
+supplier order history,supplier order history,VOCAB,#/supplier-orders
 supplier payment,payments and terms,VOCAB,#/list/src_payment
 supplier quote,rfq and quotations,VOCAB,#/list/src_rfq
 supplier rating,suppliers and forwarders,VOCAB,#/list/supplier

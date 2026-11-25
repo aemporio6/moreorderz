@@ -48,6 +48,7 @@ class Finder
         ['My investor account', 'investor portal dashboard my stock my sales share', '#/my-portal', null],
         ['My sales', 'investor portal my sales share amount', '#/my-sales', null],
         ['My invoices', 'investor portal my invoices payments e-mail', '#/my-invoices', null],
+        ['Supplier order history', 'amazon business orders supplier orders order history purchase history business orders', '#/supplier-orders', 'buying.BUY'],
         ['Supplier payment schedule', 'supplier terms owe due overdue deposit balance', '#/supplier-schedule', 'money.forecast'],
         ['Profit views', 'profit by shop product month margin', '#/profit', 'money.SEE'],
         ['VAT return', 'vat tax boxes hmrc', '#/vat-return', 'finance.MONEY'],
