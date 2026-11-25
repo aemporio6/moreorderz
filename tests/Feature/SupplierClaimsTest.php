@@ -154,6 +154,8 @@ class SupplierClaimsTest extends TestCase
         $this->assertSame(20.0, (float) DB::table('t_src_customs')->where('fk_id_bank_line', $du)->value('paid_base_amount'));
         $r = Buy::landedCost($this->po, []);
         $this->assertEqualsWithDelta(5.60, (float) DB::table('fin_lots')->where('fk_id_product', $this->p)->value('unit_cost_gbp'), 0.001, '500 + 40 freight + 20 duty over 100 units');
+        $ov = \App\Services\CycleAlerts::overview(1, $this->cy, $this->owner)['lots'];
+        $this->assertSame([1, '#/src-landed/' . $this->cy, 5.6], [count($ov['rows']), $ov['rows'][0]['run_url'], round($ov['rows'][0]['cost'], 2)], 'R-B_SOURCING-40 the card of one cycle; the chip opens its landed-cost runs');
         $this->postJson("/api/bank-lines/$fr/unmatch")->assertOk();
         $this->assertSame(0, (int) DB::table('t_src_freight_costs')->where('fk_id_bank_line', $fr)->value('f_active'));
     }

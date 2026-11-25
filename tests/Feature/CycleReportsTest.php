@@ -65,7 +65,10 @@ class CycleReportsTest extends TestCase
         $this->f('t_src_allocations', ['fk_id_cycle' => $cy, 'alloc_code' => 'AL-S', 'allocated_qty' => 900]);
         $this->f('t_src_grn', ['fk_id_cycle' => $cy, 'grn_number' => 'GRN-S', 'units_received' => 880, 'damaged_units' => 5, 'missing_units' => 15]);
 
+        foreach ([500, 300] as $m) $this->f('t_src_rfq', ['fk_id_cycle' => $cy, 'rfq_code' => 'RFQ-M' . $m, 'moq' => $m]);
+        $this->f('t_src_investments', ['fk_id_cycle' => $cy, 'invest_code' => 'INV-S', 'invest_amount' => 1000, 'base_amount' => 800, 'status' => 'Confirmed']);
         $x = $this->getJson("/api/cycle/$cy/summary")->assertOk()->json();
+        $this->assertSame([300.0, 800.0], [(float) $x['header']['moq'], (float) $x['money']['invested']], 'R-B_SOURCING-24 MOQ = the lowest of the RFQs; R-25 invested in base');
         $this->assertSame('SOURCING CYCLE SUMMARY — ' . DB::table('t_src_cycles')->where('id', $cy)->value('cycle_code'), $x['title']);
         $this->assertSame(['Desk lamp, Floor lamp', 'Lamp Co', 'Open', 'High'], [$x['products'], $x['suppliers'], $x['status'], $x['priority']]);
         $this->assertSame('800 (80.0%)', $x['qty_text']['produced']);

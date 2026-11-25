@@ -70,6 +70,17 @@ class SourcingBoard
         return ['url' => 'https://wa.me/' . $p['whatsapp'] . '?text=' . rawurlencode($text), 'message' => 'Logged on the cycle.'];
     }
 
+    /** R-B_SOURCING-29 / R-F_SETUP-23 one place for a shipment's customs and GRN chips: [customs, tone, grn, tone, late]. */
+    public static function chips(object $s, string $today): array
+    {
+        $late = $s->eta && $s->eta < $today && ! $s->actual_arrival; $shipped = ! empty($s->actual_departure);
+        $cu = DB::table('t_src_customs')->where('fk_id_shipment', $s->id)->where('f_active', 1)->orderByDesc('updated_at')->orderByDesc('id')->value('status');
+        $customs = $cu === null || $cu === '' ? ['—', 'grey'] : [$cu, stripos($cu, 'clear') !== false ? 'teal' : ($late ? 'red' : 'amber')];
+        $grn = DB::table('t_src_grn')->where('fk_id_shipment', $s->id)->where('f_active', 1)->exists();
+        $g = $grn ? ['Received', 'teal'] : (! $shipped ? ['—', 'grey'] : ($late ? ['Not received · late', 'red'] : ['Not received', 'amber']));
+        return ['customs' => $customs[0], 'customs_tone' => $customs[1], 'grn' => $g[0], 'grn_tone' => $g[1], 'late' => $late];
+    }
+
     /** R-F_SETUP-23 */
     public static function shipments(int $ent, int $limit = 15, ?string $today = null): array
     {

@@ -82,14 +82,22 @@ class CycleReports
         $sups = $poRows->pluck('fk_id_supplier')->filter()->unique()->values()->all();
         if (! $sups) $sups = DB::table('t_src_rfq')->where('fk_id_cycle', $id)->where('f_active', 1)->pluck('fk_id_supplier')->filter()->unique()->values()->all();
         $supNames = $sups ? DB::table('t_src_suppliers')->whereIn('id', $sups)->orderBy('supplier_name')->pluck('supplier_name')->all() : [];
+        /* R-B_SOURCING-25 invested (base) and accepted (production) shown; QC green from SRC_QC_PASS_GREEN; R-B_SOURCING-24 header: MOQ = MIN of the active RFQs, SKU, total qty, dates */
+        $invested = round((float) DB::table('t_src_investments')->where('fk_id_cycle', $id)->where('f_active', 1)->whereNotIn('status', ['Cancelled', 'CANCELLED', 'Rejected', 'REJECTED'])->sum(DB::raw('COALESCE(base_amount, invest_amount * COALESCE(NULLIF(exchange_rate, 0), 1))')), 2);
+        $acceptedProd = (float) DB::table('t_src_production')->where('fk_id_cycle', $id)->where('f_active', 1)->sum('accepted_qty');
+        $moq = DB::table('t_src_rfq')->where('fk_id_cycle', $id)->where('f_active', 1)->where('moq', '>', 0)->min('moq');
+        $qcGreen = (float) Settings::get('SRC_QC_PASS_GREEN', $ent, 95);
         $num = fn ($x) => rtrim(rtrim(number_format((float) $x, 3, '.', ''), '0'), '.');
         return ['cycle' => ['id' => (int) $c->id, 'code' => $c->cycle_code], 'title' => 'SOURCING CYCLE SUMMARY — ' . $c->cycle_code, 'base' => Fx::base($ent),
             'status' => $c->status, 'priority' => $c->priority, 'stage' => $pl['current_name'], 'progress_pct' => $pl['progress_pct'],
             'products' => DB::table('t_src_cycle_products')->where('fk_id_cycle', $id)->where('f_active', 1)->orderBy('id')->pluck('product_name')->filter()->implode(', ') ?: '-',
             'suppliers' => $supNames ? implode(', ', $supNames) : '-',
-            'money' => ['purchase_cost' => $purchase, 'paid' => $paid, 'outstanding' => round($purchase - $paid, 2), 'freight' => $freight, 'customs_duty' => round((float) $cust->duty, 2), 'landed_per_unit' => (float) $lc->q > 0 ? round((float) $lc->t / (float) $lc->q, 4) : 0.0],
+            'money' => ['purchase_cost' => $purchase, 'invested' => $invested, 'paid' => $paid, 'outstanding' => round($purchase - $paid, 2), 'freight' => $freight, 'customs_duty' => round((float) $cust->duty, 2), 'landed_per_unit' => (float) $lc->q > 0 ? round((float) $lc->t / (float) $lc->q, 4) : 0.0],
             'qty' => ['ordered' => $ordered, 'produced' => $produced, 'production_pct' => $ordered > 0 ? round($produced / $ordered * 100, 1) : 0.0, 'received' => (float) $grn->r, 'allocated' => $alloc, 'unallocated' => $ordered - $alloc,
                 'damaged' => (float) $grn->d, 'missing' => (float) $grn->m, 'qc_pass_rate' => (float) $qc->i > 0 ? round((float) $qc->p / (float) $qc->i * 100, 1) : 0.0],
+            'header' => ['sku' => DB::table('t_src_cycle_products')->where('fk_id_cycle', $id)->where('f_active', 1)->pluck('sku')->filter()->unique()->implode(', ') ?: ($c->sku ?: '-'), 'total_qty' => (float) DB::table('t_src_cycle_products')->where('fk_id_cycle', $id)->where('f_active', 1)->sum('target_qty'),
+                'moq' => $moq !== null ? (float) $moq : null, 'sourcing_date' => $c->sourcing_date, 'required_delivery' => $c->required_delivery_date, 'type' => $c->cycle_type, 'pending_approval' => strtoupper((string) $c->approval_status) === 'PENDING'],
+            'extra' => ['accepted_production' => $acceptedProd, 'qc_green' => $qcGreen],
             'qty_text' => ['produced' => $num($produced) . ' (' . number_format($ordered > 0 ? $produced / $ordered * 100 : 0, 1) . '%)'],
             'import_vat' => round((float) $cust->vat, 2), 'footnote' => 'Import VAT (' . number_format((float) $cust->vat, 2) . ') tracked separately — reclaimable, not in landed cost. Generated ' . date('d-m-Y H:i'),
             'file' => 'CycleSummary_' . $c->cycle_code . '_' . date('Ymd') . '.pdf'];

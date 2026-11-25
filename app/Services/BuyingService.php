@@ -551,7 +551,7 @@ class BuyingService
             ->get(['p.id', 'p.po_number', 's.supplier_name as supplier', 'p.po_date', 'p.po_total', 'cu.currency_code as currency', 'p.status', 'p.f_paid_in_full'])->all();
         $poIds = array_column($pos, 'id');
         $terms = DB::table('t_src_payment_terms')->whereIn('fk_id_po', $poIds ?: [0])->where('f_active', 1)->orderBy('fk_id_po')->orderBy('term_no')->get(['id', 'fk_id_po', 'milestone', 'planned_amount', 'paid_amount', 'remaining_amount', 'due_date', 'status'])->all();
-        $ships = DB::table('t_src_shipments')->whereIn('fk_id_po', $poIds ?: [0])->where('f_active', 1)->orderBy('id')->get(['id', 'shipment_code', 'fk_id_po', 'planned_qty', 'etd', 'eta', 'actual_arrival', 'status'])->all();
+        $ships = DB::table('t_src_shipments')->whereIn('fk_id_po', $poIds ?: [0])->where('f_active', 1)->orderBy('id')->get(['id', 'shipment_code', 'fk_id_po', 'planned_qty', 'etd', 'eta', 'actual_departure', 'actual_arrival', 'status'])->map(fn ($x) => (object) ((array) $x + SourcingBoard::chips($x, date('Y-m-d'))))->all();      /* R-B_SOURCING-29 customs / GRN chips */
         $grns = DB::table('t_src_grn')->where('fk_id_cycle', $cycleId)->where('f_active', 1)->orderBy('id')->get(['id', 'grn_number', 'fk_id_shipment', 'grn_date', 'units_received', 'damaged_units', 'missing_units', 'posting_status', 'claim_status'])->all();
         $lcs = DB::table('t_src_landed_cost')->whereIn('fk_id_po', $poIds ?: [0])->where('f_active', 1)->orderBy('id')->get(['id', 'lc_code', 'fk_id_po', 'freight_cost', 'customs_duty', 'other_cost', 'total_cost', 'landed_cost_per_unit', 'landed_status', 'run_version', 'superseded_by'])->all();
         $done = fn ($ok, $started) => $ok ? 'done' : ($started ? 'prog' : 'pend');

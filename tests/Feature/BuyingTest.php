@@ -106,6 +106,8 @@ class BuyingTest extends TestCase
         $this->assertFalse(TaskEngine::isOpen('SRC_PAY_DUE', \App\Services\CycleAlerts::key('SRC_PAY_DUE', (int) $terms[0]->id)), 'paid term closes its task');
 
         $ship = Buy::createShipment(['po' => $po, 'eta' => '2026-08-18']);
+        $cs = Buy::cycle((int) DB::table('t_src_po')->where('id', $po)->value('fk_id_cycle'))['shipments'][0];
+        $this->assertSame(['—', '—'], [$cs->customs, $cs->grn], 'R-B_SOURCING-29 chips on the cycle: no customs yet, not shipped');
         try { Buy::createShipment(['po' => $po, 'eta' => '2026-08-19']); $this->fail('shipped twice'); } catch (\RuntimeException $e) { $this->assertStringContainsString('already on a shipment', $e->getMessage()); }
         $line = (int) DB::table('t_src_po_lines')->where('fk_id_po', $po)->value('id');
 

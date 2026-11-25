@@ -118,14 +118,14 @@ class DashCards
     }
 
     /** R-F_SETUP-25: last 10 lots (company scope) with owner and the cost-source chip; the landed unit cost only with see money. */
-    public static function lots(int $ent, bool $money): array
+    public static function lots(int $ent, bool $money, ?int $cycle = null): array
     {
         $rows = DB::table('fin_lots as l')->leftJoin('t_account as a', 'a.id', '=', 'l.fk_id_owner')->leftJoin('t_src_cycles as c', 'c.id', '=', 'l.fk_id_cycle')->leftJoin('t_src_inventory_receipts as r', 'r.id', '=', 'l.fk_id_receipt')
-            ->where('l.company_id', $ent)->orderByDesc('l.id')->limit(10)
+            ->where('l.company_id', $ent)->when($cycle, fn ($w) => $w->where('l.fk_id_cycle', $cycle))->orderByDesc('l.id')->limit(10)      /* R-B_SOURCING-40 one cycle's card */
             ->get(['l.id', 'l.lot_code', 'l.sku', 'l.qty', 'l.unit_cost_gbp', 'l.cost_source', 'l.landed_status', 'c.id as cycle_id', 'c.cycle_code', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as owner"), 'r.receipt_code'])
             ->map(function ($l) use ($money) { $cs = self::costSource($l);
                 return ['id' => (int) $l->id, 'batch' => $l->receipt_code ?: $l->lot_code, 'sku' => $l->sku, 'lot' => $l->lot_code, 'cycle' => $l->cycle_code, 'cycle_id' => $l->cycle_id ? (int) $l->cycle_id : null, 'qty' => (float) $l->qty,
-                    'owner' => $l->owner ?: '—', 'cost_source' => $cs, 'chip' => self::COST_SOURCES[$cs][0], 'tone' => self::COST_SOURCES[$cs][1]] + ($money ? ['cost' => round((float) $l->unit_cost_gbp, 4)] : []); })->all();      // no cost key without see money
+                    'owner' => $l->owner ?: '—', 'cost_source' => $cs, 'chip' => self::COST_SOURCES[$cs][0], 'tone' => self::COST_SOURCES[$cs][1], 'run_url' => $l->cycle_id ? '#/src-landed/' . $l->cycle_id : null] + ($money ? ['cost' => round((float) $l->unit_cost_gbp, 4)] : []); })->all();      // no cost key without see money
         return ['title' => 'Inventory receiving', 'header' => $money ? 'Landed Unit Cost' : 'Cost source', 'rows' => $rows, 'empty' => 'No inventory lots yet.'];
     }
 

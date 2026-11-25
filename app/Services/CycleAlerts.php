@@ -259,7 +259,8 @@ class CycleAlerts
             $rows = array_map(fn ($r) => ['code' => $r['code'], 'p' => $r['p'], 'title' => $r['title'], 'detail' => $r['detail'], 'chip' => $r['chip'], 'due' => $r['due'], 'fix' => $r['opt']['fix_url'] ?? null], self::detect($ent, $cycleId));
             usort($rows, fn ($a, $b) => [$a['p'], $a['due'] ?? '9999'] <=> [$b['p'], $b['due'] ?? '9999']); return $rows; });
         return ['cycle' => ['id' => (int) $c->id, 'code' => $c->cycle_code, 'type' => $c->cycle_type], 'pipeline' => $pipe, 'needs' => $needs, 'next_action' => is_array($needs) && ! isset($needs['error']) && $needs ? $needs[0]['title'] : '—',
-            'quantities' => $safe('quantities', fn () => self::quantities($cycleId)), 'contacts' => $safe('contacts', fn () => self::contacts($ent, $cycleId))];
+            'quantities' => $safe('quantities', fn () => self::quantities($cycleId)), 'contacts' => $safe('contacts', fn () => self::contacts($ent, $cycleId)),
+            'lots' => $safe('lots', fn () => DashCards::lots($ent, $u ? Perm::has($u, 'buying.MONEY') : false, $cycleId))];      /* R-B_SOURCING-40 this cycle's lots, chip → landed-cost run */
     }
 
     private static function healthAlert(int $ent, string $part, \Throwable $e): void
