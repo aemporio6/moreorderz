@@ -52,6 +52,27 @@ class Variations
             'can_edit' => Perm::has($u, 'stock.variations')];
     }
 
+    /**
+     * R-D-6 the variations panel of a parent: one row per child with the real status (qty from the stock ledger), and the summary line
+     * "n variations · a available · o out of stock · £min–£max · sum £x · created by / on". Reads only.
+     */
+    public static function panel(int $parentId, ?object $u): array
+    {
+        Perm::need($u, 'stock.SEE'); $p = self::parent($parentId); $rows = [];
+        $name = fn ($t, $id, $col) => $id ? (string) DB::table($t)->where('id', $id)->value($col) : '';
+        foreach (self::children($parentId) as $c) {
+            $qty = StockService::balance((int) $c->id); $out = $qty <= 0 || (int) $c->f_out_of_stock === 1 && (int) ($c->oos_manual ?? 0) === 1;
+            $rows[] = ['id' => (int) $c->id, 'sku' => $c->SKU_VENDOR, 'name' => trim((string) $c->product_name_vendor) !== '' ? $c->product_name_vendor : $p->product_name_vendor, 'hs' => $c->hs_code ?: $p->hs_code, 'qty' => $qty, 'size' => $c->f_size, 'colour' => $c->f_color,
+                'weight' => $c->weight !== null ? (float) $c->weight : null, 'sale_price' => round((float) $c->sale_price, 2), 'packing' => $name('t_packings', $c->fk_id_packing ?: $p->fk_id_packing, 'packing_name'), 'carrier' => $name('t_carrier_pkg_svc', $c->fk_id_car_pkg_svc ?: $p->fk_id_car_pkg_svc, 'pkg_svc_name'),
+                'available' => ! $out, 'status' => $out ? 'Out Of Stock' : 'Available', 'colour_hex' => $out ? '#dd3f3f' : '#249f24', 'open' => '#/rec/' . RecordService::formOfTable('t_product_vendors') . '/' . $c->id, 'history' => '#/stock/product/' . $c->id];
+        }
+        $prices = array_column($rows, 'sale_price'); $avail = count(array_filter($rows, fn ($r) => $r['available'])); $n = count($rows); $m = fn ($v) => '£' . number_format((float) $v, 2);
+        $cu = DB::table('t_users')->where('id', $p->created_by ?: $p->fk_id_account_added_by)->first(['display_name', 'login_id']); $by = (string) ($cu->display_name ?? '') ?: (string) ($cu->login_id ?? ''); $on = $p->d_created ? date('F j, Y', strtotime((string) $p->d_created)) : null;
+        $summary = $n ? "$n variation" . ($n === 1 ? '' : 's') . " · $avail available · " . ($n - $avail) . ' out of stock · ' . $m(min($prices)) . '–' . $m(max($prices)) . ' · sum ' . $m(array_sum($prices)) : 'No variations found';
+        return ['parent' => ['id' => (int) $p->id, 'sku' => $p->SKU_VENDOR, 'name' => $p->product_name_vendor], 'rows' => $rows, 'count' => $n, 'available' => $avail, 'out_of_stock' => $n - $avail, 'price_min' => $n ? min($prices) : null, 'price_max' => $n ? max($prices) : null,
+            'price_sum' => round(array_sum($prices), 2), 'summary' => $summary, 'created_by' => $by ?: null, 'created_on' => $on, 'empty' => 'No variations found'];
+    }
+
     /** Save the grid. Returns "n created · n saved · n skipped" with the first error of each skipped card. */
     public static function save(int $parentId, array $cards, ?object $u): array
     {

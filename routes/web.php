@@ -228,6 +228,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('stock/ledger', [StockController::class, 'ledger']);
         Route::get('stock/lots', [StockController::class, 'lots']);
         Route::post('stock/lots/{id}/cost', [StockController::class, 'lotCost'])->whereNumber('id');
+        Route::post('stock/lots/{id}/void', [StockController::class, 'lotVoid'])->whereNumber('id');      // R-D-43
         Route::get('stock/pick', [StockController::class, 'pick']);
         Route::get('stock/check', [StockController::class, 'check']);
         Route::post('stock/opening', [StockController::class, 'opening']);
@@ -246,6 +247,14 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('prices/{productId}', [StockController::class, 'prices'])->whereNumber('productId');
         Route::post('prices/{productId}', [StockController::class, 'setPrice'])->whereNumber('productId');
         Route::get('variations/{id}', [StockController::class, 'variations'])->whereNumber('id');
+        Route::post('product-imports/family/{step}', [StockController::class, 'familyLinks'])->whereIn('step', ['check', 'import']);      // R-D-52
+        Route::post('product-imports/family/undo/{job}', [StockController::class, 'familyUndo'])->whereNumber('job');
+        Route::get('product-imports/staged/meta', [StockController::class, 'stagedMeta']);      // R-D-53
+        Route::post('product-imports/staged/clear', [StockController::class, 'stagedClear']);
+        Route::post('product-imports/staged', [StockController::class, 'stagedStage']);
+        Route::get('product-imports/staged/{job}', [StockController::class, 'stagedPreview'])->whereNumber('job');
+        Route::post('product-imports/staged/{job}/confirm', [StockController::class, 'stagedConfirm'])->whereNumber('job');
+        Route::get('variations/{id}/panel', [StockController::class, 'variationsPanel'])->whereNumber('id');      // R-D-6
         Route::post('variations/{id}', [StockController::class, 'variationsSave'])->whereNumber('id');
         Route::post('variations/{id}/copy-parent', [StockController::class, 'variationsCopy'])->whereNumber('id');
         Route::post('variations/{id}/{child}/remove', [StockController::class, 'variationRemove'])->whereNumber('id')->whereNumber('child');

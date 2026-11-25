@@ -50,6 +50,7 @@ class Finder
         ['My invoices', 'investor portal my invoices payments e-mail', '#/my-invoices', null],
         ['Supplier order history', 'amazon business orders supplier orders order history purchase history business orders', '#/supplier-orders', 'buying.BUY'],
         ['Gen-1 sale ↔ buy check', 'sale buy match buying missing qty customer supplier orders buy file aliexpress gen-1 legacy compare', '#/gen1', 'orders.SEE'],
+        ['Products: families and parent + child file', 'product family link import parent child sku staged import csv generator import inventory', '#/product-imports', 'stock.CHANGE'],
         ['Warehouse locations and SKU homes (CSV)', 'wh_locations wh_sku_homes import export locations bins sku homes csv deactivate rename bin', '#/wh-csv', 'stock.SEE'],
         ['Person sections by kind', 'managed account external contact convert person sections tabs short profile kind', '#/person-sections', 'people.convert'],
         ['Supplier payment schedule', 'supplier terms owe due overdue deposit balance', '#/supplier-schedule', 'money.forecast'],
@@ -247,6 +248,11 @@ class Finder
     {
         $a = [];
         if ($entity === 't_product_vendors') {
+            /* R-D-6 a product (also a child SKU, also an inactive one) is found with its real status and Edit / History / Hide */
+            $pf = RecordService::formOfTable('t_product_vendors'); $pr = DB::table('t_product_vendors')->where('id', $id)->first(['f_active', 'f_parent']);
+            if ($pr && Perm::has($u, 'stock.SEE')) $a[] = ['label' => ! (int) $pr->f_active ? 'Hidden' : (StockService::balance($id) > 0 ? 'Available' : 'Out Of Stock'), 'url' => "#/stock/product/$id", 'status' => true];
+            if ($pf && Perm::has($u, "form:$pf:EDIT")) { $a[] = ['label' => 'Edit', 'url' => "#/rec/$pf/$id"]; if ($pr && (int) $pr->f_active) $a[] = ['label' => 'Hide', 'url' => "#/rec/$pf/$id"]; }
+            if (Perm::has($u, 'stock.SEE')) $a[] = ['label' => 'History', 'url' => "#/stock/product/$id"];
             if (Perm::has($u, 'stock.SEE')) $a[] = ['label' => 'Stock', 'url' => "#/stock/product/$id"];
             if (Perm::has($u, 'buying.BUY')) { $a[] = ['label' => 'Create PO for ' . mb_strimwidth($title, 0, 24, '…'), 'url' => "#/direct-po?product=$id"]; $a[] = ['label' => 'Quick buy', 'url' => "#/quick-buy?product=$id"]; }      // R-G_CORE-100
         }

@@ -74,6 +74,15 @@ class StockController extends Controller
         return $this->wh(fn () => $step === 'check' ? \App\Services\WarehouseCsv::check((int) Context::ent(), $type, $t) : \App\Services\WarehouseCsv::import((int) Context::ent(), $type, $t, $r->user()));
     }
     public function whCsvUndo(Request $r, int $job) { \App\Services\Perm::need($r->user(), 'stock.CHANGE'); return $this->wh(fn () => \App\Services\WarehouseCsv::undo((int) Context::ent(), $job)); }
+    /** R-D-52 family links (check / import / undo) and R-D-53 parent + child staged import (meta, clear, stage, preview, confirm). */
+    public function familyLinks(Request $r, string $step) { return $this->wh(function () use ($r, $step) { if (! $r->hasFile('file')) throw new \InvalidArgumentException('Please select a file to upload.'); return \App\Services\ProductImports::familyLinks((int) Context::ent(), (string) file_get_contents($r->file('file')->getRealPath()), $step === 'import', $r->user()); }); }
+    public function familyUndo(Request $r, int $job) { return $this->wh(fn () => \App\Services\ProductImports::familyUndo($job, $r->user())); }
+    public function stagedMeta(Request $r) { return \App\Services\ProductImports::stagedMeta((int) Context::ent(), $r->user()); }
+    public function stagedClear(Request $r) { \App\Services\Perm::need($r->user(), 'stock.CHANGE'); return \App\Services\ProductImports::stagedClear($r->user()); }
+    public function stagedStage(Request $r) { return $this->wh(fn () => \App\Services\ProductImports::stage((int) Context::ent(), $r->only(['vendor', 'vendor_inventory', 'shop']), $r->hasFile('file') ? $r->file('file')->getClientOriginalName() : null, $r->hasFile('file') ? (string) file_get_contents($r->file('file')->getRealPath()) : null, $r->user())); }
+    public function stagedPreview(Request $r, int $job) { return $this->wh(fn () => \App\Services\ProductImports::preview($job, $r->user())); }
+    public function stagedConfirm(Request $r, int $job) { return $this->wh(fn () => \App\Services\ProductImports::confirm((int) Context::ent(), $job, $r->user())); }
+    public function variationsPanel(Request $r, int $id) { return $this->wh(fn () => \App\Services\Variations::panel($id, $r->user())); }      /* R-D-6 reads only */
     public function siteGoLive(Request $r, int $id)
     {
         abort_unless($r->user()->role_code === 'OWNER', 403, 'Only the Owner runs the warehouse go-live.');
@@ -220,7 +229,7 @@ class StockController extends Controller
         if ($v = $r->query('q')) $q->where(fn ($w) => $w->where('l.sku', 'like', "%$v%")->orWhere('l.lot_code', 'like', "%$v%"));
         if ($r->query('nocost') === '1') $q->where('l.unit_cost_gbp', '<=', 0);
         $money = \App\Services\Perm::has($r->user(), 'stock.MONEY');
-        $cols = ['l.id', 'l.lot_code', 'l.sku', 'p.id as product_id', 'p.product_name_vendor as name', 'l.source', 'l.received_date', 'l.qty', 'l.qty_left', 'l.visibility', 'l.landed_status', 'l.po_id', 'l.fk_id_cycle', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as owner")];
+        $cols = ['l.id', 'l.lot_code', 'l.sku', 'p.id as product_id', 'p.product_name_vendor as name', 'l.source', 'l.received_date', 'l.qty', 'l.qty_left', 'l.visibility', 'l.landed_status', 'l.lot_status', 'l.po_id', 'l.fk_id_cycle', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as owner")];
         if ($money) $cols[] = 'l.unit_cost_gbp';
         $noCost = DB::table('fin_lots')->where('company_id', Context::ent())->where('qty_left', '>', 0)->where('unit_cost_gbp', '<=', 0)->count();
         $rows = $q->orderBy('l.received_date')->orderBy('l.id')->limit(500)->get($cols); $qc = \App\Services\SourcingExtras::qcOfPos($rows->pluck('po_id')->filter()->unique()->values()->all());
@@ -230,6 +239,8 @@ class StockController extends Controller
         return ['rows' => $rows, 'owner_types' => \App\Services\ProductsList::OWNER_TYPES, 'show_value' => $money, 'no_cost' => $noCost, 'can_cost' => \App\Services\Perm::has($r->user(), 'stock.lots_may')];
     }
 
+    /** R-D-43 void a purchase (an unconsumed opening / manual lot). */
+    public function lotVoid(Request $r, int $id) { $this->can($r, 'stock.lotCost'); $d = $r->validate(['reason' => 'required|string|max:255']); return $this->run(fn () => StockService::voidLot((int) Context::ent(), $id, $d['reason'])); }
     public function lotCost(Request $r, int $id)
     {
         $this->can($r, 'stock.lotCost');

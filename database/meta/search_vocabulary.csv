@@ -504,6 +504,7 @@ cron,system health,VOCAB,#/health
 cs,customer service cases,VOCAB,#/list/customer_case
 csv converter,convert file,VOCAB,#/csv-convert
 csv export,all reports,VOCAB,#/reports
+csv generator,product family and parent child import,VOCAB,#/product-imports
 csv mapping,mappings and report types,VOCAB,#/list/imp_report_type
 csv upload,import a file,VOCAB,#/import
 ct600,tax and filings,VOCAB,#/compliance
@@ -578,6 +579,7 @@ deferment,customs,VOCAB,#/list/t_src_customs
 delay at port,shipments,VOCAB,#/list/t_src_shipments
 delegation,task rules,VOCAB,#/list/task_category
 delete person,delete or restore a person,VOCAB,#/list/party
+delete purchase,void a purchase,VOCAB,#/stock/lots
 delete sale,etsy month header and sale files,VOCAB,#/gen1
 delivered orders,sales lines,VOCAB,#/sales
 delivery days,carrier service facts,VOCAB,#/carriers
@@ -758,6 +760,8 @@ factory,buying dashboard,VOCAB,#/buying
 factory progress,production,VOCAB,#/list/t_src_production
 fail rate,qc,VOCAB,#/list/t_src_qc
 faire,marketplace operations hubs,VOCAB,#/hubs
+family import,product family and parent child import,VOCAB,#/product-imports
+family link,product family and parent child import,VOCAB,#/product-imports
 faster payment,bank and cash,VOCAB,#/bank
 faulty,held stock,VOCAB,#/stock/held
 faulty return,returns,VOCAB,#/returns
@@ -949,6 +953,7 @@ import duty,customs,VOCAB,#/list/t_src_customs
 import file,import a file,VOCAB,#/import
 import from china,buying dashboard,VOCAB,#/buying
 import history,import history,VOCAB,#/import-history
+import inventory,product family and parent child import,VOCAB,#/product-imports
 import locations,warehouse locations and SKU homes by CSV,VOCAB,#/wh-csv
 import sale etsy,etsy month header and sale files,VOCAB,#/gen1
 import sales,import sales,VOCAB,#/sales-import
@@ -1083,6 +1088,7 @@ lending,loans,VOCAB,#/loans
 level,locations and bins,VOCAB,#/list/location
 limited company,companies,VOCAB,#/list/company
 line items,sales lines,VOCAB,#/sales
+link child sku,product family and parent child import,VOCAB,#/product-imports
 link without login,supplier link without login,VOCAB,#/buying
 linnworks,api connections,VOCAB,#/connections
 liquidity,cash forecast,VOCAB,#/forecast
@@ -1145,6 +1151,7 @@ made in china,buying dashboard,VOCAB,#/buying
 mailer,packaging and box sizes,VOCAB,#/list/product_packaging
 mailer bag,packaging and box sizes,VOCAB,#/list/product_packaging
 main image,products,VOCAB,#/list/product
+main marketplace,primary marketplace,VOCAB,#/settings
 main page,home,VOCAB,#/home
 make.com,api connections,VOCAB,#/connections
 maker checker,approvals queue,VOCAB,#/approvals
@@ -1418,7 +1425,9 @@ parcelforce,carriers and postage rates,VOCAB,#/carriers
 parcelforce label,carrier labels,VOCAB,#/labels
 parcels,orders to dispatch,VOCAB,#/orders
 parent asin,listings,VOCAB,#/list/listing
+parent child import,product family and parent child import,VOCAB,#/product-imports
 parent sku,products,VOCAB,#/list/product
+parent sku child sku,product family and parent child import,VOCAB,#/product-imports
 partial refund,refunds and refund proposals,VOCAB,#/refunds
 partially paid,term paid,VOCAB,#/buying
 partner,partners,VOCAB,#/partners
@@ -1539,6 +1548,9 @@ price quote,rfq and quotations,VOCAB,#/list/src_rfq
 prices,prices and price log,VOCAB,#/reports/price_log
 pricing,prices and price log,VOCAB,#/reports/price_log
 primary bin,sku homes,VOCAB,#/sku-homes
+primary marketplace,primary marketplace,VOCAB,#/settings
+primary price,primary marketplace,VOCAB,#/settings
+primary_marketplace,primary marketplace,VOCAB,#/settings
 print,print queue,VOCAB,#/print-queue
 print agent,printers,VOCAB,#/printers
 print barcode,print queue,VOCAB,#/print-queue
@@ -1564,6 +1576,7 @@ product code,products,VOCAB,#/list/product
 product data,products,VOCAB,#/list/product
 product description,products,VOCAB,#/list/product
 product documents,cycle details,VOCAB,#/buying
+product family,product family and parent child import,VOCAB,#/product-imports
 product ideas,research board,VOCAB,#/list/src_research
 product images,products,VOCAB,#/list/product
 product launch,products,VOCAB,#/list/product
@@ -1577,6 +1590,7 @@ product safety,certificates,VOCAB,#/list/product_certificate
 product title,products,VOCAB,#/list/product
 product type,products,VOCAB,#/list/product
 product weight,products,VOCAB,#/list/product
+product_family,product family and parent child import,VOCAB,#/product-imports
 production,production,VOCAB,#/list/t_src_production
 production delay,production,VOCAB,#/list/t_src_production
 production photo link,supplier link without login,VOCAB,#/buying
@@ -1612,6 +1626,7 @@ proxy,account kit,VOCAB,#/list/t_mobile_device
 psi,qc,VOCAB,#/list/t_src_qc
 psp,payment provider profiles,VOCAB,#/list/payment_provider_profile
 purchase,buying dashboard,VOCAB,#/buying
+purchase entered twice,void a purchase,VOCAB,#/stock/lots
 purchase for customer,drop shipping orders,VOCAB,#/ds-orders
 purchase history,supplier order history,VOCAB,#/supplier-orders
 purchase invoice,expenses,VOCAB,#/expenses
@@ -1772,6 +1787,7 @@ returns stock,held stock,VOCAB,#/stock/held
 returns window,returns window and seller portal,VOCAB,#/marketplaces
 revenue,sales lines,VOCAB,#/sales
 revenue share,profit split rules,VOCAB,#/waterfall
+reverse purchase,void a purchase,VOCAB,#/stock/lots
 reviews,account health,VOCAB,#/shop-health
 revoke link,supplier link without login,VOCAB,#/buying
 revolut,bank and cash,VOCAB,#/bank
@@ -2004,6 +2020,7 @@ spreadsheet,all reports,VOCAB,#/reports
 stacking rule,partners,VOCAB,#/partners
 staff cost,expenses,VOCAB,#/expenses
 staff member,people and companies,VOCAB,#/list/party
+staged import,product family and parent child import,VOCAB,#/product-imports
 stakeholder,partners,VOCAB,#/partners
 standard operating procedure,playbooks,VOCAB,#/list/playbook_step
 standard sheet template,learn sale columns,VOCAB,#/import
@@ -2280,6 +2297,7 @@ variance,stock counts,VOCAB,#/stock/counts
 variant,products,VOCAB,#/list/product
 variants,products,VOCAB,#/list/product
 variation,products,VOCAB,#/list/product
+variation import,product family and parent child import,VOCAB,#/product-imports
 variation listing,listings,VOCAB,#/list/listing
 variation record,product record,VOCAB,#/list/product_variation
 variations,products,VOCAB,#/list/product
@@ -2306,8 +2324,11 @@ vinted sales,import sales,VOCAB,#/sales-import
 vip customer,customers,VOCAB,#/list/crm_customer
 virgin money,bank and cash,VOCAB,#/bank
 virtual assistant,va statements,VOCAB,#/va-statements
+void,void a purchase,VOCAB,#/stock/lots
 void fill,packaging and box sizes,VOCAB,#/list/product_packaging
 void label,orders to dispatch,VOCAB,#/orders
+void lot,void a purchase,VOCAB,#/stock/lots
+void purchase,void a purchase,VOCAB,#/stock/lots
 volumetric weight,carriers and postage rates,VOCAB,#/carriers
 vpn,account kit,VOCAB,#/list/t_mobile_device
 vps,account kit,VOCAB,#/list/t_mobile_device

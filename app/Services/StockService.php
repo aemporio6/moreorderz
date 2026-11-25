@@ -267,6 +267,33 @@ class StockService
         });
     }
 
+    /**
+     * R-D-43 void a purchase: only a hand-made lot (opening / manual) that is unconsumed – nothing sold, moved or counted. The lot stays as a record with
+     * status VOID; its units leave stock with one reversal line and the books are reversed. Otherwise: "N units already sold – return or adjust first".
+     */
+    public static function voidLot(int $ent, int $lotId, string $reason): array
+    {
+        if (trim($reason) === '') throw new \InvalidArgumentException('Give the reason for voiding this purchase.');
+        return DB::transaction(function () use ($ent, $lotId, $reason) {
+            $lot = DB::table('fin_lots')->where('id', $lotId)->where('company_id', $ent)->lockForUpdate()->first() ?? throw new \InvalidArgumentException('Lot not found.');
+            if (($lot->lot_status ?? 'ACTIVE') === 'VOID') throw new \InvalidArgumentException('This purchase is already void.');
+            if (! in_array($lot->source, ['OPENING', 'MANUAL'], true)) throw new \InvalidArgumentException('This lot came from a purchase order – its receipt is corrected on the PO, not voided here.');
+            $sold = (int) DB::table('fin_lot_consumption')->where('lot_id', $lotId)->sum('qty'); $gone = max($sold, (int) $lot->qty - (int) $lot->qty_left);
+            if ($gone > 0) throw new \InvalidArgumentException("$gone unit" . ($gone === 1 ? '' : 's') . ' already sold – return or adjust first');
+            $moves = DB::table('t_stock_movements')->where('fk_id_lot', $lotId)->count(); $places = DB::table('fin_lot_balances')->where('fk_id_lot', $lotId)->where('qty', '>', 0)->get();
+            if ($moves > 1 || $places->count() !== 1 || (int) $places[0]->qty !== (int) $lot->qty) throw new \InvalidArgumentException((int) $lot->qty . ' unit' . ((int) $lot->qty === 1 ? '' : 's') . ' already moved or counted – return or adjust first');
+            $loc = (int) $places[0]->fk_id_location; $qty = (int) $lot->qty; $value = round($qty * (float) $lot->unit_cost_gbp, 2); $p = self::product((int) $lot->fk_id_product, $ent);
+            self::addBalance($lotId, $loc, -$qty);
+            DB::table('fin_lots')->where('id', $lotId)->update(['qty_left' => 0, 'lot_status' => 'VOID', 'void_reason' => mb_substr(trim($reason), 0, 255), 'voided_at' => now(), 'voided_by' => Context::userId()]);
+            self::move($ent, (int) $lot->fk_id_product, 'adjustment', -$qty, $loc, $lotId, $lot->fk_id_owner, (float) $lot->unit_cost_gbp, 'VOID', $lotId, "Reversal of voided purchase #$lotId: " . trim($reason));
+            if ($value != 0.0) Ledger::post($ent, Ledger::openDate($ent), 'STOCK_ADJUST', (int) $lot->fk_id_product, [['account' => $lot->source === 'OPENING' ? '3000' : '4100', 'debit' => $value], ['account' => '1200', 'credit' => $value]], ['memo' => mb_substr("Void of purchase {$lot->lot_code} ({$p->SKU_VENDOR}): $reason", 0, 255)]);
+            self::refreshCache((int) $lot->fk_id_product);
+            Audit::log('fin_lots', $lotId, 'UPDATE', ['lot_status' => ['ACTIVE', 'VOID'], 'qty_left' => [$qty, 0]], $reason, $ent);
+            EventBus::fire('STOCK_ADJUSTED', 't_product_vendors', (int) $lot->fk_id_product, ['qty' => -$qty, 'location' => $loc, 'value' => -$value, 'void_lot' => $lotId], $ent);
+            return ['lot' => $lotId, 'qty' => $qty, 'value' => $value, 'message' => 'Purchase voided: ' . $qty . ' unit(s) taken back out of stock. The lot stays as a record (VOID).'];
+        });
+    }
+
     /** Give units of a lot to another owner: the lot is split (same cost and date, so FIFO order is kept). */
     public static function transferOwnership(int $ent, int $lotId, int $qty, int $toOwner, ?float $unitValue = null): int
     {
