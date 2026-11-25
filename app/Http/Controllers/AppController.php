@@ -158,6 +158,8 @@ class AppController extends Controller
         Rights::check('ADD', 'external_contact');
         try { return \App\Services\ExternalContact::create((int) \App\Services\Context::ent(), $r->all(), (int) \Illuminate\Support\Facades\Auth::id()); }
         catch (\App\Services\ValidationErrors $e) { return response()->json(['message' => 'Please fix ' . count($e->errors) . ' thing(s) before saving.', 'errors' => array_map(fn ($m) => [$m], $e->errors)], 422); }
+        catch (\App\Services\LookAlikeFound $e) { return response()->json(['message' => $e->getMessage(), 'status' => 'duplicate', 'people' => $e->matches], 409); }      /* R-C-8 */
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
     }
     public function personHeader(\Illuminate\Http\Request $r, int $id) { $f = (string) RecordService::formOfTable('t_account'); Rights::check('VIEW', $f); RecordService::get($f, $id); return \App\Services\PersonHeader::for($id); }
 
@@ -286,7 +288,9 @@ class AppController extends Controller
     public function save(Request $r, string $key, ?int $id = null)
     {
         Rights::check($id ? 'EDIT' : 'ADD', $key);
-        $res = RecordService::save($key, (array) $r->input('values', []), $id, ['quick' => $r->boolean('quick'), 'reason' => $r->input('reason')]);
+        try { $res = RecordService::save($key, (array) $r->input('values', []), $id, ['quick' => $r->boolean('quick'), 'reason' => $r->input('reason'), 'dup_reason' => $r->input('dup_reason')]); }
+        catch (\App\Services\LookAlikeFound $e) { return response()->json(['message' => $e->getMessage(), 'status' => 'duplicate', 'people' => $e->matches], 409); }      /* R-C-8 */
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
         $title = Registry::fields($key)[0]['form_title'];
         // the label and code of what was saved: a dropdown that opened "+ Add" selects it, and the toast says what it is
         $table = Registry::table($key); $label = null; $code = null;

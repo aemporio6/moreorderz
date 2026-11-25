@@ -196,7 +196,9 @@ class ExternalContact
     {
         [$c, $e] = self::validate($ent, $in);
         if ($e) throw new ValidationErrors($e);
-        return DB::transaction(function () use ($c, $ent, $userId) {
+        /* R-C-8 old order: field checks first, then the look-alike scan; "Save anyway" needs a reason (dup_reason) */
+        $alike = LookAlikes::guard(LookAlikes::find(trim($c['first_name'] . ' ' . $c['sur_name']), $c['emails'], array_column($c['mobiles'], 'mobile_no'), null, $ent), isset($in['dup_reason']) ? (string) $in['dup_reason'] : null);
+        $res = DB::transaction(function () use ($c, $ent, $userId) {
             $today = now()->toDateString();
             $id = self::ins('t_account', ['fk_id_ent' => $ent, 'account_code' => $c['account_code'], 'first_name' => $c['first_name'], 'middle_name' => $c['middle_name'], 'sur_name' => $c['sur_name'], 'title' => $c['title'],
                 'f_active' => $c['f_active'], 'f_login' => 0, 'current_nationality' => $c['current_country'], 'old_nationality' => $c['current_country'], 'private_notes' => $c['private_notes'], 'l_account_kind' => self::KIND]);
@@ -233,6 +235,8 @@ class ExternalContact
             $name = trim($c['first_name'] . ' ' . $c['sur_name']);
             return ['id' => $id, 'job_id' => $job, 'company_id' => $co ?: null, 'message' => "{$c['account_code']} – $name saved.", 'open' => "#/rec/external_contact/$id", 'open_list' => '#/list/external_contact'];
         });
+        if ($alike) LookAlikes::logged((int) $res['id'], $alike, (string) $in['dup_reason']);
+        return $res;
     }
 
     /** A bank with the same name in the same country is reused, else added to the banks list. */

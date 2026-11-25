@@ -1476,8 +1476,17 @@
   // ---------- duplicate guard supplier + order reference (R-B_SOURCING-7) ----------
   // send(extra) posts once; on a duplicate the person picks Open existing / Save anyway (with a reason, kept in history as DUPLICATE_FORCED) / Cancel.
   function dupOf(e) { if (e && e.data && e.data.duplicate) return e.data.duplicate; const x = e && e.errors && e.errors._dup; if (!x) return null; const [code, id] = String(x[0] || x).split('|'); return { code, id: +id }; }
+  // R-C-8 "Looks like an existing person": each match as a link (new tab), Use this one / Go back / Save anyway (reason required)
+  function alikePanel(people, send, ok, no) {
+    const m = modal('Looks like an existing person', 'Check before a second record of the same person is made.', `<div>${people.map(p => `<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)"><div style="flex:1"><a href="${esc(p.open)}" target="_blank" rel="noopener"><b>${esc(p.name || p.code || '#' + p.id)}</b></a> <span class="chip plain">${p.kind === 'E' ? 'External' : 'Managed'}</span><div class="small muted">${esc(p.code || '')} · same ${p.reasons.map(esc).join(', ')}</div></div><button class="btn sm" data-use="${esc(p.open)}">Use this one</button></div>`).join('')}</div>
+      <div class="fld is-req" style="margin-top:10px"><label for="alWhy"><span>Reason to save anyway</span> <span class="req">*</span></label><textarea id="alWhy" rows="2" maxlength="300" style="width:100%" placeholder="e.g. father and son with the same name"></textarea><div class="helptext" style="display:block">Kept in the history of the person; the pair is shown on the Merge screen.</div></div><div id="alErr" class="small" style="color:var(--err)"></div>`,
+      '<button class="btn" id="alBack">Go back</button><button class="btn primary" id="alYes">Save anyway</button>', false);
+    $('#alBack', m.ov).onclick = () => { m.close(); no(new Error('Not saved – check the existing person.')); };
+    $$('[data-use]', m.ov).forEach(b => b.onclick = () => { m.close(); no(Object.assign(new Error('Using the existing person.'), { use: b.dataset.use })); $$('.overlay').forEach(o => o.remove()); go(b.dataset.use); });
+    $('#alYes', m.ov).onclick = async () => { const why = $('#alWhy', m.ov).value.trim(); if (why.length < 3) return ($('#alErr', m.ov).textContent = 'Say why it is saved anyway.'); try { const r = await send({ dup_reason: why }); m.close(); ok(r); } catch (x) { $('#alErr', m.ov).textContent = x.message; } };
+  }
   async function withDup(send) {
-    try { return await send({}); } catch (e) { const d = dupOf(e); if (!d) throw e;
+    try { return await send({}); } catch (e) { if (e && e.data && e.data.status === 'duplicate' && e.data.people) return await new Promise((ok, no) => alikePanel(e.data.people, send, ok, no)); const d = dupOf(e); if (!d) throw e;
       return await new Promise((ok, no) => { const m = modal('Already exists', `Supplier + order reference already exists as ${d.code}.`, `<div class="fld is-req"><label for="dupWhy"><span>Reason to save anyway</span> <span class="req">*</span></label><textarea id="dupWhy" rows="3" maxlength="300" style="width:100%" placeholder="e.g. the supplier re-used the PI number for a second order"></textarea><div class="helptext" style="display:block">Kept in the history of the cycle as DUPLICATE_FORCED.</div></div><div id="dupErr" class="small" style="color:var(--err)"></div>`,
         `<button class="btn" id="dupNo">Cancel</button><button class="btn" id="dupOpen">Open existing</button><button class="btn primary" id="dupYes">Save anyway</button>`, false);
         $('#dupNo', m.ov).onclick = () => { m.close(); no(new Error('Not saved - duplicate.')); };
@@ -4915,7 +4924,7 @@
     $('#ecCancel', m.ov).onclick = m.close;
     $('#ecSave', m.ov).onclick = async () => { const clean = x => x.map(r => { const o = { ...r }; delete o._auto; return o; });
       const body = { ...st, roles: [...st.roles], addresses: clean(st.addresses), mobiles: clean(st.mobiles), emails: st.emails, banks: clean(st.banks) }; delete body.all;
-      busy(true); try { const r = await api('people/external/new', { method: 'POST', body }); m.close(); toast(r.message, 'ok', r.open); onSaved ? onSaved(r) : go(r.open); }
+      busy(true); try { const r = await withDup(x => api('people/external/new', { method: 'POST', body: { ...body, ...x } })); m.close(); toast(r.message, 'ok', r.open); onSaved ? onSaved(r) : go(r.open); }
       catch (x) { err = x.errors || {}; draw(); $('#ecMsg', m.ov).textContent = x.message; const f = $('.has-err', box); f && f.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
       busy(false); };
     draw();
@@ -5103,7 +5112,7 @@
       box.innerHTML = `<div class="card" style="border-color:var(--err);margin:8px 0;padding:10px 12px"><b>Why can’t I save?</b> ${m.length} required field${m.length === 1 ? ' is' : 's are'} still empty: ${m.map(f => `<a href="#" data-goto="${f.name}">${esc(f.label)}</a>`).join(' · ')}</div>`; };
     const gotoField = n => { const w = $(`[data-w="${n}"]`, ov); if (!w) return; w.scrollIntoView({ block: 'center' }); w.style.outline = '2px solid var(--err)'; setTimeout(() => { w.style.outline = ''; }, 1600); const el = w.querySelector('[data-f], [data-ddbox]'); el && el.focus(); };
     // auto-correct while typing ends (with Undo) and look-alike warning before a duplicate is saved
-    const fixOf = (f, v) => { let x = String(v).replace(/\s+/g, ' ').trim(); if (f.auto_correct === 'upper') x = x.toUpperCase(); else if (f.auto_correct === 'lower' || f.type === 'email') x = x.toLowerCase(); return x; };
+    const fixOf = (f, v) => { let x = String(v).replace(/\s+/g, ' ').trim(); if (f.auto_correct === 'upper') x = x.toUpperCase(); else if (f.auto_correct === 'lower' || f.type === 'email') x = x.toLowerCase(); else if (f.auto_correct === 'nospace') x = x.replace(/\s+/g, ''); else if (f.auto_correct === 'upper_nospace') x = x.replace(/\s+/g, '').toUpperCase(); return x; };      /* R-C-15 IBAN / SWIFT / account no: spaces removed (shown as Auto-corrected · Undo) */
     const drawUnder = f => { const u = $(`[data-under="${f.name}"]`, ov); if (u) u.innerHTML = under(f); };
     // typed code checks (R-F_SETUP-35); SKU: block / look-alike / available with a link, 500 ms after the last key (R-D-2)
     const liveCheck = async (el, name, typing) => { const w = el.closest('.fld') || $(`[data-w="${name}"]`, ov); if (w) { w.classList.remove('has-err'); $$('.live', w).forEach(m => m.remove()); }

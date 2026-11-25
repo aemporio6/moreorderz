@@ -63,7 +63,14 @@ class ExternalContactTest extends TestCase
 
         // with the marketplace → one job history row, renewal / share / rate blank, dates NULL when blank
         $code2 = $this->getJson('/api/people/external/new')->json('code');
-        $r = $this->postJson('/api/people/external/new', $this->base(['account_code' => $code2, 'roles' => [$this->x['contractor'], $this->x['vendor']], 'job_marketplace' => $this->x['mp'], 'job_start_date' => '2026-11-01', 'job_salary' => '50000']))->assertOk();
+        // R-C-8 the rule test: the same mobile typed another way ("07700 900123" / "+44 7700 900123") → the look-alike panel with reason "mobile"; Save anyway without a reason is refused; with a reason it saves and the history shows it
+        $second = $this->base(['account_code' => $code2, 'roles' => [$this->x['contractor'], $this->x['vendor']], 'job_marketplace' => $this->x['mp'], 'job_start_date' => '2026-11-01', 'job_salary' => '50000', 'mobiles' => [['mobile_no' => '07700 900123']]]);
+        $dup = $this->postJson('/api/people/external/new', $second)->assertStatus(409)->json(); $this->assertSame(['duplicate', $id], [$dup['status'], $dup['people'][0]['id']]);
+        $this->assertContains('name', $dup['people'][0]['reasons']); $this->assertTrue((bool) array_filter($dup['people'][0]['reasons'], fn ($x) => str_starts_with($x, 'mobile ')), 'last 9 digits match');
+        $this->postJson('/api/people/external/new', $second + ['dup_reason' => ' '])->assertStatus(409); $this->postJson('/api/people/external/new', $second + ['dup_reason' => 'ok'])->assertStatus(422)->assertJsonPath('message', 'Say why it is saved anyway.');
+        $r = $this->postJson('/api/people/external/new', $second + ['dup_reason' => 'Two brothers share the phone'])->assertOk();
+        $this->assertStringContainsString('Two brothers share the phone', (string) DB::table('sys_audit_log')->where('table_name', 't_account')->where('record_id', $r->json('id'))->orderByDesc('id')->value('reason'));
+        $this->assertSame(1, DB::table('sys_merge_map')->where('entity', 'PARTY')->where('source_id', $r->json('id'))->where('master_id', $id)->count(), 'the pair is a hint of the merge scan');
         $j = DB::table('t_account_job_history')->where('id', $r->json('job_id'))->first();
         $this->assertSame([$this->x['mp'], '2026-11-01', '50000.00', null, null, null], [(int) $j->fk_id_marketplace, $j->d_job_start_date, $j->salary, $j->salary_date, $j->share_percentage, $j->d_contract_renewal_date]);
         $this->assertSame(2, DB::table('t_account_in_types')->where('fk_id_account', $r->json('id'))->count());
@@ -111,7 +118,7 @@ class ExternalContactTest extends TestCase
         $this->assertTrue(DB::table('sys_audit_log')->where('table_name', 't_account')->where('record_id', $id)->exists());
 
         // a second person at the same supplier links the existing external company; the same new bank name in Pakistan is reused
-        $r2 = $this->postJson('/api/people/external/new', $this->base(['account_code' => ExternalContact::meta(1)['code'], 'current_country' => $this->x['pk'], 'company_mode' => 'existing', 'company_id' => $r->json('company_id'),
+        $r2 = $this->postJson('/api/people/external/new', $this->base(['account_code' => ExternalContact::meta(1)['code'], 'first_name' => 'Sara', 'sur_name' => 'Malik', 'mobiles' => [['mobile_no' => '+92 300 5550001']], 'current_country' => $this->x['pk'], 'company_mode' => 'existing', 'company_id' => $r->json('company_id'),
             'banks' => [['bank_id' => 'new', 'new_bank_name' => 'bank alfalah x', 'account_no' => '998877']]]))->assertOk();
         $this->assertSame((int) $banks[1]->fk_bank_id, (int) DB::table('t_account_banks')->where('fk_id_account', $r2->json('id'))->value('fk_bank_id'));
         $this->assertTrue(DB::table('t_account_company_houses')->where('fk_id_account', $r2->json('id'))->where('fk_company_house_id', $r->json('company_id'))->exists());

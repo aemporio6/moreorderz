@@ -169,6 +169,18 @@ class RecordService
             $errors['fk_id_product'] = 'Pick the product (or + Add product) for this line.';      /* PO lines: FormRules */
         if ($table === 'cat_src_lov' && ($why = SrcLists::guard($data, $old))) $errors['f_active'] = $why;      /* R-B_SOURCING-52 */
         if ($table === 'cat_src_lov' && ! $id && SrcLists::isSystem((string) ($data['lov_group'] ?? ''), (string) ($data['lov_value'] ?? ''))) $data['f_system'] = 1;
+        if ($table === 't_account_banks') { $data = BankRules::clean($data); $errors = BankRules::check($data, $old, $id) + $errors; }      /* R-C-15 the shared bank validators on every bank form */
+        if ($table === 'cat_banks') { if (isset($data['bank_name'])) $data['bank_name'] = BankRules::tidyName((string) $data['bank_name']);      /* R-C-14 "+ New bank": the same name in the same country is reused */
+            if (! $id && ! $errors && ($hit = BankRules::existing((string) ($data['bank_name'] ?? ''), isset($data['country_id']) ? (int) $data['country_id'] : null))) { DB::table('cat_banks')->where('id', $hit)->where('f_active', 0)->update(['f_active' => 1]); return ['id' => $hit, 'created' => false, 'note' => 'This bank is already in the list for this country – it is used, no second one is added.']; }
+            if (! $id && empty($data['bank_short_name']) && ! empty($data['bank_name'])) $data['bank_short_name'] = mb_substr((string) $data['bank_name'], 0, 50);
+            $bankWarn = ! $id ? BankRules::elsewhere((string) ($data['bank_name'] ?? ''), isset($data['country_id']) ? (int) $data['country_id'] : null) : null; }
+        /* R-C-8 look-alike check before a new person, and before a mobile / e-mail is added to an existing one ("Save anyway" = opt dup_reason) */
+        $alike = [];
+        if (! $id && ! $errors && in_array($table, ['t_account', 't_account_mobiles', 't_account_emails'], true) && empty($opt['no_lookalike'])) {
+            $alike = match ($table) { 't_account' => LookAlikes::find(trim(($data['first_name'] ?? '') . ' ' . ($data['sur_name'] ?? ''))),
+                't_account_mobiles' => LookAlikes::find(null, [], [(string) ($data['mobile_no'] ?? '')], (int) ($data['fk_id_account'] ?? 0)), default => LookAlikes::find(null, [(string) ($data['email'] ?? '')], [], (int) ($data['fk_id_account'] ?? 0)) };
+            $alike = LookAlikes::guard($alike, $opt['dup_reason'] ?? null);
+        }
         $errors = FormRules::check($formKey, $data, $old, $id, $errors) + $errors;      // a form's own message (old texts) wins over the general one      // typed codes, shares, uniqueness of this form (R-F_SETUP-35)
         if ($errors) throw ValidationException::withMessages($errors);
 
@@ -181,6 +193,8 @@ class RecordService
             $res = self::write($table, $pk, $id, $data, $old, $formKey, $opt);
             if ($vault['put']) Vault::store($table, (int) $res['id'], $vault['put']);
             if ($vault['dropped']) $res['note'] = 'Not kept on purpose (CVV / PIN are never stored): ' . implode(', ', $vault['dropped']) . '.';
+            if (! empty($bankWarn)) $res['note'] = $bankWarn;
+            if ($alike) LookAlikes::logged($table === 't_account' ? (int) $res['id'] : (int) ($data['fk_id_account'] ?? 0), $alike, (string) $opt['dup_reason']);
             return $res;
         } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
             throw ValidationException::withMessages(['_form' => 'A record with the same code or name already exists. Change it and save again.']);
@@ -349,6 +363,8 @@ class RecordService
             $v = trim($v);
             if ($f['auto_correct'] === 'upper') $v = mb_strtoupper($v);
             if ($f['auto_correct'] === 'lower') $v = mb_strtolower($v);
+            if ($f['auto_correct'] === 'nospace') $v = preg_replace('/\s+/u', '', $v);
+            if ($f['auto_correct'] === 'upper_nospace') $v = mb_strtoupper(preg_replace('/\s+/u', '', $v));
         }
         if ($f['type'] === 'check') return in_array($v, [1, '1', true, 'true', 'on', 'Y'], true) ? 1 : 0;
         if ($f['type'] === 'month_year' && is_string($v) && $v !== '') return self::monthYear($f, $v);

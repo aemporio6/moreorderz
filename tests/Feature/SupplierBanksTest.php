@@ -72,4 +72,26 @@ class SupplierBanksTest extends TestCase
         $this->assertContains('beneficiary_name', array_column(\App\Services\Registry::fields('supplier_bank'), 'field_name'));
     }
 
+
+    /** R-C-15 the shared bank validators on the supplier / person bank forms (the rule test: the public example IBAN passes, one digit changed fails) and R-C-14 "+ New bank" reuse ("hbl " in Pakistan when "HBL" Pakistan exists → reused). */
+    public function test_c14_c15_bank_validators_and_new_bank_reuse_on_every_bank_form(): void
+    {
+        $this->as($this->owner); $sup = $this->f('t_src_suppliers', ['fk_id_ent' => 1, 'supplier_code' => 'S-V', 'supplier_name' => 'Valid Co', 'f_active' => 1]);
+        $pk = $this->f('cat_country', ['country_name' => 'Pakistan', 'iso_code' => 'PK', 'country_code' => 9201, 'fk_id_ent' => 1]); $uk = $this->f('cat_country', ['country_name' => 'United Kingdom', 'iso_code' => 'GB', 'country_code' => 9441, 'fk_id_ent' => 1]);
+        $hbl = (int) RecordService::save('cat_banks', ['bank_name' => 'HBL', 'country_id' => $pk, 'f_active' => 1])['id'];
+        $again = RecordService::save('cat_banks', ['bank_name' => ' hbl ', 'country_id' => $pk]); $this->assertSame([$hbl, false], [(int) $again['id'], $again['created']]); $this->assertSame(1, DB::table('cat_banks')->whereRaw('LOWER(bank_name) = ?', ['hbl'])->count());
+        $other = RecordService::save('cat_banks', ['bank_name' => 'HBL', 'country_id' => $uk]); $this->assertTrue($other['created']); $this->assertStringContainsString('already exists in Pakistan', $other['note']);
+        $row = fn (array $x) => ['fk_id_src_supplier' => $sup, 'country_id' => $uk, 'fk_bank_id' => $hbl, 'fk_currency_id' => Buy::currencyId('GBP'), 'beneficiary_name' => 'Valid Co'] + $x;
+        $err = function (array $x) use ($row) { try { RecordService::save('supplier_bank', $row($x)); return []; } catch (\Illuminate\Validation\ValidationException $e) { return array_map(fn ($m) => $m[0], $e->errors()); } };
+        $this->assertSame('This IBAN does not look right. Please check it.', $err(['account_no' => '12345678', 'iban_no' => 'GB82 WEST 1234 5698 7654 33'])['iban_no']);
+        $this->assertSame('SWIFT/BIC is 8 or 11 letters/numbers, e.g. HSBCGB2L.', $err(['account_no' => '12345678', 'swift_code' => 'HSBC1'])['swift_code']);
+        $this->assertSame('Account Number: letters and numbers only, 3 to 34 characters.', $err(['account_no' => '12*45'])['account_no']);
+        $this->assertSame('Enter the Account Number or the IBAN.', $err([])['account_no']);
+        $id = (int) RecordService::save('supplier_bank', $row(['account_no' => '1234 5678', 'iban_no' => 'gb82 west 1234 5698 7654 32', 'swift_code' => 'hsbc gb2l']))['id'];
+        $b = DB::table('t_account_banks')->where('id', $id)->first(); $vault = DB::table('sys_vault')->where(['table_name' => 't_account_banks', 'record_id' => $id])->pluck('cipher', 'column_name')->map(fn ($c) => \Illuminate\Support\Facades\Crypt::decryptString($c));
+        $this->assertSame(['GB82WEST12345698765432', '12345678', 'HSBCGB2L'], [$vault['iban_no'] ?? $b->iban_no, $vault['account_no'] ?? $b->account_no, $vault['swift_code'] ?? $b->swift_code], 'spaces removed, upper case (the numbers are kept in the vault)');
+        $p = $this->f('t_account', ['fk_id_ent' => 1, 'account_code' => 'BV' . random_int(1000, 9999), 'first_name' => 'Bank', 'sur_name' => 'Check', 'f_active' => 1]);
+        $this->postJson('/api/record/t_account_bank', ['values' => ['fk_id_account' => $p, 'account_no' => '12345678', 'sort_branch_code' => 'AB-CD']])->assertStatus(422)->assertJsonPath('errors.sort_branch_code.0', 'Sort Code: numbers, e.g. 04-06-05.');
+    }
+
 }

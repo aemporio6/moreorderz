@@ -629,6 +629,8 @@ ds upload,upload drop shipping orders,VOCAB,#/ds-upload
 due date,tax and filings,VOCAB,#/compliance
 due payments,supplier payment schedule,VOCAB,#/supplier-schedule
 duplicate,merge duplicates,VOCAB,#/merges
+duplicate contact,look-alike person,VOCAB,#/merges
+duplicate person,look-alike person,VOCAB,#/merges
 duplicates,merge duplicates,VOCAB,#/merges
 duties,customs,VOCAB,#/list/t_src_customs
 duty,customs,VOCAB,#/list/t_src_customs
@@ -1064,6 +1066,8 @@ logistics cost,freight,VOCAB,#/list/t_src_freight
 logistics partner,3pl profiles,VOCAB,#/list/threepl_profile
 logo,brands,VOCAB,#/list/brand
 long term storage,payouts and settlements,VOCAB,#/settlements
+look alike,look-alike person,VOCAB,#/merges
+looks like an existing person,look-alike person,VOCAB,#/merges
 lookup,reference register,VOCAB,#/list/reference_value
 lookups,reference register,VOCAB,#/list/reference_value
 loss,profit views,VOCAB,#/profit
@@ -1739,7 +1743,9 @@ sales report,sales lines,VOCAB,#/sales
 sales trend,annual sale report,VOCAB,#/sales-annual
 sales velocity,replenishment and icc reorder,VOCAB,#/list/icc
 same day dispatch,orders to dispatch,VOCAB,#/orders
-same person twice,merge duplicates,VOCAB,#/merges
+same email,look-alike person,VOCAB,#/merges
+same mobile,look-alike person,VOCAB,#/merges
+same person twice,look-alike person,VOCAB,#/merges
 same supplier again,direct po repeat order,VOCAB,#/list/t_src_direct
 sample,samples,VOCAB,#/list/t_src_samples
 sample approval,samples,VOCAB,#/list/t_src_samples
@@ -1748,6 +1754,7 @@ sample price,rfq and quotations,VOCAB,#/list/src_rfq
 sample review,samples,VOCAB,#/list/t_src_samples
 samples,samples,VOCAB,#/list/t_src_samples
 santander,bank and cash,VOCAB,#/bank
+save anyway,look-alike person,VOCAB,#/merges
 save details,cycle details,VOCAB,#/buying
 sc number,sourcing cycles,VOCAB,#/list/src_cycle
 scan,work screen phone,VOCAB,#/work
@@ -2138,6 +2145,7 @@ upwork,expenses,VOCAB,#/expenses
 usd,fx rates,VOCAB,#/list/fin_fx_rate
 usd payment,payments and terms,VOCAB,#/list/src_payment
 usd to gbp,exchange rates,VOCAB,#/fx
+use this one,look-alike person,VOCAB,#/merges
 user,users,VOCAB,#/users
 user manual,product pack artwork,VOCAB,#/list/product_artwork_file
 username,users,VOCAB,#/users

@@ -148,6 +148,7 @@ add('#/buying', 'term paid', 'term paid|term remaining|term status|partially pai
 add('#/buying', 'cycle step map', 'step map|cycle tabs|cycle steps|11 steps|carton data|payment schedule|destination allocation|inventory receiving|platform allocation|ownership transfers|inventory transfers|cycle products|products grid|target qty|target unit cost|people on this cycle|talk to today')
 add('#/buying', 'cycle details', 'cycle details|save details|sourcing date|required delivery date|sourcing priority|sourcing status|sourcing notes|quote expired|quote valid until|price confirmed|supplier rated d|do not use supplier|supplier rating|supplier local time|product documents')
 add('#/approvals', 'supplier bank approval', 'supplier bank approval|bank details approval|bank change|changed bank details|phone check|confirm bank by phone|beneficiary|beneficiary name|bank letter|payment blocked|unapproved bank|forwarder bank|payee bank|bank fraud check')
+add('#/merges', 'look-alike person', 'look alike|looks like an existing person|duplicate person|same mobile|same email|save anyway|use this one|duplicate contact|same person twice')
 add('#/import', 'learn sale columns', 'learn columns|learned mapping|propose columns|column proposal|new file header|header not found|map file headers|standard sheet template|convert file template')
 
 # ---------- reports, setup, system ----------

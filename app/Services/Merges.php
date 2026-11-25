@@ -54,6 +54,8 @@ class Merges
                 $groups[$key] ??= ['ids' => $ids, 'why' => []]; $groups[$key]['why'][] = $e === 'PRODUCT' ? 'same SKU written differently' : $why;
             }
         }
+        if ($e === 'PARTY') foreach (DB::table('sys_merge_map')->where('entity', 'PARTY')->where('status', 'SUGGESTED')->limit(200)->get(['source_id', 'master_id']) as $h) {      /* R-C-8 pairs saved with "Save anyway" are hints of the scan */
+            $ids = [min((int) $h->source_id, (int) $h->master_id), max((int) $h->source_id, (int) $h->master_id)]; $key = implode(',', $ids); $groups[$key] ??= ['ids' => $ids, 'why' => []]; $groups[$key]['why'][] = 'saved although it looked like this person'; }
         $dismissed = DB::table('sys_merge_map')->where('entity', self::ent($e)[4])->where('status', 'REJECTED')->get(['source_id', 'master_id'])->map(fn ($x) => min($x->source_id, $x->master_id) . '-' . max($x->source_id, $x->master_id))->flip();
         $out = [];
         foreach ($groups as $g) {
