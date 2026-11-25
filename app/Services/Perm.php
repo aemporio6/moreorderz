@@ -176,6 +176,7 @@ class Perm
         $c['print.testPage'] = ['Print a printer test page', 'Printing', ['OWNER', 'MANAGER', 'WAREHOUSE']];
         foreach (self::PRINT_KINDS as $k => $roles) $c["print.kind_$k"] = ['Print: ' . ucfirst(strtolower(str_replace('_', ' ', $k))), 'Printing', $roles];
         $c['admin.permissions'] = ['Change roles and rights', 'Users and system', ['OWNER']];
+        $c['people.convert'] = ['Convert a person Managed Account ↔ External Contact, and set which sections each kind shows', 'Users and system', ['OWNER', 'MANAGER']];      /* R-C-2 PEOPLE_CONVERT */
         /* R-H-58 warehouse rights per action – STOCK (warehouse manager) is the MANAGER role here, ADMIN the OWNER */
         $wh = ['OWNER', 'MANAGER', 'WAREHOUSE']; $boss = ['OWNER', 'MANAGER'];
         foreach (['receive' => 'Receive goods', 'putaway' => 'Put goods away', 'pick' => 'Pick', 'pack' => 'Pack', 'handover' => 'Hand parcels over', 'return' => 'Book returns', 'move' => 'Move stock and put back', 'count' => 'Count bins'] as $k => $l) $c["wh.work.$k"] = ["Work screen: $l", 'Warehouse', $wh];

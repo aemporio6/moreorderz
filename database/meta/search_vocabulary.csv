@@ -29,6 +29,7 @@ account holder,people and companies,VOCAB,#/list/party
 account kit,account kit,VOCAB,#/list/t_mobile_device
 account reserve,payouts and settlements,VOCAB,#/settlements
 account suspension,account health,VOCAB,#/shop-health
+account type change,person sections by kind,VOCAB,#/person-sections
 accountant,ledger,VOCAB,#/ledger
 accountant deadline,tax and filings,VOCAB,#/compliance
 accounting,money dashboard,VOCAB,#/money
@@ -207,6 +208,8 @@ bill,expenses,VOCAB,#/expenses
 bill of lading,shipments,VOCAB,#/list/t_src_shipments
 bills,expenses,VOCAB,#/expenses
 bin,locations and bins,VOCAB,#/list/location
+bin csv,warehouse locations and SKU homes by CSV,VOCAB,#/wh-csv
+bin list upload,warehouse locations and SKU homes by CSV,VOCAB,#/wh-csv
 bin location,locations and bins,VOCAB,#/list/location
 bins,locations and bins,VOCAB,#/list/location
 blacklist,customers,VOCAB,#/list/crm_customer
@@ -245,6 +248,7 @@ budget,budgets,VOCAB,#/budgets
 budget vs actual,budgets,VOCAB,#/budgets
 budgeting,budgets,VOCAB,#/budgets
 budgets,budgets,VOCAB,#/budgets
+bulk bins,warehouse locations and SKU homes by CSV,VOCAB,#/wh-csv
 bulk import,import a file,VOCAB,#/import
 bulk location,locations and bins,VOCAB,#/list/location
 bulk message,messages and whatsapp,VOCAB,#/messages
@@ -286,6 +290,7 @@ cancel order,orders to dispatch,VOCAB,#/orders
 cancellation rate,account health,VOCAB,#/shop-health
 cancelled order,orders to dispatch,VOCAB,#/orders
 cannot be deleted,system rows,VOCAB,#/choices
+cannot remove role,delete or restore a person,VOCAB,#/list/party
 canton fair,buying dashboard,VOCAB,#/buying
 capital,partners,VOCAB,#/partners
 capital account,partners,VOCAB,#/partners
@@ -444,6 +449,9 @@ convert,convert file,VOCAB,#/csv-convert
 convert csv,convert file,VOCAB,#/csv-convert
 convert file,convert file,VOCAB,#/csv-convert
 convert file template,learn sale columns,VOCAB,#/import
+convert person,person sections by kind,VOCAB,#/person-sections
+convert to external,person sections by kind,VOCAB,#/person-sections
+convert to managed,person sections by kind,VOCAB,#/person-sections
 coo,products,VOCAB,#/list/product
 corporation tax,tax and filings,VOCAB,#/compliance
 corporation tax worksheet,taxation,VOCAB,#/list/tax_period
@@ -534,6 +542,8 @@ ddp,freight,VOCAB,#/list/t_src_freight
 ddp price,rfq and quotations,VOCAB,#/list/src_rfq
 ddu,freight,VOCAB,#/list/t_src_freight
 de-duplicate,merge duplicates,VOCAB,#/merges
+deactivate bin,warehouse locations and SKU homes by CSV,VOCAB,#/wh-csv
+deactivate location,warehouse locations and SKU homes by CSV,VOCAB,#/wh-csv
 deadline,tax and filings,VOCAB,#/compliance
 deadlines,tax and filings,VOCAB,#/compliance
 debenhams marketplace,marketplace operations hubs,VOCAB,#/hubs
@@ -554,6 +564,7 @@ defects,qc,VOCAB,#/list/t_src_qc
 deferment,customs,VOCAB,#/list/t_src_customs
 delay at port,shipments,VOCAB,#/list/t_src_shipments
 delegation,task rules,VOCAB,#/list/task_category
+delete person,delete or restore a person,VOCAB,#/list/party
 delivered orders,sales lines,VOCAB,#/sales
 delivery rates,carriers and postage rates,VOCAB,#/carriers
 delivery received,inbound and grn,VOCAB,#/list/t_src_grn
@@ -712,9 +723,14 @@ expenses,expenses,VOCAB,#/expenses
 expiry,lots and owners,VOCAB,#/stock/lots
 expiry date,lots and owners,VOCAB,#/stock/lots
 export,all reports,VOCAB,#/reports
+export bins,warehouse locations and SKU homes by CSV,VOCAB,#/wh-csv
+export locations,warehouse locations and SKU homes by CSV,VOCAB,#/wh-csv
+export sku homes,warehouse locations and SKU homes by CSV,VOCAB,#/wh-csv
 exports,all reports,VOCAB,#/reports
 express courier,shipments,VOCAB,#/list/t_src_shipments
 express shipping,carriers and postage rates,VOCAB,#/carriers
+external contact,person sections by kind,VOCAB,#/person-sections
+external contact tabs,person sections by kind,VOCAB,#/person-sections
 exw,freight,VOCAB,#/list/t_src_freight
 exw price,rfq and quotations,VOCAB,#/list/src_rfq
 factories,buying dashboard,VOCAB,#/buying
@@ -904,11 +920,14 @@ idea,research board,VOCAB,#/list/src_research
 ideas,research board,VOCAB,#/list/src_research
 images,products,VOCAB,#/list/product
 import,import a file,VOCAB,#/import
+import bins,warehouse locations and SKU homes by CSV,VOCAB,#/wh-csv
 import duty,customs,VOCAB,#/list/t_src_customs
 import file,import a file,VOCAB,#/import
 import from china,buying dashboard,VOCAB,#/buying
 import history,import history,VOCAB,#/import-history
+import locations,warehouse locations and SKU homes by CSV,VOCAB,#/wh-csv
 import sales,import sales,VOCAB,#/sales-import
+import sku homes,warehouse locations and SKU homes by CSV,VOCAB,#/wh-csv
 import vat,customs,VOCAB,#/list/t_src_customs
 importer address,legal label texts,VOCAB,#/list/label_legal_text
 imports,import history,VOCAB,#/import-history
@@ -994,6 +1013,7 @@ journals,ledger,VOCAB,#/ledger
 jungle scout,research board,VOCAB,#/list/src_research
 keepa,research board,VOCAB,#/list/src_research
 keyword research,research board,VOCAB,#/list/src_research
+kind of person,person sections by kind,VOCAB,#/person-sections
 kit,products,VOCAB,#/list/product
 kits,products,VOCAB,#/list/product
 kpi,all reports,VOCAB,#/reports
@@ -1058,6 +1078,7 @@ local buy,quick buy,VOCAB,#/list/quick_buy
 local purchase,quick buy,VOCAB,#/list/quick_buy
 location,locations and bins,VOCAB,#/list/location
 locations,locations and bins,VOCAB,#/list/location
+locations csv,warehouse locations and SKU homes by CSV,VOCAB,#/wh-csv
 lock icon,system rows,VOCAB,#/choices
 lock month,month close,VOCAB,#/close
 lock sales,month confirm,VOCAB,#/confirm
@@ -1102,6 +1123,7 @@ make.com,api connections,VOCAB,#/connections
 maker checker,approvals queue,VOCAB,#/approvals
 making tax digital,vat return,VOCAB,#/vat-return
 manage orders,orders to dispatch,VOCAB,#/orders
+managed account,person sections by kind,VOCAB,#/person-sections
 manifest,orders to dispatch,VOCAB,#/orders
 manomano,marketplace operations hubs,VOCAB,#/hubs
 manual,product pack artwork,VOCAB,#/list/product_artwork_file
@@ -1408,6 +1430,9 @@ period close,month close,VOCAB,#/close
 permission,roles and rights,VOCAB,#/permissions
 permissions,roles and rights,VOCAB,#/permissions
 person,people and companies,VOCAB,#/list/party
+person recycle bin,delete or restore a person,VOCAB,#/list/party
+person sections,person sections by kind,VOCAB,#/person-sections
+person used in,delete or restore a person,VOCAB,#/list/party
 persons,people and companies,VOCAB,#/list/party
 petrol,expenses,VOCAB,#/expenses
 phone,account kit,VOCAB,#/list/t_mobile_device
@@ -1521,6 +1546,7 @@ products grid,cycle step map,VOCAB,#/buying
 products not listed,products not listed,VOCAB,#/list/t_products_shop_not_listed
 professional plan,subscriptions,VOCAB,#/subscriptions
 profile,my account,VOCAB,#/me
+profile tabs,person sections by kind,VOCAB,#/person-sections
 profiles,marketplace profiles,VOCAB,#/list/mp_profile
 profit,profit views,VOCAB,#/profit
 profit and loss,profit views,VOCAB,#/profit
@@ -1636,6 +1662,8 @@ relocate stock,transfers,VOCAB,#/stock/ledger?act=transfer
 reminder,my tasks,VOCAB,#/tasks
 reminders,my tasks,VOCAB,#/tasks
 remittance,payouts and settlements,VOCAB,#/settlements
+remove person,delete or restore a person,VOCAB,#/list/party
+rename bin,warehouse locations and SKU homes by CSV,VOCAB,#/wh-csv
 renminbi,payments and terms,VOCAB,#/list/src_payment
 rent,expenses,VOCAB,#/expenses
 reorder,replenishment and icc reorder,VOCAB,#/list/icc
@@ -1676,6 +1704,7 @@ responsible person,legal label texts,VOCAB,#/list/label_legal_text
 restock,returns,VOCAB,#/returns
 restock plan,replenishment and icc reorder,VOCAB,#/list/icc
 restocking,returns,VOCAB,#/returns
+restore person,delete or restore a person,VOCAB,#/list/party
 restrict,roles and rights,VOCAB,#/permissions
 retail arbitrage,drop shipping orders,VOCAB,#/ds-orders
 retail purchase,quick buy,VOCAB,#/list/quick_buy
@@ -1775,6 +1804,7 @@ scans,documents,VOCAB,#/list/document
 sds,certificates,VOCAB,#/list/product_certificate
 sea freight,shipments,VOCAB,#/list/t_src_shipments
 second class,carriers and postage rates,VOCAB,#/carriers
+sections by kind,person sections by kind,VOCAB,#/person-sections
 security,sessions and ip allow list,VOCAB,#/sessions
 self assessment,tax and filings,VOCAB,#/compliance
 self billing,invoices and credit notes,VOCAB,#/invoices
@@ -1852,6 +1882,7 @@ shopify orders,import sales,VOCAB,#/sales-import
 shopify plan,subscriptions,VOCAB,#/subscriptions
 shops,shops,VOCAB,#/list/shop
 short delivery,inbound and grn,VOCAB,#/list/t_src_grn
+short profile,person sections by kind,VOCAB,#/person-sections
 short shipped,inbound and grn,VOCAB,#/list/t_src_grn
 shortlist,research board,VOCAB,#/list/src_research
 shrinkage,stock ledger,VOCAB,#/stock/ledger
@@ -1865,6 +1896,7 @@ sim card,account kit,VOCAB,#/list/t_mobile_device
 size,products,VOCAB,#/list/product
 sku,products,VOCAB,#/list/product
 sku home,sku homes,VOCAB,#/sku-homes
+sku homes csv,warehouse locations and SKU homes by CSV,VOCAB,#/wh-csv
 sku label,label templates,VOCAB,#/list/label_template
 sku mapping,listings,VOCAB,#/list/listing
 skus,products,VOCAB,#/list/product
@@ -2229,12 +2261,15 @@ weekly report,all reports,VOCAB,#/reports
 weight,products,VOCAB,#/list/product
 weight band,carriers and postage rates,VOCAB,#/carriers
 weighted average,lots and owners,VOCAB,#/stock/lots
+wh_locations,warehouse locations and SKU homes by CSV,VOCAB,#/wh-csv
+wh_sku_homes,warehouse locations and SKU homes by CSV,VOCAB,#/wh-csv
 what it became,research outcome,VOCAB,#/list/src_research
 what we owe,supplier payment schedule,VOCAB,#/supplier-schedule
 whatsapp,messages and whatsapp,VOCAB,#/messages
 whatsapp number,people and companies,VOCAB,#/list/party
 when to order,replenishment and icc reorder,VOCAB,#/list/icc
 where is sku,sku homes,VOCAB,#/sku-homes
+where used,delete or restore a person,VOCAB,#/list/party
 which marketplace,allocation and platform plan,VOCAB,#/list/t_src_allocations
 which warehouse,allocation and platform plan,VOCAB,#/list/t_src_allocations
 white label,products,VOCAB,#/list/product

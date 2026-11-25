@@ -267,6 +267,8 @@
       if (r.startsWith('#/my-sales')) return await pageMySales();
       if (r === '#/labels') return await pageLabels();
       if (r === '#/supplier-orders') return await pageSupplierOrders();
+      if (r === '#/wh-csv') return pageWhCsv();
+      if (r === '#/person-sections') return await pagePersonSections();
       if (r === '#/import') return pageImportHub();
       if (r === '#/import-history') return await pageImportHistory();
       if (r.startsWith('#/legacy-compare')) return await pageLegacyCompare();
@@ -3571,8 +3573,18 @@
     const box = $('#pHeader'); if (!box) return; const col = { red: '#dc3545', amber: '#ffc107', grey: '#adb5bd' };
     box.innerHTML = `<div class="card" style="position:sticky;top:0;z-index:5;margin-bottom:12px"><div class="card-b" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
       <span title="${esc((h.health_why || []).join(' · ') || 'Nothing due')}" data-health="${esc(h.health || 'ok')}" style="width:12px;height:12px;border-radius:50%;display:inline-block;background:${col[h.health] || '#28a745'}"></span>
-      <b>${esc(h.code || '')}</b> ${esc(h.name)} ${h.kind ? `<span class="chip plain">${esc(h.kind)}</span>` : ''}${(h.roles || []).map(r => `<span class="chip">${esc(r)}</span>`).join(' ')}
-      <span style="flex-basis:100%"></span>${h.chips.map(c => `<a class="chip ${c.health === 'red' ? 'err' : c.health === 'amber' ? 'warn' : 'plain'}" data-chip="${c.key}" ${c.url ? `href="${esc(c.url)}"` : ''} title="${esc(c.note || '')}" style="${c.health === 'grey' ? 'border:1px dashed #adb5bd' : ''}">${esc(c.label)} ${c.count}</a>`).join(' ')}</div></div>`;
+      <b>${esc(h.code || '')}</b> ${esc(h.name)} <span class="chip plain" id="pKind" title="${esc((h.kind_log || []).map(l => l.at + ' ' + l.by + ': ' + l.from + ' → ' + l.to + (l.note ? ' (' + l.note + ')' : '')).join('\n'))}">${esc(h.kind_badge || '')}</span>${h.can_convert ? ' <button class="btn sm" id="pConvert">Convert</button>' : ''}${(h.roles || []).map(r => `<span class="chip">${esc(r)}</span>`).join(' ')}
+      <span style="flex-basis:100%"></span>${h.chips.map(c => `<a class="chip ${c.health === 'red' ? 'err' : c.health === 'amber' ? 'warn' : 'plain'}" data-chip="${c.key}" ${c.url ? `href="${esc(c.url)}"` : ''} title="${esc(c.note || '')}" style="${c.health === 'grey' ? 'border:1px dashed #adb5bd' : ''}">${esc(c.label)} ${c.count}</a>`).join(' ')}
+      ${h.can_delete ? `<span style="margin-left:auto">${h.deleted ? '<span class="chip err">In the recycle bin</span> <button class="btn sm" id="pRestore">Restore</button>' : '<button class="btn sm danger" id="pDelete" title="Move this person to the recycle bin – only when not used anywhere">Delete person</button>'}</span>` : ''}</div><div id="pUsed"></div></div>`;
+    // R-C-17 delete = soft delete with a confirm; when the person is used, the blocking list is shown instead
+    if ($('#pDelete')) $('#pDelete').onclick = () => { const m = modal('Delete this person?', 'The person goes to the recycle bin and can be restored. Shops are never deleted with a person.', '', '<button class="btn" id="pdNo">Cancel</button><button class="btn danger" id="pdYes">Delete</button>', false); $('#pdNo', m.ov).onclick = m.close;
+      $('#pdYes', m.ov).onclick = async () => { m.close(); try { const r = await api(`people/${pid}/delete`, { method: 'POST', body: {} }); toast(r.message); personHeader(pid); } catch (e) { const u = (e.data && e.data.used) || [];
+        $('#pUsed').innerHTML = `<div class="card-b small" style="border-top:1px solid var(--line);color:var(--err)"><b>Cannot be deleted – still used:</b>${u.map(x => `<div>${esc(x.label)}: ${x.names && x.names.length ? x.names.map(esc).join(', ') : x.count}</div>`).join('') || ' ' + esc(e.message)}</div>`; } }; };
+    // R-C-2 Convert Managed ↔ External: confirm text, optional note; nothing is deleted
+    if ($('#pConvert')) $('#pConvert').onclick = () => { const m = modal('Convert this person?', h.convert_text, `<label class="small">Note (optional)</label><input id="pcNote" maxlength="255" style="width:100%"><div class="small muted" style="margin-top:8px"><a href="#/person-sections" id="pcSec">Which sections each kind shows</a></div>`, '<button class="btn" id="pcNo">Cancel</button><button class="btn primary" id="pcYes">Convert</button>', false);
+      $('#pcNo', m.ov).onclick = m.close; $('#pcSec', m.ov).onclick = m.close;
+      $('#pcYes', m.ov).onclick = async () => { try { const r = await api(`people/${pid}/convert`, { method: 'POST', body: { to: h.convert_to, note: $('#pcNote', m.ov).value } }); m.close(); toast(r.message); render(); } catch (e) { toast(e.message || 'Could not change the account type.', 'err'); } }; };
+    if ($('#pRestore')) $('#pRestore').onclick = async () => { try { const r = await api(`people/${pid}/restore`, { method: 'POST', body: {} }); toast(r.message); personHeader(pid); } catch (e) { toast(e.message, 'err'); } };
   }
   async function shopsCard(pid) {
     let d; try { d = await api(`people/${pid}/shops`); } catch (e) { return; }
@@ -3908,9 +3920,31 @@
   }
   function pageImportHub() {
     const tiles = [['#/orders', 'Orders', 'eBay orders report, Temu order list, any order table – Orders › Load order file.'], ['#/settlements', 'Marketplace money files', 'TikTok workbook, Amazon settlement (date range and flat file V2), eBay transaction report, OnBuy / Temu tables.'],
-      ['#/bank', 'Bank statements', 'CSV or Excel from the bank, in the layout of that bank.'], ['#/labels', 'Carrier label PDFs', 'Labels downloaded from the carrier, linked to their orders.'], ['#/supplier-orders', 'Supplier order history', 'Amazon Business order report of a buying supplier (file named by shop no., e.g. 1.csv) – kept with its VAT evidence.'], ['#/tasks?scope=all&import=1', 'Tasks (CSV)', 'New tasks from a CSV file: check first (changes nothing), then all or nothing; undo by batch. Partner / Manager.'], ['#/import-history', 'Everything loaded so far', 'Every file, when, by whom, new / already there / problems; and the old-tool import, table by table.']];
+      ['#/bank', 'Bank statements', 'CSV or Excel from the bank, in the layout of that bank.'], ['#/labels', 'Carrier label PDFs', 'Labels downloaded from the carrier, linked to their orders.'], ['#/supplier-orders', 'Supplier order history', 'Amazon Business order report of a buying supplier (file named by shop no., e.g. 1.csv) – kept with its VAT evidence.'], ['#/wh-csv', 'Warehouse locations and SKU homes (CSV)', 'Report types WH_LOCATIONS and WH_SKU_HOMES: export, change in Excel, check first (changes nothing), then load; look-alike codes are held back; undo by batch.'], ['#/tasks?scope=all&import=1', 'Tasks (CSV)', 'New tasks from a CSV file: check first (changes nothing), then all or nothing; undo by batch. Partner / Manager.'], ['#/import-history', 'Everything loaded so far', 'Every file, when, by whom, new / already there / problems; and the old-tool import, table by table.']];
     $('#main').innerHTML = `<div class="page-head"><div><h1>Import a file</h1><div class="sub">Each kind of file is loaded where its work is done. The tool finds the layout from the file itself; a file loaded twice adds nothing.</div></div></div>
       <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">${tiles.map(([h, t, w]) => `<a class="card" href="${h}" style="display:block;padding:14px;text-decoration:none;color:inherit"><b>${esc(t)}</b><div class="small muted" style="margin-top:4px">${esc(w)}</div></a>`).join('')}</div>`;
+  }
+  // ---------- Settings: which person sections / tabs each kind shows (R-C-2) ----------
+  async function pagePersonSections() {
+    let d; try { d = await api('people/sections'); } catch (e) { $('#main').innerHTML = `<div class="card"><div class="card-b">${esc(e.message)}</div></div>`; return; }
+    const draw = rows => { $('#main').innerHTML = `<div class="page-head"><div><h1>Person sections by kind</h1><div class="sub">A Managed Account shows the full profile; an External Contact shows the short profile. A hidden section keeps its data – it is only not shown and not saved for that kind.</div></div></div>
+      <div class="card"><table class="tbl"><thead><tr><th>Section / tab</th><th>What</th><th>Shown for</th></tr></thead><tbody>${rows.map(r => `<tr><td>${esc(r.title)}</td><td class="small muted">${esc(r.what)}</td><td><select data-psec="${r.id}">${Object.entries(d.kinds).map(([k, l]) => `<option value="${k}" ${k === r.visible_kind ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></div>`;
+      document.querySelectorAll('[data-psec]').forEach(s => s.onchange = async () => { try { const x = await api('people/sections/' + s.dataset.psec, { method: 'POST', body: { visible_kind: s.value } }); toast(x.message); } catch (e) { toast(e.message, 'err'); draw(rows); } }); };
+    draw(d.rows);
+  }
+  // ---------- warehouse locations / SKU homes by CSV (R-H-6) ----------
+  function pageWhCsv() {
+    const kinds = [['WH_LOCATIONS', 'Locations (zones and bins)', 'Columns: site, parent, kind, code, name, zone_type, bin_type, pick_seq, capacity_units, pickable, receivable, active, deactivated_reason, confirm_new. A location is never deleted by file – put N in active (with a reason) to deactivate it.'], ['WH_SKU_HOMES', 'SKU homes', 'Columns: site, bin, sku, role (PRIMARY / OVERFLOW), min_qty, max_qty.']];
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/import">Import a file</a> ›</div><h1>Warehouse locations and SKU homes (CSV)</h1><div class="sub">Export gives the file as it is now – change it and load it back. Check never saves anything.</div></div></div>
+      ${kinds.map(([k, t, w]) => `<div class="card" style="padding:14px;margin-bottom:12px"><b>${t}</b> <span class="small muted">${k}</span><div class="small muted" style="margin:4px 0 8px">${w}</div>
+        <a class="btn" href="/api/warehouse/csv/${k}">Export</a> <input type="file" accept=".csv" data-whf="${k}" style="display:inline-block;width:auto"> <button class="btn" data-whc="${k}">Check</button> <button class="btn primary" data-whi="${k}">Load</button>
+        <div data-who="${k}" class="small" style="margin-top:8px"></div></div>`).join('')}`;
+    const send = async (k, step) => { const f = $(`[data-whf="${k}"]`).files[0]; if (!f) throw new Error('Choose the CSV file first.'); const fd = new FormData(); fd.append('file', f);
+      const r = await fetch(`/api/warehouse/csv/${k}/${step}`, { method: 'POST', body: fd, headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content || '', 'Accept': 'application/json' } }); const d = await r.json(); if (!r.ok) throw new Error(d.message || 'Could not read the file.'); return d; };
+    const show = (k, d) => { $(`[data-who="${k}"]`).innerHTML = `<b>${esc(d.message)}</b>${(d.log || []).length ? `<pre class="small" style="max-height:220px;overflow:auto;white-space:pre-wrap;margin-top:6px">${esc(d.log.join('\n'))}</pre>` : ''}${d.job ? ` <button class="btn" data-whu="${d.job}">Undo this batch</button>` : ''}`;
+      const u = $(`[data-whu]`); if (u) u.onclick = async () => { try { const x = await api('warehouse/csv/undo/' + u.dataset.whu, { method: 'POST' }); toast(x.message); $(`[data-who="${k}"]`).innerHTML = `<b>${esc(x.message)}</b>`; } catch (e) { toast(e.message, 'err'); } }; };
+    document.querySelectorAll('[data-whc]').forEach(b => b.onclick = async () => { try { show(b.dataset.whc, await send(b.dataset.whc, 'check')); } catch (e) { toast(e.message, 'err'); } });
+    document.querySelectorAll('[data-whi]').forEach(b => b.onclick = async () => { try { show(b.dataset.whi, await send(b.dataset.whi, 'import')); } catch (e) { toast(e.message, 'err'); } });
   }
   // ---------- Gen-2 money compare per shop / month (R-A_SALES-52) ----------
   const LC = { shop: '', month: '' };
@@ -5055,7 +5089,8 @@
     }
     // labels of the chosen values of a dropdown (so an id never shows as a number)
     async function ensureLabels(f) { const cur = String(val[f.name] ?? '').split(',').filter(x => x !== '' && x !== '0'); labels[f.name] = labels[f.name] || {}; if (!cur.length || cur.every(x => labels[f.name][x] !== undefined)) return;
-      try { const r = await api(`options/${key}/${f.name}?` + new URLSearchParams(Object.entries(parentsOf()).filter(([k]) => k !== f.name).map(([k, v]) => [`parent[${k}]`, v]))); r.options.forEach(([v, l]) => { labels[f.name][v] = l; }); cur.forEach(x => { if (labels[f.name][x] === undefined) labels[f.name][x] = x; }); redrawField(f); } catch (e) {} }
+      try { const r = await api(`options/${key}/${f.name}?` + new URLSearchParams(Object.entries(parentsOf()).filter(([k]) => k !== f.name).map(([k, v]) => [`parent[${k}]`, v]))); r.options.forEach(([v, l]) => { labels[f.name][v] = l; }); const gone = cur.filter(x => labels[f.name][x] === undefined);
+        if (gone.length) { let nm = {}; try { nm = (await api(`options/${key}/${f.name}/saved?ids=` + encodeURIComponent(gone.join(',')))).labels || {}; } catch (e) {} gone.forEach(x => { labels[f.name][x] = `[Saved: ${nm[x] ?? x}] (re-select from list)`; }); }      /* R-B_SOURCING-23 a saved value never disappears */ redrawField(f); } catch (e) {} }
     const redrawField = f => { const w = $(`[data-w="${f.name}"] .selwrap`, ov); if (w) w.outerHTML = input(f); };
     // the dropdown panel: type to search (asks the server), your last values first, tick several, All / None, + Add what you typed
     let ddOpen = null;

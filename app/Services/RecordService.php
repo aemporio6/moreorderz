@@ -169,7 +169,12 @@ class RecordService
         if ($table === 't_src_cycle_products' && array_key_exists('fk_id_product', $data + $old) && empty($data['fk_id_product'] ?? $old['fk_id_product'] ?? null))
             $errors['fk_id_product'] = 'Pick the product (or + Add product) for this line.';      /* PO lines: FormRules */
         if ($table === 'cat_src_lov' && ($why = SrcLists::guard($data, $old))) $errors['f_active'] = $why;
-        if (! $errors) $errors = SystemRows::guard($table, $data, $old, $id) + $errors;      /* R-F_SETUP-42 locked system rows */      /* R-B_SOURCING-52 */
+        if (! $errors) $errors = SystemRows::guard($table, $data, $old, $id) + $errors;
+        if (! $errors && ($table === 't_account' || str_starts_with($table, 't_account_'))) $errors = PersonKind::guard($table, $formKey, $data, $old, $id) + $errors;      /* R-C-2 a section hidden for the person's kind is not accepted */
+        /* R-C-17 where-used guard: the role OWNER / SELLER of a person who is owner / seller of a shop cannot be removed (also from the profile edit); a used person is not made inactive */
+        if (! $errors && $table === 't_account_in_types' && $id && ((array_key_exists('f_active', $data) && (int) ($old['f_active'] ?? 1) && ! (int) $data['f_active']) || (array_key_exists('fk_id_account_type', $data) && (int) $data['fk_id_account_type'] !== (int) ($old['fk_id_account_type'] ?? 0)))
+            && ($why = PartyUse::roleGuard((int) $old['fk_id_account'], (int) $old['fk_id_account_type']))) $errors['f_active'] = $why;
+        if (! $errors && $table === 't_account' && $id && array_key_exists('f_active', $data) && (int) ($old['f_active'] ?? 1) && ! (int) $data['f_active'] && ($used = PartyUse::whereUsed($id))) $errors['f_active'] = 'This person cannot be deleted – still used: ' . PartyUse::text($used) . '.';      /* R-F_SETUP-42 locked system rows */      /* R-B_SOURCING-52 */
         if ($table === 'cat_src_lov' && ! $id && SrcLists::isSystem((string) ($data['lov_group'] ?? ''), (string) ($data['lov_value'] ?? ''))) $data['f_system'] = 1;
         if ($table === 't_account_banks') { $data = BankRules::clean($data); $errors = BankRules::check($data, $old, $id) + $errors; }      /* R-C-15 the shared bank validators on every bank form */
         if ($table === 'cat_banks') { if (isset($data['bank_name'])) $data['bank_name'] = BankRules::tidyName((string) $data['bank_name']);      /* R-C-14 "+ New bank": the same name in the same country is reused */
@@ -239,6 +244,7 @@ class RecordService
             FormAssist::remember($formKey, $data);   // for the "you used this last time" chips
             if ($table === 't_src_po_lines') PoLines::sync((int) $id);
             if ($table === 't_account_banks') SupplierBanks::afterSave((int) $id);
+            if ($table === 'cat_inventory_locations' && ! $created) WarehouseSites::afterSave((int) $id, (array) $old);      // R-H-6 rename → one shelf label
             if ($table === 't_src_payments') { PaymentTerms::sync((int) DB::table($table)->where($pk, $id)->value('fk_id_term')); if (! empty($old['fk_id_term']) && (int) $old['fk_id_term'] !== (int) ($data['fk_id_term'] ?? $old['fk_id_term'])) PaymentTerms::sync((int) $old['fk_id_term']); }      /* R-B_SOURCING-30 both terms of a moved payment */
             if ($table === 't_src_payment_terms' && $id) PaymentTerms::sync((int) $id);
             if ($table === 'tax_periods') AccHubAdmin::periodSaved((int) $id);      // R-ACC-21 / R-TAX-4 a tax period status ticks the matching filing
@@ -287,6 +293,10 @@ class RecordService
             ->orderByDesc('a.id')->limit(50)->get(['a.action', 'a.changes_json', 'a.reason', 'a.created_at', 'u.display_name'])
             ->map(fn ($h) => ['action' => $h->action, 'at' => $h->created_at, 'by' => $h->display_name ?: 'System', 'reason' => $h->reason, 'changes' => $h->action === 'UPDATE' ? Mask::history($formKey, json_decode($h->changes_json ?: '[]', true), \Illuminate\Support\Facades\Auth::user()) : null])->all();      // R-G_CORE-62 hidden fields read "(hidden)"
         if ($table === 'cat_company_house') $sections['Accountancy Hub (read-only here)'] = AccHub::display($id);      // kept once, in the Hub (IC-17, R-F_SETUP-35)
+        if ($table === 't_account') {      /* R-C-2 only the sections and tabs of the person's kind */
+            $kind = PersonKind::of($id); foreach (PersonKind::hiddenSections($kind) as $t) unset($sections[$t]);
+            $hide = PersonKind::hiddenTables($kind); $children = array_filter($children, fn ($ct) => ! in_array($ct, $hide, true), ARRAY_FILTER_USE_KEY);
+        }
         $lc = Registry::labelColumn($table);
         return ['form_key' => $formKey, 'table' => $table, 'id' => $id, 'form_title' => Registry::fields($formKey)[0]['form_title'], 'title' => (string) ($row[$lc] ?? "#$id"),
             'sections' => $sections, 'parents' => $parents, 'children' => array_values($children), 'tasks' => $tasks, 'history' => $hist];

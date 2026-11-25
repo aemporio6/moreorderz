@@ -49,6 +49,8 @@ class Finder
         ['My sales', 'investor portal my sales share amount', '#/my-sales', null],
         ['My invoices', 'investor portal my invoices payments e-mail', '#/my-invoices', null],
         ['Supplier order history', 'amazon business orders supplier orders order history purchase history business orders', '#/supplier-orders', 'buying.BUY'],
+        ['Warehouse locations and SKU homes (CSV)', 'wh_locations wh_sku_homes import export locations bins sku homes csv deactivate rename bin', '#/wh-csv', 'stock.SEE'],
+        ['Person sections by kind', 'managed account external contact convert person sections tabs short profile kind', '#/person-sections', 'people.convert'],
         ['Supplier payment schedule', 'supplier terms owe due overdue deposit balance', '#/supplier-schedule', 'money.forecast'],
         ['Profit views', 'profit by shop product month margin', '#/profit', 'money.SEE'],
         ['VAT return', 'vat tax boxes hmrc', '#/vat-return', 'finance.MONEY'],

@@ -47,9 +47,16 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('people/external/new', [AppController::class, 'externalForm']);
         Route::post('people/external/new', [AppController::class, 'externalSave']);
         Route::get('people/{id}/header', [AppController::class, 'personHeader'])->whereNumber('id');
+        Route::get('people/{id}/where-used', [AppController::class, 'personUsed'])->whereNumber('id');
+        Route::post('people/{id}/delete', [AppController::class, 'personDelete'])->whereNumber('id');
+        Route::post('people/{id}/convert', [AppController::class, 'personConvert'])->whereNumber('id');      // R-C-2
+        Route::get('people/sections', [AppController::class, 'personSections']);
+        Route::post('people/sections/{id}', [AppController::class, 'personSectionSet'])->whereNumber('id');
+        Route::post('people/{id}/restore', [AppController::class, 'personRestore'])->whereNumber('id');
         Route::get('people/{id}/shops', [AppController::class, 'personShops'])->whereNumber('id');
         Route::post('people/{id}/shops/{aid?}', [AppController::class, 'personShopSave'])->whereNumber('id')->whereNumber('aid');
         Route::post('people/{id}/shops/{aid}/delete', [AppController::class, 'personShopRemove'])->whereNumber('id')->whereNumber('aid');
+        Route::get('options/{key}/{field}/saved', [AppController::class, 'savedLabels']);
         Route::get('options/{key}/{field}', [AppController::class, 'options']);
         Route::post('options/{key}/{field}', [AppController::class, 'addOption']);
         Route::get('lookalike/{key}', [AppController::class, 'lookalike']);
@@ -664,6 +671,9 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('warehouse/sites/{id}/manage', [StockController::class, 'siteManage'])->whereNumber('id');      // R-H-3
         Route::get('warehouse/sites/{id}/go-live', [StockController::class, 'siteGoLive'])->whereNumber('id');      // R-H-14 dry run
         Route::post('warehouse/sites/{id}/go-live', [StockController::class, 'siteGoLive'])->whereNumber('id');
+        Route::get('warehouse/csv/{type}', [StockController::class, 'whCsvExport'])->whereIn('type', ['WH_LOCATIONS', 'WH_SKU_HOMES']);      // R-H-6
+        Route::post('warehouse/csv/{type}/{step}', [StockController::class, 'whCsv'])->whereIn('type', ['WH_LOCATIONS', 'WH_SKU_HOMES'])->whereIn('step', ['check', 'import']);
+        Route::post('warehouse/csv/undo/{job}', [StockController::class, 'whCsvUndo'])->whereNumber('job');
         Route::get('bins/{id}/contents', [StockController::class, 'binContents'])->whereNumber('id');      // R-H-8
         Route::get('tasks/absence-calendar', [WorkController::class, 'absenceCalendar']);
         Route::post('absence/{id}/end', [WorkController::class, 'absenceEnd'])->whereNumber('id');

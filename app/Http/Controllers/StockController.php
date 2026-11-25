@@ -64,6 +64,16 @@ class StockController extends Controller
     /** R-H-3 / 8 / 14 warehouse sites. */
     private function wh(callable $fn) { try { return $fn(); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
     public function siteManage(Request $r, int $id) { \App\Services\Perm::need($r->user(), 'stock.CHANGE'); return $this->wh(fn () => ['bins' => \App\Services\WarehouseSites::manage((int) Context::ent(), $id, (bool) $r->input('on', true)), 'message' => 'Saved']); }
+    /** R-H-6 locations / SKU homes by CSV (WH_LOCATIONS, WH_SKU_HOMES): export, check (never writes), import, undo. */
+    public function whCsvExport(Request $r, string $type) { \App\Services\Perm::need($r->user(), 'stock.SEE'); return $this->wh(fn () => response(\App\Services\WarehouseCsv::export((int) Context::ent(), $type), 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => 'attachment; filename="' . $type . '.csv"'])); }
+    public function whCsv(Request $r, string $type, string $step)
+    {
+        \App\Services\Perm::need($r->user(), 'stock.CHANGE');
+        if (! $r->hasFile('file')) return response()->json(['message' => 'No file uploaded'], 422);
+        $t = (string) file_get_contents($r->file('file')->getRealPath());
+        return $this->wh(fn () => $step === 'check' ? \App\Services\WarehouseCsv::check((int) Context::ent(), $type, $t) : \App\Services\WarehouseCsv::import((int) Context::ent(), $type, $t, $r->user()));
+    }
+    public function whCsvUndo(Request $r, int $job) { \App\Services\Perm::need($r->user(), 'stock.CHANGE'); return $this->wh(fn () => \App\Services\WarehouseCsv::undo((int) Context::ent(), $job)); }
     public function siteGoLive(Request $r, int $id)
     {
         abort_unless($r->user()->role_code === 'OWNER', 403, 'Only the Owner runs the warehouse go-live.');

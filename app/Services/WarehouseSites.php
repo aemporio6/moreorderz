@@ -95,6 +95,32 @@ class WarehouseSites
         return null;
     }
 
+    /** A location and everything under it (site › zone › bin). */
+    public static function under(int $id): array
+    {
+        $all = [$id]; $level = [$id];
+        for ($i = 0; $i < 8 && $level; $i++) { $level = DB::table('cat_inventory_locations')->whereIn('fk_id_parent', $level)->pluck('id')->map(fn ($x) => (int) $x)->all(); $level = array_values(array_diff($level, $all)); $all = array_merge($all, $level); }
+        return $all;
+    }
+
+    /** R-H-6 has this location ever held stock or been in a movement? Then it is only ever deactivated. */
+    public static function hasHistory(int $id): bool
+    {
+        return DB::table('fin_lot_balances')->where('fk_id_location', $id)->exists() || DB::table('t_stock_movements')->where('fk_id_location', $id)->exists()
+            || DB::table('wh_movements')->where(fn ($w) => $w->where('fk_id_from_location', $id)->orWhere('fk_id_to_location', $id))->exists();
+    }
+
+    /** R-H-6 after a save: a renamed bin keeps its id (the audit line shows old → new) and one shelf label is queued. */
+    public static function afterSave(int $id, array $old): ?string
+    {
+        if (! $old) return null;
+        $now = DB::table('cat_inventory_locations')->where('id', $id)->first(['kind', 'location_name', 'location_code', 'fk_id_ent', 'f_active']);
+        if (! $now || $now->kind !== 'BIN' || ! $now->f_active) return null;
+        if ((string) $now->location_name === (string) ($old['location_name'] ?? '') && (string) $now->location_code === (string) ($old['location_code'] ?? '')) return null;
+        try { PrintService::print((int) ($now->fk_id_ent ?: Context::ent()), 'LOCATION', [$id], ['trigger' => 'RENAME', 'reason' => 'Bin renamed ' . ($old['location_name'] ?? '') . ' → ' . $now->location_name]); return 'One shelf label queued.'; }
+        catch (\Throwable $e) { return 'Shelf label not queued: ' . $e->getMessage(); }
+    }
+
     /** FormRules hook for a location (R-H-3 / 6). */
     public static function check(array &$data, array $old, ?int $id): array
     {
@@ -114,8 +140,14 @@ class WarehouseSites
             foreach (['kind', 'system_role'] as $c) if (array_key_exists($c, $data) && (string) $data[$c] !== (string) $old[$c]) return [$c => 'A system bin keeps its role.'];
         }
         if (array_key_exists('f_active', $data) && ! (int) $data['f_active'] && (int) ($old['f_active'] ?? 1)) {
-            $units = (int) DB::table('fin_lot_balances')->where('fk_id_location', $id)->sum('qty');
+            /* R-H-6 a site or zone counts everything under it; units, open pick lines and open reservations stop the deactivation; a reason is always asked */
+            $ids = self::under($id);
+            $units = (int) DB::table('fin_lot_balances')->whereIn('fk_id_location', $ids)->sum('qty');
             if ($units > 0) return ['f_active' => "Move the $units unit" . ($units === 1 ? '' : 's') . ' first.'];
+            $lines = DB::table('wh_pick_task_lines')->whereIn('line_status', ['OPEN', 'RELEASED'])->where(fn ($w) => $w->whereIn('fk_id_from_location', $ids)->orWhereIn('fk_id_to_location', $ids))->count();
+            if ($lines) return ['f_active' => "Finish or release the $lines open pick line" . ($lines === 1 ? '' : 's') . ' first.'];
+            if (($old['kind'] ?? '') === 'WAREHOUSE' && ($res = DB::table('wh_reservations')->where('fk_id_site', $id)->where('status', 'OPEN')->count())) return ['f_active' => "Release the $res open reservation" . ($res === 1 ? '' : 's') . ' of this site first.'];
+            if (trim((string) ($data['deactivated_reason'] ?? '')) === '') return ['deactivated_reason' => 'Give the reason for deactivating.'];
         }
         if (($old['kind'] ?? '') === 'WAREHOUSE' && array_key_exists('f_wh_managed', $data) && (int) $data['f_wh_managed'] && ! (int) ($old['f_wh_managed'] ?? 0)) self::ensureBins((int) ($old['fk_id_ent'] ?: Context::ent()), $id);
         return [];

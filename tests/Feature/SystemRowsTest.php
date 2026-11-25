@@ -28,4 +28,16 @@ class SystemRowsTest extends TestCase
         $this->assertContains(9, $this->getJson('/api/list/cat_subscription_items')->assertOk()->json('locked'));
         $this->assertTrue(\Illuminate\Support\Facades\Schema::hasColumn('cat_banks', 'f_system'), 'every master has the flag');
     }
+
+    /** R-B_SOURCING-23 a saved value never disappears: a supplier no longer in the list is shown by name ("[Saved: Ningbo Lights] (re-select from list)" in the form); an unknown id comes back as the id; saving the form untouched keeps the value. */
+    public function test_b23_a_saved_value_not_in_the_list_keeps_its_name_and_its_value(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id);
+        $sup = (int) DB::table('t_src_suppliers')->insertGetId(RecordService::fillNotNull('t_src_suppliers', ['fk_id_ent' => 1, 'supplier_code' => 'S-77', 'supplier_name' => 'Ningbo Lights', 'f_active' => 0]));
+        $po = (int) DB::table('t_src_po')->insertGetId(RecordService::fillNotNull('t_src_po', ['fk_id_ent' => 1, 'po_number' => 'PO-B23', 'fk_id_supplier' => $sup, 'status' => 'DRAFT', 'f_active' => 1]));
+        $this->assertNotContains($sup, array_map(fn ($o) => (int) $o[0], \App\Services\FormAssist::options('t_src_po', 'fk_id_supplier', null)['options']), 'an inactive supplier is not offered');
+        $l = $this->getJson("/api/options/t_src_po/fk_id_supplier/saved?ids=$sup,999999")->assertOk()->json('labels'); $this->assertSame(['Ningbo Lights', '999999'], [$l[(string) $sup], $l['999999']]);
+        RecordService::save('t_src_po', ['notes' => 'checked'], $po); $this->assertSame($sup, (int) DB::table('t_src_po')->where('id', $po)->value('fk_id_supplier'), 'untouched: the value is kept');
+    }
+
 }

@@ -161,7 +161,18 @@ class AppController extends Controller
         catch (\App\Services\LookAlikeFound $e) { return response()->json(['message' => $e->getMessage(), 'status' => 'duplicate', 'people' => $e->matches], 409); }      /* R-C-8 */
         catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
     }
-    public function personHeader(\Illuminate\Http\Request $r, int $id) { $f = (string) RecordService::formOfTable('t_account'); Rights::check('VIEW', $f); RecordService::get($f, $id); return \App\Services\PersonHeader::for($id); }
+    public function personHeader(\Illuminate\Http\Request $r, int $id) { $f = (string) RecordService::formOfTable('t_account'); Rights::check('VIEW', $f); RecordService::get($f, $id);
+        $h = \App\Services\PersonHeader::for($id); $hideForms = array_filter(array_map(fn ($t) => RecordService::formOfTable($t), \App\Services\PersonKind::hiddenTables(\App\Services\PersonKind::of($id))));
+        $h['chips'] = array_values(array_filter($h['chips'], fn ($c) => ! $c['url'] || ! in_array(explode('?', substr($c['url'], 7))[0], $hideForms, true)));      /* R-C-2 only the tabs of the person's kind */
+        return $h + ['can_convert' => \App\Services\Perm::has($r->user(), 'people.convert'), 'kind_code' => ($k = \App\Services\PersonKind::of($id)), 'kind_badge' => \App\Services\PersonKind::BADGE[$k], 'convert_to' => $k === 'E' ? 'M' : 'E', 'convert_text' => \App\Services\PersonKind::CONFIRM[$k === 'E' ? 'M' : 'E'], 'kind_log' => \App\Services\PersonKind::log($id), 'hidden_tables' => \App\Services\PersonKind::hiddenTables($k), 'can_delete' => \App\Services\Perm::has($r->user(), 'admin.accounts'), 'deleted' => ! (int) DB::table('t_account')->where('id', $id)->value('f_active')]; }
+    /** R-C-2 convert Managed ↔ External (POST), its log, and the sections each kind shows (Settings). */
+    public function personConvert(\Illuminate\Http\Request $r, int $id) { try { return \App\Services\PersonKind::convert($id, (string) $r->input('to'), $r->input('note'), $r->user()); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
+    public function personSections(\Illuminate\Http\Request $r) { \App\Services\Perm::need($r->user(), 'people.convert'); return ['rows' => \App\Services\PersonKind::rows(), 'kinds' => ['ALL' => 'Everyone', 'M' => 'Managed Account only', 'E' => 'External Contact only']]; }
+    public function personSectionSet(\Illuminate\Http\Request $r, int $id) { try { return \App\Services\PersonKind::setVisible($id, (string) $r->input('visible_kind'), $r->user()); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
+    /** R-C-17 where a person is used (reads only); soft delete to the recycle bin (POST) – refused with the list when used; restore. */
+    public function personUsed(\Illuminate\Http\Request $r, int $id) { $f = (string) RecordService::formOfTable('t_account'); Rights::check('VIEW', $f); RecordService::get($f, $id); $u = \App\Services\PartyUse::whereUsed($id); return ['used' => array_map(fn ($x, $k) => ['key' => $k, 'label' => $x[0], 'count' => $x[1], 'names' => $x[2]], $u, array_keys($u)), 'text' => \App\Services\PartyUse::text($u)]; }
+    public function personDelete(\Illuminate\Http\Request $r, int $id) { try { $x = \App\Services\PartyUse::delete($id, $r->user()); return response()->json($x, $x['deleted'] ? 200 : 409); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
+    public function personRestore(\Illuminate\Http\Request $r, int $id) { try { return \App\Services\PartyUse::restore($id, $r->user()); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
 
     public function personShops(\Illuminate\Http\Request $r, int $id)
     {
@@ -208,6 +219,8 @@ class AppController extends Controller
     }
 
     /** "+ Add" for a dropdown that has its own small list: the value is saved to the list and comes back selected. */
+    /** R-B_SOURCING-23 names of saved values that are not in the option list any more (reads only). */
+    public function savedLabels(Request $r, string $key, string $field) { Rights::check('VIEW', $key); return ['labels' => \App\Services\FormAssist::savedLabels($key, $field, array_slice(explode(',', (string) $r->query('ids', '')), 0, 50))]; }
     public function addOption(Request $r, string $key, string $field)
     {
         Rights::check('ADD', $key);

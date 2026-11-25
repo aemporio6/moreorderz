@@ -20,6 +20,21 @@ class FormAssist
     }
 
     /** The table a dropdown reads, or null (fixed list / reference list). */
+    /**
+     * R-B_SOURCING-23 a saved value never disappears: the names of saved references that are no longer in the option list
+     * (inactive, another role, deleted) – looked up without the list's filters; an id that cannot be found comes back as the id.
+     */
+    public static function savedLabels(string $formKey, string $field, array $ids): array
+    {
+        $f = collect(Registry::fields($formKey))->firstWhere('field_name', $field); if (! $f) return [];
+        $ids = array_values(array_unique(array_filter(array_map('strval', $ids), fn ($x) => $x !== ''))); $out = array_combine($ids, $ids) ?: [];
+        $t = self::sourceTable($f); if (! $t || ! $ids) return $out;
+        if ($t === 't_account') { foreach (DB::table('t_account')->whereIn('id', $ids)->get(['id', 'first_name', 'sur_name', 'account_code']) as $a) $out[(string) $a->id] = trim($a->first_name . ' ' . $a->sur_name) ?: (string) $a->account_code; return $out; }
+        $label = $t === 't_src_suppliers' ? 'supplier_name' : Registry::labelColumn($t); $pk = Registry::pk($t);
+        if ($label && Registry::hasColumn($t, $label)) foreach (DB::table($t)->whereIn($pk, $ids)->pluck($label, $pk) as $id => $name) if ((string) $name !== '') $out[(string) $id] = (string) $name;
+        return $out;
+    }
+
     public static function sourceTable(array $f): ?string
     {
         [$kind, $arg] = array_pad(explode(':', (string) $f['source'], 2), 2, '');

@@ -28,6 +28,7 @@ class MoInstall extends Command
         Artisan::call('migrate', ['--force' => true]);
         $this->line(trim(Artisan::output()));
         $this->info('Registry: ' . self::loadRegistry() . ' fields');
+        \App\Services\PersonKind::seed();      /* R-C-2 the sections each kind of person shows – needs the registry */
         $this->info('Menu roles: ' . self::loadMenuRoles() . ' screens');
         Ledger::seedChart();
         \App\Services\PrintService::seed();
