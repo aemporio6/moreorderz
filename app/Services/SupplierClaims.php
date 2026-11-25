@@ -28,7 +28,7 @@ class SupplierClaims
     }
 
     /** The PO (currency, rate) of a GRN: through its shipment, else the first PO of its lines. */
-    private static function poOf(object $g): ?object
+    public static function poOf(object $g): ?object
     {
         $po = $g->fk_id_shipment ? DB::table('t_src_shipments')->where('id', $g->fk_id_shipment)->value('fk_id_po') : null;
         $po ??= DB::table('t_src_grn_lines as l')->join('t_src_po_lines as p', 'p.id', '=', 'l.fk_id_po_line')->where('l.fk_id_grn', $g->id)->value('p.fk_id_po');

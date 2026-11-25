@@ -45,6 +45,8 @@ class Finder
         ['Phone work screen', 'pick pack handover scan mobile', '#/work', 'orders.WAREHOUSE'],
         ['Month confirm', 'confirm sales month', '#/confirm', 'orders.CONFIRM'],
         ['Cash forecast', 'cash flow weeks payables', '#/forecast', 'money.forecast'],
+        ['My investor account', 'investor portal dashboard my stock my sales share', '#/my-portal', null],
+        ['My sales', 'investor portal my sales share amount', '#/my-sales', null],
         ['My invoices', 'investor portal my invoices payments e-mail', '#/my-invoices', null],
         ['Supplier payment schedule', 'supplier terms owe due overdue deposit balance', '#/supplier-schedule', 'money.forecast'],
         ['Profit views', 'profit by shop product month margin', '#/profit', 'money.SEE'],

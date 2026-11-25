@@ -138,6 +138,25 @@ class InvestorDocsTest extends TestCase
         $this->assertStringStartsWith("\xEF\xBB\xBFInvestor,Shop,Month,Units,\"Raw cost (paid to investor)\"", $csv->getContent());
         $this->actingAs($this->makeUser('FINANCE'))->getJson('/api/invoices/margin')->assertStatus(403)->assertJsonPath('message', 'This report is restricted.');
         $all = collect($this->actingAs($this->owner)->getJson('/api/boot')->json('menu')); $menu = $all->firstWhere('name', 'Invoicing'); $this->assertNotNull($menu, json_encode($all->pluck('name')));
-        $this->assertSame(['#/invoices', '#/invoices?show=settle', '#/invoices?show=months', '#/invoice-outstanding', '#/invoice-margin', '#/waterfall', '#/my-invoices'], array_column($menu['items'], 'route'), json_encode(array_column($menu['items'], 'route')));
+        $this->assertSame(['#/invoices', '#/invoices?show=settle', '#/invoices?show=months', '#/invoice-outstanding', '#/invoice-margin', '#/waterfall', '#/my-invoices', '#/my-portal', '#/my-sales'], array_column($menu['items'], 'route'), json_encode(array_column($menu['items'], 'route')));
+    }
+    /** R-INV-15 portal dashboard and my sales: 2 investors on a product, 10 units × £5 raw → my amount £25; landing only for HIDDEN_MARGIN_ROLES. */
+    public function test_inv15_portal_dashboard_and_my_sales(): void
+    {
+        $u = $this->makeUser('PARTNER'); DB::table('t_users')->where('id', $u->id)->update(['fk_id_account' => $this->inv]); $u->refresh();
+        DB::table('t_inv_parties')->where('fk_id_account', $this->inv)->update(['f_portal_access' => 1]);
+        $p = $this->f('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'LAMP-9', 'product_name_vendor' => 'Lamp', 'stock' => 8, 'raw_price' => 5, 'landing_price' => 4, 'f_active' => 1]);
+        $other = $this->f('t_account', ['fk_id_ent' => 1, 'account_code' => 'BET', 'first_name' => 'Beta', 'f_active' => 1]);
+        foreach ([$this->inv, $other] as $a) DB::table('t_product_investors')->insert(['fk_id_product' => $p, 'fk_id_account' => $a, 'created_at' => now()]);
+        $shop = (int) DB::table('t_inv_periods')->where('id', $this->period)->value('fk_id_branch');
+        foreach ([['Confirmed', 10], ['Pending', 2]] as [$st, $q]) $this->f('t_sales', ['fk_id_ent' => 1, 'fk_id_branch' => $shop, 'fk_product_id' => $p, 'sku' => 'LAMP-9', 'order_no' => 'O-' . $st, 'd_order' => '2026-11-10', 'qty' => $q, 'raw_price' => 5, 'total_amount' => $q * 12, 'status' => $st]);
+        $s = $this->actingAs($u)->getJson('/api/portal/sales?from=2026-11-01&to=2026-11-30')->assertOk()->json();
+        $this->assertSame([25.0, 5.0, 0.5], [(float) $s['confirmed']['amount'], (float) $s['pending']['amount'], (float) $s['rows'][0]['share']], 'pending shown apart');
+        $csv = $this->actingAs($u)->get('/api/portal/sales?from=2026-11-01&to=2026-11-30&csv=1')->getContent();
+        $this->assertStringStartsWith("\xEF\xBB\xBFDate,Marketplace,Shop,\"Order no\",SKU,Product,Qty,\"Sale rate\",Total,\"Raw price\",\"My share\",\"My amount\",Status", $csv);
+        $h = $this->actingAs($u)->getJson('/api/portal/home')->assertOk()->json();
+        $this->assertSame([4, 20.0, 1, 200.0, 100.0], [$h['stock_units'], (float) $h['stock_value'], $h['unconfirmed'], (float) $h['capital_recovered'], (float) $h['share']], 'half of 8 units × £5; settled month of the setup');
+        $this->assertArrayNotHasKey('stock_actual', $h, 'landing price is internal');
+        $this->actingAs($this->makeUser('PARTNER'))->getJson('/api/portal/home')->assertStatus(422)->assertJsonPath('message', 'Your login does not have investor portal access. Please contact the administrator.');
     }
 }

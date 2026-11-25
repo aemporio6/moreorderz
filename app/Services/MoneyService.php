@@ -143,6 +143,16 @@ class MoneyService
      * A person says what an unmatched line is. $d: category, branch (shop, for shop accounts), party, note, vat_amount.
      * Money-out categories that are costs also make an expense record.
      */
+    /** R-B_SOURCING-63 an import freight / duty bank line becomes a PAID cost row of its cycle (freight cost or customs duty), so the landed cost moves it from 1210 into stock value. */
+    private static function importCost(int $ent, object $l, string $code, array $d, float $base): void
+    {
+        $cyc = (int) $d['cycle']; $cur = self::currencyId($l->currency, $ent); $amt = abs((float) $l->amount); $rate = $amt > 0 ? round($base / $amt, 6) : 1;
+        $common = ['fk_id_ent' => $ent, 'fk_id_cycle' => $cyc, 'fk_id_shipment' => $d['shipment'] ?? null, 'fk_id_currency' => $cur, 'exchange_rate' => $rate, 'base_amount' => $base, 'pay_status' => 'PAID', 'paid_date' => $l->txn_date,
+            'fk_id_bank_line' => $l->id, 'paid_base_amount' => $base, 'f_active' => 1, 'created_by' => Context::userId(), 'created_at' => now()];
+        if ($code === 'IMPORT_FREIGHT') DB::table('t_src_freight_costs')->insert(RecordService::fillNotNull('t_src_freight_costs', $common + ['freight_code' => Numbering::next('FRT', $ent, (string) $l->txn_date), 'cost_type' => 'Freight', 'amount' => $amt, 'cost_date' => $l->txn_date, 'notes' => mb_substr('Bank line · ' . $l->description, 0, 250)]));
+        else DB::table('t_src_customs')->insert(RecordService::fillNotNull('t_src_customs', $common + ['customs_code' => Numbering::next('CUS', $ent, (string) $l->txn_date), 'duty_amount' => $amt, 'import_vat' => 0, 'status' => 'CLEARED', 'clearance_date' => $l->txn_date]));
+    }
+
     public static function categorise(int $ent, int $lineId, array $d): array
     {
         return DB::transaction(function () use ($ent, $lineId, $d) {
@@ -152,6 +162,7 @@ class MoneyService
             if (isset(self::NOT_BY_HAND[$cat->code])) throw new \InvalidArgumentException(self::NOT_BY_HAND[$cat->code]);
             $in = (float) $l->amount > 0;
             if ($cat->direction !== 'BOTH' && ($cat->direction === 'IN') !== $in) throw new \InvalidArgumentException("\"{$cat->name}\" is for money " . ($cat->direction === 'IN' ? 'in' : 'out') . ', this line is money ' . ($in ? 'in' : 'out') . '.');
+            if (in_array($cat->code, ['IMPORT_FREIGHT', 'IMPORT_DUTY'], true) && ! DB::table('t_src_cycles')->where('id', (int) ($d['cycle'] ?? 0))->where('fk_id_ent', $ent)->exists()) throw new \InvalidArgumentException('Choose the purchase cycle this import cost belongs to – it goes into the landed cost of its products.');
             $acc = self::accountFor($cat->code); $sub = DB::table('gl_accounts')->where('code', $acc)->value('sub_ledger'); $base = abs((float) $l->amount_gbp); $ref = null; $noRef = false;
             if ($sub === 'SHOP') { $ref = (int) ($d['branch'] ?? 0); if (! $ref || ! DB::table('t_branches')->where('id', $ref)->where('fk_id_ent', $ent)->exists()) throw new \InvalidArgumentException('Choose the shop this money belongs to.'); }
             elseif ($sub === 'PARTY') { $ref = (int) ($d['party'] ?? 0) ?: null; $noRef = $ref === null; }
@@ -167,6 +178,7 @@ class MoneyService
             $other = [['account' => $acc, $in ? 'credit' : 'debit' => round($base - $vat, 2), 'ref_id' => $ref]]; if ($vat > 0) $other[] = ['account' => '1400', 'debit' => $vat, 'memo' => 'VAT to claim back'];
             Ledger::post($ent, $l->txn_date, $isCost ? 'EXPENSE' : 'BANK_LINE', $isCost ? $expId : (int) $l->id, [$bankLine, ...$other], ['memo' => $memo, 'currency' => $l->currency, 'allow_no_ref' => $noRef]);
             DB::table('fin_bank_transactions')->where('id', $l->id)->update(['category_code' => $cat->code, 'branch_id' => $d['branch'] ?? null]);
+            if (in_array($cat->code, ['IMPORT_FREIGHT', 'IMPORT_DUTY'], true)) self::importCost($ent, $l, (string) $cat->code, $d, $base);      /* R-B_SOURCING-63: into the landed cost of its cycle (1210 → stock) */
             self::link($l, $isCost ? 'EXPENSE' : 'CATEGORY', $isCost ? $expId : (int) $l->id, 'BY_HAND', 'MANUAL');
             $paid = $in ? null : VaStatements::bankPaid($ent, $cat->code, (int) ($d['party'] ?? 0) ?: null, $base, (int) $l->id);      // a VA share / salary payout closes its payable
             BankCategoryHint::learn($ent, $l, (string) $cat->code);      // R-FIN-30: payee → category, offered first next time
@@ -300,7 +312,9 @@ class MoneyService
                     }
                     break;
                 case 'INVOICE': BankMatch::undoInvoice((int) $l->id); break;
-                case 'CATEGORY': $rev('BANK_LINE', (int) $l->id); break;
+                case 'LOAN': BankMatch::undoLoan((int) $l->matched_to_id); break;
+                case 'CLAIM': $rev('CLAIM_REFUND', (int) $l->id); break;
+                case 'CATEGORY': $rev('BANK_LINE', (int) $l->id); DB::table('t_src_freight_costs')->where('fk_id_bank_line', $l->id)->whereNull('source_po_line_id')->update(['f_active' => 0]); DB::table('t_src_customs')->where('fk_id_bank_line', $l->id)->where('import_vat', 0)->where('duty_amount', '>', 0)->where('status', 'CLEARED')->whereNull('declaration_number')->update(['f_active' => 0]); break;
                 case 'SPLIT':
                     $rev('BANK_SPLIT', (int) $l->id);
                     foreach (DB::table('fin_bank_line_splits')->where('fk_id_bank_line', $l->id)->get() as $s) {

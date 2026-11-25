@@ -365,7 +365,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('settings/finance', [MoneyController::class, 'financeSettingSave']);
         Route::post('settings/finance/company', [MoneyController::class, 'financeCompanySave']);
         Route::post('bank/{id}/match', [MoneyController::class, 'rematch'])->whereNumber('id');
-        Route::post('bank-lines/{id}/{what}', [MoneyController::class, 'lineAction'])->whereNumber('id')->whereIn('what', ['categorise', 'transfer', 'ignore', 'unmatch', 'payout', 'many']);
+        Route::post('bank-lines/{id}/{what}', [MoneyController::class, 'lineAction'])->whereNumber('id')->whereIn('what', ['categorise', 'transfer', 'ignore', 'unmatch', 'payout', 'many', 'match']);
+        Route::get('bank-lines/{id}/targets', [MoneyController::class, 'matchTargets'])->whereNumber('id');      // R-FIN-28
         Route::get('bank-lines/{id}/payables', [MoneyController::class, 'payables'])->whereNumber('id');      // R-FIN-70
         Route::get('bank-lines/{id}/payouts', [MoneyController::class, 'payouts'])->whereNumber('id');
         Route::get('money/export/ledger', [MoneyController::class, 'exportLedger']);
@@ -622,6 +623,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('invoices/{id}/pdf', [\App\Http\Controllers\InvoicesController::class, 'pdf'])->whereNumber('id');
         Route::get('invoices/outstanding', [\App\Http\Controllers\InvoicesController::class, 'outstanding']);
         Route::get('invoices/margin', [\App\Http\Controllers\InvoicesController::class, 'margin']);
+        Route::get('portal/home', [\App\Http\Controllers\InvoicesController::class, 'portalHome']);
+        Route::get('portal/sales', [\App\Http\Controllers\InvoicesController::class, 'portalSales']);
         Route::get('portal/invoices', [\App\Http\Controllers\InvoicesController::class, 'portal']);
         Route::post('portal/invoices/{id}/pay', [\App\Http\Controllers\InvoicesController::class, 'portalPay'])->whereNumber('id');
         Route::post('portal/invoices/{id}/email', [\App\Http\Controllers\InvoicesController::class, 'portalEmail'])->whereNumber('id');

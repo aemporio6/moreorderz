@@ -76,6 +76,14 @@ class InvoicesController extends Controller
         return response($pdf, 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="' . $d->invoice_no . '.pdf"']);
     }
     public function portal(Request $r) { return $this->run(fn () => Docs::portalList($this->ent(), $r->user())); }      /* R-D-84 / R-G_CORE-86: own documents only – guarded inside */
+    /** R-INV-15 portal dashboard and my sales (?csv=1). */
+    public function portalHome(Request $r) { return $this->run(fn () => \App\Services\InvestorPortal::dashboard($this->ent(), $r->user())); }
+    public function portalSales(Request $r)
+    {
+        try { $d = \App\Services\InvestorPortal::mySales($this->ent(), $r->user(), $r->only(['from', 'to', 'shop'])); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+        if ($r->query('csv') === '1') return response(\App\Services\InvestorPortal::csv($d), 200, ['Content-Type' => 'text/csv; charset=UTF-8', 'Content-Disposition' => 'attachment; filename="' . $d['file'] . '"']);
+        return $d;
+    }
     public function portalPay(Request $r, int $id) { return $this->run(fn () => Docs::portalPay($this->ent(), $id, $r->only(['amount', 'date', 'method', 'received_into', 'reference', 'notes']), $r->file('proof'), $r->user())); }
     public function portalEmail(Request $r, int $id) { return $this->run(fn () => Docs::portalEmail($this->ent(), $id, $r->user())); }
     public function pay(Request $r, int $id) { Perm::need($r->user(), 'money.EDIT'); return $this->run(fn () => Docs::pay($this->ent(), $id, $r->only(['amount', 'date', 'method', 'received_into', 'reference', 'notes']), $r->file('proof'), $r->user())); }

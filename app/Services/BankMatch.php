@@ -107,6 +107,69 @@ class BankMatch
         });
     }
 
+    /**
+     * R-FIN-28 by hand to one target, with the direction guard: INVOICE (money in = an open invoice our company issued, money out = one addressed to us; the line
+     * may not be more than the balance; the invoice payment carries the bank line), LOAN (money out repays a TAKEN loan, money in is a repayment of a GIVEN loan;
+     * principal = line − interest; the loan payment is booked by FinanceExtras::loanPay from the line's account). Undo takes it all back.
+     */
+    public static function matchTo(int $ent, int $lineId, string $kind, int $id, array $d = []): array
+    {
+        return DB::transaction(function () use ($ent, $lineId, $kind, $id, $d) {
+            $l = DB::table('fin_bank_transactions')->where('id', $lineId)->where('company_id', $ent)->lockForUpdate()->first() ?? throw new \InvalidArgumentException('Bank line not found.');
+            if ($l->match_status !== 'UNMATCHED') throw new \InvalidArgumentException('This line is already matched. Undo the match first.');
+            $amt = round((float) $l->amount, 2); $abs = abs($amt); $in = $amt > 0;
+            if ($kind === 'INVOICE') {
+                $i = DB::table('t_invoices')->where('id', $id)->where('fk_id_ent', $ent)->lockForUpdate()->first() ?? throw new \InvalidArgumentException('Invoice not found.');
+                if (! in_array($i->status, ['UNPAID', 'PART_PAID'], true) || $i->invoice_type === 'CREDIT_NOTE') throw new \InvalidArgumentException("Invoice {$i->invoice_no} is not open.");
+                $ours = DB::table('t_inv_parties')->where('fk_id_ent', $ent)->where('f_is_sbs', 1)->pluck('id')->map(fn ($x) => (int) $x)->all();
+                $weIssued = in_array((int) $i->fk_issuer_party, $ours, true); $toUs = in_array((int) $i->fk_recipient_party, $ours, true);
+                if ($in && ! $weIssued) throw new \InvalidArgumentException("Money in can only pay an invoice our company issued – {$i->invoice_no} is not ours to receive.");
+                if (! $in && ! $toUs) throw new \InvalidArgumentException("Money out can only pay an invoice addressed to our company – {$i->invoice_no} is not ours to pay.");
+                if ($abs > self::bal($i) + 0.01) throw new \InvalidArgumentException('The bank line (' . number_format($abs, 2) . ') is more than the invoice balance (' . number_format(self::bal($i), 2) . ').');
+                DB::table('t_invoice_payments')->insert(['fk_id_invoice' => $i->id, 'd_payment' => $l->txn_date, 'amount' => $abs, 'method' => 'Bank transfer', 'received_into' => mb_substr('Bank line #' . $l->id, 0, 200),
+                    'reference' => mb_substr((string) ($l->reference_no ?: $l->description), 0, 200), 'notes' => 'Matched by hand from the bank statement', 'proof_file' => '', 'f_deleted' => 0, 'fk_id_bank_line' => $l->id, 'created_by' => (int) Context::userId(), 'created_at' => now()]);
+                InvestorDocs::refresh((int) $i->id);
+                self::link($l, 'INVOICE', (string) $i->id, 'BY_HAND', 'MANUAL', $in ? 'INVOICE_RECEIPT' : 'INVOICE_PAYMENT');
+                Audit::log('fin_bank_transactions', (int) $l->id, 'UPDATE', ['matched' => "invoice {$i->invoice_no}"], 'by hand', $ent);
+                return ['message' => "Matched to invoice {$i->invoice_no}."];
+            }
+            if ($kind === 'LOAN') {
+                $loan = DB::table('fin_loans')->where('id', $id)->where('company_id', $ent)->first() ?? throw new \InvalidArgumentException('Loan not found.');
+                if ($in === ($loan->direction === 'TAKEN')) throw new \InvalidArgumentException($loan->direction === 'TAKEN' ? 'A loan we took is repaid with money going out.' : 'A loan we gave is repaid with money coming in.');
+                $int = round(max(0, (float) ($d['interest'] ?? 0)), 2); if ($int > $abs) throw new \InvalidArgumentException('The interest is more than the bank line.');
+                $base = abs((float) $l->amount_gbp) ?: $abs; $rate = $abs > 0 ? $base / $abs : 1;
+                $r = FinanceExtras::loanPay($ent, (int) $loan->id, ['principal' => round(($abs - $int) * $rate, 2), 'interest' => round($int * $rate, 2), 'date' => $l->txn_date, 'bank' => (int) $l->bank_account_id, 'note' => 'Bank line #' . $l->id]);
+                $pid = (int) DB::table('fin_loan_payments')->where('fk_id_loan', $loan->id)->orderByDesc('id')->value('id');
+                self::link($l, 'LOAN', (string) $pid, 'BY_HAND', 'MANUAL', $loan->direction === 'TAKEN' ? 'LOAN_REPAYMENT' : 'LOAN_RECEIPT');
+                return ['message' => "Matched to the loan {$loan->counterparty}. Balance left " . number_format((float) $r['balance'], 2) . '.'];
+            }
+            if ($kind === 'CLAIM') {      /* a supplier claim settled as REFUND: the supplier pays us back – Dr bank 1000 / Cr supplier 1300 */
+                if (! $in) throw new \InvalidArgumentException('A supplier refund comes in as money in.');
+                $g = DB::table('t_src_grn')->where('id', $id)->where('fk_id_ent', $ent)->first() ?? throw new \InvalidArgumentException('Claim not found.');
+                if ($g->claim_status !== 'SETTLED' || $g->claim_settled_as !== 'REFUND') throw new \InvalidArgumentException('Only a claim settled as a refund is paid back through the bank.');
+                $base = abs((float) $l->amount_gbp) ?: $abs; $got = (float) DB::table('fin_bank_transactions')->where('matched_to_type', 'CLAIM')->where('matched_to_id', (string) $g->id)->sum('amount_gbp');
+                $left = round((float) $g->claim_base_amount - $got, 2);
+                if ($base > $left + 0.01) throw new \InvalidArgumentException('The bank line (' . number_format($base, 2) . ') is more than the refund still due (' . number_format($left, 2) . ').');
+                $po = SupplierClaims::poOf($g); $sup = (int) ($po->fk_id_supplier ?? 0);
+                Ledger::post($ent, $l->txn_date, 'CLAIM_REFUND', (int) $l->id, [['account' => '1000', 'debit' => $base, 'ref_id' => (int) $l->bank_account_id, 'amount_cur' => (float) $l->amount], ['account' => '1300', 'credit' => $base, 'ref_id' => $sup ?: null]], ['memo' => 'Supplier refund ' . ($g->grn_number ?? $g->id), 'currency' => $l->currency, 'allow_no_ref' => ! $sup]);
+                self::link($l, 'CLAIM', (string) $g->id, 'BY_HAND', 'MANUAL', 'SUPPLIER_REFUND');
+                return ['message' => 'Matched to the supplier refund of ' . ($g->grn_number ?? 'GRN ' . $g->id) . '.'];
+            }
+            throw new \InvalidArgumentException('Choose an invoice, a loan or a supplier claim.');
+        });
+    }
+
+    /** Undo a LOAN match: the loan payment's journal is reversed, the balance goes back, the payment row is removed. */
+    public static function undoLoan(int $paymentId): void
+    {
+        $p = DB::table('fin_loan_payments')->where('id', $paymentId)->first(); if (! $p) return;
+        if ($p->journal_id && ($j = DB::table('gl_journals')->where('id', $p->journal_id)->first()) && ! $j->reversed_by_id) Ledger::reverse((int) $j->id, null, 'Bank match undone');
+        $loan = DB::table('fin_loans')->where('id', $p->fk_id_loan)->first(); $bal = round((float) $loan->balance + (float) $p->principal, 2);
+        DB::table('fin_loans')->where('id', $loan->id)->update(['balance' => $bal, 'is_active' => $bal > 0 ? 1 : 0]);
+        DB::table('fin_loan_payments')->where('id', $p->id)->delete();
+        Audit::log('fin_loans', (int) $loan->id, 'UPDATE', ['payment undone' => (float) $p->principal, 'balance' => [(float) $loan->balance, $bal]]);
+    }
+
     /** Payment-provider profile: a fee line of a PROVIDER account is booked as bank fees. */
     public static function providerFee(int $ent, object $l): bool
     {

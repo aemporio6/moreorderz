@@ -116,4 +116,28 @@ class WeightBatch153Test extends TestCase
         $this->assertSame('VA / Seller', DB::table('cat_account_types')->where('id', $sid)->value('account_type_name'));
         $this->assertSame('OWNER', RoleMaster::code('owner'));
     }
+    /** R-FIN-28 by hand to an invoice / a loan with the direction guard; undo takes it back. */
+    public function test_fin28_match_by_hand_to_invoice_and_loan(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id); $bank = $this->bank();
+        $us = $this->f('t_inv_parties', ['fk_id_ent' => 1, 'party_type' => 'COMPANY', 'party_code' => 'SBS', 'display_name' => 'Our Co', 'company_name' => 'Our Co', 'payment_terms_days' => 0, 'f_is_sbs' => 1, 'f_portal_access' => 0, 'f_active' => 1, 'created_at' => now()]);
+        $them = $this->f('t_inv_parties', ['fk_id_ent' => 1, 'party_type' => 'ACCOUNT', 'party_code' => 'INV2', 'display_name' => 'Investor', 'company_name' => 'Investor', 'payment_terms_days' => 0, 'f_is_sbs' => 0, 'f_portal_access' => 0, 'f_active' => 1, 'created_at' => now()]);
+        $inv = $this->f('t_invoices', ['fk_id_ent' => 1, 'fk_id_period' => 0, 'invoice_no' => 'INV-2026-0099', 'invoice_type' => 'INVESTOR', 'fk_issuer_party' => $us, 'fk_recipient_party' => $them, 'fk_id_investor_account' => 0, 'd_invoice' => '2026-10-01', 'd_due' => '2026-10-31', 'currency' => 'GBP', 'subtotal' => 300, 'total' => 300, 'amount_paid' => 0, 'status' => 'UNPAID', 'created_at' => now()]);
+        $out = $this->line($bank, -100.00, 'SOMETHING'); $in = $this->line($bank, 120.00, 'NO REF'); $big = $this->line($bank, 400.00, 'TOO MUCH');
+        $this->postJson("/api/bank-lines/{$out->id}/match", ['kind' => 'INVOICE', 'target' => $inv])->assertStatus(422)->assertJsonPath('message', 'Money out can only pay an invoice addressed to our company – INV-2026-0099 is not ours to pay.');
+        $this->postJson("/api/bank-lines/{$big->id}/match", ['kind' => 'INVOICE', 'target' => $inv])->assertStatus(422);
+        $this->assertSame([[$inv]], [array_column($this->getJson("/api/bank-lines/{$in->id}/targets")->json('invoices'), 'id')]);
+        $this->postJson("/api/bank-lines/{$in->id}/match", ['kind' => 'INVOICE', 'target' => $inv])->assertOk();
+        $this->assertSame(['PART_PAID', 'INVOICE', 'BY_HAND'], [DB::table('t_invoices')->where('id', $inv)->value('status'), DB::table('fin_bank_transactions')->where('id', $in->id)->value('matched_to_type'), DB::table('fin_bank_transactions')->where('id', $in->id)->value('match_rule')]);
+        $this->postJson("/api/bank-lines/{$in->id}/unmatch")->assertOk();
+        $this->assertSame('UNPAID', DB::table('t_invoices')->where('id', $inv)->value('status'), 'undo takes the payment back');
+        // loan taken: repaid with money out only
+        $loan = \App\Services\FinanceExtras::loanNew(1, ['direction' => 'TAKEN', 'counterparty' => 'Bank Loan Ltd', 'amount' => 1000, 'bank' => $bank, 'date' => '2026-10-01']);
+        $this->postJson("/api/bank-lines/{$in->id}/match", ['kind' => 'LOAN', 'target' => $loan])->assertStatus(422)->assertJsonPath('message', 'A loan we took is repaid with money going out.');
+        $this->postJson("/api/bank-lines/{$out->id}/match", ['kind' => 'LOAN', 'target' => $loan, 'interest' => 10])->assertOk();
+        $this->assertEqualsWithDelta(910, (float) DB::table('fin_loans')->where('id', $loan)->value('balance'), 0.001, 'principal 90 + interest 10');
+        $this->postJson("/api/bank-lines/{$out->id}/unmatch")->assertOk();
+        $this->assertEqualsWithDelta(1000, (float) DB::table('fin_loans')->where('id', $loan)->value('balance'), 0.001);
+        $this->assertSame(0, DB::table('fin_loan_payments')->where('fk_id_loan', $loan)->count());
+    }
 }

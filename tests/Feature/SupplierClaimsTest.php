@@ -126,4 +126,35 @@ class SupplierClaimsTest extends TestCase
         $this->actingAs($m); Context::set(1, $m->id); Approvals::decide($y['approval'], false, 'too much');
         $this->assertSame(['REJECTED', 0], [DB::table('t_src_payments')->where('id', $y['id'])->value('status'), (int) DB::table('t_src_payments')->where('id', $y['id'])->value('f_active')]);
     }
+    /** R-FIN-28 a claim settled as REFUND is paid back through the bank: matched by hand, Cr supplier 1300, never more than the refund; undo reverses it. */
+    public function test_fin28_refund_claim_matched_to_a_bank_line(): void
+    {
+        $this->cycle('GBP', 5.0, 100, 90, 0);      // 10 missing → refund 50.00
+        SC::refresh(1, $this->grn); SC::status(1, $this->grn, 'SETTLED', ['settled_as' => 'REFUND']);
+        $mk = fn ($a) => DB::table('fin_bank_transactions')->insertGetId(RecordService::fillNotNull('fin_bank_transactions', ['batch_id' => 0, 'bank_txn_id' => uniqid('T'), 'bank_account_id' => $this->bank, 'company_id' => 1, 'txn_date' => '2026-08-25', 'amount' => $a, 'currency' => 'GBP', 'amount_gbp' => $a, 'description' => 'CLAIM CO REFUND', 'match_status' => 'UNMATCHED']));
+        $big = $mk(60.0); $ok = $mk(50.0);
+        $this->assertSame([$this->grn], array_column($this->getJson("/api/bank-lines/$ok/targets")->json('claims'), 'id'));
+        $this->postJson("/api/bank-lines/$big/match", ['kind' => 'CLAIM', 'target' => $this->grn])->assertStatus(422)->assertJsonPath('message', 'The bank line (60.00) is more than the refund still due (50.00).');
+        $before = \App\Services\Ledger::balance(1, '1300', 'PARTY', $this->sup);
+        $this->postJson("/api/bank-lines/$ok/match", ['kind' => 'CLAIM', 'target' => $this->grn])->assertOk();
+        $this->assertEqualsWithDelta($before - 50, \App\Services\Ledger::balance(1, '1300', 'PARTY', $this->sup), 0.001, 'the supplier no longer owes the refund');
+        $this->postJson("/api/bank-lines/$ok/unmatch")->assertOk();
+        $this->assertEqualsWithDelta($before, \App\Services\Ledger::balance(1, '1300', 'PARTY', $this->sup), 0.001);
+    }
+    /** R-B_SOURCING-63 an import freight / duty bank line names its cycle and becomes a PAID cost row there – the landed cost takes it into stock value; undo removes it. */
+    public function test_b63_import_freight_and_duty_bank_lines_reach_the_landed_cost(): void
+    {
+        $this->cycle('GBP', 5.0, 100, 100, 0);
+        $mk = fn ($a) => DB::table('fin_bank_transactions')->insertGetId(RecordService::fillNotNull('fin_bank_transactions', ['batch_id' => 0, 'bank_txn_id' => uniqid('T'), 'bank_account_id' => $this->bank, 'company_id' => 1, 'txn_date' => '2026-08-22', 'amount' => $a, 'currency' => 'GBP', 'amount_gbp' => $a, 'description' => 'FORWARDER LTD', 'match_status' => 'UNMATCHED']));
+        $fr = $mk(-40.0); $du = $mk(-20.0);
+        $this->postJson("/api/bank-lines/$fr/categorise", ['category' => 'IMPORT_FREIGHT'])->assertStatus(422)->assertJsonPath('message', 'Choose the purchase cycle this import cost belongs to – it goes into the landed cost of its products.');
+        $this->postJson("/api/bank-lines/$fr/categorise", ['category' => 'IMPORT_FREIGHT', 'cycle' => $this->cy])->assertOk();
+        $this->postJson("/api/bank-lines/$du/categorise", ['category' => 'IMPORT_DUTY', 'cycle' => $this->cy])->assertOk();
+        $this->assertSame([40.0, 'PAID'], [(float) DB::table('t_src_freight_costs')->where('fk_id_bank_line', $fr)->value('paid_base_amount'), DB::table('t_src_freight_costs')->where('fk_id_bank_line', $fr)->value('pay_status')]);
+        $this->assertSame(20.0, (float) DB::table('t_src_customs')->where('fk_id_bank_line', $du)->value('paid_base_amount'));
+        $r = Buy::landedCost($this->po, []);
+        $this->assertEqualsWithDelta(5.60, (float) DB::table('fin_lots')->where('fk_id_product', $this->p)->value('unit_cost_gbp'), 0.001, '500 + 40 freight + 20 duty over 100 units');
+        $this->postJson("/api/bank-lines/$fr/unmatch")->assertOk();
+        $this->assertSame(0, (int) DB::table('t_src_freight_costs')->where('fk_id_bank_line', $fr)->value('f_active'));
+    }
 }

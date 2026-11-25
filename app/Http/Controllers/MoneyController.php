@@ -33,7 +33,8 @@ class MoneyController extends Controller
     {
         return ['categories' => DB::table('fin_categories')->where('f_active', 1)->whereNotIn('code', ['SUPPLIER_PAYMENT', 'SPLIT', 'OWN_TRANSFER_IN', 'OWN_TRANSFER_OUT'])->orderBy('sort_no')->orderBy('name')->get(['code', 'name', 'direction'])
                 ->map(fn ($c) => ['code' => $c->code, 'name' => $c->name, 'direction' => $c->direction, 'needs_shop' => in_array(Money::ACCOUNTS[$c->code] ?? '', ['1100', '5100', '5300', '5400'], true)]),
-            'shops' => \App\Services\Perm::mine(DB::table('t_branches'), 'id')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name as name'])];
+            'shops' => \App\Services\Perm::mine(DB::table('t_branches'), 'id')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name as name']),
+            'cycles' => DB::table('t_src_cycles')->where('fk_id_ent', $ent)->where('f_active', 1)->whereNotIn('status', ['CANCELLED', 'Cancelled', 'CLOSED', 'Closed'])->orderByDesc('id')->limit(200)->get(['id', DB::raw("CONCAT(cycle_code, ' · ', COALESCE(product_name, '')) as name")])];      /* R-B_SOURCING-63 import costs name their cycle */
     }
 
     // ---- dashboard and profit ----
@@ -270,13 +271,27 @@ class MoneyController extends Controller
         $this->can($r, 'money.EDIT');
         $ent = (int) Context::ent();
         return $this->run(function () use ($r, $id, $what, $ent) {
-            if ($what === 'categorise') { $d = $r->validate(['category' => 'required|string|max:40', 'branch' => 'nullable|integer', 'note' => 'nullable|string|max:200', 'vat_amount' => 'nullable|numeric|min:0']); Money::categorise($ent, $id, array_filter($d, fn ($v) => $v !== null)); return ['message' => 'Booked']; }
+            if ($what === 'categorise') { $d = $r->validate(['category' => 'required|string|max:40', 'branch' => 'nullable|integer', 'note' => 'nullable|string|max:200', 'vat_amount' => 'nullable|numeric|min:0', 'cycle' => 'nullable|integer', 'shipment' => 'nullable|integer']); Money::categorise($ent, $id, array_filter($d, fn ($v) => $v !== null)); return ['message' => 'Booked']; }
             if ($what === 'transfer') { $d = $r->validate(['other' => 'required|integer']); $x = Money::transfer($ent, $id, (int) $d['other']); return ['message' => 'Transfer booked' . ($x['mirror'] ? ' – the line in the other account is linked too' : '')]; }
             if ($what === 'payout') { $d = $r->validate(['branch' => 'required|integer', 'pay_key' => 'required|string|max:40']); Money::matchPayout($ent, $id, (int) $d['branch'], $d['pay_key']); return ['message' => 'Payout matched']; }
             if ($what === 'ignore') { $d = $r->validate(['reason' => 'required|string|max:200']); Money::ignore($ent, $id, $d['reason']); return ['message' => 'Line set aside']; }
+            if ($what === 'match') { $d = $r->validate(['kind' => 'required|in:INVOICE,LOAN,CLAIM', 'target' => 'required|integer', 'interest' => 'nullable|numeric|min:0']); return \App\Services\BankMatch::matchTo($ent, $id, $d['kind'], (int) $d['target'], $d); }      // R-FIN-28 by hand to an invoice / loan
             if ($what === 'many') { $d = $r->validate(['ids' => 'required|array|min:1', 'ids.*' => 'integer']); return \App\Services\BankMatch::matchMany($ent, $id, 'EXPENSE', $d['ids']); }      // R-FIN-70 several payables by hand
             Money::unmatch($ent, $id); return ['message' => 'Match undone'];
         });
+    }
+
+    /** R-FIN-28 the open invoices and loans a line can be matched to (direction-aware). */
+    public function matchTargets(Request $r, int $id)
+    {
+        $this->can($r, 'money.SEE'); $ent = (int) Context::ent();
+        $l = DB::table('fin_bank_transactions')->where('id', $id)->where('company_id', $ent)->first() ?? abort(404); $in = (float) $l->amount > 0;
+        $ours = DB::table('t_inv_parties')->where('fk_id_ent', $ent)->where('f_is_sbs', 1)->pluck('id')->all();
+        return ['invoices' => DB::table('t_invoices')->where('fk_id_ent', $ent)->whereIn('status', ['UNPAID', 'PART_PAID'])->where('invoice_type', '<>', 'CREDIT_NOTE')->whereIn($in ? 'fk_issuer_party' : 'fk_recipient_party', $ours ?: [0])
+                ->orderBy('d_due')->limit(200)->get(['id', 'invoice_no', 'total', 'amount_paid', 'd_due'])->map(fn ($i) => ['id' => (int) $i->id, 'name' => $i->invoice_no . ' · balance ' . number_format((float) $i->total - (float) $i->amount_paid, 2)])->all(),
+            'claims' => $in ? DB::table('t_src_grn')->where('fk_id_ent', $ent)->where('claim_status', 'SETTLED')->where('claim_settled_as', 'REFUND')->where('claim_base_amount', '>', 0)->orderByDesc('id')->limit(100)->get(['id', 'grn_number', 'claim_base_amount'])
+                ->map(fn ($g) => ['id' => (int) $g->id, 'name' => ($g->grn_number ?: 'GRN ' . $g->id) . ' · refund ' . number_format((float) $g->claim_base_amount, 2)])->all() : [],
+            'loans' => DB::table('fin_loans')->where('company_id', $ent)->where('is_active', 1)->where('direction', $in ? 'GIVEN' : 'TAKEN')->get(['id', 'counterparty', 'balance'])->map(fn ($x) => ['id' => (int) $x->id, 'name' => $x->counterparty . ' · balance ' . number_format((float) $x->balance, 2)])->all()];
     }
 
     /** Booked payouts of exactly this line's amount, for a person to pick from. */
