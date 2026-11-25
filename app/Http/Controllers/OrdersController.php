@@ -187,10 +187,10 @@ class OrdersController extends Controller
             $s = DB::table('t_sales')->where('id', $id)->where('fk_id_ent', Context::ent())->first() ?? throw new \RuntimeException('Order line not found.');
             if ($s->status !== 'Pending' || $s->f_locked) throw new \RuntimeException('Only a pending line can be cancelled.');
             if ((int) $s->qty_shipped > 0) throw new \RuntimeException('This line is already shipped. Book a return instead.');
-            Dispatch::release($id, $d['reason']);
+            $how = Dispatch::release($id, $d['reason']);
             DB::table('t_sales')->where('id', $id)->update(['status' => 'Cancelled', 'updated_at' => now()]);
             Audit::log('t_sales', $id, 'UPDATE', ['status' => ['Pending', 'Cancelled']], $d['reason']);
-            return ['message' => 'Order line cancelled; its stock is free again'];
+            return ['message' => $how === 'PUTBACK' ? 'Order line cancelled; its picked units wait in the Dispatch area – put them back (task opened)' : 'Order line cancelled; its stock is free again'];
         });
     }
 
@@ -299,6 +299,11 @@ class OrdersController extends Controller
         $d = $r->validate(['code' => 'required|string|max:100', 'op_id' => 'nullable|string|max:36']);
         return $this->run(fn () => Dispatch::scan($id, $d['code'], $d['op_id'] ?? null));
     }
+
+    /** R-H-17 put back the picked units of a cancelled line; R-H-35 un-scan a parcel the carrier did not take. */
+    public function putback(Request $r, int $id) { $this->can($r, 'orders.WAREHOUSE'); return $this->run(fn () => Dispatch::putback($id, $r->input('bin') ? (int) $r->input('bin') : null)); }
+
+    public function unscan(Request $r, int $id) { $this->can($r, 'orders.WAREHOUSE'); return $this->run(fn () => Dispatch::unscan($id, (int) $r->input('parcel'), (string) $r->input('reason', ''))); }
 
     public function closeHandover(Request $r, int $id)
     {

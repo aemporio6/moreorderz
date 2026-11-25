@@ -115,6 +115,30 @@ class CountService
         });
     }
 
+    /**
+     * R-H-48 found stock (adjustment reason Found): units of the same SKU sitting in MISSING come back first (COUNT_FOUND, owner kept);
+     * the rest is a new ADJUSTMENT lot owned by DEFAULT_STOCK_OWNER at the product's last FINAL cost.
+     */
+    public static function found(int $ent, int $pid, int $loc, int $qty, string $note = ''): array
+    {
+        if ($qty <= 0) throw new \InvalidArgumentException('Found stock must be more than zero.');
+        return DB::transaction(function () use ($ent, $pid, $loc, $qty, $note) {
+            $miss = StockService::systemLocation($ent, 'MISSING'); $why = 'Found stock' . ($note !== '' ? ': ' . $note : '');
+            $back = min($qty, StockService::balance($pid, $miss));
+            if ($back > 0) { StockService::transfer($ent, $pid, $back, $miss, $loc, $why, ['type_out' => 'count_found', 'type_in' => 'count_found', 'source_type' => 'ADJUST']); self::closeMissing($ent, $pid, $back, 'FOUND'); }
+            $new = $qty - $back; $value = 0.0; $lot = null;
+            if ($new > 0) {
+                $cost = (float) (DB::table('fin_lots')->where('fk_id_product', $pid)->where('company_id', $ent)->where('landed_status', 'FINAL')->orderByDesc('received_date')->orderByDesc('id')->value('unit_cost_gbp')
+                    ?? DB::table('fin_lots')->where('fk_id_product', $pid)->where('company_id', $ent)->orderByDesc('received_date')->orderByDesc('id')->value('unit_cost_gbp') ?? 0);
+                $owner = (int) Settings::get('DEFAULT_STOCK_OWNER', $ent, '0') ?: null;
+                $r = StockService::receive($ent, [['product' => $pid, 'qty' => $new, 'location' => $loc, 'unit_cost' => $cost, 'owner' => $owner]], 'ADJUST', null, ['lot_source' => 'MANUAL', 'contra' => '4100']);
+                $value = (float) $r['value']; $lot = $r['lots'][0] ?? null;
+                Audit::log('t_product_vendors', $pid, 'UPDATE', ['stock_adjust' => [0, $new], 'found stock lot' => $lot, 'owner' => $owner], $why, $ent);
+            }
+            return ['from_missing' => $back, 'new_lot' => $new, 'lot' => $lot, 'value' => round($value, 2)];
+        });
+    }
+
     private static function closeMissing(int $ent, int $pid, int $qty, string $how): void
     {
         foreach (DB::table('wh_missing_units')->where('fk_id_ent', $ent)->where('fk_id_product', $pid)->where('qty_open', '>', 0)->orderBy('id')->get() as $m) {

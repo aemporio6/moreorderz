@@ -227,6 +227,8 @@ class StockService
     {
         if ($qty === 0) throw new \InvalidArgumentException('The change cannot be zero.');
         if (trim($reason) === '') throw new \InvalidArgumentException('Give the reason for the adjustment.');
+        if ($qty > 0 && empty($opt['lot']) && empty($opt['type']) && preg_match('/^found\s*(?:[–:-]\s*(.*))?$/iu', trim($reason), $m))      /* R-H-48: reason Found = MISSING first, then a found-stock lot */
+            return CountService::found($ent, $productId, $locId, $qty, trim($m[1] ?? ''));
         return DB::transaction(function () use ($ent, $productId, $locId, $qty, $reason, $opt) {
             $p = self::product($productId, $ent);
             self::location($locId, $ent);

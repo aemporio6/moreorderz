@@ -55,17 +55,74 @@ class DispatchService
         return $n;
     }
 
-    public static function release(int $saleId, string $reason): void
+    public static function release(int $saleId, string $reason): ?string
     {
-        DB::transaction(function () use ($saleId, $reason) {
+        return DB::transaction(function () use ($saleId, $reason) {
+            $picked = DB::table('wh_reservations')->where('fk_id_sale', $saleId)->where('status', 'PICKED')->lockForUpdate()->get();
+            if ($picked->isNotEmpty() && self::inParcel($saleId)) throw new \RuntimeException('This order is packed. Void its label / parcel first, then cancel (the units go back to picked).');
             foreach (DB::table('wh_reservations')->where('fk_id_sale', $saleId)->whereIn('status', ['OPEN', 'ALLOCATED'])->lockForUpdate()->get() as $r) {
                 DB::table('wh_pick_task_lines')->where('fk_id_reservation', $r->id)->where('line_status', 'OPEN')->update(['line_status' => 'CANCELLED']);
                 DB::table('wh_reservations')->where('id', $r->id)->update(['status' => 'RELEASED', 'release_reason' => mb_substr($reason, 0, 255), 'updated_at' => now()]);
                 self::hist($r->id, $r->status, 'RELEASED', $r->qty, $r->qty, $reason);
             }
-            if (DB::table('wh_reservations')->where('fk_id_sale', $saleId)->where('status', 'PICKED')->exists()) throw new \RuntimeException('These units are already picked. Put them back first (Move from the Dispatch area to a shelf).');
-            DB::table('t_sales')->where('id', $saleId)->update(['wh_status' => 'RELEASED']);
             TaskEngine::close('WH_ORDER_SHORT', [$saleId], 'Released');
+            if ($picked->isNotEmpty()) {      /* R-H-17 cancel after pick: the units wait in DISPATCH for a PUTBACK to the home bin; the reservation is released when they are back */
+                foreach ($picked as $r) { DB::table('wh_reservations')->where('id', $r->id)->update(['release_reason' => mb_substr($reason, 0, 255), 'updated_at' => now()]); self::hist($r->id, 'PICKED', 'PICKED', $r->qty, $r->qty, "Cancelled after pick – put back: $reason"); }
+                $s = DB::table('t_sales')->where('id', $saleId)->first(['fk_id_ent', 'order_no', 'sku']);
+                DB::table('t_sales')->where('id', $saleId)->update(['wh_status' => 'PUTBACK']);
+                TaskEngine::open('WH_PUTBACK', [$saleId], "Put back {$picked->sum('qty_picked')} × {$s->sku} of cancelled order {$s->order_no} from the Dispatch area to its bin", ['ent' => (int) $s->fk_id_ent, 'module' => 't_sales', 'record_id' => $saleId, 'fix_url' => '#/orders']);
+                return 'PUTBACK';
+            }
+            DB::table('t_sales')->where('id', $saleId)->update(['wh_status' => 'RELEASED']);
+            return 'RELEASED';
+        });
+    }
+
+    /** R-H-17: put the picked units of a cancelled line back (DISPATCH → the bin, default the first sellable bin of the product); then the reservation is RELEASED and available rises. */
+    public static function putback(int $saleId, ?int $bin = null): array
+    {
+        return DB::transaction(function () use ($saleId, $bin) {
+            $s = DB::table('t_sales')->where('id', $saleId)->where('fk_id_ent', Context::ent())->lockForUpdate()->first() ?? throw new \RuntimeException('Order line not found.');
+            if ($s->wh_status !== 'PUTBACK') throw new \RuntimeException('Nothing to put back for this line.');
+            $ent = (int) $s->fk_id_ent; $from = StockService::systemLocation($ent, 'DISPATCH'); $n = 0;
+            foreach (DB::table('wh_reservations')->where('fk_id_sale', $saleId)->where('status', 'PICKED')->lockForUpdate()->get() as $r) {
+                $to = $bin ?: (int) (self::binsOf((int) $r->fk_id_product, $ent, null)[0]->loc ?? DB::table('t_branches')->where('id', $s->fk_id_branch)->value('fk_id_main_location') ?? 0);
+                if (! $to) throw new \RuntimeException('Choose the bin to put the units back in.');
+                if ((int) $r->qty_picked > 0) StockService::transfer($ent, (int) $r->fk_id_product, (int) $r->qty_picked, $from, $to, "Putback cancelled order {$s->order_no}", ['rule' => $r->owner_rule === 'PRIVATE' ? 'PRIVATE' : 'POOL', 'owner' => $r->fk_id_owner_seg ?: null, 'source_type' => 'PUTBACK', 'source_id' => $saleId]);
+                DB::table('wh_reservations')->where('id', $r->id)->update(['status' => 'RELEASED', 'updated_at' => now()]);
+                self::hist($r->id, 'PICKED', 'RELEASED', $r->qty, $r->qty, 'Put back to bin ' . DB::table('cat_inventory_locations')->where('id', $to)->value('location_name'));
+                $n += (int) $r->qty_picked;
+            }
+            DB::table('t_sales')->where('id', $saleId)->update(['wh_status' => 'RELEASED']);
+            TaskEngine::close('WH_PUTBACK', [$saleId], 'Units put back');
+            EventBus::fire('PUTBACK_DONE', 't_sales', $saleId, ['units' => $n], $ent);
+            return ['units' => $n, 'message' => "$n unit(s) put back – the stock is free again."];
+        });
+    }
+
+    /** R-H-35: the carrier took fewer than scanned – within WH_HANDOVER_REOPEN_MINUTES a parcel can be un-scanned with a reason (back to Ready, units SHIPPED → DISPATCH); later it is a lost-parcel case. */
+    public static function unscan(int $sessionId, int $parcelId, string $reason): array
+    {
+        if (mb_strlen(trim($reason)) < 3) throw new \InvalidArgumentException('Give the reason for the un-scan.');
+        return DB::transaction(function () use ($sessionId, $parcelId, $reason) {
+            $s = DB::table('wh_handover_sessions')->where('id', $sessionId)->where('fk_id_ent', Context::ent())->lockForUpdate()->first() ?? throw new \RuntimeException('Handover session not found.');
+            $ent = (int) $s->fk_id_ent; $min = (int) Settings::get('WH_HANDOVER_REOPEN_MINUTES', $ent, 60);
+            if ($s->status !== 'CLOSED') throw new \RuntimeException('The handover is still open – just do not close it with this parcel, or scan it again.');
+            if (! $s->closed_at || strtotime((string) $s->closed_at) < time() - $min * 60) throw new \RuntimeException("The handover was closed more than $min minutes ago – report the parcel as lost instead.");
+            $p = DB::table('wh_parcels')->where('id', $parcelId)->where('fk_id_handover_session', $sessionId)->where('status', 'HANDED_OVER')->lockForUpdate()->first() ?? throw new \RuntimeException('This parcel was not handed over in this session.');
+            $from = StockService::systemLocation($ent, 'SHIPPED'); $to = StockService::systemLocation($ent, 'DISPATCH');
+            foreach (DB::table('wh_parcel_lines')->where('fk_id_parcel', $parcelId)->get() as $l) {
+                $r = DB::table('wh_reservations')->where('fk_id_sale', $l->fk_id_sale)->where('status', 'SHIPPED')->lockForUpdate()->first();
+                StockService::transfer($ent, (int) $l->fk_id_product, (int) $l->qty_packed, $from, $to, "Un-scan {$p->parcel_code}: $reason", ['rule' => ($r->owner_rule ?? 'POOL') === 'PRIVATE' ? 'PRIVATE' : 'POOL', 'owner' => $r->fk_id_owner_seg ?? null ?: null, 'source_type' => 'HANDOVER', 'source_id' => $sessionId]);
+                if ($r) { DB::table('wh_reservations')->where('id', $r->id)->update(['status' => 'PICKED', 'updated_at' => now()]); self::hist($r->id, 'SHIPPED', 'PICKED', $r->qty, $r->qty, "Un-scanned from {$s->session_code}: $reason"); }
+                DB::table('t_sales')->where('id', $l->fk_id_sale)->update(['qty_shipped' => DB::raw('GREATEST(COALESCE(qty_shipped,0) - ' . (int) $l->qty_packed . ', 0)'), 'wh_status' => 'PACKED']);
+            }
+            DB::table('wh_parcels')->where('id', $parcelId)->update(['status' => 'READY', 'fk_id_handover_session' => null, 'handed_over_at' => null]);
+            DB::table('wh_handover_scans')->where('fk_id_handover_session', $sessionId)->where('fk_id_parcel', $parcelId)->where('result', 'OK')->update(['result' => 'UNSCANNED', 'resolve_note' => mb_substr($reason, 0, 255)]);
+            DB::table('wh_handover_sessions')->where('id', $sessionId)->update(['scanned_count' => DB::raw('GREATEST(COALESCE(scanned_count,0) - 1, 0)')]);
+            Audit::log('wh_parcels', $parcelId, 'UPDATE', ['status' => ['HANDED_OVER', 'READY'], 'session' => $s->session_code], $reason, $ent);
+            EventBus::fire('HANDOVER_UNSCANNED', 'wh_parcels', $parcelId, ['session' => $sessionId, 'reason' => $reason], $ent);
+            return ['message' => "Parcel {$p->parcel_code} is Ready again – the next handover takes it."];
         });
     }
 
@@ -410,7 +467,7 @@ class DispatchService
     public static function board(int $ent): array
     {
         return \App\Services\Perm::mine(DB::table('t_sales as s'), 's.fk_id_branch')->leftJoin('wh_reservations as r', fn ($j) => $j->on('r.fk_id_sale', '=', 's.id')->whereNotIn('r.status', ['RELEASED'])->whereRaw('r.resend_no = (SELECT MAX(x.resend_no) FROM wh_reservations x WHERE x.fk_id_sale = r.fk_id_sale AND x.status <> "RELEASED")'))->leftJoin('t_branches as b', 'b.id', '=', 's.fk_id_branch')
-            ->where('s.fk_id_ent', $ent)->where('s.status', 'Pending')->where('s.sale_source', 'active')->whereRaw("COALESCE(s.wh_status,'') NOT IN ('SHIPPED','RELEASED')")->orderByRaw('s.dispatch_by IS NULL, s.dispatch_by')->orderBy('s.id')->limit(500)
+            ->where('s.fk_id_ent', $ent)->where(fn ($w) => $w->where('s.status', 'Pending')->orWhere('s.wh_status', 'PUTBACK'))->where('s.sale_source', 'active')      /* R-H-17: cancelled lines waiting for a putback stay on the board */->whereRaw("COALESCE(s.wh_status,'') NOT IN ('SHIPPED','RELEASED')")->orderByRaw('s.dispatch_by IS NULL, s.dispatch_by')->orderBy('s.id')->limit(500)
             ->get(['s.id', 's.order_no', 's.d_order', 's.sku', 's.qty', 's.wh_status', 's.fk_id_branch', 'b.shop_name as shop', 's.ship_to_name', 's.dispatch_by', 's.carrier_service_text', 'r.status as reservation', 'r.qty as reserved', 'r.qty_short', 'r.qty_picked'])
             ->pipe(fn ($c) => DispatchDeadline::sort($c->all()));      // overdue → due before collection → due today → later; express first; order time (R-H-24)
     }

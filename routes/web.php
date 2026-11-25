@@ -42,6 +42,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('form/{key}/calc', [AppController::class, 'formCalc']);
         Route::get('people/{id}/jobs', [AppController::class, 'jobs'])->whereNumber('id');
         Route::get('people/{id}/security-questions', [AppController::class, 'securityHealth'])->whereNumber('id');
+        Route::get('parties', [AppController::class, 'parties']);      // R-C-1
         Route::get('people/external/new', [AppController::class, 'externalForm']);
         Route::post('people/external/new', [AppController::class, 'externalSave']);
         Route::get('people/{id}/header', [AppController::class, 'personHeader'])->whereNumber('id');
@@ -541,6 +542,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('handover', [OrdersController::class, 'openHandover']);
         Route::post('handover/{id}/scan', [OrdersController::class, 'scan'])->whereNumber('id');
         Route::post('handover/{id}/close', [OrdersController::class, 'closeHandover'])->whereNumber('id');
+        Route::post('handover/{id}/unscan', [OrdersController::class, 'unscan'])->whereNumber('id');      // R-H-35
+        Route::post('sales/{id}/putback', [OrdersController::class, 'putback'])->whereNumber('id');      // R-H-17
         Route::get('confirm', [OrdersController::class, 'confirmPreview']);
         Route::post('confirm', [OrdersController::class, 'confirm']);
         Route::get('returns', [OrdersController::class, 'returns']);

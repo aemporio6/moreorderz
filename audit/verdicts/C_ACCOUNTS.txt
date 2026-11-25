@@ -1,4 +1,4 @@
-1|F|form:t_account|form only; party type column / filter rule not built
+1|B|class Party|7e-163: l_party_type P / C and l_account_kind M / E are two columns (old rows keep E and get P); Party::find / listByRole filter each one independently (+ role, name), API GET parties; External contacts list shows external people and companies, filter Company leaves the external person out (PartyTypeTest)
 2|M||convert Managed <-> External with kind log not built
 3|P|form:external_contact|both forms are in + Create; the chooser that carries typed values not built
 4|B|class AccountCode|one rule for every person form: upper case, ^[A-Z0-9][A-Z0-9-]{0,9}$, unique per enterprise (managed people too), old messages (required / format / "already used. Suggested: Y"); suggestion MAX(CAST)+1 over the enterprise ("214-EX" = 214), external series adds -EX (setting), 500 tries; the new form opens with the suggestion; live check in the browser + server (AccountCodeTest)

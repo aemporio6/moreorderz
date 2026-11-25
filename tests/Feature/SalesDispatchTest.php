@@ -238,4 +238,76 @@ class SalesDispatchTest extends TestCase
         $this->assertSame(['ORD-3', 'ORD-4'], DB::table('wh_pick_task_lines as l')->join('t_sales as s', 's.id', '=', 'l.fk_id_sale')->where('l.fk_id_pick_task', $next)->orderBy('l.line_no')->pluck('s.order_no')->all(), 'they join the next list');
         $this->assertSame(0, \App\Services\PickLists::sweep(1));
     }
+
+    /** R-H-17 / R-H-60: order cancelled after pick → PUTBACK task; scanned back to the bin → RELEASED and available rises. */
+    public function test_cancel_after_pick_opens_a_putback_and_releases_when_the_units_are_back(): void
+    {
+        $id = $this->order('ORD-1', 3);
+        $task = Dispatch::buildPickList(1); Dispatch::pick(DB::table('wh_pick_task_lines')->where('fk_id_pick_task', $task)->value('id'));
+        $disp = Stock::systemLocation(1, 'DISPATCH');
+        $this->assertSame([3, 7], [Stock::balance($this->p, $disp), Stock::available($this->p)]);
+        $this->assertSame('PUTBACK', Dispatch::release($id, 'Buyer cancelled'));
+        $this->assertSame(['PUTBACK', 'PICKED'], [DB::table('t_sales')->where('id', $id)->value('wh_status'), DB::table('wh_reservations')->where('fk_id_sale', $id)->value('status')]);
+        $this->assertTrue(TaskEngine::isOpen('WH_PUTBACK', [$id]));
+        $this->assertSame(7, Stock::available($this->p), 'not free until the units are back on the shelf');
+        \App\Services\Context::set(1, null);
+        $this->assertSame(3, Dispatch::putback($id)['units']);
+        $this->assertSame([0, 4, 10], [Stock::balance($this->p, $disp), Stock::balance($this->p, $this->binA), Stock::available($this->p)], 'back to the home bin A-A-01; available rises by 3');
+        $this->assertSame(['RELEASED', 'RELEASED'], [DB::table('t_sales')->where('id', $id)->value('wh_status'), DB::table('wh_reservations')->where('fk_id_sale', $id)->value('status')]);
+        $this->assertFalse(TaskEngine::isOpen('WH_PUTBACK', [$id]));
+        try { Dispatch::putback($id); $this->fail('put back twice'); } catch (\RuntimeException $e) { $this->assertSame('Nothing to put back for this line.', $e->getMessage()); }
+        \App\Services\Settings::set('WH_SCAN_CONFIRM_PACK', 'N', 1);
+        $id2 = $this->order('ORD-2', 1); $t2 = Dispatch::buildPickList(1); Dispatch::pick(DB::table('wh_pick_task_lines')->where('fk_id_pick_task', $t2)->value('id'));
+        Dispatch::pack(['order_no' => 'ORD-2', 'branch' => $this->shop, 'weight_g' => 300, 'tracking_no' => 'TRK9']);
+        try { Dispatch::release($id2, 'Buyer cancelled'); $this->fail('packed order released'); } catch (\RuntimeException $e) { $this->assertStringContainsString('Void its label', $e->getMessage()); }
+    }
+
+    /** R-H-35 / R-H-60: the carrier took fewer than scanned → un-scan with a reason within WH_HANDOVER_REOPEN_MINUTES; later it is a lost parcel. */
+    public function test_carrier_takes_fewer_unscan_within_the_window_back_to_ready(): void
+    {
+        \App\Services\Settings::set('WH_SCAN_CONFIRM_PACK', 'N', 1); \App\Services\Context::set(1, null);
+        foreach (['ORD-1' => 'TRK1', 'ORD-2' => 'TRK2'] as $no => $trk) { $ids[$no] = $this->order($no, 1); }
+        $t = Dispatch::buildPickList(1); foreach (DB::table('wh_pick_task_lines')->where('fk_id_pick_task', $t)->pluck('id') as $l) Dispatch::pick($l);
+        $p1 = Dispatch::pack(['order_no' => 'ORD-1', 'branch' => $this->shop, 'weight_g' => 300, 'tracking_no' => 'TRK1']); $p2 = Dispatch::pack(['order_no' => 'ORD-2', 'branch' => $this->shop, 'weight_g' => 300, 'tracking_no' => 'TRK2']);
+        $ses = Dispatch::openHandover($this->carrier); Dispatch::scan($ses, 'TRK1', 'a'); Dispatch::scan($ses, 'TRK2', 'b');
+        $this->assertSame(2, Dispatch::closeHandover($ses)['shipped']);
+        $disp = Stock::systemLocation(1, 'DISPATCH'); $ship = Stock::systemLocation(1, 'SHIPPED');
+        try { Dispatch::unscan($ses, $p2, 'x'); $this->fail('no reason'); } catch (\InvalidArgumentException $e) { $this->assertSame('Give the reason for the un-scan.', $e->getMessage()); }
+        $this->assertStringContainsString('Ready again', Dispatch::unscan($ses, $p2, 'Driver left it on the bench')['message']);
+        $this->assertSame(['READY', 'PACKED', 0, 'PICKED'], [DB::table('wh_parcels')->where('id', $p2)->value('status'), DB::table('t_sales')->where('id', $ids['ORD-2'])->value('wh_status'), (int) DB::table('t_sales')->where('id', $ids['ORD-2'])->value('qty_shipped'), DB::table('wh_reservations')->where('fk_id_sale', $ids['ORD-2'])->value('status')]);
+        $this->assertSame([1, 1, 1], [Stock::balance($this->p, $disp), Stock::balance($this->p, $ship), (int) DB::table('wh_handover_sessions')->where('id', $ses)->value('scanned_count')]);
+        DB::table('wh_handover_sessions')->where('id', $ses)->update(['closed_at' => now()->subMinutes(61)]);
+        try { Dispatch::unscan($ses, $p1, 'Driver says not taken'); $this->fail('too late'); } catch (\RuntimeException $e) { $this->assertStringContainsString('report the parcel as lost', $e->getMessage()); }
+        $ses2 = Dispatch::openHandover($this->carrier); Dispatch::scan($ses2, 'TRK2', 'c');
+        $this->assertSame(1, Dispatch::closeHandover($ses2)['shipped'], 'the next session picks it up');
+    }
+
+    /** R-H-48 / R-H-60: found 4 units while MISSING holds 3 → 3 back from MISSING (owner kept) + 1 found-stock lot of DEFAULT_STOCK_OWNER. */
+    public function test_found_stock_comes_back_from_missing_first_then_a_found_lot(): void
+    {
+        $miss = Stock::systemLocation(1, 'MISSING');
+        Stock::transfer(1, $this->p, 3, $this->binB, $miss, 'Count loss', ['type_out' => 'count_loss', 'type_in' => 'count_loss', 'source_type' => 'COUNT']);
+        DB::table('wh_missing_units')->insert(['fk_id_ent' => 1, 'fk_id_product' => $this->p, 'fk_id_count' => 0, 'fk_id_from_location' => $this->binB, 'qty' => 3, 'qty_open' => 3, 'created_at' => now()]);
+        $owner = DB::table('t_account')->insertGetId(RecordService::fillNotNull('t_account', ['fk_id_ent' => 1]));
+        \App\Services\Settings::set('DEFAULT_STOCK_OWNER', (string) $owner, 1);
+        DB::table('fin_lots')->where('fk_id_product', $this->p)->update(['landed_status' => 'FINAL']);
+        $lots = DB::table('fin_lots')->where('fk_id_product', $this->p)->count();
+        $r = Stock::adjust(1, $this->p, $this->binA, 4, 'Found – behind the shelf');
+        $this->assertSame([3, 1], [$r['from_missing'], $r['new_lot']]);
+        $this->assertSame([0, 8], [Stock::balance($this->p, $miss), Stock::balance($this->p, $this->binA)]);
+        $lot = DB::table('fin_lots')->where('id', $r['lot'])->first();
+        $this->assertSame([$lots + 1, $owner, 5.0], [DB::table('fin_lots')->where('fk_id_product', $this->p)->count(), (int) $lot->fk_id_owner, (float) $lot->unit_cost_gbp], 'new lot of the default owner at the last FINAL cost (5.00)');
+        $this->assertSame(0, (int) DB::table('wh_missing_units')->where('fk_id_product', $this->p)->sum('qty_open'));
+        Stock::adjust(1, $this->p, $this->binA, 1, 'Found one behind the shelf');
+        $this->assertSame($lots + 1, DB::table('fin_lots')->where('fk_id_product', $this->p)->count(), 'a free-text reason is an ordinary adjustment');
+    }
+
+    /** R-D-9 / R-H-60: a retired (hidden) SKU keeps its bins and stock and cannot be deleted while it holds stock. */
+    public function test_retired_sku_keeps_its_stock_and_cannot_be_deleted(): void
+    {
+        $u = $this->makeUser('OWNER'); \App\Services\Context::set(1, (int) $u->id);
+        \App\Services\ProductArchive::hide($this->p, 'Retired line', $u);
+        $this->assertSame(['HIDDEN', 4, 6, 10], [DB::table('t_product_vendors')->where('id', $this->p)->value('row_state'), Stock::balance($this->p, $this->binA), Stock::balance($this->p, $this->binB), Stock::balance($this->p)]);
+        try { \App\Services\ProductArchive::delete($this->p, $u); $this->fail('deleted with stock'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('stock on BOWL-01', $e->getMessage()); }
+    }
 }

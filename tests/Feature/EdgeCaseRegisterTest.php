@@ -28,6 +28,10 @@ class EdgeCaseRegisterTest extends TestCase
         'Transferring ownership' => ['StockTest::test_ownership_transfer_splits_the_lot_and_keeps_the_fifo_date'],
         'Multipacks, bundles, variants' => ['ListingsMoneyFilesTest::test_h19_bundle_reserves_each_component_and_costs_the_sum', 'SalesDispatchTest::test_listing_sku_with_pack_quantity_reserves_the_real_units'],
         'Time zones, dispatch deadlines, bank holidays' => ['DispatchDeadlineTest::test_the_rule_example_friday_15_00_after_cutoff_monday_holiday_is_tuesday'],
+        'Stock found physically but not in the system' => ['SalesDispatchTest::test_found_stock_comes_back_from_missing_first_then_a_found_lot'],
+        'Order cancelled after picking (putback)' => ['SalesDispatchTest::test_cancel_after_pick_opens_a_putback_and_releases_when_the_units_are_back'],
+        'Carrier takes fewer parcels than scanned' => ['SalesDispatchTest::test_carrier_takes_fewer_unscan_within_the_window_back_to_ready'],
+        'SKUs retired but holding stock' => ['SalesDispatchTest::test_retired_sku_keeps_its_stock_and_cannot_be_deleted'],
         'Two users on the same stock; browser refresh mid-scan' => ['StockTest::test_two_pickers_at_the_same_moment_never_take_the_same_units', 'SalesDispatchTest::test_abandoned_pick_list_releases_unpicked_lines_and_keeps_picked_units_in_dispatch'],
     ];
 
@@ -35,13 +39,9 @@ class EdgeCaseRegisterTest extends TestCase
     public const GAPS = [
         'Wrong item; unlabelled cartons; mixed SKUs in one carton (receiving)',
         'Moving a SKU\'s home while orders are reserved',
-        'Stock found physically but not in the system',
-        'Order cancelled after picking (putback)',
         'Address change after label print',
-        'Carrier takes fewer parcels than scanned',
         'Combined shipping (several orders, one parcel)',
         'Owner running out while another owner has stock',
-        'SKUs retired but holding stock',
     ];
 
     public function test_every_edge_case_points_at_a_test_that_exists(): void
