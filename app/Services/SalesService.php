@@ -89,10 +89,10 @@ class SalesService
             if ($s->status === 'Refunded') { $refunded++; continue; }
             if ($s->sale_source !== 'active' || ! $s->fk_product_id) { $unmatched++; continue; }
             if (($s->fulfilment_channel ?: 'SELF') !== 'SELF') continue;
-            $out = (int) $s->qty_shipped - (int) $s->qty_returned_unconfirmed;
-            if ($out < $s->qty) $unshipped[] = ['id' => $s->id, 'order_no' => $s->order_no, 'sku' => $s->sku, 'qty' => (int) $s->qty - max(0, $out), 'wh_status' => $s->wh_status];
+            $out = (int) $s->qty_shipped - (int) $s->qty_returned_unconfirmed; $never = max(0, (int) $s->qty - (int) $s->qty_shipped);      /* R-H-38: a unit returned before Confirm is not "unshipped" */
+            if ($never > 0) $unshipped[] = ['id' => $s->id, 'order_no' => $s->order_no, 'sku' => $s->sku, 'qty' => $never, 'wh_status' => $s->wh_status];
             $take[$s->fk_product_id] = ($take[$s->fk_product_id] ?? ['shipped' => 0, 'unshipped' => 0]);
-            $take[$s->fk_product_id]['shipped'] += max(0, $out); $take[$s->fk_product_id]['unshipped'] += (int) $s->qty - max(0, $out);
+            $take[$s->fk_product_id]['shipped'] += max(0, $out); $take[$s->fk_product_id]['unshipped'] += $never;
         }
         $short = [];
         foreach ($take as $pid => $t) {
@@ -153,7 +153,7 @@ class SalesService
                     } elseif ($s->sale_source === 'active' && $s->fk_product_id && ($s->fulfilment_channel ?: 'SELF') === 'SELF') {
                         $r = DB::table('wh_reservations')->where('fk_id_sale', $s->id)->orderByDesc('id')->first();
                         $rule = ['rule' => ($r->owner_rule ?? 'POOL') === 'PRIVATE' ? 'PRIVATE' : 'POOL', 'owner' => ($r->fk_id_owner_seg ?? 0) ?: null];
-                        $out = max(0, (int) $s->qty_shipped - (int) $s->qty_returned_unconfirmed); $miss = (int) $s->qty - $out;
+                        $ret = (int) $s->qty_returned_unconfirmed; $miss = max(0, (int) $s->qty - (int) $s->qty_shipped);      /* R-H-37 / 38: backfill only what never shipped; units returned before Confirm are not consumed */
                         if ($miss > 0) {      // shipped outside the tool: book it as shipped now, from the shelf (or from Dispatch when already picked)
                             foreach (DB::table('wh_reservations')->where('fk_id_sale', $s->id)->whereIn('status', ['OPEN', 'ALLOCATED', 'PICKED'])->get() as $x) {
                                 DB::table('wh_pick_task_lines')->where('fk_id_reservation', $x->id)->where('line_status', 'OPEN')->update(['line_status' => 'CANCELLED']);
@@ -162,10 +162,11 @@ class SalesService
                             foreach (self::shelfBins((int) $s->fk_product_id, $ent, $miss) as [$loc, $q]) StockService::transfer($ent, (int) $s->fk_product_id, $q, $loc, $shipped, 'Backfill at Month Confirm', $rule + ['source_type' => 'SHIP', 'source_id' => $s->id]);
                             $upd['f_ship_backfill'] = 1; $upd['qty_shipped'] = (int) $s->qty_shipped + $miss; $backfilled++;
                         }
-                        if (Choices::get('STOCK_COST_LAYER', $ent) === 'FIFO_AT_CONFIRM') StockService::swapToFifo($ent, (int) $s->fk_product_id, (int) $s->qty, $shipped, $rule['owner']);   // two layers: the oldest lots are the ones sold
-                        $c = StockService::consumeForSale($ent, (int) $s->id, (int) $s->fk_product_id, (int) $s->qty, $shipped, $rule['owner'], ['date' => $postDate]);
-                        $upd += ['f_stock_deducted' => 1, 'cost_gbp' => $c['cost'], 'buy_amount' => $c['cost'], 'buy_rate' => $s->qty > 0 ? round($c['cost'] / $s->qty, 2) : 0, 'cost_source' => 'lots', 'profit' => round((float) $s->total_amount_gbp - $c['cost'], 2), 'wh_status' => 'CONFIRMED'];
-                        $units += (int) $s->qty; $cogs += $c['cost'];
+                        $take = max(0, (int) $s->qty - $ret);      /* exactly the shipped-awaiting qty */
+                        if (Choices::get('STOCK_COST_LAYER', $ent) === 'FIFO_AT_CONFIRM' && $take > 0) StockService::swapToFifo($ent, (int) $s->fk_product_id, $take, $shipped, $rule['owner']);   // two layers: the oldest lots are the ones sold
+                        $c = $take > 0 ? StockService::consumeForSale($ent, (int) $s->id, (int) $s->fk_product_id, $take, $shipped, $rule['owner'], ['date' => $postDate]) : ['cost' => 0.0];
+                        $upd += ['f_stock_deducted' => 1, 'cost_gbp' => $c['cost'], 'buy_amount' => $c['cost'], 'buy_rate' => $take > 0 ? round($c['cost'] / $take, 2) : 0, 'cost_source' => 'lots', 'profit' => round((float) $s->total_amount_gbp - $c['cost'], 2), 'wh_status' => 'CONFIRMED'];
+                        $units += $take; $cogs += $c['cost'];
                     } else {
                         $upd += ['f_stock_deducted' => 0, 'profit' => $s->sale_source === 'active' ? (float) $s->total_amount_gbp : 0];
                     }

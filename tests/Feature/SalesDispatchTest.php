@@ -173,8 +173,8 @@ class SalesDispatchTest extends TestCase
         $this->assertSame([3, 1], [Stock::balance($this->p, $shipped), Stock::balance($this->p, $this->binA)]);
         try { Dispatch::receiveReturn(['code' => 'TRK9', 'qty' => 9]); $this->fail(); } catch (\RuntimeException $e) { $this->assertStringContainsString('Only 3 unit(s)', $e->getMessage()); }
 
-        $c = Sales::confirmMonth($this->shop, '2026-08', true);                 // 3 still out + 1 came back and is booked as shipped again = the line's 4
-        $this->assertSame(4, $c['units']);
+        $c = Sales::confirmMonth($this->shop, '2026-08', true);                 /* R-H-37 / 38: Confirm consumes only the shipped-awaiting units – 4 shipped − 1 returned = 3 */
+        $this->assertSame([3, 0, 1], [$c['units'], Stock::balance($this->p, $shipped), Stock::balance($this->p, $this->binA)], 'the returned unit stays on the shelf, nothing is backfilled');
         $ask = Dispatch::receiveReturn(['code' => 'ORD-1', 'qty' => 2, 'condition' => 'DAMAGED']);
         $this->assertSame([true, 'Already received 1 of 4 – receive more?'], [$ask['confirm'], $ask['message']]); /* R-H-39 the same line again asks first */
         $after = Dispatch::receiveReturn(['code' => 'ORD-1', 'qty' => 2, 'condition' => 'DAMAGED', 'more' => true]);
@@ -390,5 +390,58 @@ class SalesDispatchTest extends TestCase
         $this->assertStringContainsString('stock belongs to another owner – cover from pool?', (string) DB::table('tasks')->where('rule_code', 'WH_ORDER_SHORT')->where('dedupe_key', 'WH_ORDER_SHORT:' . $id)->value('title'));
         $t = Dispatch::buildPickList(1);
         $this->assertSame([[$this->binA, 2]], DB::table('wh_pick_task_lines')->where('fk_id_pick_task', $t)->get()->map(fn ($l) => [(int) $l->fk_id_from_location, (int) $l->qty])->all(), "nobody picks B's units silently");
+    }
+
+    /** R-H-38 rule example: line shipped 4, return 2 before Confirm → Confirm consumes 2; the same return after Confirm → +2 back into the lot, reversing consumption. */
+    public function test_r38_return_before_confirm_is_not_consumed_and_after_confirm_reverses(): void
+    {
+        \App\Services\Settings::set('WH_SCAN_CONFIRM_PACK', 'N', 1);
+        foreach (['ORD-1' => 'TRKA', 'ORD-2' => 'TRKB'] as $no => $trk) {
+            $ids[$no] = $this->order($no, 4, ['d_order' => $no === 'ORD-1' ? '2026-08-10' : '2026-08-11']);
+        }
+        DB::table('t_product_vendors')->where('id', $this->p)->update(['stock' => 10]);
+        Stock::receive(1, [['product' => $this->p, 'qty' => 10, 'location' => $this->binB, 'unit_cost' => 5.00, 'received_date' => '2026-08-06']], 'GRN', 3);
+        foreach (['ORD-1', 'ORD-2'] as $no) { $t = Dispatch::buildPickList(1, [$ids[$no]]); foreach (DB::table('wh_pick_task_lines')->where('fk_id_pick_task', $t)->pluck('id') as $l) Dispatch::pick($l); }
+        Dispatch::pack(['order_no' => 'ORD-1', 'branch' => $this->shop, 'tracking_no' => 'TRKA']); Dispatch::pack(['order_no' => 'ORD-2', 'branch' => $this->shop, 'tracking_no' => 'TRKB']);
+        $ses = Dispatch::openHandover($this->carrier); Dispatch::scan($ses, 'TRKA'); Dispatch::scan($ses, 'TRKB'); Dispatch::closeHandover($ses);
+        $shipped = Stock::systemLocation(1, 'SHIPPED');
+        Dispatch::receiveReturn(['code' => 'TRKA', 'qty' => 2, 'condition' => 'SELLABLE']);
+        $c = Sales::confirmMonth($this->shop, '2026-08');
+        $this->assertSame(6, $c['units'], 'ORD-1: 4 shipped − 2 returned = 2; ORD-2: 4');
+        $this->assertSame([2, 4], [(int) DB::table('fin_lot_consumption')->where('fk_id_sale', $ids['ORD-1'])->sum('qty'), (int) DB::table('fin_lot_consumption')->where('fk_id_sale', $ids['ORD-2'])->sum('qty')]);
+        $this->assertSame(0, Stock::balance($this->p, $shipped));
+        $before = Stock::balance($this->p);
+        $after = Dispatch::receiveReturn(['code' => 'TRKB', 'qty' => 2, 'condition' => 'SELLABLE']);
+        $this->assertFalse($after['before_confirm']);
+        $this->assertSame([$before + 2, -2], [Stock::balance($this->p), (int) DB::table('fin_lot_consumption')->where('fk_id_sale', $ids['ORD-2'])->where('qty', '<', 0)->sum('qty')], 'after Confirm: +2 back into the lot with a reversing consumption row');
+        $this->assertSame(Stock::value(1), Ledger::balance(1, '1200'));
+    }
+
+    /** R-H-50 rule example: SKU-A A-class in a bin that is not prime, SKU-Q C-class in a prime bin → one swap suggestion; approve → home moved with the units. */
+    public function test_abc_classes_and_a_swap_suggestion(): void
+    {
+        $u = $this->makeUser('OWNER'); $this->actingAs($u); \App\Services\Context::set(1, (int) $u->id);
+        $f = fn ($t, $d) => DB::table($t)->insertGetId(RecordService::fillNotNull($t, $d));
+        $site = $f('cat_inventory_locations', ['location_name' => 'WH1', 'kind' => 'WAREHOUSE', 'fk_id_ent' => 1, 'f_active' => 1]);
+        $prime = $f('cat_inventory_locations', ['location_name' => 'W1-B-1', 'kind' => 'BIN', 'fk_id_ent' => 1, 'f_sellable' => 1, 'f_active' => 1, 'pick_seq' => 1, 'f_prime' => 1, 'fk_id_site' => $site]);
+        DB::table('cat_inventory_locations')->whereIn('id', [$this->binA, $this->binB])->update(['fk_id_site' => $site, 'f_prime' => 0]);
+        $q = $f('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'SKU-Q', 'product_name_vendor' => 'Slow thing', 'stock' => 0, 'f_active' => 1, 'e_product_type' => 'pool']);
+        Stock::receive(1, [['product' => $q, 'qty' => 3, 'location' => $prime, 'unit_cost' => 1.00]], 'GRN', 7);
+        \App\Services\SkuHomes::set(1, $this->p, $this->binA, 'PRIMARY'); \App\Services\SkuHomes::set(1, $q, $prime, 'PRIMARY');
+        foreach (['O1', 'O2', 'O3'] as $no) { $this->order($no, 1); }
+        $t = Dispatch::buildPickList(1); foreach (DB::table('wh_pick_task_lines')->where('fk_id_pick_task', $t)->pluck('id') as $l) Dispatch::pick($l);
+        $r = \App\Services\WarehouseSlotting::compute(1);
+        $this->assertSame(['A', 'C'], [DB::table('wh_product_stats')->where('fk_id_product', $this->p)->value('abc_class'), DB::table('wh_product_stats')->where('fk_id_product', $q)->value('abc_class')]);
+        $this->assertSame(2, $r['suggestions'], 'one swap = a row each way');
+        $this->assertSame(0, \App\Services\WarehouseSlotting::compute(1)['suggestions'], 'never twice while open');
+        $this->assertTrue(TaskEngine::isOpen('WH_SLOTTING', [$site, date('o-W')]));
+        $sa = DB::table('wh_slotting_suggestions')->where('fk_id_product', $this->p)->first();
+        $this->assertStringContainsString('BOWL-01 is A-class', $sa->reason);
+        $this->assertSame([0, 4], [Stock::balance($this->p, $prime), Stock::balance($this->p, $this->binA) + 3]);
+        \App\Services\WarehouseSlotting::decide(1, (int) $sa->id, true, $u);
+        $this->assertSame([1, 0, 'APPROVED'], [Stock::balance($this->p, $prime) - 0, Stock::balance($this->p, $this->binA), DB::table('wh_slotting_suggestions')->where('id', $sa->id)->value('status')], 'BOWL-01 home and its 1 unit moved to the prime bin');
+        $sq = DB::table('wh_slotting_suggestions')->where('fk_id_product', $q)->first();
+        $this->assertStringContainsString('rejected', \App\Services\WarehouseSlotting::decide(1, (int) $sq->id, false, $u)['message']);
+        try { \App\Services\WarehouseSlotting::decide(1, (int) $sq->id, true, $u); $this->fail('decided twice'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('already rejected', $e->getMessage()); }
     }
 }

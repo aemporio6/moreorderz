@@ -334,6 +334,7 @@
       if (r.startsWith('#/purchase-audit')) return await pagePurchaseAudit();      // R-A_SALES-60 … 64
       if (r.startsWith('#/listings-import')) return await pageListingsImport();      // R-D-59
       if (r.startsWith('#/preset-groups')) return await pagePresetGroups();      // R-D-62
+      if (r.startsWith('#/wh/slotting')) return await pageSlotting();      // R-H-50
       if (r.startsWith('#/old-entry')) return await pageOldEntry();      // R-B_SOURCING-5 / 8 / 13
       if (r === '#/bulk-jobs') return await pageBulkJobs();
       if (r === '#/choices') return await pageChoices();
@@ -2147,6 +2148,12 @@
     $('#lqS').innerHTML = (d.shops || []).map(s => `<option value="${s.id}">${esc(s.shop_no + ' ' + (s.shop_name || ''))}</option>`).join(''); if ($('#lqS').value) lq($('#lqS').value);
     $('#lqS').onchange = () => lq($('#lqS').value);
     $$('[data-liu]').forEach(b => b.onclick = async () => { try { toast((await api('listings-import/' + b.dataset.liu + '/undo', { method: 'POST' })).message); } catch (e) { toast(e.message, 'err'); } pageListingsImport(); });
+  }
+  async function pageSlotting() {      /* R-H-50 slotting suggestions (never automatic): approve = move home with the units, two shelf labels */
+    busy(true); let d; try { d = await api('slotting'); } finally { busy(false); }
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Slotting suggestions</h1><div class="sub">Fast (A-class) SKUs into prime bins, slow (C-class) out of them. Made every night; nothing moves until you approve.</div></div></div>
+      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>SKU</th><th>Class</th><th class="num">Picks</th><th>Suggestion</th><th>Status</th><th></th></tr></thead><tbody>${d.rows.map(x => `<tr><td><b>${esc(x.sku)}</b></td><td>${esc(x.abc_class || '')}</td><td class="num">${x.pick_lines_period ?? ''}</td><td>${esc(x.reason)}</td><td>${esc(x.status)}</td><td style="white-space:nowrap">${x.status === 'OPEN' ? `<button class="btn sm primary" data-sl="${x.id}" data-ok="1">Approve</button> <button class="btn sm" data-sl="${x.id}" data-ok="0">Reject</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">No suggestion yet.</td></tr>'}</tbody></table></div></div>`;
+    $$('[data-sl]').forEach(b => b.onclick = async () => { try { toast((await api('slotting/' + b.dataset.sl, { method: 'POST', body: { approve: b.dataset.ok === '1' ? 1 : 0 } })).message); } catch (e) { toast(e.message, 'err'); } pageSlotting(); });
   }
   async function pagePresetGroups() {      /* R-D-62 preset groups: list with search / status / star / drag sort, form, copy, delete, history; deep link ?id= */
     const qs = new URLSearchParams(location.hash.split('?')[1] || ''); const st = pagePresetGroups.st || (pagePresetGroups.st = { q: '', status: 'all' });

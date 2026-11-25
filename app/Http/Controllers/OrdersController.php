@@ -303,6 +303,11 @@ class OrdersController extends Controller
     /** R-H-17 put back the picked units of a cancelled line; R-H-35 un-scan a parcel the carrier did not take. */
     public function putback(Request $r, int $id) { $this->can($r, 'orders.WAREHOUSE'); return $this->run(fn () => Dispatch::putback($id, $r->input('bin') ? (int) $r->input('bin') : null)); }
 
+    /** R-H-50 slotting suggestions: list, approve / reject. */
+    public function slotting(Request $r) { $this->can($r, 'orders.SEE'); return ['rows' => \App\Services\WarehouseSlotting::list((int) Context::ent())]; }
+
+    public function slottingDecide(Request $r, int $id) { return $this->run(fn () => \App\Services\WarehouseSlotting::decide((int) Context::ent(), $id, (bool) $r->input('approve'), $r->user())); }
+
     /** R-H-32 void a label, put a new one on, address change after the label. */
     public function voidLabel(Request $r, int $id) { $this->can($r, 'orders.WAREHOUSE'); return $this->run(fn () => Dispatch::voidLabel($id, (string) $r->input('reason', ''))); }
 

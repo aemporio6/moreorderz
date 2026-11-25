@@ -544,6 +544,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('handover/{id}/close', [OrdersController::class, 'closeHandover'])->whereNumber('id');
         Route::post('handover/{id}/unscan', [OrdersController::class, 'unscan'])->whereNumber('id');      // R-H-35
         Route::post('parcels/{id}/void', [OrdersController::class, 'voidLabel'])->whereNumber('id');      // R-H-32
+        Route::get('slotting', [OrdersController::class, 'slotting']);      // R-H-50
+        Route::post('slotting/{id}', [OrdersController::class, 'slottingDecide'])->whereNumber('id');
         Route::post('parcels/{id}/new-label', [OrdersController::class, 'newLabel'])->whereNumber('id');
         Route::post('sales/{id}/address', [OrdersController::class, 'address'])->whereNumber('id');
         Route::post('sales/{id}/putback', [OrdersController::class, 'putback'])->whereNumber('id');      // R-H-17
