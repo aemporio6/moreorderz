@@ -528,6 +528,9 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('orders/{id}/cancel', [OrdersController::class, 'cancel'])->whereNumber('id');
         Route::post('pick-lists', [OrdersController::class, 'buildPick']);
         Route::get('pick-lists/{id}', [OrdersController::class, 'pickList'])->whereNumber('id');
+        Route::get('pick-lists', [OrdersController::class, 'pickLists']);      // R-H-28
+        Route::post('pick-lists/{id}/release', [OrdersController::class, 'pickRelease'])->whereNumber('id');
+        Route::post('pick-lists/{id}/reassign', [OrdersController::class, 'pickReassign'])->whereNumber('id');
         Route::post('pick-lines/{lineId}', [OrdersController::class, 'pick'])->whereNumber('lineId');
         Route::post('pick-empty', [OrdersController::class, 'pickEmpty']);
         Route::post('pack', [OrdersController::class, 'pack']);

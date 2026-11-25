@@ -196,4 +196,46 @@ class SalesDispatchTest extends TestCase
         $this->assertSame(10, Stock::available($this->p));
         $this->assertSame('RELEASED', DB::table('wh_reservations')->where('fk_id_sale', $id)->value('status'));
     }
+
+    /** R-H-28: idle, abandoned (released), reassigned, resumed and reprinted pick lists. */
+    public function test_abandoned_pick_list_releases_unpicked_lines_and_keeps_picked_units_in_dispatch(): void
+    {
+        foreach ([1, 2, 3, 4] as $n) $ids[$n] = $this->order("ORD-$n", 2);
+        $task = Dispatch::buildPickList(1);
+        $lines = DB::table('wh_pick_task_lines')->where('fk_id_pick_task', $task)->orderBy('line_no')->get();
+        $this->assertCount(4, $lines);
+        Dispatch::pick($lines[0]->id); Dispatch::pick($lines[1]->id);
+        $this->assertSame($lines[2]->id, \App\Services\PickLists::next($task)->id, 'a refresh resumes at the next unconfirmed line');
+        $pPick = new \ReflectionMethod(\App\Services\PrintService::class, 'pPick');
+        $html = $pPick->invoke(null, 1, $task);
+        $this->assertStringContainsString('reprint, lines still to pick', $html);
+        $this->assertSame(2, substr_count($html, 'ORD-3') + substr_count($html, 'ORD-4'), 'the reprint shows only the 2 lines still to pick');
+        $this->assertStringNotContainsString('ORD-1', $html);
+
+        $t = fn () => DB::table('wh_pick_tasks')->where('id', $task)->first();
+        $this->assertSame('IN_PROGRESS', \App\Services\PickLists::state($t()));
+        DB::table('wh_pick_tasks')->where('id', $task)->update(['last_activity_at' => now()->subMinutes(121)]);
+        $this->assertSame('IDLE', \App\Services\PickLists::state($t()), 'not touched for WH_PICK_IDLE_MINUTES → idle');
+        $this->assertSame(0, \App\Services\PickLists::sweep(1), 'idle is not yet abandoned');
+
+        $u = $this->makeUser('OWNER'); \App\Services\Context::set(1, (int) $u->id); $p2 = $this->makeUser('STOCK');
+        $this->assertStringContainsString('given to', \App\Services\PickLists::reassign($task, (int) $p2->id, $u)['message']);
+        $this->assertSame((int) $p2->id, (int) $t()->assigned_to);
+
+        DB::table('wh_pick_tasks')->where('id', $task)->update(['last_activity_at' => now()->subHours(9)]);
+        $this->assertSame(1, \App\Services\PickLists::sweep(1));
+        $this->assertSame('ABANDONED', $t()->status);
+        $this->assertSame(['DONE', 'DONE', 'RELEASED', 'RELEASED'], DB::table('wh_pick_task_lines')->where('fk_id_pick_task', $task)->orderBy('line_no')->pluck('line_status')->all());
+        $res = fn ($n) => DB::table('wh_reservations')->where('fk_id_sale', $ids[$n])->value('status');
+        $this->assertSame(['PICKED', 'PICKED', 'OPEN', 'OPEN'], [$res(1), $res(2), $res(3), $res(4)], 'unpicked lines go back to OPEN – still reserved');
+        $disp = \App\Services\StockService::systemLocation(1, 'DISPATCH');
+        $this->assertSame(4, \App\Services\CountTriggers::inBin($this->p, $disp), 'picked units stay in DISPATCH for packing');
+        $this->assertTrue(TaskEngine::isOpen('WH_PICK_ABANDONED', [$t()->task_code]));
+        $this->assertSame('RESERVED', DB::table('t_sales')->where('id', $ids[3])->value('wh_status'));
+        try { Dispatch::pick($lines[2]->id); $this->fail('a released line cannot be picked'); } catch (\RuntimeException $e) { $this->assertStringContainsString('released', $e->getMessage()); }
+        try { $pPick->invoke(null, 1, $task); $this->fail('an abandoned list is not printed'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('abandoned', $e->getMessage()); }
+        $next = Dispatch::buildPickList(1);
+        $this->assertSame(['ORD-3', 'ORD-4'], DB::table('wh_pick_task_lines as l')->join('t_sales as s', 's.id', '=', 'l.fk_id_sale')->where('l.fk_id_pick_task', $next)->orderBy('l.line_no')->pluck('s.order_no')->all(), 'they join the next list');
+        $this->assertSame(0, \App\Services\PickLists::sweep(1));
+    }
 }

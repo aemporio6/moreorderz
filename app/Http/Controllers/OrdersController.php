@@ -46,8 +46,8 @@ class OrdersController extends Controller
             'shops' => \App\Services\Perm::mine(DB::table('t_branches'), 'id')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name as name']),
             'carriers' => DB::table('t_carriers')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('carrier_name')->get(['id', 'carrier_name as name']),
             'boxes' => DB::table('wh_box_sizes')->whereIn('fk_id_ent', [$ent, 0])->where('f_active', 1)->get(['id', 'box_code as name']),
-            'pick_lists' => DB::table('wh_pick_tasks')->where('fk_id_ent', $ent)->whereIn('status', ['OPEN', 'IN_PROGRESS'])->orderBy('id')->get(['id', 'task_code', 'status', 'created_at',
-                DB::raw('(SELECT COUNT(*) FROM wh_pick_task_lines l WHERE l.fk_id_pick_task = wh_pick_tasks.id AND l.line_status = "OPEN") as open_lines')]),
+            'pick_lists' => DB::table('wh_pick_tasks')->where('fk_id_ent', $ent)->whereIn('status', ['OPEN', 'IN_PROGRESS'])->orderBy('id')->get(['id', 'fk_id_ent', 'last_activity_at', 'task_code', 'status', 'created_at',
+                DB::raw('(SELECT COUNT(*) FROM wh_pick_task_lines l WHERE l.fk_id_pick_task = wh_pick_tasks.id AND l.line_status = "OPEN") as open_lines')])->each(fn ($t) => $t->state = \App\Services\PickLists::state($t)),      /* R-H-28 idle */
             'ready' => DB::table('wh_parcels as p')->leftJoin('t_carriers as c', 'c.id', '=', 'p.fk_id_carrier')->where('p.fk_id_ent', $ent)->where('p.status', 'READY')->orderBy('p.id')->get(['p.id', 'p.parcel_code', 'p.order_no', 'p.tracking_no', 'p.fk_id_carrier', 'c.carrier_name as carrier']),
             'handovers' => DB::table('wh_handover_sessions as s')->leftJoin('t_carriers as c', 'c.id', '=', 's.fk_id_carrier')->where('s.fk_id_ent', $ent)->where('s.status', 'OPEN')->get(['s.id', 's.session_code', 's.expected_count', 's.scanned_count', 's.exception_count', 'c.carrier_name as carrier']),
             'rights' => $this->rights($r), 'month' => date('Y-m')];
@@ -204,10 +204,25 @@ class OrdersController extends Controller
     public function pickList(Request $r, int $id)
     {
         $this->can($r, 'orders.SEE');
-        $t = DB::table('wh_pick_tasks')->where('id', $id)->where('fk_id_ent', Context::ent())->first(['id', 'task_code', 'status', 'created_at']) ?? abort(404);
+        $t = DB::table('wh_pick_tasks')->where('id', $id)->where('fk_id_ent', Context::ent())->first(['id', 'fk_id_ent', 'task_code', 'status', 'created_at', 'last_activity_at', 'assigned_to']) ?? abort(404);
+        $t->state = \App\Services\PickLists::state($t); $t->next_line = \App\Services\PickLists::next($id)?->id;      /* R-H-28: resume at the next unconfirmed line after a refresh */
+        $t->picker = $t->assigned_to ? DB::table('t_users')->where('id', $t->assigned_to)->value('display_name') : null;
+        $pickers = DB::table('t_users')->where('fk_id_ent', Context::ent())->where('f_active', 1)->orderBy('display_name')->limit(300)->get(['id', 'display_name']);
         return ['task' => $t, 'lines' => DB::table('wh_pick_task_lines as l')->join('t_product_vendors as p', 'p.id', '=', 'l.fk_id_product')->leftJoin('cat_inventory_locations as c', 'c.id', '=', 'l.fk_id_from_location')->leftJoin('t_sales as s', 's.id', '=', 'l.fk_id_sale')
-            ->where('l.fk_id_pick_task', $id)->orderBy('l.line_no')->get(['l.id', 'l.line_no', 'c.location_name as bin', 'p.SKU_VENDOR as sku', 'p.product_name_vendor as name', 'l.qty', 'l.qty_done', 'l.qty_short', 'l.line_status', 's.order_no']), 'rights' => $this->rights($r)];
+            ->where('l.fk_id_pick_task', $id)->orderBy('l.line_no')->get(['l.id', 'l.line_no', 'c.location_name as bin', 'p.SKU_VENDOR as sku', 'p.product_name_vendor as name', 'l.qty', 'l.qty_done', 'l.qty_short', 'l.line_status', 's.order_no']), 'pickers' => $pickers, 'rights' => $this->rights($r)];
     }
+
+    /** R-H-28: open / idle / abandoned lists, release (abandon) a list, give it to another picker. */
+    public function pickLists(Request $r) { $this->can($r, 'orders.SEE'); return ['rows' => \App\Services\PickLists::lists((int) Context::ent())]; }
+
+    public function pickRelease(Request $r, int $id)
+    {
+        $this->can($r, 'orders.WAREHOUSE');
+        abort_unless(DB::table('wh_pick_tasks')->where('id', $id)->where('fk_id_ent', Context::ent())->exists(), 404);
+        return $this->run(fn () => ['message' => \App\Services\PickLists::abandon($id, 'released by ' . ($r->user()->display_name ?? 'user')) . ' line(s) released to the queue; picked units stay in DISPATCH.']);
+    }
+
+    public function pickReassign(Request $r, int $id) { $this->can($r, 'orders.WAREHOUSE'); return $this->run(fn () => \App\Services\PickLists::reassign($id, (int) $r->input('user'), $r->user())); }
 
     public function pick(Request $r, int $lineId)
     {
