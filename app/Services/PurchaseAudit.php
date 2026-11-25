@@ -152,9 +152,12 @@ class PurchaseAudit
 
     /* ---------------- R-A_SALES-62 file against our sales ---------------- */
 
-    public static function compare(int $runId, object $u): array
+    public static function compare(int $runId, object $u): array { return self::diffs(self::run($runId, $u), Perm::has($u, 'orders.dsSeeContact')); }
+
+    /** The Missing / Extra / Different lists of a run (also the Month Close check ORDERS_FILE_VS_SALES – no user, no contact columns). */
+    public static function diffs(object $run, bool $contact = false): array
     {
-        $run = self::run($runId, $u); $from = $run->d_yr_mon; $to = date('Y-m-t', strtotime($from)); $contact = Perm::has($u, 'orders.dsSeeContact');
+        $runId = (int) $run->id; $from = $run->d_yr_mon; $to = date('Y-m-t', strtotime($from));
         $file = DB::table('ebay_audit')->where('fk_id_audit_main', $runId)->get(); $key = fn ($o, $s) => mb_strtoupper(trim((string) $o)) . '|' . mb_strtoupper(trim((string) $s));
         $fk = []; foreach ($file as $f) $fk[$key($f->Order_number, $f->sku_ebay)] = $f;
         $sales = DB::table('t_sales')->where('fk_id_branch', $run->fk_id_branch)->whereBetween('d_order', [$from, $to])->where(fn ($w) => $w->whereNull('line_status')->orWhere('line_status', '<>', 'DELETED'))->get();
@@ -186,6 +189,34 @@ class PurchaseAudit
         DB::table('t_sales')->where('id', $saleId)->update($set);
         Audit::log('t_sales', $saleId, 'UPDATE', ['qty' => [(int) $s->qty, $set['qty']], 'sale_rate' => [(float) $s->sale_rate, $set['sale_rate']], 'total_amount' => [(float) $s->total_amount, $set['total_amount']]], 'eBay audit: file value accepted', Context::ent());
         return ['message' => 'The sale now has the file values.'];
+    }
+
+    /** R-A_SALES-62 "Create missing sale": a file line not in sales becomes a Pending sale of the shop (unmatched source until it is matched to a listing). */
+    public static function createMissing(int $runId, string $order, string $sku, object $u): array
+    {
+        Perm::need($u, 'orders.CONFIRM'); $run = self::run($runId, $u);
+        $f = DB::table('ebay_audit')->where('fk_id_audit_main', $runId)->where('Order_number', $order)->where('sku_ebay', $sku)->first() ?? throw new \InvalidArgumentException('The line is not in the file.');
+        if (DB::table('t_sales')->where('fk_id_branch', $run->fk_id_branch)->where('order_no', $order)->where('sku', $sku)->where(fn ($w) => $w->whereNull('line_status')->orWhere('line_status', '<>', 'DELETED'))->exists()) throw new \InvalidArgumentException('This order line is already in sales.');
+        $shop = DB::table('t_branches')->where('id', $run->fk_id_branch)->first();
+        $listing = DB::table('t_product_listings')->where('fk_id_branch', $shop->id)->where('marketplace_sku', $sku)->first();
+        $id = (int) DB::table('t_sales')->insertGetId(RecordService::fillNotNull('t_sales', ['fk_id_ent' => (int) $shop->fk_id_ent, 'fk_id_branch' => $shop->id, 'fk_id_marketplace' => $shop->fk_id_marketplace, 'order_no' => $order, 'sku' => $sku,
+            'd_order' => self::date((string) $f->Sale_date) ?? $run->d_yr_mon, 'qty' => (int) $f->Quantity, 'sale_rate' => (float) $f->Sold_for, 'total_amount' => (float) $f->Total_price, 'ds_note' => (string) $f->My_item_note, 'product_info' => mb_substr((string) $f->Item_title, 0, 250),
+            'cust_name' => mb_substr((string) $f->Post_to_name, 0, 100), 'status' => 'Pending', 'sale_source' => $listing ? 'active' : 'unmatched', 'fk_id_listing' => $listing->id ?? null, 'fk_product_id' => $listing->fk_id_product ?? null, 'created_by' => $u->id, 'created_at' => now()]));
+        Audit::log('t_sales', $id, 'INSERT', ['from' => 'eBay audit file', 'order' => $order, 'sku' => $sku], 'Create missing sale', (int) $shop->fk_id_ent);
+        return ['sale' => $id, 'message' => "Sale $order / $sku created (Pending)."];
+    }
+
+    /** R-A_SALES-62 "Delete extra": a Pending sale of the month that is not in the file is marked DELETED (kept for the audit trail, never a confirmed one). */
+    public static function deleteExtra(int $runId, int $saleId, string $reason, object $u): array
+    {
+        Perm::need($u, 'orders.CONFIRM'); $run = self::run($runId, $u);
+        if (trim($reason) === '') throw new \InvalidArgumentException('Give the reason for deleting the sale.');
+        $s = DB::table('t_sales')->where('id', $saleId)->where('fk_id_branch', $run->fk_id_branch)->first() ?? throw new \InvalidArgumentException('Sale not found in this shop.');
+        if ($s->status !== 'Pending') throw new \InvalidArgumentException('Only a Pending sale can be deleted – this one is ' . $s->status . '.');
+        if (DB::table('ebay_audit')->where('fk_id_audit_main', $runId)->where('Order_number', $s->order_no)->where('sku_ebay', $s->sku)->exists()) throw new \InvalidArgumentException('This sale is in the file – it is not extra.');
+        DB::table('t_sales')->where('id', $saleId)->update(['line_status' => 'DELETED', 'updated_at' => now()]);
+        Audit::log('t_sales', $saleId, 'UPDATE', ['line_status' => [$s->line_status, 'DELETED']], 'eBay audit: extra sale deleted – ' . trim($reason), Context::ent());
+        return ['message' => 'The sale is deleted (kept in the history).'];
     }
 
     /* ---------------- R-A_SALES-63 Amazon ---------------- */

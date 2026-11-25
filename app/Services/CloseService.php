@@ -16,7 +16,7 @@ class CloseService
         'FILES_PRESENT' => ['The marketplace money file for the month is loaded', false], 'ORDERS_FILE' => ['The orders file of the month is imported (for a daily-only shop: its daily orders)', false], 'SETTLEMENT_COMPLETE' => ['Every statement of the month has all its rows', false],
         'ORDERS_VS_TXN' => ['Every order has a money line and every money line an order', true], 'HUB_TOTALS' => ['Statements together = the marketplace\'s own period total', true],
         'PAYOUT_VS_BANK' => ['Every payout of the month is matched to a bank line', true], 'BANK_ALL_CATEGORISED' => ['No bank line of the month is left unmatched', false],
-        'PURCHASE_VS_SUPPLIER' => ['Purchases match supplier proof', true], 'SALES_CONFIRMED' => ['All sale lines of the month are confirmed', false],
+        'PURCHASE_VS_SUPPLIER' => ['Purchases match supplier proof', true], 'ORDERS_FILE_VS_SALES' => ['The orders file of the purchase audit matches the sales (no missing, extra or different line)', true], 'SALES_CONFIRMED' => ['All sale lines of the month are confirmed', false],
         'COST_PRESENT' => ['Every sold unit has a cost', false], 'FX_PRESENT' => ['Every amount has an exchange rate', false], 'EXPENSES' => ['Every expense is given to a shop or a shared rule', true],
         'STOCK_ROLL' => ['Stock adds up: products = lots = movements, and stock value = the ledger', false], 'SHARES_LE_100' => ['Partner shares are not over 100 %', false],
         'SPLIT_RULES' => ['A profit split rule is valid for the month', false], 'OPENING_LOCKED' => ['Opening balances are locked', false], 'PREVIOUS_LOCKED' => ['Earlier months of the shop are locked', false],
@@ -121,6 +121,11 @@ class CloseService
         $un = DB::table('fin_bank_transactions')->where('company_id', $ent)->where('match_status', 'UNMATCHED')->whereBetween('txn_date', [$from, $to])->count();
         $set('BANK_ALL_CATEGORISED', $un ? 'RED' : 'GREEN', $un ? "$un bank line(s) dated in the month are not matched." : 'No unmatched bank line in the month.', $un, '#/bank');
         $set('PURCHASE_VS_SUPPLIER', 'NA', $later);
+        /* R-A_SALES-62: the purchase audit's orders file against the sales of the shop-month (NA while no audit file was loaded) */
+        $ar = DB::table('t_audit_main')->where('fk_id_branch', $branchId)->where('d_yr_mon', $from)->orderByDesc('id')->first();
+        if (! $ar || ! DB::table('ebay_audit')->where('fk_id_audit_main', $ar->id)->exists()) $set('ORDERS_FILE_VS_SALES', 'NA', 'No orders file was loaded in the purchase audit of this month.');
+        else { $dc = PurchaseAudit::diffs($ar)['counts']; $bad = $dc['missing'] + $dc['extra'] + $dc['different'];
+            $set('ORDERS_FILE_VS_SALES', $bad ? 'RED' : 'GREEN', $bad ? "{$dc['missing']} missing, {$dc['extra']} extra, {$dc['different']} different line(s) between the orders file and the sales." : 'The orders file and the sales agree line by line.', $bad, '#/purchase-audit/' . $ar->id); }
         // 8 – 10
         $pend = DB::table('t_sales')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->where('sale_source', 'active')->where('status', 'Pending')->whereBetween('d_order', [$from, $to])->count();
         $unm = DB::table('t_sales')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->where('sale_source', 'unmatched')->where('status', 'Pending')->whereBetween('d_order', [$from, $to])->count();

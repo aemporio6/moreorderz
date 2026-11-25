@@ -47,6 +47,17 @@ class Profiles
         return ['id' => (int) $r->id, 'type' => $r->report_type, 'required' => (bool) $r->f_required_for_close, 'detect' => self::names($r->detect_headers), 'map' => $map];
     }
 
+    /** R-FIN-69 every report type of the profile as a file layout: report_type => [map (role => header names), detect (headers that recognise the file)]. */
+    public static function layouts(int $profileId): array
+    {
+        $out = [];
+        foreach (DB::table('mp_profile_report_types')->where('fk_id_mp_profile', $profileId)->where('f_active', 1)->orderBy('id')->get() as $r) {
+            $map = []; foreach ((array) json_decode((string) $r->column_map_json, true) as $k => $v) { $n = is_array($v) ? array_values(array_filter(array_map('trim', $v))) : self::names($v); if ($n) $map[$k] = $n; }
+            $out[$r->report_type] = ['map' => $map, 'detect' => self::names($r->detect_headers)];
+        }
+        return $out;
+    }
+
     /** Fee buckets that say how a file fills them: wide = header name → code, long = words in type / description → code. */
     public static function buckets(int $profileId): array
     {

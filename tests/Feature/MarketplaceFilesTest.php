@@ -232,4 +232,26 @@ class MarketplaceFilesTest extends TestCase
         $bp = \App\Services\Profiles::ensureForMarketplace($blank);
         $this->assertSame([0, 'OnBuy profile'], [DB::table('mp_profile_fee_buckets')->where('fk_id_mp_profile', $bp)->count(), DB::table('mp_profiles')->where('id', $bp)->value('name')], 'a marketplace with no example gets a blank profile');
     }
+    /** R-FIN-69 the file layouts are profile data: the seeded profiles read the example files exactly as the code; a renamed header is read after a profile change, no code change. */
+    public function test_money_file_layouts_are_profile_data(): void
+    {
+        $mp = (int) DB::table('t_branches')->where('id', $this->shop)->value('fk_id_marketplace');
+        DB::table('cat_marketplaces')->where('id', $mp)->update(['marketplace_short' => 'eBay', 'marketplace_descr' => 'eBay UK']);
+        $pid = \App\Services\Profiles::ensureForMarketplace($mp);
+        DB::table('t_branches')->where('id', $this->shop)->update(['fk_id_mp_profile' => $pid]);
+        $lay = \App\Services\Profiles::layouts($pid);
+        $this->assertSame(['payout id'], $lay['EBAY_TRANSACTIONS']['map']['payout id'] ?? null, 'the eBay columns are rows of the profile');
+        $path = $this->file('ebay.csv', $this->ebay());
+        $code = MF::read($path, 'csv'); $prof = MF::read($path, 'csv', ['layouts' => $lay]);
+        $this->assertSame([array_column($code['lines'], 'code'), array_column($code['lines'], 'amount')], [array_column($prof['lines'], 'code'), array_column($prof['lines'], 'amount')], 'the seeded profile reads the file exactly as the code');
+        $renamed = $this->file('ebay2.csv', str_replace(['Payout ID', 'Net amount'], ['Payout reference', 'Net total'], $this->ebay()));
+        $this->assertSame('MAPPED', MF::detect($renamed, 'csv'), 'eBay renamed two headers: not recognised by the defaults');
+        $row = DB::table('mp_profile_report_types')->where('fk_id_mp_profile', $pid)->where('report_type', 'EBAY_TRANSACTIONS')->first();
+        $map = json_decode((string) $row->column_map_json, true); $map['payout id'] = ['Payout reference']; $map['net amount'] = ['Net total'];
+        DB::table('mp_profile_report_types')->where('id', $row->id)->update(['column_map_json' => json_encode($map)]);
+        $x = MF::read($renamed, 'csv', ['layouts' => \App\Services\Profiles::layouts($pid)]);
+        $this->assertSame(['EBAY', array_column($code['lines'], 'amount')], [$x['format'], array_column($x['lines'], 'amount')], 'the profile change alone reads the renamed file');
+        $this->assertGreaterThan(0, MF::import(1, $this->shop, $renamed, 'ebay2.csv')['lines_new'], 'the import takes the shop profile layouts');
+        $this->assertSame(1, DB::table('mp_profile_report_types as r')->join('mp_profiles as p', 'p.id', '=', 'r.fk_id_mp_profile')->where('p.code', 'AMAZON_EXAMPLE')->where('r.report_type', 'AMAZON_TRANSACTIONS')->count(), 'the Amazon date range report is a profile row too');
+    }
 }

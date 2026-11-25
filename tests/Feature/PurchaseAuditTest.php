@@ -69,6 +69,17 @@ class PurchaseAuditTest extends TestCase
         $this->assertSame([2, 1], $c['different'][0]['diff']['qty'], 'shown as file over current');
         $this->postJson("/api/purchase-audit/$run/accept/$s2")->assertOk();
         $this->assertSame(0, A::compare($run, $this->owner)['counts']['different']);
+        // the Month Close check, then the two actions close the gap
+        $chk = fn () => collect(\App\Services\CloseService::evaluate(1, $this->shop, '2026-07')['checks'])->firstWhere('code', 'ORDERS_FILE_VS_SALES');
+        $this->assertSame(['RED', 2], [$chk()['status'], $chk()['open_items']], 'one missing, one extra');
+        $this->postJson("/api/purchase-audit/$run/create-missing", ['order' => 'O-3', 'sku' => 'C'])->assertOk();
+        $this->assertSame([1, 7.0, 'Pending'], [DB::table('t_sales')->where('order_no', 'O-3')->count(), (float) DB::table('t_sales')->where('order_no', 'O-3')->value('total_amount'), DB::table('t_sales')->where('order_no', 'O-3')->value('status')]);
+        $this->postJson("/api/purchase-audit/$run/create-missing", ['order' => 'O-3', 'sku' => 'C'])->assertStatus(422);
+        $extra = (int) DB::table('t_sales')->where('order_no', 'O-X')->value('id');
+        $this->postJson("/api/purchase-audit/$run/delete-extra/$extra", [])->assertStatus(422)->assertJsonPath('message', 'Give the reason for deleting the sale.');
+        $this->postJson("/api/purchase-audit/$run/delete-extra/$extra", ['reason' => 'test order'])->assertOk();
+        $this->assertSame(['missing' => 0, 'extra' => 0, 'different' => 0], A::compare($run, $this->owner)['counts']);
+        $this->assertSame('GREEN', $chk()['status']);
     }
 
     public function test_r63_amazon_price_and_customer(): void

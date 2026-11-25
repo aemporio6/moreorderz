@@ -601,6 +601,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('purchase-audit/{id}/ebay', [\App\Http\Controllers\PurchaseAuditController::class, 'ebay'])->whereNumber('id');
         Route::post('purchase-audit/{id}/supplier/{vendor}', [\App\Http\Controllers\PurchaseAuditController::class, 'supplier'])->whereNumber(['id', 'vendor']);
         Route::post('purchase-audit/{id}/accept/{sale}', [\App\Http\Controllers\PurchaseAuditController::class, 'accept'])->whereNumber(['id', 'sale']);
+        Route::post('purchase-audit/{id}/create-missing', [\App\Http\Controllers\PurchaseAuditController::class, 'createMissing'])->whereNumber('id');
+        Route::post('purchase-audit/{id}/delete-extra/{sale}', [\App\Http\Controllers\PurchaseAuditController::class, 'deleteExtra'])->whereNumber(['id', 'sale']);
         Route::get('compliance/hub', [\App\Http\Controllers\InvoicesController::class, 'hubSettings']);      // R-ACC-20 / 22
         Route::post('compliance/hub', [\App\Http\Controllers\InvoicesController::class, 'hubSettingsSave']);
         Route::post('compliance/hub/team/{user}', [\App\Http\Controllers\InvoicesController::class, 'hubMember'])->whereNumber('user');

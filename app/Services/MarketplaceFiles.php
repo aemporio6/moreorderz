@@ -42,6 +42,53 @@ class MarketplaceFiles
     ];
 
     public const FORMATS = ['TIKTOK' => 'TikTok Shop settlement workbook', 'AMAZON_TXN' => 'Amazon date range report (transactions)', 'AMAZON_V2' => 'Amazon settlement report (flat file V2)', 'EBAY' => 'eBay transaction report', 'MAPPED' => 'Table read by its column names'];
+    /**
+     * R-FIN-69 / R-A_SALES-87 the money-file layouts are profile data: each layout names the profile report types that describe it, the headers that recognise it and
+     * its columns by role (the role names are the column names of the marketplace's own file). A shop's profile report type (mp_profile_report_types, column_map_json
+     * role → [header names], detect_headers) renames or adds headers, so a changed file is read by changing the profile, not the code. The readers below only know the
+     * SHAPE of a file (a summary line per settlement / one column per amount group / payout rows), never a marketplace's header names beyond these defaults.
+     */
+    public const LAYOUTS = [
+        'AMAZON_V2' => ['shape' => 'SUMMARY_LINE', 'report_types' => ['AMAZON_SETTLEMENT_V2', 'AMAZON_SETTLEMENT'], 'detect' => ['settlement-id', 'amount-description'],
+            'columns' => ['settlement-id', 'settlement-start-date', 'settlement-end-date', 'deposit-date', 'total-amount', 'currency', 'transaction-type', 'order-id', 'sku', 'quantity-purchased', 'amount-type', 'amount-description', 'amount', 'posted-date', 'posted-date-time']],
+        'EBAY' => ['shape' => 'PAYOUT_ROWS', 'report_types' => ['EBAY_TRANSACTIONS', 'EBAY_TRANSACTION'], 'detect' => ['transaction creation date', 'payout id'],
+            'columns' => ['transaction creation date', 'type', 'order number', 'custom label', 'quantity', 'description', 'gross transaction amount', 'net amount', 'payout id', 'payout date', 'payout currency', 'payout method', 'transaction currency', 'exchange rate', 'seller']],
+        'AMAZON_TXN' => ['shape' => 'COLUMN_GROUPS', 'report_types' => ['AMAZON_TRANSACTIONS', 'AMAZON_TRANSACTION'], 'detect' => ['date/time', 'settlement id', 'selling fees'],
+            'columns' => ['date/time', 'settlement id', 'type', 'order id', 'sku', 'description', 'quantity', 'product sales', 'selling fees', 'other transaction fees', 'total']],
+    ];
+
+    /** format => [file header (key) => role] from the shop profile's report types. */
+    public static array $alias = [];
+    private static array $detect = [];
+
+    /** The first lines of a text file as rows (detection never parses the whole file). */
+    private static function headRows(string $path): array
+    {
+        $txt = (string) file_get_contents($path, false, null, 0, 20000); if (str_starts_with($txt, "\xEF\xBB\xBF")) $txt = substr($txt, 3);
+        if (! mb_check_encoding($txt, 'UTF-8')) $txt = mb_convert_encoding($txt, 'UTF-8', 'Windows-1252');
+        $lines = array_slice(preg_split('/\r\n|\r|\n/', $txt), 0, 60); $head = implode("\n", $lines);
+        $sep = substr_count($head, "\t") > substr_count($head, ',') && substr_count($head, "\t") > substr_count($head, ';') ? "\t" : (substr_count($head, ';') > substr_count($head, ',') ? ';' : ',');
+        return array_map(fn ($l) => str_getcsv($l, $sep, '"', ''), $lines);
+    }
+
+    /** A header row in role names: a header the profile renames becomes its role. */
+    private static function hdr(array $row, string $fmt): array { return array_map(fn ($x) => self::$alias[$fmt][self::key($x)] ?? self::key($x), $row); }
+
+    /** The profile's report types (report_type => [map, detect]) → the aliases and the recognising headers of each layout. */
+    public static function useLayouts(array $types): array
+    {
+        self::$alias = []; $det = [];
+        foreach (self::LAYOUTS as $fmt => $L) {
+            $det[$fmt] = $L['detect'];
+            foreach ($L['report_types'] as $rt) {
+                if (! isset($types[$rt])) continue;
+                foreach ((array) ($types[$rt]['map'] ?? []) as $role => $names) foreach ((array) $names as $n) if (($k = self::key($n)) !== '' && $k !== self::key($role)) self::$alias[$fmt][$k] = self::key($role);
+                if (! empty($types[$rt]['detect'])) $det[$fmt] = array_map(fn ($x) => self::key($x), (array) $types[$rt]['detect']);
+            }
+        }
+        return $det;
+    }
+
     public const PLATFORMS = ['ONBUY' => 'OnBuy', 'TEMU' => 'Temu', 'AMAZON' => 'Amazon', 'EBAY' => 'eBay', 'OTHER' => 'Other marketplace'];
 
     // ---------- small helpers ----------
@@ -95,10 +142,11 @@ class MarketplaceFiles
             $names = IOFactory::createReaderForFile($path)->listWorksheetNames($path);
             return in_array('Order details', $names, true) && in_array('Statements', $names, true) ? 'TIKTOK' : 'MAPPED';
         }
-        $head = mb_strtolower(substr((string) file_get_contents($path, false, null, 0, 6000), 0, 6000));
-        if (str_contains($head, "settlement-id\t") && str_contains($head, 'amount-description')) return 'AMAZON_V2';
-        if (str_contains($head, 'transaction creation date') && str_contains($head, 'payout id')) return 'EBAY';
-        if (preg_match('/^"?date\/time"?,"?settlement id"?,/m', $head) && str_contains($head, 'selling fees')) return 'AMAZON_TXN';
+        /* R-FIN-69: a layout is recognised by its headers (the profile's detect headers, else the layout's), each found as itself or as a name the profile gives it */
+        $rows = self::headRows($path);
+        foreach (self::$detect ?: array_map(fn ($L) => $L['detect'], self::LAYOUTS) as $fmt => $need) foreach ($rows as $r) {
+            $h = self::hdr($r, $fmt); if (! array_diff(array_map(fn ($x) => self::$alias[$fmt][self::key($x)] ?? self::key($x), $need), $h)) return $fmt;
+        }
         return 'MAPPED';
     }
 
@@ -124,7 +172,7 @@ class MarketplaceFiles
 
     public static function readAmazon(string $path): array
     {
-        $rows = self::rows($path, 'txt'); $h = array_map(fn ($x) => self::key($x), $rows[0] ?? []); $ix = array_flip($h);
+        $rows = self::rows($path, 'txt'); $h = self::hdr($rows[0] ?? [], 'AMAZON_V2'); $ix = array_flip($h);
         foreach (['settlement-id', 'transaction-type', 'amount-type', 'amount-description', 'amount', 'total-amount'] as $must) if (! isset($ix[$must])) throw new \InvalidArgumentException("This is not an Amazon settlement report (flat file V2): the column \"$must\" is missing.");
         $g = fn (array $r, string $k) => trim((string) ($r[$ix[$k] ?? -1] ?? ''));
         $st = []; $lines = []; $refund = []; $unknown = []; $cur = 'GBP';
@@ -163,9 +211,9 @@ class MarketplaceFiles
     public static function readAmazonTxn(string $path): array
     {
         $rows = self::rows($path, 'csv'); $hi = null;
-        foreach (array_slice($rows, 0, 40, true) as $i => $r) if (self::key($r[0] ?? '') === 'date/time' && self::key($r[1] ?? '') === 'settlement id') { $hi = $i; break; }
+        foreach (array_slice($rows, 0, 40, true) as $i => $r) { $hr = self::hdr($r, 'AMAZON_TXN'); if (($hr[0] ?? '') === 'date/time' && ($hr[1] ?? '') === 'settlement id') { $hi = $i; break; } }
         if ($hi === null) throw new \InvalidArgumentException('This is not an Amazon date range report: the line starting with "date/time, settlement id" is missing.');
-        $h = array_map(fn ($x) => self::key($x), $rows[$hi]); $ix = array_flip($h);
+        $h = self::hdr($rows[$hi], 'AMAZON_TXN'); $ix = array_flip($h);
         foreach (['type', 'product sales', 'selling fees', 'total'] as $must) if (! isset($ix[$must])) throw new \InvalidArgumentException("The column \"$must\" is missing in the Amazon report.");
         $g = fn (array $r, string $k) => trim((string) ($r[$ix[$k] ?? -1] ?? '')); $cur = preg_match('/All amounts in ([A-Z]{3})/', implode(' ', array_map(fn ($r) => (string) ($r[0] ?? ''), array_slice($rows, 0, $hi))), $m) ? $m[1] : 'GBP';
         // every amount column before "selling fees" is money from / to the buyer (sales, credits, rebates and their taxes, tax withheld by the marketplace)
@@ -218,9 +266,9 @@ class MarketplaceFiles
     public static function readEbay(string $path): array
     {
         $rows = self::rows($path, 'csv'); $hi = null; $seller = null;
-        foreach ($rows as $i => $r) { if (self::key($r[0] ?? '') === 'seller') $seller = trim((string) ($r[1] ?? '')); if (self::key($r[0] ?? '') === 'transaction creation date') { $hi = $i; break; } }
+        foreach ($rows as $i => $r) { $hr = self::hdr($r, 'EBAY'); if (($hr[0] ?? '') === 'seller') $seller = trim((string) ($r[1] ?? '')); if (($hr[0] ?? '') === 'transaction creation date') { $hi = $i; break; } }
         if ($hi === null) throw new \InvalidArgumentException('This is not an eBay transaction report: the line starting with "Transaction creation date" is missing.');
-        $h = array_map(fn ($x) => self::key($x), $rows[$hi]); $ix = array_flip($h);
+        $h = self::hdr($rows[$hi], 'EBAY'); $ix = array_flip($h);
         foreach (['type', 'net amount', 'payout id', 'gross transaction amount'] as $must) if (! isset($ix[$must])) throw new \InvalidArgumentException("The column \"$must\" is missing in the eBay report. Tick all columns when you make the report.");
         $g = function (array $r, string $k) use ($ix) { $v = trim((string) ($r[$ix[$k] ?? -1] ?? '')); return $v === '--' ? '' : $v; };
         $fees = ['final value fee - fixed' => 'MP_COMMISSION', 'final value fee - variable' => 'MP_COMMISSION', 'regulatory operating fee' => 'MP_REGULATORY', "very high 'item not as described' fee" => 'MP_PENALTY', 'below standard performance fee' => 'MP_PENALTY', 'international fee' => 'MP_INTERNATIONAL',
@@ -402,6 +450,7 @@ class MarketplaceFiles
     public static function read(string $path, string $ext, array $opt = []): array
     {
         self::$pfBuckets = ['wide' => (array) ($opt['profile']['wide'] ?? []), 'long' => (array) ($opt['profile']['long'] ?? [])];
+        self::$detect = self::useLayouts((array) ($opt['layouts'] ?? []));
         $fmt = self::detect($path, $ext);
         return match ($fmt) { 'AMAZON_V2' => self::readAmazon($path), 'AMAZON_TXN' => self::readAmazonTxn($path), 'EBAY' => self::readEbay($path), 'TIKTOK' => ['format' => 'TIKTOK'], default => self::readMapped($path, $ext, $opt) };
     }
@@ -410,6 +459,7 @@ class MarketplaceFiles
     {
         $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION)) ?: 'csv';
         if (! isset($opt['profile']) && ($p = Profiles::ofShop($branchId))) { $rt = Profiles::report((int) $p->id, 'MONEY'); $b = Profiles::buckets((int) $p->id); if (($rt && $rt['map']) || $b['wide'] || $b['long']) $opt['profile'] = ['name' => $p->name, 'type' => $rt['type'] ?? null, 'map' => $rt['map'] ?? [], 'wide' => $b['wide'], 'long' => $b['long']]; }
+        if (! isset($opt['layouts']) && ($p ??= Profiles::ofShop($branchId))) $opt['layouts'] = Profiles::layouts((int) $p->id);      /* R-FIN-69 the shop profile's file layouts */
         $x = self::read($path, $ext, $opt);
         if ($x['format'] === 'TIKTOK') return SettlementService::importTikTok($ent, $branchId, $path, $fileName) + ['format' => 'TIKTOK', 'format_name' => self::FORMATS['TIKTOK']];
         $shop = DB::table('t_branches')->where('id', $branchId)->where('fk_id_ent', $ent)->first() ?? throw new \InvalidArgumentException('Choose the shop this file belongs to.');
