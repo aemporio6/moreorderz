@@ -125,6 +125,7 @@ class RecordService
 
     /** Insert or update. Returns ['id' => .., 'created' => bool]. Throws ValidationException with a message per field. */
     /** R-B_SOURCING-54 required fields of the sourcing module with the old messages (table.column => message). */
+    public const SYSTEM_USER_FIELDS = ['t_src_cycles.requested_by', 't_src_po.requested_by'];
     public const SPEC_REQUIRED = [
         'cat_src_lov.lov_group' => 'LOV Group is required', 'cat_src_lov.lov_value' => 'LOV Value is required',
         't_product_vendors.product_name_vendor' => 'Product Name is required', 't_src_products.product_name' => 'Product Name is required', 't_src_cycle_products.product_name' => 'Product Name is required',
@@ -162,6 +163,10 @@ class RecordService
             if ($v === '' ) $v = null;
             $data[$col] = is_array($v) ? implode(',', $v) : $v;
         }
+        /* R-B_SOURCING-62 requested by = the person logged in (a system field: what the form posts is ignored, an edit never changes it); a PRODUCT line needs its product */
+        if (in_array($table . '.requested_by', self::SYSTEM_USER_FIELDS, true)) { if (! $id) $data['requested_by'] = Context::userId(); else unset($data['requested_by']); }
+        if ($table === 't_src_cycle_products' && array_key_exists('fk_id_product', $data + $old) && empty($data['fk_id_product'] ?? $old['fk_id_product'] ?? null))
+            $errors['fk_id_product'] = 'Pick the product (or + Add product) for this line.';      /* PO lines: FormRules */
         $errors = FormRules::check($formKey, $data, $old, $id, $errors) + $errors;      // a form's own message (old texts) wins over the general one      // typed codes, shares, uniqueness of this form (R-F_SETUP-35)
         if ($errors) throw ValidationException::withMessages($errors);
 

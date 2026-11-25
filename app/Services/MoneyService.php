@@ -319,6 +319,7 @@ class MoneyService
                 case 'WITHDRAWAL': DB::table('fin_withdrawals')->where('id', (int) $l->matched_to_id)->update(['bank_txn_id' => null]); break;
                 case 'CAPITAL_CALL': BankMatch::undoCapitalCall((string) $l->matched_to_id); break;
                 case 'CLAIM': $rev('CLAIM_REFUND', (int) $l->id); break;
+                case 'REFUND': throw new \InvalidArgumentException('This bank line paid a refund that is booked on a confirmed sale line – it cannot be unmatched. Book a correction instead (a manual journal or a new sale charge).');
                 case 'CATEGORY': $rev('BANK_LINE', (int) $l->id); DB::table('t_src_freight_costs')->where('fk_id_bank_line', $l->id)->whereNull('source_po_line_id')->update(['f_active' => 0]); DB::table('t_src_customs')->where('fk_id_bank_line', $l->id)->where('import_vat', 0)->where('duty_amount', '>', 0)->where('status', 'CLEARED')->whereNull('declaration_number')->update(['f_active' => 0]); break;
                 case 'SPLIT':
                     $rev('BANK_SPLIT', (int) $l->id);

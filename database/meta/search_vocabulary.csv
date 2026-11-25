@@ -111,6 +111,7 @@ arrival,shipments,VOCAB,#/list/t_src_shipments
 artwork,product pack artwork,VOCAB,#/list/product_artwork_file
 asin,listings,VOCAB,#/list/listing
 asins,listings,VOCAB,#/list/listing
+asked by,requested by,VOCAB,#/list/src_research
 asos marketplace,marketplace operations hubs,VOCAB,#/hubs
 assigned to me,my tasks,VOCAB,#/tasks
 at port,shipments,VOCAB,#/list/t_src_shipments
@@ -163,6 +164,7 @@ bank list,catalog masters,VOCAB,#/list/cat_country
 bank profile,bank statement profiles,VOCAB,#/list/bank_statement_profile
 bank rec,bank and cash,VOCAB,#/bank
 bank reconciliation,bank and cash,VOCAB,#/bank
+bank refund to buyer,outside refund,VOCAB,#/refunds
 bank statement,bank and cash,VOCAB,#/bank
 bank statements,bank and cash,VOCAB,#/bank
 bank transactions,bank and cash,VOCAB,#/bank
@@ -178,6 +180,7 @@ batch,lots and owners,VOCAB,#/stock/lots
 batch history,import history,VOCAB,#/import-history
 batch number,lots and owners,VOCAB,#/stock/lots
 batch picking,orders to dispatch,VOCAB,#/orders
+batch refunds,outside refund,VOCAB,#/refunds
 batches,lots and owners,VOCAB,#/stock/lots
 battery regulations,certificates,VOCAB,#/list/product_certificate
 bay,locations and bins,VOCAB,#/list/location
@@ -655,7 +658,9 @@ error log,system health,VOCAB,#/health
 errors,system health,VOCAB,#/health
 escalation,needs action,VOCAB,#/tasks?scope=all
 escalations,needs action,VOCAB,#/tasks?scope=all
+estimate vs real,research outcome,VOCAB,#/list/src_research
 estimated arrival,shipments,VOCAB,#/list/t_src_shipments
+estimated vs real margin,research outcome,VOCAB,#/list/src_research
 eta,shipments,VOCAB,#/list/t_src_shipments
 etd,shipments,VOCAB,#/list/t_src_shipments
 etsy,marketplace operations hubs,VOCAB,#/hubs
@@ -1073,6 +1078,7 @@ map file headers,learn sale columns,VOCAB,#/import
 mapping,mappings and report types,VOCAB,#/list/imp_report_type
 mappings,mappings and report types,VOCAB,#/list/imp_report_type
 margin,profit views,VOCAB,#/profit
+margin after sales,research outcome,VOCAB,#/list/src_research
 margin calculator,marketplace calculator,VOCAB,#/calculator
 margin report,hidden margin,VOCAB,#/invoice-margin
 margins,profit views,VOCAB,#/profit
@@ -1262,6 +1268,7 @@ origin charges,freight,VOCAB,#/list/t_src_freight
 oss,vat return,VOCAB,#/vat-return
 out of stock,stock on hand,VOCAB,#/stock
 output vat,vat return,VOCAB,#/vat-return
+outside refund,outside refund,VOCAB,#/refunds
 outsourced warehouse,3pl profiles,VOCAB,#/list/threepl_profile
 outstanding,outstanding who owes whom,VOCAB,#/invoice-outstanding
 over delivery,inbound and grn,VOCAB,#/list/t_src_grn
@@ -1341,6 +1348,7 @@ payouts,payouts and settlements,VOCAB,#/settlements
 paypal,bank and cash,VOCAB,#/bank
 paypal balance,bank and cash,VOCAB,#/bank
 paypal profile,payment provider profiles,VOCAB,#/list/payment_provider_profile
+paypal refund to buyer,outside refund,VOCAB,#/refunds
 payroll,expenses,VOCAB,#/expenses
 payslip,va statements,VOCAB,#/va-statements
 pda,work screen phone,VOCAB,#/work
@@ -1527,6 +1535,7 @@ re-order,replenishment and icc reorder,VOCAB,#/list/icc
 reach,certificates,VOCAB,#/list/product_certificate
 ready date,production,VOCAB,#/list/t_src_production
 ready to ship,orders to dispatch,VOCAB,#/orders
+real margin,research outcome,VOCAB,#/list/src_research
 receipt,inbound and grn,VOCAB,#/list/t_src_grn
 receipt purchase,quick buy,VOCAB,#/list/quick_buy
 receipts,expenses,VOCAB,#/expenses
@@ -1549,12 +1558,16 @@ reformat file,convert file,VOCAB,#/csv-convert
 refund,refunds and refund proposals,VOCAB,#/refunds
 refund adjustment,refund on confirmed line,VOCAB,#/choices
 refund after confirm,refund on confirmed line,VOCAB,#/choices
+refund from bank,outside refund,VOCAB,#/refunds
 refund on confirmed line,refund on confirmed line,VOCAB,#/choices
+refund paid by bank,outside refund,VOCAB,#/refunds
+refund paid outside,outside refund,VOCAB,#/refunds
 refund proposal,refunds and refund proposals,VOCAB,#/refunds
 refund reason,refunds and refund proposals,VOCAB,#/refunds
 refund request,refunds and refund proposals,VOCAB,#/refunds
 refunded,refunds and refund proposals,VOCAB,#/refunds
 refunds,refunds and refund proposals,VOCAB,#/refunds
+refunds of this batch,outside refund,VOCAB,#/refunds
 refurbish,returns,VOCAB,#/returns
 refurbished,returns,VOCAB,#/returns
 registered office,companies,VOCAB,#/list/company
@@ -1594,8 +1607,12 @@ reprint,print queue,VOCAB,#/print-queue
 reprint label,print queue,VOCAB,#/print-queue
 request for quotation,rfq and quotations,VOCAB,#/list/src_rfq
 request for quote,rfq and quotations,VOCAB,#/list/src_rfq
+requested by,requested by,VOCAB,#/list/src_research
+requester,requested by,VOCAB,#/list/src_research
 resale,returns,VOCAB,#/returns
 research,research board,VOCAB,#/list/src_research
+research accuracy,research outcome,VOCAB,#/list/src_research
+research result,research outcome,VOCAB,#/list/src_research
 reserve,payouts and settlements,VOCAB,#/settlements
 reset password,users,VOCAB,#/users
 responsible person,legal label texts,VOCAB,#/list/label_legal_text
@@ -2131,6 +2148,7 @@ weekly report,all reports,VOCAB,#/reports
 weight,products,VOCAB,#/list/product
 weight band,carriers and postage rates,VOCAB,#/carriers
 weighted average,lots and owners,VOCAB,#/stock/lots
+what it became,research outcome,VOCAB,#/list/src_research
 what we owe,supplier payment schedule,VOCAB,#/supplier-schedule
 whatsapp,messages and whatsapp,VOCAB,#/messages
 whatsapp number,people and companies,VOCAB,#/list/party
@@ -2140,6 +2158,7 @@ which marketplace,allocation and platform plan,VOCAB,#/list/t_src_allocations
 which warehouse,allocation and platform plan,VOCAB,#/list/t_src_allocations
 white label,products,VOCAB,#/list/product
 whitelist,sessions and ip allow list,VOCAB,#/sessions
+who asked,requested by,VOCAB,#/list/src_research
 who can see,roles and rights,VOCAB,#/permissions
 who changed,audit log,VOCAB,#/audit
 who owes,outstanding who owes whom,VOCAB,#/invoice-outstanding

@@ -73,7 +73,7 @@ class MoneyController extends Controller
     {
         $this->can($r, 'money.SEE');
         $ent = (int) Context::ent();
-        $x = \App\Services\RefundProposals::page($r->user());
+        try { $x = \App\Services\RefundProposals::page($r->user(), $r->query('batch') ? (int) $r->query('batch') : null); } catch (\InvalidArgumentException $e) { abort(404, $e->getMessage()); }
         return $x + ['base' => Fx::base($ent), 'shops' => $this->lists($ent)['shops'], 'can_edit' => \App\Services\Perm::has($r->user(), 'money.refunds_may')];
     }
     public function refundCandidates(Request $r, int $id) { try { return \App\Services\RefundProposals::candidates($id, (string) $r->query('q'), $r->user()); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
@@ -275,7 +275,7 @@ class MoneyController extends Controller
             if ($what === 'transfer') { $d = $r->validate(['other' => 'required|integer']); $x = Money::transfer($ent, $id, (int) $d['other']); return ['message' => 'Transfer booked' . ($x['mirror'] ? ' – the line in the other account is linked too' : '')]; }
             if ($what === 'payout') { $d = $r->validate(['branch' => 'required|integer', 'pay_key' => 'required|string|max:40']); Money::matchPayout($ent, $id, (int) $d['branch'], $d['pay_key']); return ['message' => 'Payout matched']; }
             if ($what === 'ignore') { $d = $r->validate(['reason' => 'required|string|max:200']); Money::ignore($ent, $id, $d['reason']); return ['message' => 'Line set aside']; }
-            if ($what === 'match') { $d = $r->validate(['kind' => 'required|in:INVOICE,LOAN,CLAIM', 'target' => 'required|integer', 'interest' => 'nullable|numeric|min:0']); return \App\Services\BankMatch::matchTo($ent, $id, $d['kind'], (int) $d['target'], $d); }      // R-FIN-28 by hand to an invoice / loan
+            if ($what === 'match') { $d = $r->validate(['kind' => 'required|in:INVOICE,LOAN,CLAIM,REFUND', 'target' => 'required|integer', 'interest' => 'nullable|numeric|min:0']); return \App\Services\BankMatch::matchTo($ent, $id, $d['kind'], (int) $d['target'], $d); }      // R-FIN-28 by hand to an invoice / loan
             if ($what === 'many') { $d = $r->validate(['ids' => 'required|array|min:1', 'ids.*' => 'integer']); return \App\Services\BankMatch::matchMany($ent, $id, 'EXPENSE', $d['ids']); }      // R-FIN-70 several payables by hand
             Money::unmatch($ent, $id); return ['message' => 'Match undone'];
         });
@@ -291,6 +291,8 @@ class MoneyController extends Controller
                 ->orderBy('d_due')->limit(200)->get(['id', 'invoice_no', 'total', 'amount_paid', 'd_due'])->map(fn ($i) => ['id' => (int) $i->id, 'name' => $i->invoice_no . ' · balance ' . number_format((float) $i->total - (float) $i->amount_paid, 2)])->all(),
             'claims' => $in ? DB::table('t_src_grn')->where('fk_id_ent', $ent)->where('claim_status', 'SETTLED')->where('claim_settled_as', 'REFUND')->where('claim_base_amount', '>', 0)->orderByDesc('id')->limit(100)->get(['id', 'grn_number', 'claim_base_amount'])
                 ->map(fn ($g) => ['id' => (int) $g->id, 'name' => ($g->grn_number ?: 'GRN ' . $g->id) . ' · refund ' . number_format((float) $g->claim_base_amount, 2)])->all() : [],
+            'refunds' => $in ? [] : DB::table('t_sale_refund_proposals as p')->join('t_sales as s', 's.id', '=', 'p.fk_id_sale')->where('s.fk_id_ent', $ent)->where('p.status', 'PROPOSED')->where('s.status', 'Confirmed')->orderByRaw('ABS(p.amount - ?)', [abs((float) $l->amount)])->limit(100)
+                ->get(['p.id', 's.order_no', 's.sku', 'p.amount'])->map(fn ($x) => ['id' => (int) $x->id, 'name' => "order {$x->order_no} · {$x->sku} · " . number_format((float) $x->amount, 2)])->all(),
             'loans' => DB::table('fin_loans')->where('company_id', $ent)->where('is_active', 1)->where('direction', $in ? 'GIVEN' : 'TAKEN')->get(['id', 'counterparty', 'balance'])->map(fn ($x) => ['id' => (int) $x->id, 'name' => $x->counterparty . ' · balance ' . number_format((float) $x->balance, 2)])->all()];
     }
 

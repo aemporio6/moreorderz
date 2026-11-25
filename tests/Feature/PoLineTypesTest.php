@@ -64,13 +64,13 @@ class PoLineTypesTest extends TestCase
         $fee = Buy::createPo(['supplier' => $this->sup, 'currency' => 'GBP', 'lines' => [['line_type' => 'FEE', 'name' => 'Agent fee', 'unit_price' => 5]]]);
         $this->assertStringContainsString('NOTE: no PRODUCT lines - nothing will go to stock', (string) DB::table('sys_audit_log')->where('table_name', 't_src_po')->where('record_id', $fee)->where('action', 'UPDATE')->value('changes_json'));
         try { Buy::createPo(['supplier' => $this->sup, 'currency' => 'GBP', 'lines' => [['line_type' => 'FEE', 'unit_price' => 5]]]); $this->fail('name'); } catch (\InvalidArgumentException $e) { $this->assertSame('A FEE line needs a name (what the amount is for).', $e->getMessage()); }
-        try { Buy::createPo(['supplier' => $this->sup, 'currency' => 'GBP', 'lines' => [['line_type' => 'PRODUCT', 'qty' => 1, 'unit_price' => 5]]]); $this->fail('product'); } catch (\RuntimeException $e) { $this->assertSame('A PRODUCT line needs a product of this company.', $e->getMessage()); }
+        try { Buy::createPo(['supplier' => $this->sup, 'currency' => 'GBP', 'lines' => [['line_type' => 'PRODUCT', 'qty' => 1, 'unit_price' => 5]]]); $this->fail('product'); } catch (\InvalidArgumentException $e) { $this->assertSame('Pick the product (or + Add product) for line 1.', $e->getMessage()); }
 
         // the PO line form: COST line edited to a new amount → its cost row follows; type changed to PRODUCT without a product → refused
         $this->postJson("/api/record/t_src_po_lines/{$l[1]->id}", ['values' => ['unit_price' => 45]])->assertOk();
         $this->assertSame([45.0, 45.0], [(float) DB::table('t_src_po_lines')->where('id', $l[1]->id)->value('line_total'), (float) DB::table('t_src_freight_costs')->where('source_po_line_id', $l[1]->id)->value('base_amount')]);
         $this->assertSame(73.0, (float) DB::table('t_src_po')->where('id', $po)->value('po_total'));
-        $this->postJson("/api/record/t_src_po_lines/{$l[1]->id}", ['values' => ['line_type' => 'PRODUCT']])->assertStatus(422)->assertJsonPath('errors.fk_id_product.0', 'A PRODUCT line needs a product from the product master.');
+        $this->postJson("/api/record/t_src_po_lines/{$l[1]->id}", ['values' => ['line_type' => 'PRODUCT']])->assertStatus(422)->assertJsonPath('errors.fk_id_product.0', 'Pick the product (or + Add product) for this line.');
     }
 
     public function test_add_line_screen_on_a_draft_po(): void
@@ -84,4 +84,15 @@ class PoLineTypesTest extends TestCase
         Buy::confirmPo($po);
         $this->postJson("/api/po/$po/line", ['line_type' => 'FEE', 'name' => 'Late fee', 'unit_price' => 1])->assertStatus(422)->assertJsonPath('message', 'Lines can only be added while the PO is a draft.');
     }
+
+    /** R-B_SOURCING-62 requested by = the person logged in (what the form posts is ignored); a cycle product without a product is refused with the rule's message. */
+    public function test_r62_requested_by_is_the_logged_in_user_and_product_lines_need_the_product(): void
+    {
+        $a = $this->makeUser('MANAGER'); $b = $this->makeUser('MANAGER'); $this->actingAs($b); \App\Services\Context::set(1, $b->id);
+        $r = \App\Services\RecordService::save('t_src_cycles', ['cycle_type' => 'PO', 'fk_id_owner' => (int) DB::table('t_account')->value('id'), 'sourcing_date' => '2026-11-25', 'required_delivery_date' => '2026-12-20', 'requested_by' => $a->id]);
+        $this->assertSame($b->id, (int) DB::table('t_src_cycles')->where('id', $r['id'])->value('requested_by'));
+        $this->actingAs($a); \App\Services\Context::set(1, $a->id); \App\Services\RecordService::save('t_src_cycles', ['requested_by' => $a->id, 'notes' => 'edited'], (int) $r['id']);
+        $this->assertSame($b->id, (int) DB::table('t_src_cycles')->where('id', $r['id'])->value('requested_by'), 'an edit never changes who asked');
+    }
+
 }

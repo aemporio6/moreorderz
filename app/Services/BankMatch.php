@@ -214,7 +214,23 @@ class BankMatch
                 self::link($l, 'CLAIM', (string) $g->id, 'BY_HAND', 'MANUAL', 'SUPPLIER_REFUND');
                 return ['message' => 'Matched to the supplier refund of ' . ($g->grn_number ?? 'GRN ' . $g->id) . '.'];
             }
-            throw new \InvalidArgumentException('Choose an invoice, a loan or a supplier claim.');
+            if ($kind === 'REFUND') {      /* R-A_SALES-86 / R-FIN-70: a refund paid outside the marketplace (bank / payment provider) – the proposal becomes Outside and is booked: Dr refunds 5400 / Cr shop 1100 (refund), then Dr 1100 / Cr bank 1000 (paid from the bank, not by the marketplace) */
+                if ($in) throw new \InvalidArgumentException('A refund paid to a buyer is money going out.');
+                $p = DB::table('t_sale_refund_proposals')->where('id', $id)->lockForUpdate()->first();
+                $s = $p && $p->fk_id_sale ? DB::table('t_sales')->where('id', $p->fk_id_sale)->where('fk_id_ent', $ent)->first() : null;
+                if (! $p || ! $s) throw new \InvalidArgumentException('Refund proposal not found.');
+                if ($p->status !== 'PROPOSED') throw new \InvalidArgumentException('This refund proposal was already decided.');
+                if ($s->status !== 'Confirmed') throw new \InvalidArgumentException("Order {$s->order_no} is not confirmed yet – confirm its month first, then match the bank line.");
+                $base = abs((float) $l->amount_gbp) ?: $abs;
+                DB::table('t_sale_refund_proposals')->where('id', $p->id)->update(['refund_kind' => 'OUTSIDE', 'amount' => $base]);
+                SettlementService::refund($ent, (int) $s->id, $base, 'Refund paid outside the marketplace – bank line #' . $l->id, (int) $p->id);
+                Ledger::post($ent, $l->txn_date, 'REFUND_OUTSIDE', (int) $l->id, [['account' => '1100', 'debit' => $base, 'ref_id' => (int) $s->fk_id_branch], ['account' => '1000', 'credit' => $base, 'ref_id' => (int) $l->bank_account_id, 'amount_cur' => (float) $l->amount]], ['memo' => "Refund of order {$s->order_no} paid from the bank"]);
+                DB::table('t_sale_refund_proposals')->where('id', $p->id)->update(['status' => 'ACCEPTED', 'decided_by' => Context::userId(), 'decided_at' => now()]);
+                self::link($l, 'REFUND', (string) $p->id, 'BY_HAND', 'MANUAL', 'MP_REFUND_OUTSIDE');
+                Audit::log('fin_bank_transactions', (int) $l->id, 'UPDATE', ['matched' => "refund of order {$s->order_no}", 'amount' => $base], 'by hand', $ent);
+                return ['message' => "Matched to the refund of order {$s->order_no} – booked as a refund paid outside the marketplace."];
+            }
+            throw new \InvalidArgumentException('Choose an invoice, a loan, a supplier claim or a refund.');
         });
     }
 

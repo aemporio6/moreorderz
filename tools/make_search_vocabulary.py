@@ -140,6 +140,9 @@ add('#/supplier-orders', 'supplier order history', 'supplier order history|amazo
 add('#/sales', 'bought from', 'bought from|item note|my item note|buy note|buy evidence|purchase record on sale|promoted listing|promoted listings|sold via promoted|ebay collected tax|vat on sale|tax status|dispatched on|postage charged|file details|all columns of the file')
 add('#/fulfilment', 'carrier file layouts', 'click and drop file|click & drop csv|royal mail import file|evri file|evri bulk upload|hermes file|dpd file|dpd bulk upload|carrier layout|carrier csv|label file for carrier|shipping file|courier file|parcel weight from product|package size')
 add('#/choices', 'refund on confirmed line', 'refund on confirmed line|refund after confirm|adjustment next month|refund adjustment|locked month refund')
+add('#/list/src_research', 'research outcome', 'real margin|estimate vs real|estimated vs real margin|research accuracy|what it became|research result|margin after sales')
+add('#/refunds', 'outside refund', 'outside refund|refund paid outside|refund from bank|refund paid by bank|bank refund to buyer|paypal refund to buyer|refunds of this batch|batch refunds')
+add('#/list/src_research', 'requested by', 'requested by|who asked|requester|asked by')
 add('#/import', 'learn sale columns', 'learn columns|learned mapping|propose columns|column proposal|new file header|header not found|map file headers|standard sheet template|convert file template')
 
 # ---------- reports, setup, system ----------

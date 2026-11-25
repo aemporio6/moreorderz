@@ -68,6 +68,29 @@ class RefundProposalsTest extends TestCase
         $this->sale('M-1', 'M1', 10); $this->sale('M-1', 'M2', 30);
         $this->assertSame(['proposal', 'proposal'], [$this->refund('M-1', 'M1', 10, 'RM'), $this->refund('M-1', 'M2', 15, 'RM')]);
         $this->assertSame(['FULL', 'HALF'], DB::table('t_sale_refund_proposals')->where('refund_id', 'RM')->orderBy('id')->pluck('refund_kind')->all());
+        // the grid on the batch view: only the refunds of the batch's lines and the unknown refunds of its shop + month
+        $bid = DB::table('t_sale_imports')->insertGetId(RecordService::fillNotNull('t_sale_imports', ['fk_id_ent' => 1, 'fk_id_branch' => $this->shop, 'fk_id_marketplace' => $this->mp, 'period_month' => 7, 'period_year' => 2026, 'status' => 'Pending', 'import_nature' => 'Normal']));
+        DB::table('t_sales')->where('order_no', 'M-1')->update(['fk_id_import' => $bid]); $this->assertSame('unknown', $this->refund('M-1', 'ZZ', 1, 'RZ'));
+        $g = RP::page($this->owner, $bid); $this->assertSame(['M-1', 'M-1'], array_column($g['rows'], 'order_no')); $this->assertSame(['ZZ'], array_column($g['unknown'], 'sku'));
+        $this->getJson('/api/refunds?batch=' . $bid)->assertOk()->assertJsonCount(2, 'rows'); $this->getJson('/api/refunds?batch=999999')->assertStatus(404);
+    }
+
+    /** R-A_SALES-86 / R-FIN-70: a refund paid outside the marketplace is matched from the bank line – Outside, booked once, the line paid from the bank. */
+    public function test_r86_outside_refund_matched_from_a_bank_line(): void
+    {
+        $this->world(); \App\Services\Choices::set('REFUND_ON_CONFIRMED', 'PROPOSE', 1);
+        $c = $this->sale('O-1', 'O1', 20); DB::table('t_sales')->where('id', $c)->update(['status' => 'Confirmed', 'sale_source' => 'active']);
+        $this->assertSame('proposal', $this->refund('O-1', 'O1', 6, 'RO1')); $pid = (int) DB::table('t_sale_refund_proposals')->where('refund_id', 'RO1')->value('id');
+        $bank = \App\Services\MoneyService::createBank(1, ['bank_name' => 'Bank One', 'account_label' => 'Main', 'currency' => 'GBP', 'opening_balance' => 100, 'opening_date' => '2026-07-01']);
+        $mk = fn ($a) => DB::table('fin_bank_transactions')->insertGetId(RecordService::fillNotNull('fin_bank_transactions', ['batch_id' => 0, 'bank_txn_id' => uniqid('T'), 'bank_account_id' => $bank, 'company_id' => 1, 'txn_date' => '2026-07-22', 'amount' => $a, 'currency' => 'GBP', 'amount_gbp' => $a, 'description' => 'REFUND JO', 'match_status' => 'UNMATCHED']));
+        $in = $mk(6.0); $out = $mk(-6.0);
+        $this->assertSame([], $this->getJson("/api/bank-lines/$in/targets")->json('refunds')); $this->assertSame([$pid], array_column($this->getJson("/api/bank-lines/$out/targets")->json('refunds'), 'id'));
+        $this->postJson("/api/bank-lines/$in/match", ['kind' => 'REFUND', 'target' => $pid])->assertStatus(422)->assertJsonPath('message', 'A refund paid to a buyer is money going out.');
+        $this->postJson("/api/bank-lines/$out/match", ['kind' => 'REFUND', 'target' => $pid])->assertOk();
+        $p = DB::table('t_sale_refund_proposals')->where('id', $pid)->first(); $this->assertSame(['ACCEPTED', 'OUTSIDE'], [$p->status, $p->refund_kind]);
+        $this->assertEqualsWithDelta(6.0, \App\Services\Ledger::balance(1, '5400'), 0.001); $this->assertEqualsWithDelta(0.0, \App\Services\Ledger::balance(1, '1100', null, $this->shop), 0.001, 'the shop owes nothing more: the bank paid it');
+        $this->assertSame('REFUND', DB::table('fin_bank_transactions')->where('id', $out)->value('matched_to_type'));
+        $this->postJson("/api/bank-lines/$out/match", ['kind' => 'REFUND', 'target' => $pid])->assertStatus(422);      // a second match is refused
     }
 
     public function test_a_line_without_price_uses_the_reports_sale_amount_or_waits_to_be_classified(): void

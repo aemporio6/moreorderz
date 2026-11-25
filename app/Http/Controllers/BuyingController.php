@@ -76,7 +76,7 @@ class BuyingController extends Controller
         $cycle = $x->fk_id_cycle ? DB::table('t_src_cycles')->where('id', $x->fk_id_cycle)->first(['id', 'cycle_code']) : null;
         return ['research' => ['id' => $x->id, 'code' => $x->research_code, 'title' => $x->title, 'status' => $x->status, 'sell' => $x->target_sell_price, 'cost' => $x->est_unit_cost, 'freight' => $x->est_freight_per_unit, 'fee_pct' => $x->est_fee_pct,
                 'ad_pct' => $x->est_ad_pct, 'currency' => $x->currency ?: Fx::base((int) $x->fk_id_ent), 'units' => $x->est_monthly_units, 'margin' => $margin, 'risk_flags' => $x->risk_flags, 'reason' => $x->decision_reason, 'product' => $x->fk_id_product],
-            'min_margin' => (float) Settings::get('RESEARCH_MIN_MARGIN', Context::ent(), 25), 'cycle' => $cycle,
+            'min_margin' => (float) Settings::get('RESEARCH_MIN_MARGIN', Context::ent(), 25), 'cycle' => $cycle, 'outcome' => Buy::researchOutcome($x),
             'competitors' => DB::table('src_research_competitors')->where('fk_id_research', $id)->orderBy('id')->get(), 'suppliers' => DB::table('src_research_suppliers')->where('fk_id_research', $id)->orderBy('id')->get(), 'rights' => $this->rights($r)];
     }
 

@@ -49,7 +49,7 @@ class DirectPo
         if (! $lines) throw new \InvalidArgumentException('Add at least one product line (name + qty)');
         foreach ($lines as $i => $l) {
             if ((float) ($l['qty'] ?? 0) <= 0) throw new \InvalidArgumentException('Line ' . ($i + 1) . ': the quantity must be more than zero.');
-            if (empty($l['product'])) throw new \InvalidArgumentException('Line ' . ($i + 1) . ': choose the product (or add it) – a product line needs the product master.');
+            if (empty($l['product'])) throw new \InvalidArgumentException('Pick the product (or + Add product) for line ' . ($i + 1) . '.');      /* R-B_SOURCING-62 */
         }
         try {
             return DB::transaction(function () use ($ent, $d, $lines) {

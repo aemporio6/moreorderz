@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\DB;
  */
 class CycleRepeat
 {
-    public const COPY_CYCLE = ['requested_by', 'required_delivery_date', 'priority', 'notes', 'brand', 'product_name', 'sku', 'variation', 'target_qty', 'product_spec', 'cycle_type', 'skipped_steps', 'fk_id_owner', 'fk_id_main_branch'];
+    public const COPY_CYCLE = ['required_delivery_date', 'priority', 'notes', 'brand', 'product_name', 'sku', 'variation', 'target_qty', 'product_spec', 'cycle_type', 'skipped_steps', 'fk_id_owner', 'fk_id_main_branch'];
     public const CARTON_CONFIG = ['sku', 'config_name', 'unit_l', 'unit_w', 'unit_h', 'unit_cbm', 'volumetric_weight', 'unit_net_weight', 'unit_gross_weight', 'carton_tare_weight', 'units_per_carton', 'carton_l', 'carton_w', 'carton_h', 'carton_net_weight', 'carton_gross_weight', 'carton_cbm', 'hs_code', 'fk_id_country'];
 
     /** Last agreed price of a cycle product: its latest PO line, else the RFQ final price of its supplier in the source cycle, else its target. */
@@ -39,7 +39,7 @@ class CycleRepeat
         return DB::transaction(function () use ($ent, $src, $userId) {
             $today = date('Y-m-d'); $now = now();
             $row = ['fk_id_ent' => $ent, 'cycle_code' => Numbering::next('CYC', $ent), 'sourcing_date' => $today, 'status' => 'Draft', 'source_cycle_id' => (int) $src->id, 'created_by' => $userId, 'created_at' => $now, 'updated_at' => $now, 'f_active' => 1];
-            foreach (self::COPY_CYCLE as $c) if (property_exists($src, $c)) $row[$c] = $src->$c;
+            foreach (self::COPY_CYCLE as $c) if (property_exists($src, $c)) $row[$c] = $src->$c; $row['requested_by'] = Context::userId();      /* R-B_SOURCING-62 the person who repeats it */
             $new = (int) DB::table('t_src_cycles')->insertGetId(RecordService::fillNotNull('t_src_cycles', $row));
             $map = []; $prices = [];
             foreach (DB::table('t_src_cycle_products')->where('fk_id_cycle', $src->id)->where('f_active', 1)->orderBy('id')->get() as $cp) {

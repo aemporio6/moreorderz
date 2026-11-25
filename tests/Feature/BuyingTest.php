@@ -69,6 +69,19 @@ class BuyingTest extends TestCase
         Buy::go($this->research());
     }
 
+    /** R-B_SOURCING-70 the rule example: research GO with an estimate, the product sells in September → the research shows the estimate and the real September margin side by side. */
+    public function test_r70_research_shows_the_real_margin_next_to_the_estimate(): void
+    {
+        $id = $this->research(); $f = fn ($t, $d) => DB::table($t)->insertGetId(\App\Services\RecordService::fillNotNull($t, $d));
+        $pid = $f('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'RES-70', 'product_name_vendor' => 'Lamp', 'f_active' => 1]);
+        DB::table('src_research')->where('id', $id)->update(['fk_id_product' => $pid, 'est_margin_pct' => 54.5, 'status' => 'GO']);
+        $sale = $f('t_sales', ['fk_id_ent' => 1, 'fk_product_id' => $pid, 'order_no' => 'R70', 'd_order' => '2026-09-10', 'sku' => 'RES-70', 'qty' => 2, 'sale_rate' => 10, 'total_amount' => 20, 'total_amount_gbp' => 20, 'status' => 'Confirmed', 'sale_source' => 'active']);
+        $lot = $f('fin_lots', ['company_id' => 1, 'sku' => 'RES-70', 'source' => 'GRN', 'received_date' => '2026-08-20', 'qty' => 10, 'qty_left' => 8, 'unit_cost_gbp' => 4.5, 'fk_id_product' => $pid, 'lot_code' => 'L-R70']);
+        DB::table('fin_lot_consumption')->insert(\App\Services\RecordService::fillNotNull('fin_lot_consumption', ['fk_id_sale' => $sale, 'lot_id' => $lot, 'qty' => 2, 'unit_cost_gbp' => 4.5]));
+        $o = $this->actingAs($this->owner)->getJson("/api/research/$id")->assertOk()->json('outcome');
+        $this->assertSame([54.5, 4.5], [$o['estimate'], $o['landed_unit']]); $this->assertSame(['2026-09', 2, 20, 55, 0.5], [$o['months'][0]['month'], $o['months'][0]['units'], $o['months'][0]['sales'], $o['months'][0]['real'], $o['months'][0]['diff']]);
+    }
+
     public function test_no_go_needs_a_reason_and_stale_research_gets_a_task_that_closes_on_a_move(): void
     {
         $id = $this->research();

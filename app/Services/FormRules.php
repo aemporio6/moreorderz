@@ -193,7 +193,7 @@ class FormRules
         $v = fn (string $c) => array_key_exists($c, $data) ? $data[$c] : ($old[$c] ?? null);
         $log = []; $type = PoLines::type($v('line_type'), (string) ($v('line_notes') ?: $v('sku')), $log);
         if (array_key_exists('line_type', $data) || ! $old) $data['line_type'] = $type;
-        if ($type === 'PRODUCT' && ! $v('fk_id_product')) return ['fk_id_product' => 'A PRODUCT line needs a product from the product master.'];
+        if ($type === 'PRODUCT' && ! $v('fk_id_product')) return ['fk_id_product' => 'Pick the product (or + Add product) for this line.'];
         if ($type === 'PRODUCT' && (float) $v('qty_ordered') <= 0) return ['qty_ordered' => 'A product line needs a quantity above zero.'];
         if ($type !== 'PRODUCT' && ! $v('fk_id_product') && trim((string) $v('line_notes')) === '') return ['line_notes' => "Say what the $type amount is for (e.g. \"Agent fee\", \"Inspection\")."];
         if ($v('unit_price') !== null && $v('unit_price') !== '') $data['line_total'] = round(PoLines::amount($v('qty_ordered'), $v('unit_price')) + (float) $v('other_charges'), 2);

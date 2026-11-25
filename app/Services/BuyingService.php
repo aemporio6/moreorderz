@@ -22,6 +22,21 @@ class BuyingService
         return round(($sell - $cost * $fx - $freight - $sell * ($feePct + $adPct) / 100) / $sell * 100, 2);
     }
 
+    /** R-B_SOURCING-70 what the research became: its cycle and POs, the landed cost per unit, and – once it sells – the real margin of each month next to the estimate. */
+    public static function researchOutcome(object $x): array
+    {
+        $ent = (int) $x->fk_id_ent; $pid = (int) $x->fk_id_product;
+        $pos = $x->fk_id_cycle ? DB::table('t_src_po')->where('fk_id_cycle', $x->fk_id_cycle)->where('f_active', 1)->orderBy('id')->get(['id', 'po_number', 'status'])->map(fn ($p) => ['id' => (int) $p->id, 'po' => $p->po_number, 'status' => $p->status])->all() : [];
+        $landed = $pid ? DB::table('fin_lots')->where('company_id', $ent)->where('fk_id_product', $pid)->where('source', 'GRN')->orderByDesc('received_date')->value('unit_cost_gbp') : null;
+        $months = ! $pid ? collect() : DB::table('t_sales as s')->leftJoin('fin_lot_consumption as c', 'c.fk_id_sale', '=', 's.id')->where('s.fk_id_ent', $ent)->where('s.fk_product_id', $pid)->where('s.status', 'Confirmed')->where('s.sale_source', 'active')
+            ->groupBy(DB::raw("DATE_FORMAT(s.d_order, '%Y-%m')"))->orderBy(DB::raw("DATE_FORMAT(s.d_order, '%Y-%m')"))->selectRaw("DATE_FORMAT(s.d_order, '%Y-%m') m, SUM(s.total_amount_gbp) sales, SUM(COALESCE(c.qty * c.unit_cost_gbp, 0)) cost, SUM(s.qty) units")->get();
+        $est = $x->est_margin_pct !== null ? (float) $x->est_margin_pct : null;
+        return ['pos' => $pos, 'landed_unit' => $landed !== null ? round((float) $landed, 4) : null, 'estimate' => $est,
+            'months' => $months->map(function ($r) use ($est) { $sales = (float) $r->sales; $real = $sales > 0 ? round(($sales - (float) $r->cost) / $sales * 100, 1) : null;
+                return ['month' => $r->m, 'units' => (int) $r->units, 'sales' => round($sales, 2), 'real' => $real, 'diff' => $real !== null && $est !== null ? round($real - $est, 1) : null]; })->all(),
+            'note' => 'Real margin = sales less the cost of the units sold (before marketplace fees), per month of confirmed sales.'];
+    }
+
     public static function refreshMargin(int $researchId): ?float
     {
         $r = DB::table('src_research')->where('id', $researchId)->first() ?? throw new \RuntimeException('Research not found.');
@@ -135,12 +150,13 @@ class BuyingService
                 'fk_id_currency' => self::currencyId($cur), 'fk_id_payment_term' => $d['fk_id_payment_term'] ?? null, 'requested_by' => Context::userId(), 'status' => 'DRAFT', 'created_by' => Context::userId(), 'f_active' => 1, 'created_at' => now(),
                 'deposit_pct' => $d['deposit_pct'] ?? 30, 'po_total' => 0, 'fk_id_repeat_from_po' => $d['repeat_from'] ?? null]);
             $total = 0.0; $log = []; $ids = [];
-            foreach ($d['lines'] as $l) {      // line types PRODUCT / FEE / COST / SAMPLE (R-B_SOURCING-6)
+            foreach (array_values($d['lines']) as $ln => $l) {      // line types PRODUCT / FEE / COST / SAMPLE (R-B_SOURCING-6)
                 $name = trim((string) ($l['name'] ?? $l['line_notes'] ?? ''));
                 $type = PoLines::type($l['line_type'] ?? null, $name ?: (string) ($l['sku'] ?? (! empty($l['product']) ? DB::table('t_product_vendors')->where('id', $l['product'])->value('SKU_VENDOR') : '')), $log);
                 if ((float) ($l['qty'] ?? 0) < 0 || (float) ($l['unit_price'] ?? -1) < 0) throw new \InvalidArgumentException('Each line needs a price (and no negative quantity).');
                 if ($type === 'PRODUCT' && (float) ($l['qty'] ?? 0) <= 0) throw new \InvalidArgumentException('Each product line needs a quantity above zero and a price.');
                 $p = null;
+                if ($type === 'PRODUCT' && empty($l['product'])) throw new \InvalidArgumentException('Pick the product (or + Add product) for line ' . ($ln + 1) . '.');      /* R-B_SOURCING-62 */
                 if ($type === 'PRODUCT' || ! empty($l['product'])) $p = DB::table('t_product_vendors')->where('id', $l['product'] ?? 0)->where('fk_id_ent', $ent)->first() ?? throw new \RuntimeException('A PRODUCT line needs a product of this company.');
                 if ($type !== 'PRODUCT' && ! $p && $name === '') throw new \InvalidArgumentException("A $type line needs a name (what the amount is for).");
                 $lt = round(PoLines::amount($l['qty'] ?? 0, $l['unit_price']) + (float) ($l['other_charges'] ?? 0), 2);
