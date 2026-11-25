@@ -125,7 +125,7 @@ class MarketplaceFilesTest extends TestCase
     public function test_ebay_report_groups_by_payout_makes_refund_proposals_and_takes_late_lines_of_a_payout(): void
     {
         $sale = Sales::intake($this->shop, [['order_no' => 'EB-1', 'd_order' => '2026-09-05', 'sku' => 'BOWL-01', 'qty' => 1, 'sale_rate' => 20]])['ids'][0];
-        Sales::confirmMonth($this->shop, '2026-09', true);
+        Sales::confirmMonth($this->shop, '2026-09', true); \App\Services\Choices::set('REFUND_ON_CONFIRMED', 'PROPOSE', 1);      // this test follows the ask-first route; the default adjustment is in RefundProposalsTest r86
         $r = MF::import(1, $this->shop, $this->file('Transaction_report.csv', $this->ebay()), 'Transaction_report.csv');
         $this->assertSame(['EBAY', 2, ['Loyalty bonus'], 1, 17.32, 1], [$r['format'], $r['statements_new'], $r['new_columns'], $r['skipped']['rows'], $r['skipped']['amount'], $r['refund_proposals']]);
         $this->assertTrue($r['checks'][0]['ok']); $this->assertTrue($r['checks'][1]['ok'], 'payout line 8.77 = the lines of payout 9001');
