@@ -27,13 +27,13 @@ class StepFormulas
     {
         $n = fn ($k) => self::n($r, $k);
         switch ($table) {
-            case 't_src_grn': return ['shortage_qty' => max(0, $n('expected_units') - $n('units_received')), 'damage_pct' => $n('units_received') > 0 ? round($n('damaged_units') / $n('units_received') * 100, 2) : 0.0];
-            case 't_src_grn_lines': return ['missing_qty' => max(0, $n('expected_qty') - $n('received_qty'))];
+            case 't_src_grn': return ['shortage_qty' => max(0.0, $n('expected_units') - $n('units_received')), 'damage_pct' => $n('units_received') > 0 ? round($n('damaged_units') / $n('units_received') * 100, 2) : 0.0];
+            case 't_src_grn_lines': return ['missing_qty' => max(0.0, $n('expected_qty') - $n('received_qty'))];
             case 't_src_production':
                 $ordered = isset($r['fk_id_po']) && $r['fk_id_po'] ? (float) DB::table('t_src_po_lines')->where('fk_id_po', $r['fk_id_po'])->where('f_active', 1)->where(fn ($q) => $q->whereNull('line_type')->orWhere('line_type', 'PRODUCT'))->sum('qty_ordered') : 0.0;
                 return ['accepted_qty' => $n('produced_qty') - $n('rejected_qty'), 'variance_qty' => $n('produced_qty') - $n('planned_qty'), 'progress_pct' => $ordered > 0 ? round($n('produced_qty') / $ordered * 100, 2) : 0.0];
             case 't_src_qc': return ['defect_rate' => $n('qty_inspected') > 0 ? round($n('qty_failed') / $n('qty_inspected') * 100, 2) : 0.0];
-            case 't_src_transfers': return ['qty_in_transit' => max(0, $n('qty_dispatched') - $n('qty_received'))];
+            case 't_src_transfers': return ['qty_in_transit' => max(0.0, $n('qty_dispatched') - $n('qty_received'))];
             case 't_src_customs': return ['duty_amount' => round($n('customs_value') * $n('duty_rate') / 100, 2)];
             case 't_src_po_lines': return ['line_total' => round(PoLines::amount($r['qty_ordered'] ?? 0, $r['unit_price'] ?? 0) - $n('discount') + $n('other_charges'), 2)];
         }
