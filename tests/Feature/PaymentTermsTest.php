@@ -62,4 +62,22 @@ class PaymentTermsTest extends TestCase
         RecordService::save('cat_src_lov', ['f_active' => 0], $free); $this->assertSame(0, (int) DB::table('cat_src_lov')->where('id', $free)->value('f_active'));
     }
 
+
+    /** R-B_SOURCING-33 live formulas recomputed on the server (the rule example: GRN expected 1,000, received 990, damaged 11 → shortage 10, damage 1.11 %). */
+    public function test_r33_live_formulas_of_the_step_forms(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id); $F = \App\Services\StepFormulas::class;
+        $this->assertSame(['shortage_qty' => 10.0, 'damage_pct' => 1.11], $F::of('t_src_grn', ['expected_units' => 1000, 'units_received' => 990, 'damaged_units' => 11]));
+        $this->assertSame(['shortage_qty' => 0.0, 'damage_pct' => 0.0], $F::of('t_src_grn', ['expected_units' => 0, 'units_received' => 0, 'damaged_units' => 3]), 'received 0 → 0 %');
+        $this->assertSame(['defect_rate' => 4.0], $F::of('t_src_qc', ['qty_inspected' => 200, 'qty_failed' => 8]));
+        $this->assertSame(['qty_in_transit' => 40.0], $F::of('t_src_transfers', ['qty_dispatched' => 100, 'qty_received' => 60]));
+        $this->assertSame(['duty_amount' => 12.5], $F::of('t_src_customs', ['customs_value' => 500, 'duty_rate' => 2.5]));
+        $this->assertSame(['line_total' => 97.0], $F::of('t_src_po_lines', ['qty_ordered' => 10, 'unit_price' => 10, 'discount' => 5, 'other_charges' => 2]));
+        $po = DB::table('t_src_po')->insertGetId(RecordService::fillNotNull('t_src_po', ['fk_id_ent' => 1, 'po_number' => 'PO-PT-3', 'status' => 'CONFIRMED', 'f_active' => 1]));
+        DB::table('t_src_po_lines')->insert(RecordService::fillNotNull('t_src_po_lines', ['fk_id_po' => $po, 'qty_ordered' => 500, 'unit_price' => 1, 'line_type' => 'PRODUCT', 'f_active' => 1]));
+        $this->assertSame(['accepted_qty' => 290.0, 'variance_qty' => -100.0, 'progress_pct' => 60.0], $F::of('t_src_production', ['fk_id_po' => $po, 'planned_qty' => 400, 'produced_qty' => 300, 'rejected_qty' => 10]));
+        $id = RecordService::save('t_src_qc', ['fk_id_po' => $po, 'qty_inspected' => 50, 'qty_failed' => 5, 'defect_rate' => 99, 'inspection_date' => '2026-11-20'])['id'];
+        $this->assertEquals(10.0, (float) DB::table('t_src_qc')->where('id', $id)->value('defect_rate'), 'a posted value is replaced by the formula');
+    }
+
 }
