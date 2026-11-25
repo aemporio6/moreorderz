@@ -674,3 +674,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-160 (22 Nov): R-D-88 Missing return written off (STOCK_LOSS) and R-F_SETUP-24 Month Close quantity check BUILT; R-H-20 quantity per listing PARTIAL (API push open). 893 → 897 BUILT (63 %), MISSING 120 → 118. 686 tests. Browser desktop + phone, business checksums same.
 
 - 7e-161 (fa392ec): marketplace money readers read profile fee buckets first, migration 000126 one profile per marketplace + column sets on the profile; preset groups R-D-62 built. 688 tests pass. BUILT 899 / PARTIAL 296 / FORM ONLY 120 / MISSING 118. Open: R-A_SALES-87 file layouts still code; R-D-83 portal part.
+- 7e-162 (2f43915): pick lists idle / abandoned / reassigned / resumed / reprinted (R-H-28 BUILT); edge-case register test (R-H-60 PARTIAL, 9 gaps); R-FIN-69 re-check stays PARTIAL. 690 tests pass. BUILT 901 / PARTIAL 296 / FORM ONLY 120 / MISSING 116.
