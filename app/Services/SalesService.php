@@ -173,7 +173,7 @@ class SalesService
                             $upd['f_ship_backfill'] = 1; $upd['qty_shipped'] = (int) $s->qty_shipped + $miss; $backfilled++;
                         }
                         $take = max(0, (int) $s->qty - $ret);      /* exactly the shipped-awaiting qty */
-                        if (Choices::get('STOCK_COST_LAYER', $ent) === 'FIFO_AT_CONFIRM' && $take > 0) StockService::swapToFifo($ent, (int) $s->fk_product_id, $take, $shipped, $rule['owner']);   // two layers: the oldest lots are the ones sold
+                        if (Choices::get('STOCK_COST_LAYER', $ent, (int) $s->fk_id_branch) === 'FIFO_AT_CONFIRM' && $take > 0) StockService::swapToFifo($ent, (int) $s->fk_product_id, $take, $shipped, $rule['owner']);   // two layers: the oldest lots are the ones sold
                         $c = $take > 0 ? StockService::consumeForSale($ent, (int) $s->id, (int) $s->fk_product_id, $take, $shipped, $rule['owner'], ['date' => $postDate]) : ['cost' => 0.0];
                         $upd += ['f_stock_deducted' => 1, 'cost_gbp' => $c['cost'], 'buy_amount' => $c['cost'], 'buy_rate' => $take > 0 ? round($c['cost'] / $take, 2) : 0, 'cost_source' => 'lots', 'profit' => round((float) $s->total_amount_gbp - $c['cost'], 2), 'wh_status' => 'CONFIRMED'];
                         $units += $take; $cogs += $c['cost'];

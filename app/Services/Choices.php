@@ -208,7 +208,7 @@ class Choices
     }
 
     /** Choices a shop can have its own value for (several shops, several values); the company value is the default for every other shop. */
-    public const PER_SHOP = ['PROFIT_SHARE_AFTER_OVERHEADS', 'CLOSE_FIRST_FILE_PARTIAL', 'LATE_LINES_LOCKED_MONTH', 'WH_UNSHIPPED_AT_CONFIRM', 'DEFAULT_PROFIT_ROUTE', 'LOT_OWNER_SHARE', 'TEMU_SALE_VALUE', 'DS_MIN_MARGIN', 'VA_EXPENSES_BEFORE_SHARE', 'VA_SALARY_SOURCE', 'OUTPUT_VAT_MODE', 'STATEMENT_SEND'];
+    public const PER_SHOP = ['STOCK_COST_LAYER', 'PROFIT_SHARE_AFTER_OVERHEADS', 'CLOSE_FIRST_FILE_PARTIAL', 'LATE_LINES_LOCKED_MONTH', 'WH_UNSHIPPED_AT_CONFIRM', 'DEFAULT_PROFIT_ROUTE', 'LOT_OWNER_SHARE', 'TEMU_SALE_VALUE', 'DS_MIN_MARGIN', 'VA_EXPENSES_BEFORE_SHARE', 'VA_SALARY_SOURCE', 'OUTPUT_VAT_MODE', 'STATEMENT_SEND'];
 
     /** The shop's own value if it has one, else the company default, else the recommended option. No company yet (first sign-in after install) → the global value or the recommended one. */
     public static function get(string $key, ?int $ent, ?int $shop = null): string

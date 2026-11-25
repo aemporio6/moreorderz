@@ -63,4 +63,22 @@ class MenuSearchTest extends TestCase
         $js = file_get_contents(public_path('app/app.js'));
         $this->assertStringContainsString("act.dataset.act.startsWith('print:')", $js); $this->assertStringContainsString('async function pageDirectPo(sup, rep, prod)', $js);
     }
+    /** R-G_CORE-100 (owner 25-11): every word of the trade vocabulary (≈2,100 terms) finds its screen; typing gives suggestions; a new record is found at once. */
+    public function test_r100_vocabulary_suggestions_and_new_records(): void
+    {
+        $this->actingAs($this->owner); \App\Services\Context::set(1, $this->owner->id);
+        $rows = DB::table('sys_search_synonyms')->where('synonym_kind', 'VOCAB')->get(['term', 'target_url']);
+        $this->assertGreaterThan(2000, $rows->count(), 'the trade vocabulary is loaded');
+        $miss = [];
+        foreach ($rows as $r) { $x = Finder::find($r->term, $this->owner); $urls = []; foreach ($x['groups'] as $g) foreach ($g['items'] as $i) $urls[] = $i['url'] ?? ''; if (! in_array($r->target_url, $urls, true)) $miss[] = $r->term; }
+        $this->assertSame([], array_slice($miss, 0, 20), 'no term of the vocabulary misses its screen');
+        $sug = collect(Finder::find('payo', $this->owner)['groups'])->firstWhere('name', 'Suggestions');
+        $this->assertContains('#/settlements', array_column($sug['items'] ?? [], 'url'), 'typing "payo" suggests Payout');
+        $this->assertContains('#/list/t_src_customs', array_column(collect(Finder::find('custms clearance', $this->owner)['groups'])->flatMap(fn ($g) => $g['items'])->all(), 'url'), 'a spelling slip still finds customs');
+        DB::table('sys_search_synonyms')->insert(['fk_id_ent' => 1, 'term' => 'zorbo', 'maps_to' => 'stock', 'synonym_kind' => 'ALIAS', 'target_url' => '#/stock', 'f_active' => 1, 'created_by' => 0, 'created_at' => now()]);
+        $ref = new \ReflectionProperty(Finder::class, 'syn'); $ref->setValue(null, []);
+        $this->assertContains('#/stock', array_column(collect(Finder::find('zorbo', $this->owner)['groups'])->flatMap(fn ($g) => $g['items'])->all(), 'url'), 'a word added in Settings › Search synonyms works at once');
+        $id = \App\Services\RecordService::save('brand', ['brand_name' => 'Quokkaline Home', 'f_active' => 1]);
+        $this->assertContains('Quokkaline Home', array_column(collect(Finder::find('quokkaline', $this->owner)['groups'])->flatMap(fn ($g) => $g['items'])->all(), 'title'), 'a new record is searchable at once');
+    }
 }

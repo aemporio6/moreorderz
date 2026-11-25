@@ -49,6 +49,10 @@ class Part8Test extends TestCase
         $this->assertTrue($c['TEMU_SALE_VALUE']['per_shop']);
         $this->assertSame(['SPLIT_RULE', 'JOB_HISTORY', 'EXPENSES'], array_column($c['VA_SALARY_SOURCE']['options'], 'value'));
         $this->assertSame(['PICKED_LOT', 'FIFO_AT_CONFIRM'], array_column($c['STOCK_COST_LAYER']['options'], 'value'));
+        $this->assertTrue($c['STOCK_COST_LAYER']['per_shop'], 'owner 25-11: one layer by default, two layers per shop when needed');
+        $this->postJson('/api/choices', ['key' => 'STOCK_COST_LAYER', 'shop' => $this->shop2, 'value' => 'FIFO_AT_CONFIRM'])->assertOk();
+        $this->assertSame(['PICKED_LOT', 'FIFO_AT_CONFIRM'], [Choices::get('STOCK_COST_LAYER', 1, $this->shop), Choices::get('STOCK_COST_LAYER', 1, $this->shop2)]);
+        $this->postJson('/api/choices', ['key' => 'STOCK_COST_LAYER', 'shop' => $this->shop2, 'value' => ''])->assertOk();
         $this->assertFalse($c['VAULT_REVEAL']['per_shop']);
         $this->postJson('/api/choices', ['key' => 'VAULT_REVEAL', 'shop' => $this->shop, 'value' => 'OWNER'])->assertStatus(422);
         $this->actingAs($this->makeUser('MANAGER'))->postJson('/api/choices', ['key' => 'TEMU_SALE_VALUE', 'shop' => $this->shop, 'value' => 'BASE'])->assertStatus(403);

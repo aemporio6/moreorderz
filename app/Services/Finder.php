@@ -64,7 +64,7 @@ class Finder
 
     /** Scope chips of the search box: which groups / record forms each one keeps. */
     public const SCOPES = [
-        'all' => null, 'pages' => ['Screens', 'Actions', 'Create', 'Reports', 'Settings', 'Fields', 'Rights'],
+        'all' => null, 'pages' => ['Screens', 'Suggestions', 'Actions', 'Create', 'Reports', 'Settings', 'Fields', 'Rights'],
         'products' => '/product|listing|sku|brand|categor/i', 'orders' => '/sale|order|return|parcel|dispatch/i', 'people' => '/account|contact|people|person|staff|employee|supplier|customer|user|partner/i',
         'money' => '/bank|expense|settlement|payment|fin_|loan|budget|invoice|ledger|capital/i', 'tasks' => '/task/i',
     ];
@@ -105,6 +105,8 @@ class Finder
             if ($s) $it[] = ['kind' => 'screen', 'title' => $m['name'], 'sub' => $sec['name'] . ' › ' . $m['name'] . ' · ' . $m['no'], 'url' => $m['route'], 'score' => $s + (isset($lately[$m['route']]) ? 5 : 0)];
         }
         $add('Screens', array_merge($top, $it));
+        // R-G_CORE-100 (owner 25-11): the trade's words while typing – vocabulary terms that start with (or contain) what is typed, each opening its screen
+        $add('Suggestions', self::vocab(mb_strtolower($q), $u, $direct[1] ?? null));
 
         // actions
         $it = [];
@@ -160,7 +162,7 @@ class Finder
         }
 
         // order: pages first, then records (R-G_CORE-56); a typed code (it has a digit) puts the records first
-        $order = ['Screens' => 1, 'Actions' => 2, 'Create' => 3, 'Records' => 4, 'Reports' => 5, 'Settings' => 6, 'Fields' => 7, 'Help' => 8, 'Rights' => 9];
+        $order = ['Screens' => 1, 'Suggestions' => 1.5, 'Actions' => 2, 'Create' => 3, 'Records' => 4, 'Reports' => 5, 'Settings' => 6, 'Fields' => 7, 'Help' => 8, 'Rights' => 9];
         $code = (bool) preg_match('/\d/', $q);
         $bestOf = fn (string $n) => (collect($groups)->firstWhere('name', $n)['best'] ?? 0);
         $fieldFirst = $bestOf('Fields') >= 90 && $bestOf('Fields') > $bestOf('Screens');      // R-G_CORE-99: "sku" → Product form › SKU before the screens that only mention it
@@ -199,6 +201,25 @@ class Finder
             foreach ($words as $w) if ($w === $term) $alts[$w] = array_merge($alts[$w] ?? [], preg_split('/\s+/', mb_strtolower((string) $r->maps_to), -1, PREG_SPLIT_NO_EMPTY));
         }
         return [$alts, $direct];
+    }
+
+    /** Vocabulary / synonym terms for the typed text (prefix first, then contained, then close spelling), only screens this person can open. */
+    public static function vocab(string $lq, object $u, ?string $skipUrl = null): array
+    {
+        if (mb_strlen($lq) < 2) return [];
+        $can = []; foreach (AppController::menu($u->role_code) as $sec) foreach ($sec['items'] as $m) $can[$m['route']] = $m['name'];
+        foreach (self::ACTIONS as [$t, , $url, $right]) if (! $right || Perm::has($u, $right)) $can[$url] ??= $t;
+        $rows = self::$syn[(int) Context::ent()] ??= DB::table('sys_search_synonyms')->where('f_active', 1)->whereIn('fk_id_ent', [0, (int) Context::ent()])->get(['term', 'maps_to', 'target_url'])->all();
+        $out = []; $seen = [];
+        foreach ($rows as $r) {
+            $t = mb_strtolower((string) $r->term); $url = (string) $r->target_url; if ($url === '' || ! isset($can[$url]) || $url === $skipUrl) continue;
+            $s = str_starts_with($t, $lq) ? 90 - min(30, mb_strlen($t) - mb_strlen($lq)) : (str_contains($t, $lq) ? 55 : (mb_strlen($lq) >= 4 && levenshtein($t, $lq) <= 2 ? 45 : 0));
+            if (! $s || isset($seen[$url . '|' . $t])) continue; $seen[$url . '|' . $t] = 1;
+            $out[] = ['kind' => 'screen', 'title' => ucfirst($t), 'sub' => '→ ' . $can[$url], 'url' => $url, 'score' => $s];
+        }
+        usort($out, fn ($a, $b) => $b['score'] <=> $a['score']); $byUrl = []; $keep = [];
+        foreach ($out as $x) { if (($byUrl[$x['url']] ?? 0) >= 2) continue; $byUrl[$x['url']] = ($byUrl[$x['url']] ?? 0) + 1; $keep[] = $x; if (count($keep) >= 8) break; }
+        return $keep;
     }
 
     /** The closest names to a query that found nothing (screens, actions, reports the person may open). */
