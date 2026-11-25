@@ -33,8 +33,15 @@ class VaultTest extends TestCase
         $this->assertSame('••••', $row['memorable_word']);
         $cells = DB::table('sys_vault')->where(['table_name' => 't_account_banks', 'record_id' => $id])->pluck('cipher', 'column_name');
         $this->assertEqualsCanonicalizing(['account_no', 'memorable_word', 'web_login_pass'], $cells->keys()->all(), 'the card number is not in the vault either: only 4 digits are kept');
-        $everything = json_encode(DB::table('sys_vault')->get()) . json_encode(DB::table('sys_audit_log')->where('table_name', 't_account_banks')->get()) . json_encode($row);
+        // what a person or a database reader can see: the vault's own columns without the cipher text, the history, and the row – without ids and times
+        // (the cipher is random text: a short value such as 987 can appear in it by chance, so it is checked by decrypting below, not by searching it)
+        $skip = ['id', 'record_id', 'created_at', 'updated_at', 'created_by', 'updated_by', 'user_id', 'ip', 'cipher', 'fk_id_account'];
+        $seen = fn ($rows) => json_encode(array_map(fn ($r) => array_diff_key((array) $r, array_flip($skip)), is_array($rows) && array_is_list($rows) ? $rows : [$rows]));
+        $everything = $seen(DB::table('sys_vault')->where(['table_name' => 't_account_banks', 'record_id' => $id])->get()->all()) . $seen(DB::table('sys_audit_log')->where('table_name', 't_account_banks')->where('record_id', $id)->get()->all()) . $seen($row);
         foreach (['12345678', '4111', 'bluebird', 'S3cret-pass', '987'] as $plain) $this->assertStringNotContainsString($plain, $everything, "$plain must not be readable anywhere");
+        $inVault = $cells->map(fn ($c) => \Illuminate\Support\Facades\Crypt::decryptString($c))->all();
+        foreach ($cells as $col => $c) foreach (['12345678', 'bluebird', 'S3cret-pass'] as $plain) $this->assertNotSame($plain, $c, "$col is stored encrypted, never as typed");
+        $this->assertNotContains('987', $inVault, 'the CVV is not kept even encrypted'); foreach ($inVault as $v) $this->assertStringNotContainsString('4111', (string) $v, 'the card number is not kept even encrypted');
         // the screen shows masks, for the Owner too
         $v = $this->actingAs($this->owner)->getJson("/api/record/t_account_bank/$id")->assertOk();
         $this->assertSame('••••', $v->json('values.memorable_word'));
