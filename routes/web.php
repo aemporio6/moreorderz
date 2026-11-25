@@ -301,6 +301,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('pay', [BuyingController::class, 'pay']);
         Route::post('shipment', [BuyingController::class, 'shipment']);
         Route::get('shipment/{id}/lines', [BuyingController::class, 'shipmentLines'])->whereNumber('id');
+        Route::get('receive/open', [BuyingController::class, 'receiveOpen']);      // R-H-21 phone receiving
+        Route::get('receive/product', [BuyingController::class, 'receiveProduct']);
         Route::post('grn', [BuyingController::class, 'grn']);
         Route::get('cycle/{id}/extras', [BuyingController::class, 'extras'])->whereNumber('id');
         Route::post('samples', [BuyingController::class, 'sample']);
@@ -533,6 +535,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('pick-lists/{id}/release', [OrdersController::class, 'pickRelease'])->whereNumber('id');
         Route::post('pick-lists/{id}/reassign', [OrdersController::class, 'pickReassign'])->whereNumber('id');
         Route::post('pick-lines/{lineId}', [OrdersController::class, 'pick'])->whereNumber('lineId');
+        Route::post('pick-lines/{lineId}/scan', [OrdersController::class, 'pickScan'])->whereNumber('lineId');      // R-H-26
         Route::post('pick-empty', [OrdersController::class, 'pickEmpty']);
         Route::post('pack', [OrdersController::class, 'pack']);
         Route::get('lost-parcels', [OrdersController::class, 'lostParcels']);

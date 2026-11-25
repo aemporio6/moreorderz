@@ -14,18 +14,21 @@ use Tests\TestCase;
 
 class SalesDispatchTest extends TestCase
 {
+    protected const MARKETPLACE = 'eBay';
+
     private int $p; private int $binA; private int $binB; private int $shop; private int $carrier; private int $mp;
 
     protected function setUp(): void
     {
         parent::setUp();
         $f = fn ($t, $d) => DB::table($t)->insertGetId(RecordService::fillNotNull($t, $d));
-        $this->mp = $f('cat_marketplaces', ['fk_id_ent' => 1]);
+        $this->mp = $f('cat_marketplaces', ['fk_id_ent' => 1, 'marketplace_short' => static::MARKETPLACE]);      /* R-H-60 / IC-0.10: the edge cases run on an eBay-profile shop and (subclass) a TikTok-profile shop */
         $this->p = $f('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'BOWL-01', 'product_name_vendor' => 'Dog bowl', 'stock' => 0, 'f_active' => 1, 'e_product_type' => 'pool']);
         $this->binA = $f('cat_inventory_locations', ['location_name' => 'A-A-01', 'kind' => 'BIN', 'fk_id_ent' => 1, 'f_sellable' => 1, 'f_active' => 1, 'pick_seq' => 1]);
         $this->binB = $f('cat_inventory_locations', ['location_name' => 'A-A-02', 'kind' => 'BIN', 'fk_id_ent' => 1, 'f_sellable' => 1, 'f_active' => 1, 'pick_seq' => 2]);
         $this->carrier = $f('t_carriers', ['fk_id_ent' => 1, 'carrier_name' => 'Carrier A', 'f_active' => 1]);
         $this->shop = $f('t_branches', ['fk_id_ent' => 1, 'fk_id_marketplace' => $this->mp, 'shop_no' => 'S1', 'iso_branch' => 'S1', 'shop_name' => 'Shop A', 'f_active' => 1, 'fk_id_main_location' => $this->binA, 'fk_id_default_carrier' => $this->carrier, 'fulfilment_channel' => 'SELF']);
+        DB::table('t_branches')->where('id', $this->shop)->update(['fk_id_mp_profile' => \App\Services\Profiles::ensureForMarketplace($this->mp)]);
         Stock::receive(1, [['product' => $this->p, 'qty' => 4, 'location' => $this->binA, 'unit_cost' => 4.00, 'received_date' => '2026-08-01']], 'GRN', 1);
         Stock::receive(1, [['product' => $this->p, 'qty' => 6, 'location' => $this->binB, 'unit_cost' => 5.00, 'received_date' => '2026-08-05']], 'GRN', 2);
         PriceService::set($this->p, $this->mp, 8, 12.99, '2026-08-01');
@@ -488,5 +491,35 @@ class SalesDispatchTest extends TestCase
         $this->assertSame(1, $R::run(1, 'wh_pick_speed', date('Y-m-d'), date('Y-m-d'), 'WAREHOUSE')['rows'][0]['lines']);
         $this->assertEquals(['scanned' => 1, 'expected' => 1], array_intersect_key($R::run(1, 'wh_manifests', date('Y-m-d'), date('Y-m-d'), 'WAREHOUSE')['rows'][0], ['scanned' => 1, 'expected' => 1]));
         $this->assertSame([], $R::run(1, 'wh_recon', '2026-08-01', '2026-08-31', 'WAREHOUSE')['rows'], 'books and bins agree');
+    }
+
+    /** R-H-26 / R-H-59 #6: wrong bin and wrong item scans are refused with the rule's words and counted per picker / packer in Pick accuracy. */
+    public function test_wrong_scans_are_refused_and_counted_per_picker(): void
+    {
+        $u = $this->makeUser('WAREHOUSE'); \App\Services\Context::set(1, (int) $u->id);
+        $this->order('ORD-1', 2);
+        $t = Dispatch::buildPickList(1); $line = DB::table('wh_pick_task_lines')->where('fk_id_pick_task', $t)->value('id');
+        $P = \App\Services\PickLists::class;
+        $this->assertSame(['ok' => false, 'message' => 'This is A-A-02 – go to A-A-01'], $P::scan($line, 'bin', 'A-A-02'));
+        $this->assertTrue($P::scan($line, 'bin', 'a-a-01')['ok']);
+        $c = DB::table('t_product_vendors')->insertGetId(RecordService::fillNotNull('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'SKU-C', 'product_name_vendor' => 'Other', 'stock' => 0, 'f_active' => 1]));
+        $this->assertSame('This is SKU-C – pick BOWL-01', $P::scan($line, 'item', 'SKU-C')['message']);
+        $this->assertTrue($P::scan($line, 'item', 'BOWL-01')['ok']);
+        Dispatch::pick($line);
+        \App\Services\Settings::set('WH_SCAN_CONFIRM_PACK', 'Y', 1);
+        try { Dispatch::pack(['order_no' => 'ORD-1', 'branch' => $this->shop, 'scans' => ['BOWL-01', 'NOPE-9'], 'tracking_no' => 'T1']); $this->fail('wrong item packed'); } catch (\InvalidArgumentException $e) { }
+        $this->assertSame(3, DB::table('wh_scan_errors')->where('user_id', $u->id)->count(), '2 at pick + 1 at pack – the pack refusal did not undo it');
+        $row = \App\Services\ReportService::run(1, 'wh_pick_speed', date('Y-m-d'), date('Y-m-d'), 'WAREHOUSE')['rows'][0];
+        $this->assertSame([1, 3], [$row['lines'], $row['wrong']]);
+        $this->actingAs($u)->postJson("/api/pick-lines/$line/scan", ['step' => 'bin', 'code' => 'X'])->assertStatus(422)->assertJsonPath('message', 'This line is already done.');
+    }
+
+    /** IC-0.10: this class runs on the shop of the profile named in MARKETPLACE (eBay here, TikTok in SalesDispatchTikTokTest). */
+    public function test_the_shop_runs_on_its_marketplace_profile(): void
+    {
+        $p = \App\Services\Profiles::ofShop($this->shop);
+        $this->assertNotNull($p);
+        $src = DB::table('mp_profiles')->where('code', strtoupper(static::MARKETPLACE) . '_EXAMPLE')->first();
+        $this->assertSame([$this->mp, $src->money_report_type], [(int) $p->fk_id_marketplace, $p->money_report_type], 'a copy of the ' . static::MARKETPLACE . ' example profile');
     }
 }

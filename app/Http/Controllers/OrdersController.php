@@ -207,6 +207,7 @@ class OrdersController extends Controller
         $t = DB::table('wh_pick_tasks')->where('id', $id)->where('fk_id_ent', Context::ent())->first(['id', 'fk_id_ent', 'task_code', 'status', 'created_at', 'last_activity_at', 'assigned_to']) ?? abort(404);
         $t->state = \App\Services\PickLists::state($t); $t->next_line = \App\Services\PickLists::next($id)?->id;      /* R-H-28: resume at the next unconfirmed line after a refresh */
         $t->picker = $t->assigned_to ? DB::table('t_users')->where('id', $t->assigned_to)->value('display_name') : null;
+        $t->scan_confirm = strtoupper((string) \App\Services\Settings::get('WH_SCAN_CONFIRM_PICK', (int) Context::ent(), 'Y')) === 'Y';
         $pickers = DB::table('t_users')->where('fk_id_ent', Context::ent())->where('f_active', 1)->orderBy('display_name')->limit(300)->get(['id', 'display_name']);
         return ['task' => $t, 'lines' => DB::table('wh_pick_task_lines as l')->join('t_product_vendors as p', 'p.id', '=', 'l.fk_id_product')->leftJoin('cat_inventory_locations as c', 'c.id', '=', 'l.fk_id_from_location')->leftJoin('t_sales as s', 's.id', '=', 'l.fk_id_sale')
             ->where('l.fk_id_pick_task', $id)->orderBy('l.line_no')->get(['l.id', 'l.line_no', 'c.location_name as bin', 'p.SKU_VENDOR as sku', 'p.product_name_vendor as name', 'l.qty', 'l.qty_done', 'l.qty_short', 'l.line_status', 's.order_no']), 'pickers' => $pickers, 'rights' => $this->rights($r)];
@@ -221,6 +222,9 @@ class OrdersController extends Controller
         abort_unless(DB::table('wh_pick_tasks')->where('id', $id)->where('fk_id_ent', Context::ent())->exists(), 404);
         return $this->run(fn () => ['message' => \App\Services\PickLists::abandon($id, 'released by ' . ($r->user()->display_name ?? 'user')) . ' line(s) released to the queue; picked units stay in DISPATCH.']);
     }
+
+    /** R-H-26 scan the bin, then the item, of a pick line; refusals are kept per picker (R-H-59). */
+    public function pickScan(Request $r, int $lineId) { $this->can($r, 'wh.work.pick'); return $this->run(fn () => \App\Services\PickLists::scan($lineId, (string) $r->input('step', 'bin'), (string) $r->input('code', ''))); }
 
     public function pickReassign(Request $r, int $id) { $this->can($r, 'wh.picklist.reassign'); return $this->run(fn () => \App\Services\PickLists::reassign($id, (int) $r->input('user'), $r->user())); }
 

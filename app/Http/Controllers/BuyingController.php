@@ -341,8 +341,24 @@ class BuyingController extends Controller
     public function grn(Request $r)
     {
         $this->can($r, 'buying.RECEIVE');
-        $d = $r->validate(['shipment' => 'required|integer', 'location' => 'required|integer', 'date' => 'required|date', 'lines' => 'required|array|min:1', 'lines.*.po_line' => 'required|integer', 'lines.*.received' => 'required|integer|min:0', 'lines.*.damaged' => 'nullable|integer|min:0', 'lines.*.location' => 'nullable|integer']);
+        $d = $r->validate(['shipment' => 'required|integer', 'location' => 'required|integer', 'date' => 'required|date', 'lines' => 'required|array|min:1', 'lines.*.po_line' => 'nullable|integer|required_without:lines.*.product', 'lines.*.product' => 'nullable|integer', 'lines.*.received' => 'required|integer|min:0', 'lines.*.damaged' => 'nullable|integer|min:0', 'lines.*.location' => 'nullable|integer']);
         return $this->run(fn () => ['id' => Buy::createGrn($d), 'message' => 'GRN saved as draft – check it and post']);
+    }
+
+    /** R-H-21 phone receiving: shipments not received yet, the default place, a product by scanned code (for a wrong item). */
+    public function receiveOpen(Request $r)
+    {
+        $this->can($r, 'buying.RECEIVE'); $ent = (int) Context::ent();
+        return ['place' => (int) (DB::table('cat_inventory_locations')->where('fk_id_ent', $ent)->where('f_active', 1)->where('f_default_site', 1)->value('id') ?: \App\Services\StockService::systemLocation($ent, 'RECEIVING')),
+            'rows' => DB::table('t_src_shipments as s')->leftJoin('t_src_po as p', 'p.id', '=', 's.fk_id_po')->leftJoin('t_src_suppliers as v', 'v.id', '=', 'p.fk_id_supplier')->where('s.fk_id_ent', $ent)->where('s.f_active', 1)
+                ->where(fn ($w) => $w->whereNull('s.status')->orWhereNotIn('s.status', ['ARRIVED', 'CANCELLED']))->orderBy('s.eta')->limit(100)->get(['s.id', 's.shipment_code', 's.eta', 'p.po_number', 'v.supplier_name'])];
+    }
+
+    public function receiveProduct(Request $r)
+    {
+        $this->can($r, 'buying.RECEIVE'); $c = trim((string) $r->query('code'));
+        $p = $c === '' ? null : DB::table('t_product_vendors')->where('fk_id_ent', Context::ent())->where(fn ($w) => $w->where('SKU_VENDOR', $c)->orWhere('ean', $c)->orWhere('upc', $c))->first(['id', 'SKU_VENDOR as sku', 'product_name_vendor as name']);
+        return $p ? ['product' => $p] : response()->json(['message' => "No product has the code $c – search it by name and print its label (unlabelled carton)."], 404);
     }
 
     public function shipmentLines(Request $r, int $id)

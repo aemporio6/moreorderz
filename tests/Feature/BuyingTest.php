@@ -203,7 +203,10 @@ class BuyingTest extends TestCase
         $line = (int) DB::table('t_src_po_lines')->where('fk_id_po', $po)->value('id');
         $wrong = (int) DB::table('t_product_vendors')->insertGetId(RecordService::fillNotNull('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'WRONG-1', 'product_name_vendor' => 'Not ordered', 'stock' => 0, 'f_active' => 1, 'e_product_type' => 'pool']));
         try { Buy::createGrn(['shipment' => $ship, 'location' => $this->wh, 'lines' => [['product' => $wrong, 'received' => 0]]]); $this->fail('no qty'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('enter how many arrived', $e->getMessage()); }
-        $grn = Buy::createGrn(['shipment' => $ship, 'location' => $this->wh, 'date' => '2026-08-20', 'lines' => [['po_line' => $line, 'received' => 100], ['product' => $wrong, 'received' => 3]]]);      /* one mixed carton: the ordered SKU and 3 of another */
+        $this->getJson('/api/receive/product?code=WRONG-1')->assertOk()->assertJsonPath('product.id', $wrong);
+        $this->getJson('/api/receive/product?code=NOPE')->assertStatus(404)->assertJsonPath('message', 'No product has the code NOPE – search it by name and print its label (unlabelled carton).');
+        $this->assertContains($ship, array_column($this->getJson('/api/receive/open')->assertOk()->json('rows'), 'id'), 'the phone lists the shipment to receive');
+        $grn = $this->postJson('/api/grn', ['shipment' => $ship, 'location' => $this->wh, 'date' => '2026-08-20', 'lines' => [['po_line' => $line, 'received' => 100], ['product' => $wrong, 'received' => 3]]])->assertOk()->json('id');      /* one mixed carton through the phone API */
         $rows = DB::table('t_src_grn_lines')->where('fk_id_grn', $grn)->orderBy('id')->get();
         $this->assertSame([[100.0, 100.0, null], [0.0, 3.0, 'Wrong item – not on the PO']], $rows->map(fn ($r) => [(float) $r->expected_qty, (float) $r->received_qty, $r->notes])->all());
         $this->assertTrue(TaskEngine::isOpen('SRC_QTY_MISMATCH', ['GRN' . $grn]));

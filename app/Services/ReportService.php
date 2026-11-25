@@ -224,10 +224,13 @@ class ReportService
     {
         $rows = DB::table('wh_pick_task_lines as l')->join('wh_pick_tasks as t', 't.id', '=', 'l.fk_id_pick_task')->leftJoin('t_users as u', 'u.id', '=', 'l.done_by')->where('t.fk_id_ent', $ent)->whereIn('l.line_status', ['DONE', 'SHORT'])
             ->whereBetween(DB::raw('DATE(l.done_at)'), [$from, $to])->groupBy('l.done_by', 'u.display_name')
-            ->selectRaw("u.display_name who, COUNT(*) n_lines, SUM(l.qty_done) units, SUM(l.line_status = 'SHORT') shorts, TIMESTAMPDIFF(SECOND, MIN(l.done_at), MAX(l.done_at)) secs")->get();
-        return [[['who', 'Picker', 'text'], ['lines', 'Lines', 'int'], ['units', 'Units', 'int'], ['short', 'Short picks', 'int'], ['per_hour', 'Lines per hour', 'text']],
-            $rows->map(fn ($r) => ['who' => $r->who ?? '—', 'lines' => (int) $r->n_lines, 'units' => (int) $r->units, 'short' => (int) $r->shorts, 'per_hour' => (int) $r->secs > 0 ? (string) round($r->n_lines / ($r->secs / 3600), 1) : ''])->all(),
-            'Lines per hour = lines ÷ the time from the first to the last confirm of the period. Wrong scans are not logged per picker yet.'];
+            ->selectRaw("l.done_by, u.display_name who, COUNT(*) n_lines, SUM(l.qty_done) units, SUM(l.line_status = 'SHORT') shorts, TIMESTAMPDIFF(SECOND, MIN(l.done_at), MAX(l.done_at)) secs")->get();
+        $wrong = DB::table('wh_scan_errors')->where('fk_id_ent', $ent)->whereBetween(DB::raw('DATE(created_at)'), [$from, $to])->groupBy('user_id')->selectRaw('user_id, COUNT(*) n')->pluck('n', 'user_id');
+        $ids = DB::table('wh_pick_task_lines as l')->join('wh_pick_tasks as t', 't.id', '=', 'l.fk_id_pick_task')->where('t.fk_id_ent', $ent)->whereIn('l.line_status', ['DONE', 'SHORT'])->whereBetween(DB::raw('DATE(l.done_at)'), [$from, $to])->distinct()->pluck('l.done_by')->map(fn ($x) => (int) $x)->all();
+        $out = $rows->map(fn ($r) => ['uid' => (int) ($r->done_by ?? 0), 'who' => $r->who ?? '—', 'lines' => (int) $r->n_lines, 'units' => (int) $r->units, 'short' => (int) $r->shorts, 'wrong' => (int) ($wrong[(int) ($r->done_by ?? 0)] ?? 0), 'per_hour' => (int) $r->secs > 0 ? (string) round($r->n_lines / ($r->secs / 3600), 1) : ''])->all();
+        foreach ($wrong as $uid => $n) if (! in_array((int) $uid, $ids, true)) $out[] = ['uid' => (int) $uid, 'who' => DB::table('t_users')->where('id', $uid)->value('display_name') ?? '—', 'lines' => 0, 'units' => 0, 'short' => 0, 'wrong' => (int) $n, 'per_hour' => ''];
+        return [[['who', 'Picker / packer', 'text'], ['lines', 'Lines', 'int'], ['units', 'Units', 'int'], ['short', 'Short picks', 'int'], ['wrong', 'Wrong scans', 'int'], ['per_hour', 'Lines per hour', 'text']], $out,
+            'Lines per hour = lines ÷ the time from the first to the last confirm of the period. Wrong scans = refused bin / item scans at pick and pack.'];
     }
 
     private static function r_wh_manifests(int $ent, string $from, string $to): array

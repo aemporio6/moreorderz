@@ -56,6 +56,29 @@ class PickLists
         });
     }
 
+    /**
+     * R-H-26 scan-confirm on the phone: step 'bin' then 'item'. A wrong bin → "This is W1-A-2 – go to W1-A-1" (no move); a wrong item → "This is SKU-C – pick SKU-A". Each refusal is kept per picker (R-H-59).
+     */
+    public static function scan(int $lineId, string $step, string $code): array
+    {
+        $ent = (int) Context::ent(); $code = trim($code);
+        $l = DB::table('wh_pick_task_lines as l')->join('wh_pick_tasks as t', 't.id', '=', 'l.fk_id_pick_task')->join('t_product_vendors as p', 'p.id', '=', 'l.fk_id_product')->leftJoin('cat_inventory_locations as c', 'c.id', '=', 'l.fk_id_from_location')
+            ->where('l.id', $lineId)->where('t.fk_id_ent', $ent)->first(['l.id', 'l.fk_id_product', 'l.fk_id_sale', 'l.line_status', 'c.location_name', 'c.location_code', 'c.barcode_value', 'p.SKU_VENDOR', 'p.ean', 'p.upc']) ?? throw new \InvalidArgumentException('Pick line not found.');
+        if ($l->line_status !== 'OPEN') throw new \InvalidArgumentException('This line is already done.');
+        $up = fn ($v) => mb_strtoupper(trim((string) $v));
+        if ($step === 'bin') {
+            if (in_array($up($code), array_filter([$up($l->location_name), $up($l->location_code), $up($l->barcode_value)]), true)) return ['ok' => true, 'message' => 'Bin OK – scan the item'];
+            $other = DB::table('cat_inventory_locations')->where('fk_id_ent', $ent)->where(fn ($w) => $w->where('location_name', $code)->orWhere('location_code', $code)->orWhere('barcode_value', $code))->value('location_name');
+            ScanErrors::add($ent, 'PICK_BIN', $lineId, $l->location_name, $code);
+            return ['ok' => false, 'message' => 'This is ' . ($other ?: $code) . " – go to {$l->location_name}"];
+        }
+        $listing = $l->fk_id_sale ? DB::table('t_sales')->where('id', $l->fk_id_sale)->value('sku') : null;
+        if (in_array($up($code), array_filter([$up($l->SKU_VENDOR), $up($l->ean), $up($l->upc), $up($listing)]), true)) return ['ok' => true, 'message' => 'Item OK'];
+        $other = DB::table('t_product_vendors')->where('fk_id_ent', $ent)->where(fn ($w) => $w->where('SKU_VENDOR', $code)->orWhere('ean', $code)->orWhere('upc', $code))->value('SKU_VENDOR');
+        ScanErrors::add($ent, 'PICK_ITEM', $lineId, $l->SKU_VENDOR, $code);
+        return ['ok' => false, 'message' => 'This is ' . ($other ?: $code) . " – pick {$l->SKU_VENDOR}"];
+    }
+
     /** Job (mo:dispatch-watch): every open list untouched for WH_PICK_ABANDON_HOURS is released. */
     public static function sweep(int $ent): int
     {

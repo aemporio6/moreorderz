@@ -265,6 +265,11 @@ class DispatchService
 
     public static function pack(array $d): int
     {
+        try { return self::packTx($d); } finally { ScanErrors::flush(); }
+    }
+
+    private static function packTx(array $d): int
+    {
         return DB::transaction(function () use ($d) {
             $ent = (int) Context::ent();
             $orders = array_values(array_unique(array_filter(array_map('strval', array_merge([$d['order_no']], (array) ($d['combine'] ?? []))), fn ($x) => trim($x) !== '')));      /* combined shipping: several orders of one buyer, one parcel (R-H-60) */
@@ -289,7 +294,8 @@ class DispatchService
             $pl = array_values(array_filter(array_merge(...array_map(fn ($o) => PackService::lines($ent, (string) $o, (int) $d['branch']), $orders)), fn ($l) => $lines->contains('id', (int) $l['sale'])));
             if (PackService::scanOn($ent)) {
                 if (empty($d['scans'])) throw new \InvalidArgumentException('Scan each item of the order to verify it (or switch WH_SCAN_CONFIRM_PACK off).');
-                $v = PackService::verify($pl, (array) $d['scans']); if (! $v['ok']) throw new \InvalidArgumentException(PackService::refusal($v));
+                $v = PackService::verify($pl, (array) $d['scans']);
+                if (! $v['ok']) { foreach ($v['wrong'] as $w) ScanErrors::add($ent, 'PACK_ITEM', null, (string) $d['order_no'], (string) $w, true); throw new \InvalidArgumentException(PackService::refusal($v)); }      /* R-H-59 the wrong scans are kept per packer */
             }
             $sug = PackService::suggest($ent, $pl);
             // carrier service: the rule's suggestion; the packer may change it with a reason (R-H-30)
