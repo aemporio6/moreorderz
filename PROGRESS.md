@@ -685,3 +685,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-170 (111d857): edge cases on two profiles complete (R-H-60 BUILT), one location tree (R-H-2 BUILT, quick-form kind bug fixed). 769 tests pass. BUILT 921 / PARTIAL 280 / FORM ONLY 118 / MISSING 114.
 - 7e-171 (901e8c9): payment schedule templates (R-B_SOURCING-27 BUILT), SIM slot rule (R-C-26 BUILT), colour / size lists with swatch (R-D-5 BUILT). 772 tests pass. BUILT 927 / PARTIAL 278 / FORM ONLY 114 / MISSING 114.
 - 7e-172 (8d4a25a): WhatsApp number from own mobiles (R-C-48 BUILT), seller accounts + shop Account kit (R-C-30 BUILT), sourcing required messages (R-B_SOURCING-54 BUILT). 775 tests pass. BUILT 933 / PARTIAL 274 / FORM ONLY 112 / MISSING 114.
+- 7e-173 (20db35e): zero quantity pushed at once (R-H-20 BUILT), fulfilment centres + channel, FC lines now consumed at Confirm (R-D-87 BUILT). 776 tests pass. BUILT 937 / PARTIAL 270 / FORM ONLY 112 / MISSING 114.
