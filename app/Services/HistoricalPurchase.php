@@ -39,7 +39,10 @@ class HistoricalPurchase
     {
         $log = []; $ref = SrcDuplicate::clean($e['order_ref'] ?? ''); $date = $e['order_date'] ?? null;
         $lines = array_values(array_filter((array) ($e['lines'] ?? []), fn ($l) => ! empty($l['product']) || trim((string) ($l['product_name'] ?? '')) !== '' || trim((string) ($l['line_type'] ?? '')) !== ''));
-        if ((empty($e['supplier']) && trim((string) ($e['supplier_name'] ?? '')) === '') || ! $date || $ref === '' || ! $lines) throw new \InvalidArgumentException('Section 1: Supplier, Order Date, Order Reference and at least one line are required');
+        if (empty($e['supplier']) && trim((string) ($e['supplier_name'] ?? '')) === '') throw new \InvalidArgumentException('Select the Supplier');      /* R-B_SOURCING-54 the old messages, one at a time */
+        if (! $date) throw new \InvalidArgumentException('Order Date is required');
+        if ($ref === '') throw new \InvalidArgumentException('order_ref is REQUIRED');
+        if (! $lines) throw new \InvalidArgumentException('At least one line is required');
         return DB::transaction(function () use ($ent, $e, $u, $ref, $date, $lines, &$log) {
             /* supplier: chosen, or found by name; a new name is created (logged NEW) */
             $sup = ! empty($e['supplier']) ? DB::table('t_src_suppliers')->where('id', (int) $e['supplier'])->where('fk_id_ent', $ent)->first()

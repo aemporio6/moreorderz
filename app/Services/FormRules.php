@@ -43,6 +43,11 @@ class FormRules
             if ($other !== null && (int) ($v('f_active') ?? 1)) return ['slotno' => "Slot $slot of " . ($d->mobile_name ?? 'this device') . " is already used by $other"];
         }
         if ($id && (int) $v('sms_forward_to_mobile') === $id) return ['sms_forward_to_mobile' => 'SMS cannot be forwarded to the same mobile.'];
+        if ($id && (array_key_exists('mobile_no', $data) && (string) $data['mobile_no'] !== (string) ($old['mobile_no'] ?? '') || array_key_exists('f_active', $data) && ! (int) $data['f_active'] && (int) ($old['f_active'] ?? 1))) {      /* R-C-48 the WhatsApp number follows its mobile */
+            $n = PersonChannels::intl((string) $v('mobile_no'));
+            if ((int) ($v('f_active') ?? 1) && ($who = DB::table('t_account')->where('fk_id_whatsapp_mobile', $id)->exists() ? PersonChannels::waOwner($n, (int) $v('fk_id_account')) : null)) return ['mobile_no' => "This number is already the WhatsApp number of $who."];
+            PersonChannels::mobileChanged($id, (string) $v('mobile_no'), (bool) (int) ($v('f_active') ?? 1));
+        }
         return [];
     }
 
@@ -80,7 +85,8 @@ class FormRules
             if (! is_array($p) || array_values($p) !== $p || array_filter($p, fn ($x) => ! is_string($x) || ! preg_match('/^\w+$/', $x))) return ['params_json' => 'Parameters must be a list of names, e.g. ["first_name","task_ref"].'];
             $data['params_json'] = json_encode(array_values($p));
         }
-        if ($table === 't_account_mobiles' && ($w = self::mobile($data, $old, $id))) return $w;      // R-C-26 slot rule, SMS forward, required set
+        if ($table === 't_account_mobiles' && ($w = self::mobile($data, $old, $id))) return $w;
+        if ($table === 't_account_marketplaces' && ($w = ShopKit::check($data, $old, $id))) return $w;      // R-C-30 a seller account needs its shop      // R-C-26 slot rule, SMS forward, required set
         if ($table === 'cat_inventory_locations' && ($w = WarehouseSites::check($data, $old, $id))) return $w;      // R-H-3 / 6 system bins, bins with units
         if ($table === 'user_absence') return TaskSettings::absence($data, $old, $id);      // R-G_CORE-16
         if ($table === 'tm_delegations') return TaskSettings::delegation($data, $old, $id);      // R-G_CORE-17
@@ -138,7 +144,7 @@ class FormRules
     /** R-B_SOURCING-47 / 49: name and Drive URL required (old alert); a URL without http(s):// is refused "Must start with https://". */
     private static function document(array &$data, array $old, array $already = []): array
     {
-        if (isset($already['drive_url'])) return ['drive_url' => 'Must start with https://'];      // the general link check took the value out already
+        if (isset($already['drive_url'])) return in_array('Google Drive URL is required', (array) $already['drive_url'], true) ? ['_form' => DocRollup::REQUIRED, 'drive_url' => 'Google Drive URL is required'] : ['drive_url' => 'Must start with https://'];      /* the PO docs modal shows the joint message, the field its own */      // the general link check took the value out already
         $v = fn (string $c) => array_key_exists($c, $data) ? trim((string) $data[$c]) : trim((string) ($old[$c] ?? ''));
         if ($v('doc_name') === '' || $v('drive_url') === '') return ['_form' => DocRollup::REQUIRED, ($v('doc_name') === '' ? 'doc_name' : 'drive_url') => DocRollup::REQUIRED];
         if (array_key_exists('drive_url', $data)) { $data['drive_url'] = trim((string) $data['drive_url']); if (! DocRollup::linkOk($data['drive_url'])) return ['drive_url' => 'Must start with https://'];

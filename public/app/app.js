@@ -319,6 +319,7 @@
       if (r.startsWith('#/fulfilment')) return await pageFulfilment();
       if (r.startsWith('#/sale-cases')) return await pageSaleCases();
       if (r.startsWith('#/shop-health')) return await pageShopHealth();
+      if (r.startsWith('#/shop-kit')) return await pageShopKit();      // R-C-30
       if (r.startsWith('#/ds-upload')) return await pageDsUpload();
       if (r.startsWith('#/ds-orders')) return await pageDsOrders(r);
       if (r.startsWith('#/sales-annual')) return await pageSalesAnnual();
@@ -915,13 +916,21 @@
   }
   // ---------- account health per shop and month (R-A_SALES-73 / 74) ----------
   const SH = { f: null };
+  async function pageShopKit() {      /* R-C-30 / PHASE_07 §7.5 the shop's seller accounts with their health */
+    const id = +(new URLSearchParams(location.hash.split('?')[1] || '').get('shop') || 0);
+    busy(true); let d; try { d = await api('shops/' + id + '/kit'); } catch (e) { busy(false); $('#main').innerHTML = `<div class="card"><div class="empty">${ic('alert')}<div>${esc(e.message)}</div></div></div>`; return; } busy(false);
+    const row = a => `<tr><td>${esc(a.person || '')}</td><td>${esc(a.type || '')}</td><td>${esc(a.two_fa || '—')}</td><td>${a.health && a.health.length ? a.health.map(h => `<span class="chip warn">${esc(h)}</span>`).join(' ') : '<span class="chip ok">OK</span>'}</td><td><a class="btn sm" href="#/rec/t_account_marketplace/${a.account}">Open</a></td></tr>`;
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/shop-health">Shop health</a> ›</div><h1>Account kit · ${esc(d.shop.name)}</h1><div class="sub">Seller accounts of this shop and what is missing.</div></div></div>
+      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>Person</th><th>Type</th><th>2-step</th><th>Health</th><th></th></tr></thead><tbody>${d.accounts.map(row).join('') || '<tr><td colspan="5" class="muted">No seller account is linked to this shop yet.</td></tr>'}</tbody></table></div></div>
+      ${d.missing_shop_link.length ? `<div class="card" style="margin-top:12px"><div class="card-h"><h3>Seller accounts of this marketplace without a shop</h3></div><div class="tbl-wrap"><table class="t"><tbody>${d.missing_shop_link.map(row).join('')}</tbody></table></div></div>` : ''}`;
+  }
   async function pageShopHealth() {
     const f = SH.f = SH.f || { year: '', month: '', marketplace: '', va: '', shop: '' };
     busy(true); let d; try { d = await api('shop-health?' + new URLSearchParams(Object.entries(f).filter(([, v]) => v !== ''))); } catch (e) { busy(false); $('#main').innerHTML = `<div class="card"><div class="empty">${ic('alert')}<div>${esc(e.message)}</div></div></div>`; return; } busy(false);
     const opt = (list, val, first) => (first ? `<option value="">${first}</option>` : '') + list.map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(val ?? '') ? 'selected' : ''}>${esc(l)}</option>`).join('');
     const col = { green: '#2e9e5b', amber: '#e0a800', red: '#d64545', '': 'inherit' }, bg = { green: '#d4edda', amber: '#fff3cd', red: '#f8d7da', '': '' }; const mcodes = Object.keys(d.metric_columns), ro = d.locked ? 'disabled' : '';
     const num = (r, field, val, w = 62) => `<input class="shIn" data-shop="${r.shop}" data-field="${field}" value="${val ?? ''}" data-last="${val ?? ''}" inputmode="decimal" style="width:${w}px;text-align:right" ${ro}>`;
-    const rowHtml = r => { const by = Object.fromEntries(r.metrics.map(m => [m.code, m])); return `<tr data-row="${r.shop}">${d.any ? `<td>${esc(r.va || '—')}</td>` : ''}<td>${esc(r.marketplace)}</td>
+    const rowHtml = r => { const by = Object.fromEntries(r.metrics.map(m => [m.code, m])); return `<tr data-row="${r.shop}">${d.any ? `<td>${esc(r.va || '—')}</td>` : ''}<td>${esc(r.marketplace)} <a class="small" href="#/shop-kit?shop=${r.shop}" title="Account kit of this shop">kit</a></td>
         <td><b>${esc(r.shop_label)}</b> <span class="chip" style="background:#d4edda" title="Positive feedback this month">+${r.positive}</span> <span class="chip" style="background:#f8d7da" title="Negative feedback this month">−${r.negative}</span>${r.entered ? `<div class="small muted">entered ${esc(r.entered)}</div>` : ''}</td>
         ${[0, 1, 2, 3].map(i => `<td class="num">${num(r, 'pf' + (i + 1), r.pf[i])}</td>`).join('')}
         <td><a href="#" data-text="cnf" data-shop="${r.shop}">${r.cnf ? 'CNF ✓' : 'CNF'}</a> · <a href="#" data-text="onf" data-shop="${r.shop}">${r.onf ? 'ONF ✓' : 'ONF'}</a></td><td class="num">${num(r, 'nf_total', r.negative || '')}</td>
@@ -2119,7 +2128,7 @@
     const save = async force => {
       const b = { force_reason: force || null }; $$('[data-h]').forEach(i => b[i.dataset.h] = i.value); b.lines = rows('[data-ol]'); b.payments = rows('[data-op]');
       const sh = {}; $$('[data-s]').forEach(i => sh[i.dataset.s] = i.value); b.shipping = { ...sh, freight: sh.freight ? [{ cost: +sh.freight, currency: sh.freight_currency }] : [] }; const rc = {}; $$('[data-r]').forEach(i => rc[i.dataset.r] = i.value); b.received = rc;
-      if (!b.supplier_name || !b.order_date || !b.order_ref || !b.lines.some(l => l.product_name || l.sku)) return toast('Section 1: Supplier, Order Date, Order Reference and at least one line are required', 'err');
+      if (!b.supplier_name) return toast('Select the Supplier', 'err'); if (!b.order_date) return toast('Order Date is required', 'err'); if (!b.order_ref) return toast('order_ref is REQUIRED', 'err'); if (!b.lines.some(l => l.product_name || l.sku)) return toast('At least one line is required', 'err');
       try { const r = await api('old-entry', { method: 'POST', body: b }); toast(r.pending ? 'Saved PENDING APPROVAL - stock unaffected until a Partner approves.' : 'Saved.'); showLog(r.log || []); $('#oeMsg').textContent = r.message; setTimeout(() => go('#/cycle/' + r.cycle), (r.log || []).length ? 1600 : 200); }
       catch (e) { if (e.status === 409) { const m = modal('Already exists', e.message, '<label class="small">Reason to save anyway<input class="q" id="oeWhy" style="width:100%"></label>', `<button class="btn" id="oeOpen">Open existing</button><button class="btn primary" id="oeAny">Save anyway</button>`, false);
           $('#oeAny', m.ov).onclick = () => { const w = $('#oeWhy', m.ov).value.trim(); if (!w) return toast('Write the reason.', 'err'); m.close(); save(w); }; $('#oeOpen', m.ov).onclick = () => { m.close(); go('#/list/t_src_cycle?q=' + encodeURIComponent(e.data.duplicate || '')); }; }

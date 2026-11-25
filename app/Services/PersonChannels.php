@@ -58,6 +58,37 @@ class PersonChannels
         return '+' . $cc . ' ' . substr($rest, 0, 1) . '•• ••• ' . substr($rest, -3);
     }
 
+    /** "+" and digits of a mobile number. */
+    public static function intl(string $no): string { $n = preg_replace('/[^\d+]/', '', $no); return str_starts_with($n, '00') ? '+' . substr($n, 2) : $n; }
+
+    /** The person's own active mobile chosen by id (picker) or by its number (typed). */
+    public static function ownMobile(?int $person, string $v): ?object
+    {
+        if (! $person) return null;
+        $q = fn () => DB::table('t_account_mobiles')->where('fk_id_account', $person)->where(fn ($w) => $w->whereNull('f_active')->orWhere('f_active', 1));
+        if (ctype_digit($v) && strlen($v) <= 9 && ($m = $q()->where('id', (int) $v)->first(['id', 'mobile_no']))) return $m;
+        $d = preg_replace('/\D/', '', self::intl($v));
+        foreach ($q()->get(['id', 'mobile_no']) as $m) if ($d !== '' && preg_replace('/\D/', '', self::intl((string) $m->mobile_no)) === $d) return $m;
+        return null;
+    }
+
+    /** "code – name" of another active person of the enterprise who already has this WhatsApp number. */
+    public static function waOwner(string $n, ?int $except): ?string
+    {
+        $o = DB::table('t_account')->where('whatsapp_number', $n)->where('f_active', 1)->when($except, fn ($q) => $q->where('id', '<>', $except))->when(Context::ent(), fn ($q) => $q->where('fk_id_ent', Context::ent()))->first(['account_code', 'first_name', 'sur_name']);
+        return $o ? trim(($o->account_code ? $o->account_code . ' – ' : '') . trim($o->first_name . ' ' . $o->sur_name)) : null;
+    }
+
+    /** R-C-48 the chosen mobile changed: its number follows; switched off → the WhatsApp number is cleared and ACC_WA_NUMBER asks for a new one. */
+    public static function mobileChanged(int $mobileId, ?string $newNo, bool $active): void
+    {
+        foreach (DB::table('t_account')->where('fk_id_whatsapp_mobile', $mobileId)->get(['id', 'fk_id_ent']) as $a) {
+            if (! $active) { DB::table('t_account')->where('id', $a->id)->update(['whatsapp_number' => null, 'fk_id_whatsapp_mobile' => null]);
+                TaskEngine::open('ACC_WA_NUMBER', [$a->id], 'Choose a new WhatsApp number – the mobile it was on is switched off', ['ent' => (int) $a->fk_id_ent, 'module' => 't_account', 'record_id' => (int) $a->id]); }
+            elseif ($newNo !== null) DB::table('t_account')->where('id', $a->id)->update(['whatsapp_number' => self::intl($newNo)]);
+        }
+    }
+
     /** Form check of the channel fields (cleans $data in place). Only fields that change are checked against the rights. */
     public static function check(array &$data, array $old, ?int $id): array
     {
@@ -68,11 +99,16 @@ class PersonChannels
         $partner = Choices::has('CHANNEL_SWITCH_ROLES', $ent ? (int) $ent : null, $role); $selfOk = Choices::get('CHANNELS_SELF_EDIT', $ent ? (int) $ent : null) === '1';      /* Settings › Choices */
         if ($u && ! $boss && ! ($self && $selfOk && ! in_array('weekly_task_limit', $changed, true))) return ['_form' => 'Refused: only a Partner or Manager can edit channels.'];
         if ($u && ! $self && ! $partner && (in_array('wa_enabled', $changed, true) || in_array('email_enabled', $changed, true))) return ['wa_enabled' => 'Refused: only a Partner can switch a channel on or off for someone.'];
-        if ($chg('whatsapp_number') && trim((string) $data['whatsapp_number']) !== '') {
-            $raw = trim((string) $data['whatsapp_number']); $n = preg_replace('/[^\d+]/', '', $raw);
-            if (! preg_match('/^\+\d{8,15}$/', $n)) $e['whatsapp_number'] = 'Refused: WhatsApp number must be in international form, e.g. +447700900123 or +923001234567.';
-            else $data['whatsapp_number'] = $n;
-        }
+        if ($chg('whatsapp_number') && trim((string) $data['whatsapp_number']) !== '') {      /* R-C-48: one of the person's own active mobiles (picker gives its id; a typed number must equal one of them) */
+            $raw = trim((string) $data['whatsapp_number']); $mob = self::ownMobile($id, $raw);
+            if (! $mob) $e['whatsapp_number'] = $id ? 'Choose one of this person\'s own mobiles (add it on the Mobiles tab first).' : 'Save the person and add a mobile first, then choose the WhatsApp number from it.';
+            else {
+                $n = self::intl((string) $mob->mobile_no);
+                if (! preg_match('/^\+\d{8,15}$/', $n)) $e['whatsapp_number'] = 'Refused: WhatsApp number must be in international form, e.g. +447700900123 or +923001234567.';
+                elseif ($who = self::waOwner($n, $id)) $e['whatsapp_number'] = "This number is already the WhatsApp number of $who.";
+                else { $data['whatsapp_number'] = $n; $data['fk_id_whatsapp_mobile'] = (int) $mob->id; if ($id) TaskEngine::close('ACC_WA_NUMBER', [$id], 'Number chosen'); }
+            }
+        } elseif ($chg('whatsapp_number')) $data['fk_id_whatsapp_mobile'] = null;
         foreach (['quiet_from', 'quiet_to', 'digest_time'] as $f) if ($chg($f) && trim((string) $data[$f]) !== '') {
             if (! preg_match('/^([01]\d|2[0-3]):[0-5]\d(:00)?$/', trim((string) $data[$f]))) $e[$f] = 'Refused: times must look like 22:00.'; else $data[$f] = substr(trim((string) $data[$f]), 0, 5);
         }

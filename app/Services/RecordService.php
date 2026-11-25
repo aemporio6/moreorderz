@@ -124,6 +124,16 @@ class RecordService
     }
 
     /** Insert or update. Returns ['id' => .., 'created' => bool]. Throws ValidationException with a message per field. */
+    /** R-B_SOURCING-54 required fields of the sourcing module with the old messages (table.column => message). */
+    public const SPEC_REQUIRED = [
+        'cat_src_lov.lov_group' => 'LOV Group is required', 'cat_src_lov.lov_value' => 'LOV Value is required',
+        't_product_vendors.product_name_vendor' => 'Product Name is required', 't_src_products.product_name' => 'Product Name is required', 't_src_cycle_products.product_name' => 'Product Name is required',
+        't_src_cycles.sourcing_date' => 'Sourcing Date is required',
+        't_src_documents.doc_name' => 'Document Name is required', 't_src_documents.drive_url' => 'Google Drive URL is required',
+        't_src_forwarders.forwarder_name' => 'Forwarder Name is required', 't_src_investments.fk_id_investor' => 'Investor is required', 't_src_investors.investor_name' => 'Investor Name is required',
+        't_src_payment_terms.milestone' => 'Trigger / Milestone is required', 't_src_suppliers.supplier_name' => 'Supplier Name is required',
+    ];
+
     public static function save(string $formKey, array $input, ?int $id = null, array $opt = []): array
     {
         $table = Registry::table($formKey) ?? abort(404);
@@ -143,7 +153,9 @@ class RecordService
             $numbered = str_starts_with((string) $f['default_rule'], 'numbering:');
             $must = $f['required'] && (! $quick || $f['in_quick']) && ! $numbered;
             if (! $must && $f['required_if']) $must = self::cond($f['required_if'], $input + $old);
-            if ($must && ($v === null || $v === '')) { $errors[$f['field_name']] = $f['label'] . ' is required.'; continue; }
+            $spec = self::SPEC_REQUIRED[$table . '.' . $col] ?? null;      /* R-B_SOURCING-54 the old messages, checked on the server for every form of the table */
+            if ($spec && ! $numbered && ($given || ! $id)) { $must = true; if (in_array(trim((string) $v), ['https://', 'http://'], true)) $v = ''; }      /* an untouched link prefix is empty */
+            if ($must && ($v === null || $v === '')) { $errors[$f['field_name']] = $spec ?? ($f['label'] . ' is required.'); continue; }
             if ($v !== null && $v !== '') {
                 if ($msg = self::invalid($f, $v)) { $errors[$f['field_name']] = $msg; continue; }
             }

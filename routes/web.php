@@ -43,6 +43,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('people/{id}/jobs', [AppController::class, 'jobs'])->whereNumber('id');
         Route::get('people/{id}/security-questions', [AppController::class, 'securityHealth'])->whereNumber('id');
         Route::get('parties', [AppController::class, 'parties']);      // R-C-1
+        Route::get('shops/{id}/kit', [AppController::class, 'shopKit'])->whereNumber('id');      // R-C-30
         Route::get('people/external/new', [AppController::class, 'externalForm']);
         Route::post('people/external/new', [AppController::class, 'externalSave']);
         Route::get('people/{id}/header', [AppController::class, 'personHeader'])->whereNumber('id');

@@ -32,8 +32,12 @@ class TaskChannelsTest extends TestCase
         $mgr = $this->person('MANAGER'); $b = $this->person('VA', ['whatsapp_number' => '+923001234567']);
         $old = (array) DB::table('t_account')->where('id', $b->fk_id_account)->first();
         $this->actingAs($mgr);
-        $d = ['whatsapp_number' => '0044 7700 900123']; $this->assertSame('Refused: WhatsApp number must be in international form, e.g. +447700900123 or +923001234567.', PersonChannels::check($d, $old, (int) $b->fk_id_account)['whatsapp_number']);
-        $d = ['whatsapp_number' => '+44 7700-900123']; $this->assertSame([], PersonChannels::check($d, $old, (int) $b->fk_id_account)); $this->assertSame('+447700900123', $d['whatsapp_number']);
+        /* R-C-48 (v1.7): the number is one of the person's own mobiles, in international form */
+        $local = DB::table('t_account_mobiles')->insertGetId(RecordService::fillNotNull('t_account_mobiles', ['fk_id_account' => $b->fk_id_account, 'mobile_no' => '07700 900555', 'simno' => 'L1', 'f_active' => 1]));
+        $intl = DB::table('t_account_mobiles')->insertGetId(RecordService::fillNotNull('t_account_mobiles', ['fk_id_account' => $b->fk_id_account, 'mobile_no' => '+44 7700-900123', 'simno' => 'I1', 'f_active' => 1]));
+        $d = ['whatsapp_number' => '+44 7700 900999']; $this->assertSame("Choose one of this person's own mobiles (add it on the Mobiles tab first).", PersonChannels::check($d, $old, (int) $b->fk_id_account)['whatsapp_number']);
+        $d = ['whatsapp_number' => (string) $local]; $this->assertSame('Refused: WhatsApp number must be in international form, e.g. +447700900123 or +923001234567.', PersonChannels::check($d, $old, (int) $b->fk_id_account)['whatsapp_number']);
+        $d = ['whatsapp_number' => '0044 7700 900123']; $this->assertSame([], PersonChannels::check($d, $old, (int) $b->fk_id_account)); $this->assertSame(['+447700900123', $intl], [$d['whatsapp_number'], $d['fk_id_whatsapp_mobile']], 'a typed number that equals an own mobile links to it');
         $d = ['wa_enabled' => 0]; $this->assertSame('Refused: only a Partner can switch a channel on or off for someone.', PersonChannels::check($d, $old, (int) $b->fk_id_account)['wa_enabled']);
         $d = ['quiet_from' => '22:00']; $this->assertSame('Refused: give both quiet-hours times, or neither.', PersonChannels::check($d, $old, (int) $b->fk_id_account)['quiet_to']);
         $d = ['quiet_from' => '10pm', 'quiet_to' => '08:00']; $this->assertSame('Refused: times must look like 22:00.', PersonChannels::check($d, $old, (int) $b->fk_id_account)['quiet_from']);

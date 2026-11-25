@@ -30,7 +30,11 @@ class HistoricalPurchaseTest extends TestCase
 
     public function test_r5_r8_entry_payments_open_balance_and_status(): void
     {
-        try { H::entry(1, ['order_date' => '2025-03-01'], $this->owner); $this->fail(); } catch (\InvalidArgumentException $e) { $this->assertSame('Section 1: Supplier, Order Date, Order Reference and at least one line are required', $e->getMessage()); }
+        try { H::entry(1, ['order_date' => '2025-03-01'], $this->owner); $this->fail(); } catch (\InvalidArgumentException $e) { $this->assertSame('Select the Supplier', $e->getMessage()); }
+        $n = DB::table('t_src_cycles')->count();
+        try { H::entry(1, ['supplier_name' => 'Old Sup', 'order_date' => '2025-03-01', 'lines' => [['product_name' => 'X', 'qty' => 1]]], $this->owner); $this->fail(); } catch (\InvalidArgumentException $e) { $this->assertSame('order_ref is REQUIRED', $e->getMessage()); }
+        $this->assertSame($n, DB::table('t_src_cycles')->count(), 'R-B_SOURCING-54 rule example: nothing saved');
+        try { H::entry(1, ['supplier_name' => 'Old Sup', 'order_date' => '2025-03-01', 'order_ref' => 'R-1'], $this->owner); $this->fail(); } catch (\InvalidArgumentException $e) { $this->assertSame('At least one line is required', $e->getMessage()); }
         try { H::entry(1, $this->entry(['owner' => null]), $this->owner); $this->fail(); } catch (\InvalidArgumentException $e) { $this->assertStringStartsWith('Owner Entity (buyer) is required', $e->getMessage()); }
         $r = H::entry(1, $this->entry(['payments' => [['amount' => 600, 'date' => '2025-03-01'], ['amount' => 900, 'date' => '2025-05-01']]]), $this->owner);
         $terms = DB::table('t_src_payment_terms')->where('fk_id_po', $r['po'])->orderBy('term_no')->get();
