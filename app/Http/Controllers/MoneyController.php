@@ -358,7 +358,8 @@ class MoneyController extends Controller
 
     public function decide(Request $r, int $id)
     {
-        $this->can($r, 'money.approve');
+        $code = (string) DB::table('sys_approvals')->where('id', $id)->where('fk_id_ent', Context::ent())->value('action_code');
+        $this->can($r, $code === 'SRC_HISTORICAL' ? 'sourcing.approve_old_entry' : 'money.approve');      /* R-B_SOURCING-11 / 55: an old entry is decided with its own right */
         $d = $r->validate(['approve' => 'required|boolean', 'reason' => 'nullable|string|max:300']);
         return $this->run(function () use ($id, $d) { Approvals::decide($id, (bool) $d['approve'], $d['reason'] ?? null); return ['message' => $d['approve'] ? 'Approved and booked' : 'Rejected']; });
     }

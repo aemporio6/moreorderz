@@ -190,12 +190,37 @@ class HistoricalPurchase
         return $done;
     }
 
+    /** The approval state of an old entry for the cycle header: the banner, who may approve, and whether the maker may send it again. */
+    public static function approvalOf(int $cycleId, ?object $u): ?array
+    {
+        $c = DB::table('t_src_cycles')->where('id', $cycleId)->first(['id', 'cycle_type', 'approval_status', 'approval_reason']); if (! $c || strtoupper((string) $c->cycle_type) !== 'HISTORICAL' || $c->approval_status !== 'PENDING') return null;
+        $a = DB::table('sys_approvals')->where('action_code', 'SRC_HISTORICAL')->where('entity_id', $cycleId)->orderByDesc('id')->first(); if (! $a) return null;
+        $waiting = $a->status === 'PENDING'; $mine = $u && (int) $a->requested_by === (int) $u->id; $can = $u && Perm::has($u, 'sourcing.approve_old_entry');
+        return ['status' => 'PENDING', 'waiting' => $waiting, 'approval_id' => $waiting ? (int) $a->id : null, 'reason' => $c->approval_reason, 'can_approve' => $waiting && $can && ! $mine, 'can_resend' => ! $waiting && $mine,
+            'text' => $waiting ? ($can ? 'This old entry waits for approval – stock and landed cost are not live yet.' : 'You are not a Partner: your entry saves as PENDING APPROVAL and does not affect stock or landed cost until a Partner approves it.') : 'Refused: ' . $c->approval_reason . ' – fix the entry, then send it again.'];
+    }
+
+    /** The maker sends a refused old entry again: a new approval request with the same change; the fix task closes. */
+    public static function resend(int $cycleId, object $u): array
+    {
+        $s = self::approvalOf($cycleId, $u); if (! $s || ! $s['can_resend']) throw new \InvalidArgumentException('Only the person who made a refused old entry can send it again.');
+        $last = DB::table('sys_approvals')->where('action_code', 'SRC_HISTORICAL')->where('entity_id', $cycleId)->orderByDesc('id')->first(); $c = json_decode((string) $last->change_json, true);
+        $aid = Approvals::request((int) Context::ent(), 'SRC_HISTORICAL', 't_src_cycles', $cycleId, (float) $last->amount_gbp, $c, 'Approve old purchase ' . ($c['ref'] ?? '') . ' (sent again) – its stock waits');
+        DB::table('t_src_cycles')->where('id', $cycleId)->update(['approval_reason' => null]); TaskEngine::close('SRC_OLD_ENTRY_REJECTED', [$cycleId], 'Sent again');
+        return ['message' => 'Sent again for approval.', 'approval' => $aid];
+    }
+
     /** The approval handler: approved → the stock is posted; refused → nothing is received (the GRN stays a draft, the cycle shows REJECTED). */
     public static function decided(object $a, bool $ok, ?string $reason): void
     {
         $c = json_decode((string) $a->change_json, true);
-        if ($ok) { DB::table('t_src_cycles')->where('id', $c['cycle'])->update(['approval_status' => 'APPROVED', 'approved_by' => Context::userId(), 'approved_at' => now()]); self::postReceived((int) $c['cycle'], (int) $c['grn'], (array) ($c['drafts'] ?? []), (array) ($c['extra'] ?? [])); }
-        else DB::table('t_src_cycles')->where('id', $c['cycle'])->update(['approval_status' => 'REJECTED']);
+        if ($ok) { DB::table('t_src_cycles')->where('id', $c['cycle'])->update(['approval_status' => 'APPROVED', 'approved_by' => Context::userId(), 'approved_at' => now(), 'approval_reason' => null]); TaskEngine::close('SRC_OLD_ENTRY_REJECTED', [(int) $c['cycle']], 'Old entry approved'); self::postReceived((int) $c['cycle'], (int) $c['grn'], (array) ($c['drafts'] ?? []), (array) ($c['extra'] ?? [])); }
+        else {      /* R-B_SOURCING-11: refused → the cycle stays PENDING with the reason; the maker gets the task "Fix old entry …" and sends it again */
+            DB::table('t_src_cycles')->where('id', $c['cycle'])->update(['approval_status' => 'PENDING', 'approval_reason' => mb_substr((string) $reason, 0, 300)]);
+            $code = (string) DB::table('t_src_cycles')->where('id', $c['cycle'])->value('cycle_code');
+            $tid = TaskEngine::open('SRC_OLD_ENTRY_REJECTED', [(int) $c['cycle']], "Fix old entry $code", ['ent' => (int) $a->fk_id_ent, 'module' => 't_src_cycles', 'record_id' => (int) $c['cycle'], 'description' => 'Refused: ' . $reason, 'fix_url' => '#/cycle/' . (int) $c['cycle']]);
+            if ($tid) DB::table('tasks')->where('id', $tid)->update(['owner_user_id' => (int) $a->requested_by]);
+        }
         Audit::log('t_src_cycles', (int) $c['cycle'], $ok ? 'APPROVE' : 'REJECT', ['old purchase' => $c['ref'] ?? ''], $reason, (int) $a->fk_id_ent);
     }
 

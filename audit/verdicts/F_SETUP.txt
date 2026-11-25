@@ -38,7 +38,7 @@
 39|B|class MasterCodes|typed real-world codes of 16 masters (banks ISO, currency / incoterm 3 letters, ports UN/LOCODE, IP, PC no, doc types, card types, mobile networks per country …): upper case / spaces out, format message, unique (per country where the master is per country) with the old words "This <label> already exists. Please add another"; the same check live while typing (GET …/live, never writes) and at save; the record itself is no duplicate (7e-174, MasterCodesTest)
 40|F|form:cat_country|form only; pin order rule not built
 41|F|form:sys_security_question|form only
-42|M||locked system rows not built
+42|B|class SystemRows|every master (cat_ table) has f_system; a system row cannot be deleted (made inactive: "System row – cannot be deleted"), its code cannot be changed, other fields only by the Owner; a lock in the list; the migration flags subscription items 9 and 10, the roles that have a role code and the location kinds; sourcing list system values by SrcLists (7e-194, SystemRowsTest – the rule test). PayPal owners 1 / 2: no such master table in this build – nothing to flag
 43|P|class Merges|merge duplicates with Undo (people, suppliers, products); reference headings merge / where-used block not built
 44|P|class Choices|settings global / company + choices per shop with history; module / parameter framework as forms only
 45|F|form:cat_ports|forms only

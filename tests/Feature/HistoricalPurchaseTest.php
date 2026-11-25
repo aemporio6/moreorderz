@@ -111,6 +111,25 @@ class HistoricalPurchaseTest extends TestCase
         $this->assertStringContainsString('po_total', json_encode($this->actingAs($this->owner)->getJson('/api/cycle/' . $r['cycle'])->json('pos')));
     }
 
+    /** R-B_SOURCING-11: a refused old entry stays PENDING with the reason, the maker gets the task "Fix old entry …" and sends it again; the maker cannot approve his own entry; approved → stock live. */
+    public function test_r11_reject_keeps_pending_with_a_task_and_the_maker_sends_it_again(): void
+    {
+        $src = \App\Models\User::create(['login_id' => 'src' . uniqid() . '@t', 'password_hash' => bcrypt('x-password-1'), 'role_code' => 'SOURCING', 'display_name' => 'Buyer', 'fk_id_ent' => 1, 'f_active' => 1]);
+        $this->actingAs($src); Context::set(1, $src->id);
+        $r = H::entry(1, $this->entry(['order_ref' => 'PI-R11', 'lines' => [['product_name' => 'Steel mug', 'sku' => 'MUG-R11', 'qty' => 40, 'unit_price' => 2.00, 'qty_accepted' => 40]], 'received' => ['date' => '2025-05-02', 'warehouse' => $this->wh]]), $src);
+        $cy = (int) $r['cycle']; $st = H::approvalOf($cy, $src); $this->assertSame([true, false, false], [$st['waiting'], $st['can_approve'], $st['can_resend']]); $this->assertStringStartsWith('You are not a Partner: your entry saves as PENDING APPROVAL', $st['text']);
+        $this->assertSame(0, (int) DB::table('fin_lots')->where('fk_id_cycle', $cy)->sum('qty'), 'product stock unchanged');
+        $this->postJson('/api/approvals/' . $st['approval_id'], ['approve' => true])->assertStatus(403);      // the maker has no right to approve (and never his own entry)
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id); $this->assertTrue($this->getJson('/api/cycle/' . $cy)->assertOk()->json('old_entry.can_approve'));
+        $this->postJson('/api/approvals/' . $st['approval_id'], ['approve' => false, 'reason' => 'Wrong unit price'])->assertOk();
+        $c = DB::table('t_src_cycles')->where('id', $cy)->first(); $this->assertSame(['PENDING', 'Wrong unit price'], [$c->approval_status, $c->approval_reason]);
+        $task = DB::table('tasks')->where('rule_code', 'SRC_OLD_ENTRY_REJECTED')->where('linked_record_id', $cy)->first(); $this->assertSame([$src->id, true], [(int) $task->owner_user_id, str_starts_with($task->title, 'Fix old entry')]);
+        try { H::resend($cy, $this->owner); $this->fail(); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('Only the person who made', $e->getMessage()); }
+        $this->actingAs($src); Context::set(1, $src->id); $again = $this->postJson("/api/cycle/$cy/old-entry/resend")->assertOk()->json('approval'); $this->assertNull(DB::table('t_src_cycles')->where('id', $cy)->value('approval_reason'));
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id); $this->postJson('/api/approvals/' . $again, ['approve' => true])->assertOk();
+        $this->assertSame(40, (int) DB::table('fin_lots')->where('fk_id_cycle', $cy)->sum('qty'), 'approved → stock +40'); $this->assertNull(H::approvalOf($cy, $this->owner));
+    }
+
     public function test_r13_check_screen_writes_nothing_and_force_imports(): void
     {
         H::entry(1, $this->entry(['order_ref' => 'PI-D']), $this->owner);

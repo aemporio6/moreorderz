@@ -105,6 +105,8 @@ apis,api connections,VOCAB,#/connections
 approval,approvals queue,VOCAB,#/approvals
 approvals,approvals queue,VOCAB,#/approvals
 approve,approvals queue,VOCAB,#/approvals
+approve entry,old entry approval,VOCAB,#/approvals
+approve old entry,old entry approval,VOCAB,#/approvals
 approve sales,month confirm,VOCAB,#/confirm
 aql,qc,VOCAB,#/list/t_src_qc
 ar,outstanding who owes whom,VOCAB,#/invoice-outstanding
@@ -283,6 +285,7 @@ camel,research board,VOCAB,#/list/src_research
 cancel order,orders to dispatch,VOCAB,#/orders
 cancellation rate,account health,VOCAB,#/shop-health
 cancelled order,orders to dispatch,VOCAB,#/orders
+cannot be deleted,system rows,VOCAB,#/choices
 canton fair,buying dashboard,VOCAB,#/buying
 capital,partners,VOCAB,#/partners
 capital account,partners,VOCAB,#/partners
@@ -766,6 +769,7 @@ first direct,bank and cash,VOCAB,#/bank
 first in first out,lots and owners,VOCAB,#/stock/lots
 first steps,first time setup,VOCAB,#/setup
 fiverr,expenses,VOCAB,#/expenses
+fix old entry,old entry approval,VOCAB,#/approvals
 flat file,payouts and settlements,VOCAB,#/settlements
 flat file v2,payouts and settlements,VOCAB,#/settlements
 flat rate vat,vat return,VOCAB,#/vat-return
@@ -876,6 +880,7 @@ hermes label,carrier labels,VOCAB,#/labels
 hidden margin,hidden margin,VOCAB,#/invoice-margin
 highlands surcharge,carriers and postage rates,VOCAB,#/carriers
 hiring,staff and employment,VOCAB,#/list/t_account_job_history
+historical entry approval,old entry approval,VOCAB,#/approvals
 historical purchase,old purchase entry,VOCAB,#/old-entry
 history import,old purchase entry,VOCAB,#/old-entry
 history log,audit log,VOCAB,#/audit
@@ -1053,9 +1058,12 @@ local buy,quick buy,VOCAB,#/list/quick_buy
 local purchase,quick buy,VOCAB,#/list/quick_buy
 location,locations and bins,VOCAB,#/list/location
 locations,locations and bins,VOCAB,#/list/location
+lock icon,system rows,VOCAB,#/choices
 lock month,month close,VOCAB,#/close
 lock sales,month confirm,VOCAB,#/confirm
+locked master,system rows,VOCAB,#/choices
 locked month refund,refund on confirmed line,VOCAB,#/choices
+locked row,system rows,VOCAB,#/choices
 locker,carriers and postage rates,VOCAB,#/carriers
 log out all,sessions and ip allow list,VOCAB,#/sessions
 logged in,sessions and ip allow list,VOCAB,#/sessions
@@ -1245,6 +1253,7 @@ office cost,expenses,VOCAB,#/expenses
 old entry,old purchase entry,VOCAB,#/old-entry
 old orders from supplier,old purchase entry,VOCAB,#/old-entry
 old purchase,old purchase entry,VOCAB,#/old-entry
+old purchase approval,old entry approval,VOCAB,#/approvals
 old system,migration switch,VOCAB,#/list/cutover_run
 old tool,migration switch,VOCAB,#/list/cutover_run
 on hold,held stock,VOCAB,#/stock/held
@@ -1389,6 +1398,7 @@ payslip,va statements,VOCAB,#/va-statements
 pda,work screen phone,VOCAB,#/work
 pdf,documents,VOCAB,#/list/document
 pending approval,approvals queue,VOCAB,#/approvals
+pending approval entry,old entry approval,VOCAB,#/approvals
 pending balance,payouts and settlements,VOCAB,#/settlements
 pending orders,orders to dispatch,VOCAB,#/orders
 people,people and companies,VOCAB,#/list/party
@@ -1788,6 +1798,7 @@ sellerdeck,api connections,VOCAB,#/connections
 selling account,shops,VOCAB,#/list/shop
 selling fees,payouts and settlements,VOCAB,#/settlements
 selling price calculator,marketplace calculator,VOCAB,#/calculator
+send again for approval,old entry approval,VOCAB,#/approvals
 send to amazon,fc and 3pl inbound shipments,VOCAB,#/list/fba_shipment
 service code,carriers and postage rates,VOCAB,#/carriers
 session,sessions and ip allow list,VOCAB,#/sessions
@@ -1991,6 +2002,7 @@ switch off,choices,VOCAB,#/choices
 switch on,choices,VOCAB,#/choices
 switch over,migration switch,VOCAB,#/list/cutover_run
 system health,system health,VOCAB,#/health
+system row,system rows,VOCAB,#/choices
 system settings,settings,VOCAB,#/settings
 system status,system health,VOCAB,#/health
 table rate,rate difference,VOCAB,#/fx

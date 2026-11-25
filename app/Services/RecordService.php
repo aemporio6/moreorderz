@@ -49,6 +49,7 @@ class RecordService
         return [
             'form_key' => $formKey, 'title' => Registry::fields($formKey)[0]['form_title'], 'table' => $table, 'total' => $total, 'page' => $page, 'per_page' => $per, 'all_columns' => array_map($col, $allCols),
             'columns' => array_map($col, $cols), 'totals' => $totals, 'where' => $where, 'where_text' => ListFilter::words($where, self::byCol($fields)),
+            'locked' => SystemRows::locked($table, $rows->pluck('id')->all()),      /* R-F_SETUP-42 the lock in the list */
             'rows' => $rows->map(function ($r) use ($labels, $table) {
                 $a = Vault::maskRow($table, (array) $r);
                 foreach ($a as $k => $v) if (isset($labels[$k][(string) $v])) $a[$k . '__label'] = $labels[$k][(string) $v];
@@ -167,7 +168,8 @@ class RecordService
         if (in_array($table . '.requested_by', self::SYSTEM_USER_FIELDS, true)) { if (! $id) $data['requested_by'] = Context::userId(); else unset($data['requested_by']); }
         if ($table === 't_src_cycle_products' && array_key_exists('fk_id_product', $data + $old) && empty($data['fk_id_product'] ?? $old['fk_id_product'] ?? null))
             $errors['fk_id_product'] = 'Pick the product (or + Add product) for this line.';      /* PO lines: FormRules */
-        if ($table === 'cat_src_lov' && ($why = SrcLists::guard($data, $old))) $errors['f_active'] = $why;      /* R-B_SOURCING-52 */
+        if ($table === 'cat_src_lov' && ($why = SrcLists::guard($data, $old))) $errors['f_active'] = $why;
+        if (! $errors) $errors = SystemRows::guard($table, $data, $old, $id) + $errors;      /* R-F_SETUP-42 locked system rows */      /* R-B_SOURCING-52 */
         if ($table === 'cat_src_lov' && ! $id && SrcLists::isSystem((string) ($data['lov_group'] ?? ''), (string) ($data['lov_value'] ?? ''))) $data['f_system'] = 1;
         if ($table === 't_account_banks') { $data = BankRules::clean($data); $errors = BankRules::check($data, $old, $id) + $errors; }      /* R-C-15 the shared bank validators on every bank form */
         if ($table === 'cat_banks') { if (isset($data['bank_name'])) $data['bank_name'] = BankRules::tidyName((string) $data['bank_name']);      /* R-C-14 "+ New bank": the same name in the same country is reused */

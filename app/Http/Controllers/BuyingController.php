@@ -221,6 +221,7 @@ class BuyingController extends Controller
     public function cycleDetailsSave(Request $r, int $id) { $this->can($r, 'buying.BUY'); return $this->run(fn () => \App\Services\CycleProducts::saveDetails($id, $r->all())); }
     public function cycleProductSave(Request $r, int $id, ?int $row = null) { $this->can($r, 'buying.BUY'); return $this->run(fn () => \App\Services\CycleProducts::save($id, $r->all(), $row)); }
     public function cycleProductDelete(Request $r, int $id, int $row) { $this->can($r, 'buying.BUY'); return $this->run(fn () => \App\Services\CycleProducts::delete($id, $row)); }
+    public function oldEntryResend(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\HistoricalPurchase::resend($id, $r->user())); }
     /** R-B_SOURCING-15 the step map of a cycle (11 steps, sub-tabs, More) – reads only. */
     public function cycleMap(Request $r, int $id) { $this->can($r, 'buying.SEE'); if (! DB::table('t_src_cycles')->where('id', $id)->where('fk_id_ent', Context::ent())->exists()) abort(404);
         return \App\Services\WorkflowContext::map($id, \App\Services\Perm::has($r->user(), 'see_money')); }
@@ -269,7 +270,7 @@ class BuyingController extends Controller
         $w = Buy::cycle($id);
         $w['stages'] = \App\Services\CycleAlerts::pipeline(DB::table('t_src_cycles')->where('id', $id)->first());      // R-F_SETUP-19: the cycle header reads the same stage engine
         if (! \App\Services\Perm::has($r->user(), 'buying.MONEY')) { foreach (['rfqs' => ['price'], 'pos' => ['po_total'], 'terms' => ['planned_amount', 'paid_amount', 'remaining_amount'], 'landed' => ['freight_cost', 'customs_duty', 'other_cost', 'total_cost', 'landed_cost_per_unit']] as $k => $cols) foreach ($w[$k] ?? [] as $row) foreach ($cols as $c) unset($row->$c);      /* R-B_SOURCING-55 sourcing.money: no money field leaves the server */ $w['terms'] = []; }
-        return $w + ['rights' => $this->rights($r)];
+        return $w + ['rights' => $this->rights($r), 'old_entry' => \App\Services\HistoricalPurchase::approvalOf($id, $r->user())];      /* R-B_SOURCING-11 */
     }
 
     public function acceptRfq(Request $r, int $id)
