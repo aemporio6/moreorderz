@@ -114,6 +114,14 @@ class BuyingService
 
     // ---------------------------------------------------------------- RFQ and PO
 
+    /** R-B_SOURCING-66 suppliers for a picker; a supplier rated D carries the warning in its name (shown, never blocked). */
+    public const RATED_D = 'Supplier rated D – do not use';
+    public static function supplierPicker(int $ent, int $limit = 500)
+    {
+        return DB::table('t_src_suppliers')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('supplier_name')->limit($limit)->get(['id', 'supplier_name', 'rating'])
+            ->map(fn ($s) => ['id' => (int) $s->id, 'name' => $s->supplier_name . (strtoupper(substr(trim((string) $s->rating), 0, 1)) === 'D' ? ' ⚠ ' . self::RATED_D : ''), 'rated_d' => strtoupper(substr(trim((string) $s->rating), 0, 1)) === 'D']);
+    }
+
     public static function acceptRfq(int $rfqId): void
     {
         $q = DB::table('t_src_rfq')->where('id', $rfqId)->where('fk_id_ent', Context::ent())->first() ?? throw new \RuntimeException('Quote not found.');
@@ -135,6 +143,7 @@ class BuyingService
             if (! empty($d['rfq'])) {
                 $q = DB::table('t_src_rfq')->where('id', $d['rfq'])->where('fk_id_ent', $ent)->first() ?? throw new \RuntimeException('Quote not found.');
                 if ($q->status !== 'ACCEPTED') throw new \RuntimeException('Accept the quote first.');
+                if ($q->d_valid_until && substr((string) $q->d_valid_until, 0, 10) < date('Y-m-d') && empty($d['price_confirmed'])) throw new \InvalidArgumentException('Quote expired on ' . date('d-m-Y', strtotime((string) $q->d_valid_until)) . '. Confirm the price with the supplier again, then choose "Price confirmed" to make the PO.');      /* R-B_SOURCING-66 */
                 $cp = DB::table('t_src_cycle_products')->where('fk_id_cycle', $q->fk_id_cycle)->where('f_active', 1)->first();
                 $d += ['cycle' => $q->fk_id_cycle, 'supplier' => $q->fk_id_supplier, 'currency' => Fx::code($q->fk_id_currency, $ent),
                     'lines' => [['product' => $cp->fk_id_product, 'qty' => $d['qty'] ?? $q->qty, 'unit_price' => $q->final_unit_price ?? $q->quoted_unit_price]]];

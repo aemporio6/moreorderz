@@ -62,7 +62,7 @@ class BuyingController extends Controller
         $pays = in_array($r->user()->role_code, self::PAY, true);      // our bank accounts only for the people who pay (owner answer 21 Nov 2026: sourcing sees amounts, not banks)
         return ['banks' => $pays ? DB::table('fin_bank_accounts')->where('company_id', $ent)->where('is_active', 1)->get(['id', DB::raw("CONCAT(bank_name, ' · ', account_label) as name"), 'currency']) : [],
             'locations' => DB::table('cat_inventory_locations')->where('fk_id_ent', $ent)->where(fn ($w) => $w->where('f_active', 1)->orWhereNull('f_active'))->whereNotIn('kind', ['DAMAGED', 'RETURNS', 'WRITTEN_OFF', 'QUARANTINE', 'MISSING', 'TRANSIT'])->orderBy('location_name')->limit(500)->get(['id', 'location_name as name']),
-            'suppliers' => DB::table('t_src_suppliers')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('supplier_name')->limit(500)->get(['id', 'supplier_name as name']),
+            'suppliers' => Buy::supplierPicker($ent),
             'products' => DB::table('t_product_vendors')->where('fk_id_ent', $ent)->orderBy('SKU_VENDOR')->limit(500)->get(['id', DB::raw("CONCAT(SKU_VENDOR, ' · ', product_name_vendor) as name")]),
             'base' => Fx::base($ent)];
     }
@@ -216,7 +216,9 @@ class BuyingController extends Controller
     /** R-B_SOURCING-20: Previous / Next step of the cycle record (skipped steps jumped). */
     /** R-B_SOURCING-42 the products grid of the cycle Details: list (reads only), ✓ save of a row, delete (set inactive when it has PO lines). */
     public function cycleProducts(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => ['rows' => \App\Services\CycleProducts::rows($id), 'can_edit' => \App\Services\Perm::has($r->user(), 'buying.BUY'),
-        'suppliers' => DB::table('t_src_suppliers')->where('fk_id_ent', Context::ent())->where('f_active', 1)->orderBy('supplier_name')->limit(500)->get(['id', 'supplier_name as name']), 'brands' => DB::table('cat_brands')->whereIn('fk_id_ent', [0, Context::ent()])->where('f_active', 1)->orderBy('brand_name')->limit(500)->get(['id', 'brand_name as name'])]); }
+        'suppliers' => Buy::supplierPicker((int) Context::ent()), 'brands' => DB::table('cat_brands')->whereIn('fk_id_ent', [0, Context::ent()])->where('f_active', 1)->orderBy('brand_name')->limit(500)->get(['id', 'brand_name as name'])]); }
+    public function cycleDetails(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\CycleProducts::details($id) + ['can_edit' => \App\Services\Perm::has($r->user(), 'buying.BUY')]); }
+    public function cycleDetailsSave(Request $r, int $id) { $this->can($r, 'buying.BUY'); return $this->run(fn () => \App\Services\CycleProducts::saveDetails($id, $r->all())); }
     public function cycleProductSave(Request $r, int $id, ?int $row = null) { $this->can($r, 'buying.BUY'); return $this->run(fn () => \App\Services\CycleProducts::save($id, $r->all(), $row)); }
     public function cycleProductDelete(Request $r, int $id, int $row) { $this->can($r, 'buying.BUY'); return $this->run(fn () => \App\Services\CycleProducts::delete($id, $row)); }
     /** R-B_SOURCING-15 the step map of a cycle (11 steps, sub-tabs, More) – reads only. */
@@ -287,7 +289,7 @@ class BuyingController extends Controller
     public function createPo(Request $r)
     {
         $this->can($r, 'buying.BUY');
-        $d = $r->validate(['rfq' => 'nullable|integer', 'repeat_from' => 'nullable|integer', 'supplier' => 'nullable|integer', 'currency' => 'nullable|string|size:3', 'product' => 'nullable|integer', 'qty' => 'required|numeric|min:1', 'unit_price' => 'nullable|numeric|min:0', 'date' => 'nullable|date', 'deposit_pct' => 'nullable|numeric|min:0|max:100', 'order_ref' => 'nullable|string|max:100', 'dup_reason' => 'nullable|string|max:300']);
+        $d = $r->validate(['rfq' => 'nullable|integer', 'repeat_from' => 'nullable|integer', 'supplier' => 'nullable|integer', 'currency' => 'nullable|string|size:3', 'product' => 'nullable|integer', 'qty' => 'required|numeric|min:1', 'unit_price' => 'nullable|numeric|min:0', 'date' => 'nullable|date', 'price_confirmed' => 'nullable|boolean', 'deposit_pct' => 'nullable|numeric|min:0|max:100', 'order_ref' => 'nullable|string|max:100', 'dup_reason' => 'nullable|string|max:300']);
         $dup = array_filter(['order_ref' => $d['order_ref'] ?? null, 'dup_reason' => $d['dup_reason'] ?? null]);
         return $this->run(function () use ($d, $dup) {
             if (! empty($d['repeat_from'])) {      // direct PO: same supplier, last price, no research
@@ -295,12 +297,13 @@ class BuyingController extends Controller
                 $lines = DB::table('t_src_po_lines')->where('fk_id_po', $old->id)->where('f_active', 1)->get()->map(fn ($l) => ['product' => $l->fk_id_product, 'qty' => $d['qty'], 'unit_price' => $l->unit_price])->all();
                 $id = Buy::createPo(['supplier' => $old->fk_id_supplier, 'currency' => Fx::code($old->fk_id_currency, Context::ent()), 'date' => $d['date'] ?? null, 'lines' => $lines, 'deposit_pct' => $d['deposit_pct'] ?? $old->deposit_pct, 'repeat_from' => $old->id] + $dup);
             } elseif (! empty($d['rfq'])) {
-                $id = Buy::createPo(array_filter(['rfq' => $d['rfq'], 'qty' => $d['qty'], 'date' => $d['date'] ?? null, 'deposit_pct' => $d['deposit_pct'] ?? null], fn ($v) => $v !== null) + $dup);
+                $id = Buy::createPo(array_filter(['rfq' => $d['rfq'], 'qty' => $d['qty'], 'date' => $d['date'] ?? null, 'deposit_pct' => $d['deposit_pct'] ?? null, 'price_confirmed' => ! empty($d['price_confirmed']) ?: null], fn ($v) => $v !== null) + $dup);
             } else {
                 if (empty($d['supplier']) || empty($d['product']) || ! isset($d['unit_price'])) throw new \InvalidArgumentException('Choose the supplier, the product and the price.');
                 $id = Buy::createPo(['supplier' => $d['supplier'], 'currency' => $d['currency'] ?? Fx::base(Context::ent()), 'date' => $d['date'] ?? null, 'deposit_pct' => $d['deposit_pct'] ?? 30, 'lines' => [['product' => $d['product'], 'qty' => $d['qty'], 'unit_price' => $d['unit_price']]]] + $dup);
             }
-            return ['id' => $id, 'message' => 'Purchase order made (draft)'];
+            $rated = strtoupper(substr(trim((string) DB::table('t_src_suppliers')->where('id', DB::table('t_src_po')->where('id', $id)->value('fk_id_supplier'))->value('rating')), 0, 1)) === 'D';
+            return ['id' => $id, 'message' => 'Purchase order made (draft)' . ($rated ? ' – ' . Buy::RATED_D : ''), 'supplier_rated_d' => $rated];
         });
     }
 

@@ -80,4 +80,23 @@ class PaymentTermsTest extends TestCase
         $this->assertEquals(10.0, (float) DB::table('t_src_qc')->where('id', $id)->value('defect_rate'), 'a posted value is replaced by the formula');
     }
 
+
+    /** R-B_SOURCING-57 the rule example: term 3,000 USD; typed BANK payment USD 1,000 (base £790) → the bank line −£791.50 is within 2 % and matches it (no new payment); a credit-note payment is never offered. */
+    public function test_r57_bank_line_matches_the_typed_foreign_payment_within_the_percent(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id); $f = fn ($t, $d) => DB::table($t)->insertGetId(RecordService::fillNotNull($t, $d));
+        Fx::set('USD', '2026-11-01', 0.80); $bank = \App\Services\MoneyService::createBank(1, ['bank_name' => 'Bank One', 'account_label' => 'Main', 'currency' => 'GBP', 'opening_balance' => 5000, 'opening_date' => '2026-10-01']);
+        $sup = $f('t_src_suppliers', ['fk_id_ent' => 1, 'supplier_code' => 'S-57', 'supplier_name' => 'Maker Co', 'f_active' => 1]);
+        $po = $f('t_src_po', ['fk_id_ent' => 1, 'po_number' => 'PO-57', 'fk_id_currency' => Buy::currencyId('USD'), 'fk_id_supplier' => $sup, 'status' => 'CONFIRMED', 'f_active' => 1]);
+        $term = $f('t_src_payment_terms', ['fk_id_ent' => 1, 'fk_id_po' => $po, 'term_no' => 1, 'milestone' => 'Deposit', 'planned_amount' => 3000, 'paid_amount' => 0, 'remaining_amount' => 3000, 'status' => 'DUE', 'f_active' => 1]);
+        $pid = Buy::pay(['term' => $term, 'amount' => 1000, 'date' => '2026-11-05', 'bank' => $bank, 'rate' => 0.79]); $this->assertEquals(790.0, (float) DB::table('t_src_payments')->where('id', $pid)->value('base_amount'));
+        $cn = $f('t_src_payments', ['fk_id_ent' => 1, 'fk_id_po' => $po, 'fk_id_term' => $term, 'fk_id_supplier' => $sup, 'payment_amount' => 1000, 'fk_id_currency' => Buy::currencyId('USD'), 'exchange_rate' => 0.79, 'base_amount' => 790, 'payment_date' => '2026-11-05', 'status' => 'PAID', 'paid_via' => 'CREDIT_NOTE', 'payment_method' => 'CREDIT_NOTE', 'f_active' => 1, 'payment_code' => 'PAY-CN-57']);
+        $line = fn ($a) => $f('fin_bank_transactions', ['batch_id' => 0, 'bank_txn_id' => uniqid('T'), 'bank_account_id' => $bank, 'company_id' => 1, 'txn_date' => '2026-11-06', 'amount' => $a, 'currency' => 'GBP', 'amount_gbp' => $a, 'description' => 'MAKER CO', 'match_status' => 'UNMATCHED']);
+        $far = $line(-900.00); $near = $line(-791.50); $before = DB::table('t_src_payments')->count();
+        \App\Services\MoneyService::autoMatch(1, $bank);
+        $l = DB::table('fin_bank_transactions')->where('id', $near)->first(); $this->assertSame(['PAYMENT', (string) $pid, 'M2%'], [$l->matched_to_type, (string) $l->matched_to_id, $l->match_rule]);
+        $this->assertSame($before, DB::table('t_src_payments')->count(), 'no new payment'); $this->assertSame($near, (int) DB::table('t_src_payments')->where('id', $pid)->value('fk_id_bank_line'));
+        $this->assertNull(DB::table('t_src_payments')->where('id', $cn)->value('fk_id_bank_line'), 'the credit-note payment is never linked to a bank line'); $this->assertSame('UNMATCHED', DB::table('fin_bank_transactions')->where('id', $far)->value('match_status'), '14 % away: left for a person');
+    }
+
 }

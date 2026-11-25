@@ -259,6 +259,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('cycle/{id}/context', [BuyingController::class, 'cycleContext'])->whereNumber('id');
         Route::get('cycle/{id}/pager', [BuyingController::class, 'cyclePager'])->whereNumber('id');
         Route::get('cycle/{id}/map', [BuyingController::class, 'cycleMap'])->whereNumber('id');
+        Route::get('cycle/{id}/details', [BuyingController::class, 'cycleDetails'])->whereNumber('id');
+        Route::post('cycle/{id}/details', [BuyingController::class, 'cycleDetailsSave'])->whereNumber('id');
         Route::get('cycle/{id}/products', [BuyingController::class, 'cycleProducts'])->whereNumber('id');
         Route::post('cycle/{id}/products/{row?}', [BuyingController::class, 'cycleProductSave'])->whereNumber('id')->whereNumber('row');
         Route::post('cycle/{id}/products/{row}/delete', [BuyingController::class, 'cycleProductDelete'])->whereNumber('id')->whereNumber('row');

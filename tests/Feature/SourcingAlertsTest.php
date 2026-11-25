@@ -149,6 +149,31 @@ class SourcingAlertsTest extends TestCase
         $this->assertTrue($this->getJson("/api/cycle/{$this->cy}/products")->assertOk()->json('can_edit'));
     }
 
+    /** R-B_SOURCING-42 the Details core form ("Cycle details saved", Requested By read-only = the login) and the 📎 documents link of a grid row; R-62 the form reads Requested by from the logins. */
+    public function test_r42_details_form_saves_and_requested_by_is_the_login(): void
+    {
+        $this->world(); DB::table('t_src_cycles')->where('id', $this->cy)->update(['requested_by' => $this->owner->id]);
+        $d = $this->getJson("/api/cycle/{$this->cy}/details")->assertOk()->json(); $this->assertSame('Owner', $d['requested_by']); $this->assertTrue($d['can_edit']); $this->assertNotEmpty($d['statuses']);
+        $r = $this->postJson("/api/cycle/{$this->cy}/details", ['sourcing_date' => '2026-11-20', 'required_delivery_date' => '2026-12-24', 'notes' => 'Before Christmas', 'requested_by' => 999])->assertOk()->json();
+        $this->assertSame(['Cycle details saved', '2026-12-24', 'Before Christmas'], [$r['message'], $r['values']['required_delivery_date'], $r['values']['notes']]);
+        $this->assertSame($this->owner->id, (int) DB::table('t_src_cycles')->where('id', $this->cy)->value('requested_by'), 'Requested by is never changed by the form');
+        $f = collect(\App\Services\Registry::fields('t_src_cycles'))->firstWhere('field_name', 'requested_by'); $this->assertSame(['table:t_users', 1], [$f['source'], (int) $f['readonly']]);
+        $pid = $this->ins('t_product_vendors', ['SKU_VENDOR' => 'GRID-9', 'product_name_vendor' => 'Shade', 'f_active' => 1]); $row = $this->postJson("/api/cycle/{$this->cy}/products", ['product' => $pid])->assertOk()->json();
+        $this->assertSame("#/list/t_src_documents?f[fk_id_cycle]={$this->cy}&f[fk_id_cycle_product]={$row['id']}", collect($row['rows'])->firstWhere('id', $row['id'])['docs']);
+        $va = $this->makeUser('WAREHOUSE'); $this->actingAs($va)->postJson("/api/cycle/{$this->cy}/details", ['notes' => 'x'])->assertStatus(403);
+    }
+
+    /** R-B_SOURCING-66 the rule test: RFQ valid until yesterday → "Make PO" asks to confirm the price; a supplier rated D carries the warning on the supplier picker (never blocked). */
+    public function test_r66_expired_quote_needs_the_price_confirmed_and_rating_d_is_flagged(): void
+    {
+        $this->world(); DB::table('t_src_suppliers')->where('id', $this->sup)->update(['rating' => 'D', 'timezone' => 'Asia/Shanghai', 'f_active' => 1, 'fk_id_ent' => 1]);
+        $rfq = $this->ins('t_src_rfq', ['fk_id_cycle' => $this->cy, 'fk_id_supplier' => $this->sup, 'rfq_code' => 'RFQ-66', 'qty' => 100, 'final_unit_price' => 2.5, 'status' => 'ACCEPTED', 'd_valid_until' => date('Y-m-d', strtotime('-1 day')), 'fk_id_ent' => 1]);
+        $this->postJson('/api/po', ['rfq' => $rfq, 'qty' => 100])->assertStatus(422)->assertJsonFragment(['message' => 'Quote expired on ' . date('d-m-Y', strtotime('-1 day')) . '. Confirm the price with the supplier again, then choose "Price confirmed" to make the PO.']);
+        $r = $this->postJson('/api/po', ['rfq' => $rfq, 'qty' => 100, 'price_confirmed' => '1'])->assertOk()->json(); $this->assertTrue($r['supplier_rated_d']); $this->assertStringContainsString('Supplier rated D – do not use', $r['message']);
+        $pick = collect(\App\Services\BuyingService::supplierPicker(1))->firstWhere('id', $this->sup); $this->assertSame('Ningbo Bright Lights ⚠ Supplier rated D – do not use', $pick['name']); $this->assertTrue($pick['rated_d']);
+        $c = collect(CA::contacts(1, $this->cy))->firstWhere('name', 'Ningbo Bright Lights'); $this->assertMatchesRegularExpression('/^\\d\\d:\\d\\d$/', $c['local_time']);
+    }
+
     public function test_contacts_with_whatsapp_logged_on_the_cycle(): void
     {
         $this->world();

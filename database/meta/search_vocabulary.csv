@@ -500,6 +500,7 @@ cycle,buying dashboard,VOCAB,#/buying
 cycle code,sourcing cycles,VOCAB,#/list/src_cycle
 cycle count,stock counts,VOCAB,#/stock/counts
 cycle counting,stock counts,VOCAB,#/stock/counts
+cycle details,cycle details,VOCAB,#/buying
 cycle list,sourcing cycles,VOCAB,#/list/src_cycle
 cycle products,cycle step map,VOCAB,#/buying
 cycle steps,cycle step map,VOCAB,#/buying
@@ -588,6 +589,7 @@ dispatched on,bought from,VOCAB,#/sales
 dispute,refunds and refund proposals,VOCAB,#/refunds
 dividend,partners,VOCAB,#/partners
 dividends,partners,VOCAB,#/partners
+do not use supplier,cycle details,VOCAB,#/buying
 doc,certificates,VOCAB,#/list/product_certificate
 document,documents,VOCAB,#/list/document
 documents,documents,VOCAB,#/list/document
@@ -1436,6 +1438,7 @@ preset group,carriers and postage rates,VOCAB,#/carriers
 price,prices and price log,VOCAB,#/reports/price_log
 price calculator,marketplace calculator,VOCAB,#/calculator
 price change,prices and price log,VOCAB,#/reports/price_log
+price confirmed,cycle details,VOCAB,#/buying
 price history,prices and price log,VOCAB,#/reports/price_log
 price list,rfq and quotations,VOCAB,#/list/src_rfq
 price list our,prices and price log,VOCAB,#/reports/price_log
@@ -1469,6 +1472,7 @@ product catalogue,products,VOCAB,#/list/product
 product code,products,VOCAB,#/list/product
 product data,products,VOCAB,#/list/product
 product description,products,VOCAB,#/list/product
+product documents,cycle details,VOCAB,#/buying
 product ideas,research board,VOCAB,#/list/src_research
 product images,products,VOCAB,#/list/product
 product launch,products,VOCAB,#/list/product
@@ -1546,6 +1550,8 @@ quick buy,quick buy,VOCAB,#/list/quick_buy
 quotation,rfq and quotations,VOCAB,#/list/src_rfq
 quotations,rfq and quotations,VOCAB,#/list/src_rfq
 quote,rfq and quotations,VOCAB,#/list/src_rfq
+quote expired,cycle details,VOCAB,#/buying
+quote valid until,cycle details,VOCAB,#/buying
 quotes,rfq and quotations,VOCAB,#/list/src_rfq
 ra,drop shipping orders,VOCAB,#/ds-orders
 rack,locations and bins,VOCAB,#/list/location
@@ -1633,6 +1639,7 @@ request for quotation,rfq and quotations,VOCAB,#/list/src_rfq
 request for quote,rfq and quotations,VOCAB,#/list/src_rfq
 requested by,requested by,VOCAB,#/list/src_research
 requester,requested by,VOCAB,#/list/src_research
+required delivery date,cycle details,VOCAB,#/buying
 resale,returns,VOCAB,#/returns
 research,research board,VOCAB,#/list/src_research
 research accuracy,research outcome,VOCAB,#/list/src_research
@@ -1729,6 +1736,7 @@ sample price,rfq and quotations,VOCAB,#/list/src_rfq
 sample review,samples,VOCAB,#/list/t_src_samples
 samples,samples,VOCAB,#/list/t_src_samples
 santander,bank and cash,VOCAB,#/bank
+save details,cycle details,VOCAB,#/buying
 sc number,sourcing cycles,VOCAB,#/list/src_cycle
 scan,work screen phone,VOCAB,#/work
 scan out,orders to dispatch,VOCAB,#/orders
@@ -1854,6 +1862,10 @@ sourcing agent,buying dashboard,VOCAB,#/buying
 sourcing cycle,buying dashboard,VOCAB,#/buying
 sourcing cycles,buying dashboard,VOCAB,#/buying
 sourcing dashboard,buying dashboard,VOCAB,#/buying
+sourcing date,cycle details,VOCAB,#/buying
+sourcing notes,cycle details,VOCAB,#/buying
+sourcing priority,cycle details,VOCAB,#/buying
+sourcing status,cycle details,VOCAB,#/buying
 sp api,api connections,VOCAB,#/connections
 sp-api,api connections,VOCAB,#/connections
 special delivery,carriers and postage rates,VOCAB,#/carriers
@@ -1939,11 +1951,13 @@ supplier claim,inbound and grn,VOCAB,#/list/t_src_grn
 supplier contact,suppliers and forwarders,VOCAB,#/list/supplier
 supplier creditors,supplier payment schedule,VOCAB,#/supplier-schedule
 supplier list,suppliers and forwarders,VOCAB,#/list/supplier
+supplier local time,cycle details,VOCAB,#/buying
 supplier order,purchase orders,VOCAB,#/list/t_src_po
 supplier order file,upload drop shipping orders,VOCAB,#/ds-upload
 supplier order history,supplier order history,VOCAB,#/supplier-orders
 supplier payment,payments and terms,VOCAB,#/list/src_payment
 supplier quote,rfq and quotations,VOCAB,#/list/src_rfq
+supplier rated d,cycle details,VOCAB,#/buying
 supplier rating,suppliers and forwarders,VOCAB,#/list/supplier
 supplier score,suppliers and forwarders,VOCAB,#/list/supplier
 supplier ships,drop shipping orders,VOCAB,#/ds-orders

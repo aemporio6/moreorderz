@@ -146,6 +146,7 @@ add('#/list/src_research', 'requested by', 'requested by|who asked|requester|ask
 add('#/fx', 'rate difference', 'rate table|table rate|rate difference|exchange rate difference|wise rate|bank rate|typed rate|real rate|fx difference|base amount')
 add('#/buying', 'term paid', 'term paid|term remaining|term status|partially paid|paid in po currency|payment term status|completion percent')
 add('#/buying', 'cycle step map', 'step map|cycle tabs|cycle steps|11 steps|carton data|payment schedule|destination allocation|inventory receiving|platform allocation|ownership transfers|inventory transfers|cycle products|products grid|target qty|target unit cost|people on this cycle|talk to today')
+add('#/buying', 'cycle details', 'cycle details|save details|sourcing date|required delivery date|sourcing priority|sourcing status|sourcing notes|quote expired|quote valid until|price confirmed|supplier rated d|do not use supplier|supplier rating|supplier local time|product documents')
 add('#/import', 'learn sale columns', 'learn columns|learned mapping|propose columns|column proposal|new file header|header not found|map file headers|standard sheet template|convert file template')
 
 # ---------- reports, setup, system ----------

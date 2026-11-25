@@ -125,6 +125,14 @@ class MoneyService
                     ->join('gl_lines as gl', 'gl.journal_id', '=', 'j.id')->join('gl_accounts as a', fn ($j) => $j->on('a.id', '=', 'gl.account_id')->where('a.code', '1000'))
                     ->where('p.fk_id_ent', $ent)->where('p.f_active', 1)->whereNull('p.fk_id_bank_line')->where('gl.ref_id', $bankId)->where(fn ($w) => $w->where('gl.amount_cur', $amt)->orWhere('gl.credit', abs((float) $l->amount_gbp))), 'p.payment_date', $l->txn_date, $dSup)->distinct()->pluck('p.id');
                 if ($pays->count() === 1) { DB::table('t_src_payments')->where('id', $pays[0])->update(['fk_id_bank_line' => $l->id]); self::link($l, 'PAYMENT', (int) $pays[0], 'M2'); $n++; continue; }
+                if ($pays->count() === 0) {      /* R-B_SOURCING-57: a typed BANK payment in another currency is matched on its base amount within match_supplier_pct – the existing payment first, never a new one, never a credit note */
+                    $base = abs((float) $l->amount_gbp) ?: abs($amt); $pct = FinanceSettings::num($ent, 'match_supplier_pct');
+                    $fx = $near(DB::table('t_src_payments as p')->join('gl_journals as j', fn ($j) => $j->on('j.source_id', '=', 'p.id')->where('j.source_type', 'PAYMENT')->whereNull('j.reverses_id')->whereNull('j.reversed_by_id'))
+                        ->join('gl_lines as gl', 'gl.journal_id', '=', 'j.id')->join('gl_accounts as a', fn ($j) => $j->on('a.id', '=', 'gl.account_id')->where('a.code', '1000'))
+                        ->where('p.fk_id_ent', $ent)->where('p.f_active', 1)->where('p.status', 'PAID')->where('p.paid_via', 'BANK')->whereNull('p.fk_id_bank_line')->where('gl.ref_id', $bankId)->where('p.base_amount', '>', 0)
+                        ->whereRaw('ABS(p.base_amount - ?) <= p.base_amount * ? / 100', [$base, $pct]), 'p.payment_date', $l->txn_date, $dSup)->distinct()->pluck('p.id');
+                    if ($pct > 0 && $fx->count() === 1) { DB::table('t_src_payments')->where('id', $fx[0])->update(['fk_id_bank_line' => $l->id]); self::link($l, 'PAYMENT', (int) $fx[0], 'M2%'); $n++; continue; }
+                }
                 $exp = $near(DB::table('fin_expenses')->where('fk_id_ent', $ent)->where('f_active', 1)->whereNull('fk_id_bank_line')->where('fk_id_paid_from', $bankId)->where('amount', abs($amt)), 'd_expense', $l->txn_date, $dSup)->pluck('id');
                 if ($exp->count() === 1) { DB::table('fin_expenses')->where('id', $exp[0])->update(['fk_id_bank_line' => $l->id]); self::link($l, 'EXPENSE', (int) $exp[0], 'M3'); $n++; continue; }
             } else {
