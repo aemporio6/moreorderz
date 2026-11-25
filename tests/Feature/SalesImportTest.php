@@ -279,4 +279,22 @@ class SalesImportTest extends TestCase
         try { SalesImport::preCheck(['nature' => 'Normal', 'marketplace' => $this->mp, 'shop' => $this->shop, 'month' => 7, 'year' => 2026, 'fee' => '0'], ['name' => 'a.csv', 'size' => 1], $va); $this->fail('no error'); }
         catch (\InvalidArgumentException $e) { $this->assertSame("You don't have rights to import sales for shop 101A (Pets).", $e->getMessage()); }
     }
+    /** R-A_SALES-87 the profile's time zone and buy-note column are read by the import; its payout rule / money lag set the expected payout day. */
+    public function test_profile_time_zone_buy_note_and_payout_rule(): void
+    {
+        $this->world();
+        $pid = (int) DB::table('t_branches')->where('id', $this->shop)->value('fk_id_mp_profile');
+        DB::table('mp_profiles')->where('id', $pid)->update(['timezone' => 'America/Los_Angeles', 'buy_note_field' => 'My item note']);
+        \App\Services\Settings::set('COMPANY_TIMEZONE', 'Europe/London', 1);
+        $head = self::HEAD . ',My item note';
+        $this->go($this->file(["A-1,2026-07-30 23:30,Ann,Lee,a@b.com,,BOWL-01,Dog bowl,1,£9.00,,AMZ : 204-1 : 30-07-26 : 1 : 4.00", "A-2,2026-07-15,Ann,Lee,a@b.com,,BOWL-01,Dog bowl,1,£9.00,,"], $head));
+        $d = fn ($o) => DB::table('t_sales')->where('order_no', $o)->first();
+        $this->assertSame(['2026-07-31', 'AMZ : 204-1 : 30-07-26 : 1 : 4.00'], [substr((string) $d('A-1')->d_order, 0, 10), $d('A-1')->ds_note], '23:30 in Los Angeles is the next morning in London; the buy note comes from the profile\'s column');
+        $this->assertSame('2026-07-15', substr((string) $d('A-2')->d_order, 0, 10), 'a date without a time stays');
+        $p = DB::table('mp_profiles')->where('id', $pid)->first();
+        $this->assertSame('2026-08-07', \App\Services\CashForecast::expected('2026-07-31', (object) ['money_lag_days' => null, 'payout_rule' => 'WEEKLY'], 3));
+        $this->assertSame('2026-08-01', \App\Services\CashForecast::expected('2026-07-31', (object) ['money_lag_days' => null, 'payout_rule' => 'MONTHLY'], 3));
+        $this->assertSame('2026-08-05', \App\Services\CashForecast::expected('2026-07-31', (object) ['money_lag_days' => 5, 'payout_rule' => 'WEEKLY'], 3), 'the money lag wins');
+        $this->assertSame('2026-08-03', \App\Services\CashForecast::expected('2026-07-31', null, 3), 'no profile: the setting');
+    }
 }

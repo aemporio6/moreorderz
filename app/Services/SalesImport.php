@@ -323,6 +323,7 @@ class SalesImport
             $from = sprintf('%04d-%02d-01', $y, $m); $to = date('Y-m-t', strtotime($from)); $cur = Fx::code((int) $shop->fk_id_payout_currency ?: null, $ent);
             $err = function (int $ln, string $order, string $sku, string $why, array $row, ?int $in = null) use (&$errors, &$st, $batch) { $st['errors']++; $errors[] = ['line' => $ln, 'order_no' => $order, 'sku' => $sku, 'reason' => $why, 'batch' => $in];
                 DB::table('t_sale_import_errors')->insert(['fk_id_import' => $batch, 'row_no' => $ln, 'order_no' => mb_substr($order, 0, 100), 'sku' => mb_substr($sku, 0, 100), 'reason' => mb_substr($why, 0, 255), 'raw_csv' => json_encode($row, JSON_UNESCAPED_UNICODE), 'f_resolved' => 0, 'f_unmatched' => 0, 'created_at' => now()]); };
+            $pf = self::profileOf((int) $shop->fk_id_marketplace); $pfTz = $pf && $pf->timezone ? (string) $pf->timezone : null; $pfNote = $pf && trim((string) $pf->buy_note_field) !== '' ? trim((string) $pf->buy_note_field) : null;
             foreach ($csv['rows'] as [$ln, $row]) {
                 if ($totals) { self::totalsRow($batch, $shop, $ln, $row, $st, $err, $cur, $ent, $u); continue; }
                 if (! array_filter($row, fn ($v) => trim((string) $v) !== '')) { $st['skipped']++; continue; }
@@ -339,6 +340,7 @@ class SalesImport
                 if ($rate === null && $total === null) { $err($ln, $v['order_no'], $v['sku'], 'Sale Rate and Total Amount are both empty', $row); continue; }
                 if ($rate === null) $rate = round($total / $qty, 2); if ($total === null) $total = round($rate * $qty, 2);
                 $date = Parse::date($v['order_date']); if ($date !== false && $date !== '') { $df = Parse::dateFormat($v['order_date']); $fmts[$df] = ($fmts[$df] ?? 0) + 1; }
+                if ($date !== false && $date !== '' && $pfTz) $date = Profiles::localDate((string) $v['order_date'], $pfTz, $date, $ent);      /* R-A_SALES-87 the file's times are in the profile's time zone */
                 if ($date === false || $date === '') { $err($ln, $v['order_no'], $v['sku'], "Order Date '{$v['order_date']}' is not a date format the system knows", $row); continue; }
                 $isNo = $v['sku'] === ''; $sku = $v['sku'];
                 if ($isNo) { $sku = self::noSku($v['order_no'], $v['product_info'], $qty, $total); $nosku[$sku] = ($nosku[$sku] ?? 0) + 1; if ($nosku[$sku] > 1) $sku .= '-' . $nosku[$sku]; }
@@ -359,7 +361,7 @@ class SalesImport
                 $line = ['fk_id_ent' => $ent, 'fk_id_import' => $target, 'fk_id_branch' => $shop->id, 'fk_id_marketplace' => (int) $shop->fk_id_marketplace, 'fk_product_id' => $product->id ?? 0, 'order_no' => $v['order_no'], 'd_order' => $date, 'cust_name' => $v['cust_name'], 'cust_contacts' => $v['cust_contacts'], 'sku' => $sku,
                     'product_info' => $v['product_info'] !== '' ? $v['product_info'] : (string) ($product->product_name_vendor ?? ''), 'qty' => $qty, 'sale_rate' => $rate, 'total_amount' => $total, 'f_out_of_period' => $flag, 'status' => 'Pending', 'f_stock_deducted' => 0, 'sale_source' => $product ? 'active' : 'unmatched',
                     'raw_csv' => json_encode($row, JSON_UNESCAPED_UNICODE), 'fk_id_currency' => BuyingService::currencyId($cur), 'total_amount_gbp' => Fx::toBase((float) $total, $cur, $date, $ent), 'batch_row_no' => $ln, 'line_status' => 'OPEN', 'fulfilment_channel' => $shop->fulfilment_channel ?: 'SELF', 'fk_id_sell_location' => $shop->fk_id_main_location,
-                    'fk_id_company' => (int) ($shop->fk_id_company ?? 0) ?: null, 'ds_note' => $product ? '' : ($isNo ? 'No SKU' : 'SKU not in inventory')];
+                    'fk_id_company' => (int) ($shop->fk_id_company ?? 0) ?: null, 'ds_note' => $product ? ($pfNote ? mb_substr(self::mapped($row, [$pfNote], 'buy_note'), 0, 250) : '') : ($isNo ? 'No SKU' : 'SKU not in inventory')];      /* R-A_SALES-87 the profile's buy-note column (e.g. eBay "My item note") feeds the purchase audit */
                 if ($product) { $line = array_merge($line, SaleLines::intakeCost($product, $shop, $date, $qty, (float) $rate, (float) $total, $ent), ['d_buy' => $product->d_purchase_date ?? null, 'product_url' => isset($product->url_ebay) ? mb_substr((string) $product->url_ebay, 0, 500) : null, 'fk_id_vendor' => (int) ($product->fk_id_vendor ?? 0) ?: null]);
                     if ($line['cost_source'] === 'current') $st['cost_current']++; if ($line['cost_source'] === 'product') $st['cost_product']++; }
                 if ($dup && ! (int) $dup->fk_id_import) {      // daily intake line: the monthly file is merged into it, the line is not replaced

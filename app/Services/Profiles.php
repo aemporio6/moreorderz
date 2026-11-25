@@ -47,6 +47,17 @@ class Profiles
         return ['id' => (int) $r->id, 'type' => $r->report_type, 'required' => (bool) $r->f_required_for_close, 'detect' => self::names($r->detect_headers), 'map' => $map];
     }
 
+    /**
+     * R-A_SALES-87 a file date with a time, written in the profile's time zone, as the company's calendar day (Settings COMPANY_TIMEZONE, default the app zone).
+     * A date without a time stays as it is. Example: "2026-10-31 23:30" in America/Los_Angeles is 1 Nov in London.
+     */
+    public static function localDate(string $raw, string $tz, string $date, int $ent): string
+    {
+        if (! preg_match('/\b(\d{1,2}):(\d{2})/', $raw, $m)) return $date;
+        $home = (string) (Settings::get('COMPANY_TIMEZONE', $ent, config('app.timezone')) ?: 'Europe/London'); if (strcasecmp($tz, $home) === 0) return $date;
+        try { $d = new \DateTimeImmutable($date . ' ' . sprintf('%02d:%02d', (int) $m[1], (int) $m[2]), new \DateTimeZone($tz)); return $d->setTimezone(new \DateTimeZone($home))->format('Y-m-d'); } catch (\Throwable) { return $date; }
+    }
+
     /** R-FIN-69 every report type of the profile as a file layout: report_type => [map (role => header names), detect (headers that recognise the file)]. */
     public static function layouts(int $profileId): array
     {

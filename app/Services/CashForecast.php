@@ -12,6 +12,16 @@ use Illuminate\Support\Facades\DB;
  */
 class CashForecast
 {
+    /** R-A_SALES-87 the expected payout day of a statement with no payout date: the profile's money lag, else its payout rule (DAILY / DAILY_SWEEP +1, WEEKLY +7, MONTHLY the 1st of next month), else PAYOUT_DAYS_AFTER_STATEMENT. */
+    public static function expected(string $statementDate, ?object $profile, int $after): string
+    {
+        if ($profile && $profile->money_lag_days !== null && $profile->money_lag_days !== '') return date('Y-m-d', strtotime("$statementDate +" . (int) $profile->money_lag_days . ' day'));
+        return match (strtoupper((string) ($profile->payout_rule ?? ''))) {
+            'DAILY', 'DAILY_SWEEP' => date('Y-m-d', strtotime("$statementDate +1 day")), 'WEEKLY' => date('Y-m-d', strtotime("$statementDate +7 day")),
+            'MONTHLY' => date('Y-m-01', strtotime("$statementDate +1 month")), default => date('Y-m-d', strtotime("$statementDate +$after day")),
+        };
+    }
+
     public static function build(int $ent, int $weeks = 8): array
     {
         $weeks = max(1, min(26, $weeks)); $today = date('Y-m-d'); $mon = date('Y-m-d', strtotime('monday this week'));
@@ -21,7 +31,7 @@ class CashForecast
         $bank = round(array_sum(array_map(fn ($x) => (float) $x['books_base'], MoneyService::banks($ent))), 2);
         $after = (int) Settings::get('PAYOUT_DAYS_AFTER_STATEMENT', $ent, 3);
         foreach (DB::table('mo_settlements as s')->join('t_branches as br', 'br.id', '=', 's.fk_id_branch')->where('s.fk_id_ent', $ent)->where('s.status', 'POSTED')->whereNull('s.fk_id_bank_line')->get(['s.statement_id', 's.payable', 's.currency', 's.payout_date', 's.statement_date', 'br.shop_name', 'br.id as shop_id']) as $s)
-            $add('in', $s->payout_date ?: date('Y-m-d', strtotime("{$s->statement_date} +" . (($lag = Profiles::ofShop((int) $s->shop_id)?->money_lag_days) !== null ? (int) $lag : $after) . ' day')),      /* R-A_SALES-87 the profile's money lag first */ Fx::toBase((float) $s->payable, $s->currency, $s->statement_date, $ent), "Payout {$s->shop_name} · {$s->statement_id}", '#/settlements');
+            $add('in', $s->payout_date ?: self::expected((string) $s->statement_date, Profiles::ofShop((int) $s->shop_id), $after),      /* R-A_SALES-87 the profile's money lag, else its payout rule */ Fx::toBase((float) $s->payable, $s->currency, $s->statement_date, $ent), "Payout {$s->shop_name} · {$s->statement_id}", '#/settlements');
         foreach (DB::table('t_src_payment_terms as t')->join('t_src_po as p', 'p.id', '=', 't.fk_id_po')->where('t.fk_id_ent', $ent)->where('t.f_active', 1)->where('t.remaining_amount', '>', 0)->whereIn('p.status', ['CONFIRMED', 'SHIPPED', 'RECEIVED'])->get(['t.remaining_amount', 't.due_date', 't.milestone', 'p.po_number', 'p.fk_id_currency', 'p.exchange_rate', 'p.fk_id_cycle']) as $t)
             $add('out', $t->due_date, round((float) $t->remaining_amount * Fx::rate(Fx::code($t->fk_id_currency, $ent), $today, $ent), 2), "Supplier {$t->po_number} · {$t->milestone}", $t->fk_id_cycle ? '#/cycle/' . $t->fk_id_cycle : '#/buying');
         foreach (DB::table('t_src_customs')->where('fk_id_ent', $ent)->where('f_active', 1)->where(fn ($w) => $w->whereNull('pay_status')->orWhere('pay_status', '<>', 'PAID'))->get(['customs_code', 'base_amount', 'import_vat', 'exchange_rate', 'clearance_date', 'fk_id_cycle']) as $c)
