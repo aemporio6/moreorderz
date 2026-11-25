@@ -16,15 +16,18 @@ use Tests\TestCase;
 /** RULES_H_WAREHOUSE R-H-36: lost parcel after claim_days → WH_PARCEL_LOST; case → claim → PAID booked on the shop; resend = new parcel with a new reservation; the lost parcel stays shipped. */
 class LostParcelsTest extends TestCase
 {
+    protected const MARKETPLACE = 'eBay';
+
     private function f(string $t, array $d): int { return DB::table($t)->insertGetId(RecordService::fillNotNull($t, $d)); }
 
     public function test_the_rule_example_handed_over_10_days_claim_7_paid_12_and_resend(): void
     {
         $this->actingAs($this->owner); \App\Services\Context::set(1, $this->owner->id); Settings::set('WH_SCAN_CONFIRM_PACK', 'N', 1);
-        $mp = $this->f('cat_marketplaces', ['fk_id_ent' => 1, 'marketplace_short' => 'LPmp', 'f_active' => 1]);
+        $mp = $this->f('cat_marketplaces', ['fk_id_ent' => 1, 'marketplace_short' => static::MARKETPLACE, 'f_active' => 1]);
         $car = $this->f('t_carriers', ['fk_id_ent' => 1, 'carrier_name' => 'Carrier L', 'claim_days' => 7, 'f_active' => 1]);
         $bin = $this->f('cat_inventory_locations', ['location_name' => 'LP-1', 'kind' => 'BIN', 'fk_id_ent' => 1, 'f_sellable' => 1, 'f_active' => 1, 'pick_seq' => 1]);
         $shop = $this->f('t_branches', ['fk_id_ent' => 1, 'fk_id_marketplace' => $mp, 'shop_no' => 'LP1', 'iso_branch' => 'LP1', 'shop_name' => 'Shop LP', 'f_active' => 1, 'fk_id_main_location' => $bin, 'fk_id_default_carrier' => $car, 'fulfilment_channel' => 'SELF']);
+        DB::table('t_branches')->where('id', $shop)->update(['fk_id_mp_profile' => \App\Services\Profiles::ensureForMarketplace($mp)]);      /* R-H-60 / IC-0.10: eBay profile here, TikTok in the subclass */
         $prod = $this->f('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'LP-MUG', 'product_name_vendor' => 'Mug', 'stock' => 0, 'f_active' => 1, 'e_product_type' => 'pool', 'pack_weight_g' => 300]);
         Stock::receive(1, [['product' => $prod, 'qty' => 5, 'location' => $bin, 'unit_cost' => 2.0]], 'GRN', 1);
         Sales::intake($shop, [['order_no' => 'LP-O1', 'd_order' => '2026-11-01', 'sku' => 'LP-MUG', 'qty' => 1, 'sale_rate' => 20]]);

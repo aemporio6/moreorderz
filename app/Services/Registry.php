@@ -153,7 +153,8 @@ class Registry
         't_src_cycles' => 't.status', 't_src_po' => 't.status',
     ];
     /** Label of a row where the plain label column is not enough. */
-    public const LABELS = ['t_product_vendors' => "CONCAT_WS(' · ', NULLIF(t.SKU_VENDOR,''), NULLIF(t.product_name_vendor,''))", 'cat_banks' => "COALESCE(NULLIF(t.bank_name,''), t.bank_short_name)"];
+    public const LABELS = ['cat_inventory_locations' => "CONCAT(CONCAT_WS(' › ', (SELECT s.location_name FROM cat_inventory_locations s WHERE s.id = t.fk_id_site AND s.id <> t.id), (SELECT z.location_name FROM cat_inventory_locations z WHERE z.id = t.fk_id_parent AND z.kind = 'ZONE'), t.location_name), CASE WHEN COALESCE(t.bin_type, '') <> '' THEN CONCAT(' (', UPPER(LEFT(REPLACE(t.bin_type, '_', ' '), 1)), LOWER(SUBSTRING(REPLACE(t.bin_type, '_', ' '), 2)), ')') ELSE '' END)",      /* R-H-2 path label WH1 › W3 › W3-B-2 (Shelf) */
+        't_product_vendors' => "CONCAT_WS(' · ', NULLIF(t.SKU_VENDOR,''), NULLIF(t.product_name_vendor,''))", 'cat_banks' => "COALESCE(NULLIF(t.bank_name,''), t.bank_short_name)"];
 
     private static function tableOptions(string $table, ?int $ent, ?string $q, int $limit, bool $loginOnly = false, ?array $onlyIds = null, array $where = []): array
     {

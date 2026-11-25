@@ -13,6 +13,8 @@ use Tests\TestCase;
 /** RULES_A_SALES §3, §5, §6: the line formula, expected cost, the state table, edit, carrier / packing, refund with nature, delete + bin, the list. */
 class SaleLinesTest extends TestCase
 {
+    protected const MARKETPLACE = 'eBay';
+
     private int $shop; private int $mp; private int $product; private int $svc2; private int $svc3; private int $pack;
 
     private function fill(string $t, array $d): array { $m = new \ReflectionMethod(RecordService::class, 'fillNotNull'); return $m->invoke(null, $t, $d); }
@@ -20,8 +22,9 @@ class SaleLinesTest extends TestCase
     private function world(): void
     {
         $this->actingAs($this->owner);
-        $this->mp = DB::table('cat_marketplaces')->insertGetId($this->fill('cat_marketplaces', ['fk_id_ent' => 1, 'marketplace_short' => 'Ebay', 'marketplace_descr' => 'eBay', 'f_active' => 1]));
+        $this->mp = DB::table('cat_marketplaces')->insertGetId($this->fill('cat_marketplaces', ['fk_id_ent' => 1, 'marketplace_short' => static::MARKETPLACE, 'marketplace_descr' => static::MARKETPLACE, 'f_active' => 1]));
         $this->shop = DB::table('t_branches')->insertGetId($this->fill('t_branches', ['fk_id_ent' => 1, 'fk_id_marketplace' => $this->mp, 'shop_no' => '101A', 'shop_name' => 'Pets', 'iso_branch' => 'P1', 'f_active' => 1, 'fulfilment_channel' => 'OTHER']));
+        DB::table('t_branches')->where('id', $this->shop)->update(['fk_id_mp_profile' => \App\Services\Profiles::ensureForMarketplace($this->mp)]);      /* R-H-60 / IC-0.10: eBay profile here, TikTok in the subclass */
         $car = DB::table('t_carriers')->insertGetId($this->fill('t_carriers', ['fk_id_ent' => 1, 'carrier_name' => 'RM', 'f_active' => 1]));
         $v = fn (float $rate, string $n) => DB::table('t_carrier_pkg_svc')->insertGetId(['pkg_svc_name' => "Small $n", 'fk_id_carrier' => $car, 'fk_id_car_package' => 0, 'fk_id_car_service' => 0, 'rate' => $rate]);
         $this->svc2 = $v(2.00, '48'); $this->svc3 = $v(3.10, '24');

@@ -52,6 +52,7 @@ class EdgeCaseRegisterTest extends TestCase
             $this->assertTrue(method_exists('Tests\\Feature\\' . $class, $method), "$case → $t does not exist");
         }
         $this->assertSame([], array_intersect(array_keys(self::CASES), self::GAPS));
-        $this->assertTrue(is_subclass_of(SalesDispatchTikTokTest::class, SalesDispatchTest::class), 'the SalesDispatchTest cases run on the eBay-profile shop and again on the TikTok-profile shop (IC-0.10)');
+        foreach (['SalesDispatch', 'LostParcels', 'SaleLines', 'Money2', 'SalesImport'] as $c)      /* every shop-bound case runs on the eBay-profile shop and again on the TikTok-profile shop (IC-0.10) */
+            $this->assertTrue(is_subclass_of('Tests\\Feature\\' . $c . 'TikTokTest', 'Tests\\Feature\\' . $c . 'Test'), "$c runs on two profiles");
     }
 }

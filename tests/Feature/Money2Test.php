@@ -17,16 +17,19 @@ use Tests\TestCase;
 
 class Money2Test extends TestCase
 {
+    protected const MARKETPLACE = 'eBay';
+
     private int $shop; private int $p; private int $bin; private int $bank;
 
     protected function setUp(): void
     {
         parent::setUp();
         $f = fn ($t, $d) => DB::table($t)->insertGetId(RecordService::fillNotNull($t, $d));
-        $mp = $f('cat_marketplaces', ['fk_id_ent' => 1]);
+        $mp = $f('cat_marketplaces', ['fk_id_ent' => 1, 'marketplace_short' => static::MARKETPLACE]);
         $this->p = $f('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'BOWL-01', 'product_name_vendor' => 'Dog bowl', 'stock' => 0, 'f_active' => 1, 'e_product_type' => 'pool']);
         $this->bin = $f('cat_inventory_locations', ['location_name' => 'A-A-01', 'kind' => 'BIN', 'fk_id_ent' => 1, 'f_sellable' => 1, 'f_active' => 1, 'pick_seq' => 1]);
         $this->shop = $f('t_branches', ['fk_id_ent' => 1, 'fk_id_marketplace' => $mp, 'shop_no' => 'S1', 'iso_branch' => 'S1', 'shop_name' => 'Shop A', 'f_active' => 1, 'fk_id_main_location' => $this->bin, 'fulfilment_channel' => 'SELF']);
+        DB::table('t_branches')->where('id', $this->shop)->update(['fk_id_mp_profile' => \App\Services\Profiles::ensureForMarketplace($mp)]);      /* R-H-60 / IC-0.10: eBay profile here, TikTok in the subclass */
         Stock::receive(1, [['product' => $this->p, 'qty' => 100, 'location' => $this->bin, 'unit_cost' => 4.00, 'received_date' => '2026-08-01']], 'GRN', 1);
         PriceService::set($this->p, $mp, 8, 20.00, '2026-08-01');
         $this->bank = Money::createBank(1, ['bank_name' => 'Bank One', 'account_label' => 'Main', 'currency' => 'GBP', 'opening_balance' => 5000, 'opening_date' => '2026-08-01']);

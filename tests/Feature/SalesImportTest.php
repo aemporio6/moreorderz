@@ -12,6 +12,8 @@ use Tests\TestCase;
 /** RULES_A_SALES §1 (R-A_SALES-1 … 18) and R-D-78: the monthly sales import, with the examples of the rules. */
 class SalesImportTest extends TestCase
 {
+    protected const MARKETPLACE = 'eBay';
+
     private int $shop; private int $mp; private int $product; private array $files = [];
 
     private function fill(string $t, array $d): array { return RecordService::fillNotNull($t, $d); }
@@ -19,8 +21,9 @@ class SalesImportTest extends TestCase
     private function world(): void
     {
         $this->actingAs($this->owner);
-        $this->mp = DB::table('cat_marketplaces')->insertGetId($this->fill('cat_marketplaces', ['fk_id_ent' => 1, 'marketplace_short' => 'Ebay', 'marketplace_descr' => 'eBay', 'f_active' => 1]));
+        $this->mp = DB::table('cat_marketplaces')->insertGetId($this->fill('cat_marketplaces', ['fk_id_ent' => 1, 'marketplace_short' => static::MARKETPLACE, 'marketplace_descr' => static::MARKETPLACE, 'f_active' => 1]));
         $this->shop = DB::table('t_branches')->insertGetId($this->fill('t_branches', ['fk_id_ent' => 1, 'fk_id_marketplace' => $this->mp, 'shop_no' => '101A', 'shop_name' => 'Pets', 'iso_branch' => 'P1', 'f_active' => 1, 'fulfilment_channel' => 'OTHER']));
+        DB::table('t_branches')->where('id', $this->shop)->update(['fk_id_mp_profile' => \App\Services\Profiles::ensureForMarketplace($this->mp)]);      /* R-H-60 / IC-0.10: eBay profile here, TikTok in the subclass */
         $this->product = DB::table('t_product_vendors')->insertGetId($this->fill('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'BOWL-01', 'product_name_vendor' => 'Dog bowl', 'f_active' => 1, 'raw_price' => 4, 'sale_price' => 9]));
         SalesImport::saveColumns($this->mp, 'SALE', ['order_no' => 'Order number', 'order_date' => 'Sale date', 'cust_name' => 'Buyer first name, Buyer last name', 'cust_contacts' => 'Buyer email,Buyer phone', 'sku' => 'Custom label', 'product_info' => 'Item title', 'qty' => 'Quantity', 'sale_rate' => 'Sold for', 'total_amount' => 'Total price']);
     }
@@ -111,6 +114,7 @@ class SalesImportTest extends TestCase
         $this->assertContains('Column not found for Cust. Contacts: Buyer phone', $r['warnings']);
         // Sale Columns not set → the import says which and where to set them
         DB::table('marketplace_sale_columns')->where('sale_field', 'qty')->update(['csv_columns' => '']);
+        $pf = SalesImport::profileOf($this->mp); $sets = json_decode((string) $pf->sale_sets_json, true); $sets['SALE']['qty'] = []; DB::table('mp_profiles')->where('id', $pf->id)->update(['sale_sets_json' => json_encode($sets)]);      /* the profile holds the sets (R-A_SALES-87) */
         try { $this->go($this->file([$this->row('D-1')]), ['month' => 9, 'sure' => true]); $this->fail('no error'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('Sale Columns are not set for this marketplace: Qty', $e->getMessage()); }
     }
 

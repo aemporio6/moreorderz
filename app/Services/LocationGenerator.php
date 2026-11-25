@@ -15,6 +15,7 @@ class LocationGenerator
         $zone = strtoupper(trim((string) $p['zone']));
         if ($zone === '' || ! preg_match('/^[A-Z0-9]{1,6}$/', $zone)) throw new \InvalidArgumentException('Zone: 1 to 6 letters or digits.');
         $parent = DB::table('cat_inventory_locations')->where('id', (int) $p['parent'])->where('fk_id_ent', $ent)->first() ?? throw new \RuntimeException('Parent location not found in this company.');
+        $site = WarehouseSites::siteOf((int) $parent->id); if (! $site) throw new \InvalidArgumentException('Choose a site (or a zone of a site) as the parent – bins always sit in a site (R-H-2).');
         $fmt = (string) Settings::get('WH_LOC_FORMAT', $ent, '{ZONE}-{LEVEL}-{BIN}'); $sep = (string) Settings::get('WH_LOC_SEPARATOR', $ent, '-');
         $pad = (int) Settings::get('WH_LOC_PAD', $ent, 0); $letters = Settings::get('WH_LOC_LEVEL_STYLE', $ent, 'LETTER') === 'LETTER';
         $codes = []; $seq = (int) DB::table('cat_inventory_locations')->where('fk_id_ent', $ent)->max('pick_seq');
@@ -28,10 +29,10 @@ class LocationGenerator
         $exists = DB::table('cat_inventory_locations')->where('fk_id_ent', $ent)->whereIn('location_code', array_column($codes, 'code'))->pluck('location_code')->all();
         $new = array_values(array_filter($codes, fn ($c) => ! in_array($c['code'], $exists, true)));
         if (! $create) return ['codes' => array_column($codes, 'code'), 'already_there' => $exists, 'to_create' => count($new)];
-        DB::transaction(function () use ($new, $ent, $parent, &$seq) {
+        DB::transaction(function () use ($new, $ent, $parent, $site, &$seq) {
             foreach ($new as $c) {
                 DB::table('cat_inventory_locations')->insert(['location_name' => $c['code'], 'fk_id_location_type' => (int) $parent->fk_id_location_type, 'fk_id_parent' => $parent->id, 'f_active' => 1, 'created_by' => Context::userId(), 'created_at' => now(),
-                    'fk_id_ent' => $ent, 'location_code' => $c['code'], 'kind' => 'BIN', 'f_sellable' => 1, 'level_code' => $c['level'], 'position_code' => $c['pos'], 'pick_seq' => ++$seq, 'f_pickable' => 1, 'f_receivable' => 1, 'barcode_value' => $c['code'], 'fk_id_site' => $parent->fk_id_site ?? $parent->id]);
+                    'fk_id_ent' => $ent, 'location_code' => $c['code'], 'kind' => 'BIN', 'f_sellable' => 1, 'level_code' => $c['level'], 'position_code' => $c['pos'], 'pick_seq' => ++$seq, 'f_pickable' => 1, 'f_receivable' => 1, 'barcode_value' => $c['code'], 'fk_id_site' => $site]);      /* R-H-2 */
             }
         });
         Audit::log('cat_inventory_locations', (int) $parent->id, 'INSERT', ['bins_created' => count($new), 'zone' => $p['zone']], null, $ent);

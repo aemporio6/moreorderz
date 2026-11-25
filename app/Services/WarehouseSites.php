@@ -88,9 +88,26 @@ class WarehouseSites
         return $n;
     }
 
+    /** The site (kind WAREHOUSE) a location sits in, walking up the tree. */
+    public static function siteOf(int $id): ?int
+    {
+        for ($i = 0; $i < 8 && $id; $i++) { $r = DB::table('cat_inventory_locations')->where('id', $id)->first(['id', 'kind', 'fk_id_parent']); if (! $r) return null; if ($r->kind === 'WAREHOUSE') return (int) $r->id; $id = (int) $r->fk_id_parent; }
+        return null;
+    }
+
     /** FormRules hook for a location (R-H-3 / 6). */
     public static function check(array &$data, array $old, ?int $id): array
     {
+        /* R-H-2 one tree site › zone › bin: a zone or bin takes its site from its parent; the old kind SHELF is read as BIN; a bin code is unique in its site */
+        $kind = strtoupper((string) ($data['kind'] ?? $old['kind'] ?? ''));
+        if ($kind === 'SHELF') { $data['kind'] = $kind = 'BIN'; }
+        if (in_array($kind, ['ZONE', 'BIN'], true) && ($parent = (int) ($data['fk_id_parent'] ?? $old['fk_id_parent'] ?? 0))) {
+            $site = self::siteOf($parent); if (! $site) return ['fk_id_parent' => 'Choose a site or a zone of a site as the parent.'];
+            $data['fk_id_site'] = $site;
+            $name = trim((string) ($data['location_name'] ?? $old['location_name'] ?? ''));
+            if ($kind === 'BIN' && $name !== '' && DB::table('cat_inventory_locations')->where('fk_id_site', $site)->where('kind', 'BIN')->where('location_name', $name)->when($id, fn ($q) => $q->where('id', '<>', $id))->exists())
+                return ['location_name' => "Bin $name already exists in this site."];
+        }
         if (! $id) return [];
         if (! empty($old['system_role'])) {
             if (array_key_exists('f_active', $data) && ! (int) $data['f_active'] && (int) ($old['f_active'] ?? 1)) return ['f_active' => 'System bins cannot be deactivated.'];

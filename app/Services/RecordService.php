@@ -133,7 +133,8 @@ class RecordService
         $old = $id ? (array) (DB::table($table)->where($pk, $id)->first() ?? abort(404)) : [];
         foreach (self::storedFields($formKey, $table, true) as $f) {
             $col = $f['column_name'];
-            if (in_array($col, self::BLOCKED, true) || $f['readonly']) continue;
+            if (in_array($col, self::BLOCKED, true)) continue;
+            if ($f['readonly']) { if (! $id && str_starts_with((string) $f['default_rule'], 'const:')) $data[$col] = substr((string) $f['default_rule'], 6); continue; }      /* a fixed value of a quick form (kind WAREHOUSE / ZONE) is stored on a new row */
             $given = array_key_exists($f['field_name'], $input) || array_key_exists($col, $input);
             $v = $input[$f['field_name']] ?? $input[$col] ?? null;
             if (! $given && $id) continue;                        // edit: untouched fields stay as they are
