@@ -26,13 +26,15 @@ class DashCardsTest extends TestCase
         for ($i = 0; $i < 5; $i++) {
             $x = $this->getJson('/api/buying/card/shipments')->assertOk()->json();
             $this->assertSame([false, 'Shipments on the way', DashCards::MSG], [$x['ok'], $x['label'], $x['error']]);
-            $this->assertStringNotContainsString('SQLSTATE', json_encode($x), 'users never see SQL text');
+            $this->assertStringContainsString('Shipments on the way: SQLSTATE', $x['admin'], 'R-B_SOURCING-41 the admin sees the error line');
         }
+        $mgr = $this->makeUser('MANAGER'); $y = $this->actingAs($mgr)->getJson('/api/buying/card/shipments')->assertOk()->json(); $this->assertSame('Could not load – retry', $y['error']);
+        $this->assertStringNotContainsString('SQLSTATE', json_encode($y), 'other users never see SQL text'); $this->assertArrayNotHasKey('admin', $y); $this->actingAs($this->owner);
         $this->assertTrue($this->getJson('/api/buying/card/contacts')->assertOk()->json('ok'), 'the other cards render');
         $this->assertTrue($this->getJson('/api/buying/card/needs')->json('ok'));
         $this->assertNotNull($this->getJson('/api/buying')->assertOk()->json('kpi'));
         $err = DB::table('sys_error_log')->where('url', 'card:shipments')->get();
-        $this->assertCount(1, $err); $this->assertSame(5, (int) $err[0]->times_seen); $this->assertSame($this->owner->id, (int) $err[0]->user_id);
+        $this->assertCount(1, $err); $this->assertSame(6, (int) $err[0]->times_seen); $this->assertSame($this->owner->id, (int) $err[0]->user_id);
         $this->assertSame('shipments', json_decode($err[0]->context_json, true)['card']);
         $this->assertSame(1, DB::table('tasks')->where('rule_code', 'SYS_ERROR')->where('dedupe_key', 'like', '%dash:shipments:' . date('Y-m-d') . '%')->count(), 'one admin alert even after 5 reloads the same day');
         DashCards::$break = ['stages'];

@@ -64,6 +64,48 @@ class WorkflowContext
         'samples' => ['extras', 'Samples'], 'qc' => ['extras', 'Quality checks'], 'customs' => ['extras', 'Customs'],
     ];
 
+    /**
+     * R-B_SOURCING-15 the step map: the 11-step bar, each old tab under it as a sub-tab (old labels kept), the group More, and Overview / Summary / Details.
+     * [no, bar label, [[old tab key, old tab label, place key or list form], …]]
+     */
+    public const MAP = [
+        [1, 'RFQ', [['rfq', 'RFQ / Quotations', 'rfq']]], [2, 'Samples', [['samples', 'Samples / Approval', 'samples']]],
+        [3, 'PO', [['po', 'Purchase Orders', 'po'], ['po_lines', 'PO Lines', 'po_lines'], ['cartons', 'Carton / Shipping Data', 'cartons'], ['payment_schedule', 'Payment Schedule', 'terms']]],
+        [4, 'Payments', [['payments', 'Supplier Payments', 'payments']]], [5, 'Production', [['production', 'Production', 'production']]], [6, 'QC', [['qc', 'QC / Inspections', 'qc']]],
+        [7, 'Allocation', [['allocation', 'Destination Allocation', 'allocation']]], [8, 'Shipments', [['shipments', 'Shipments', 'shipment'], ['freight', 'Freight Costs', 'freight']]],
+        [9, 'Customs', [['customs', 'Customs / Import', 'customs']]], [10, 'GRN', [['grn', 'Landing / GRN', 'grn'], ['inventory_receiving', 'Inventory Receiving', 'receipt']]], [11, 'Landed cost', [['landed_cost', 'Landed Cost', 'landed']]],
+    ];
+    public const MORE = [['transfers', 'Inventory Transfers', 'form:t_src_transfers'], ['platform', 'Platform Allocation', 'platform'], ['documents', 'Documents', 'documents'], ['investors', 'Investors', 'investment'], ['ownership', 'Ownership Transfers', 'ownership']];
+    /** "Next step" chain of the rule (Save & Next target); Inventory receiving and the side tabs have no next. */
+    public const NEXT = ['rfq' => 'samples', 'samples' => 'po', 'po' => 'po_lines', 'po_lines' => 'cartons', 'cartons' => 'payment_schedule', 'payment_schedule' => 'payments', 'payments' => 'production', 'production' => 'qc', 'qc' => 'allocation',
+        'allocation' => 'shipments', 'shipments' => 'freight', 'freight' => 'customs', 'customs' => 'grn', 'grn' => 'inventory_receiving'];
+
+    private static function tab(array $t, int $cycleId, bool $money): array
+    {
+        [$key, $label, $place] = $t;
+        $href = str_starts_with($place, 'form:') ? '#/list/' . substr($place, 5) . "?f[fk_id_cycle]=$cycleId" : self::place($place, $cycleId, $money)['href'];
+        return ['key' => $key, 'label' => $label, 'href' => $href, 'url' => "#/cycle/$cycleId/$key", 'next' => self::NEXT[$key] ?? null];
+    }
+
+    /** The map of one cycle: every one of the 21 old tabs has a URL …/cycle/<id>/<tab>. */
+    public static function map(int $cycleId, bool $money = true): array
+    {
+        $skip = array_filter(array_map('trim', explode(',', (string) DB::table('t_src_cycles')->where('id', $cycleId)->value('skipped_steps'))));
+        $steps = array_map(fn ($s) => ['no' => $s[0], 'label' => $s[1], 'tabs' => array_map(fn ($t) => self::tab($t, $cycleId, $money), $s[2]),
+            'skipped' => (bool) array_intersect($skip, array_filter(array_map(fn ($t) => (collect(self::STEPS)->firstWhere(0, $t[2])[3] ?? null), $s[2])))], self::MAP);
+        return ['top' => [['key' => 'overview', 'label' => 'Overview', 'href' => "#/cycle/$cycleId", 'url' => "#/cycle/$cycleId/overview"], ['key' => 'summary', 'label' => 'Summary', 'href' => "#/sourcing-reports?cycle=$cycleId", 'url' => "#/cycle/$cycleId/summary"],
+                ['key' => 'details', 'label' => 'Details', 'href' => "#/cycle/$cycleId?step=details", 'url' => "#/cycle/$cycleId/details"]],
+            'steps' => $steps, 'more' => array_map(fn ($t) => self::tab($t, $cycleId, $money), self::MORE)];
+    }
+
+    /** Where …/cycle/<id>/<tab> goes (null = unknown tab). */
+    public static function tabHref(int $cycleId, string $tab, bool $money = true): ?string
+    {
+        $m = self::map($cycleId, $money);
+        foreach (array_merge($m['top'], $m['more'], ...array_column($m['steps'], 'tabs')) as $t) if ($t['key'] === $tab) return $t['href'];
+        return null;
+    }
+
     /** The steps of the cycle in the workspace order, SKIPPED ones left out. */
     public static function steps(int $cycleId): array
     {

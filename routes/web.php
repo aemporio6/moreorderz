@@ -258,6 +258,10 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('cycle/{id}/summary', [BuyingController::class, 'summary'])->whereNumber('id');
         Route::get('cycle/{id}/context', [BuyingController::class, 'cycleContext'])->whereNumber('id');
         Route::get('cycle/{id}/pager', [BuyingController::class, 'cyclePager'])->whereNumber('id');
+        Route::get('cycle/{id}/map', [BuyingController::class, 'cycleMap'])->whereNumber('id');
+        Route::get('cycle/{id}/products', [BuyingController::class, 'cycleProducts'])->whereNumber('id');
+        Route::post('cycle/{id}/products/{row?}', [BuyingController::class, 'cycleProductSave'])->whereNumber('id')->whereNumber('row');
+        Route::post('cycle/{id}/products/{row}/delete', [BuyingController::class, 'cycleProductDelete'])->whereNumber('id')->whereNumber('row');
         Route::get('stock-health', [BuyingController::class, 'stockHealth']);
         Route::post('cycle/{id}/whatsapp', [BuyingController::class, 'cycleWhatsapp'])->whereNumber('id');
         Route::get('src-report/landed/{id}', [BuyingController::class, 'repLanded'])->whereNumber('id');

@@ -214,6 +214,14 @@ class BuyingController extends Controller
     public function cycleContext(Request $r, int $id) { $this->can($r, 'buying.SEE'); $ctx = \App\Services\WorkflowContext::get($id, (int) \Illuminate\Support\Facades\Auth::id());
         $f = (string) $r->query('form'); return ['context' => $ctx, 'preset' => $f !== '' ? \App\Services\WorkflowContext::prefill($f, $id, $ctx) : null, 'step' => $f !== '' ? \App\Services\WorkflowContext::stepOf($f) : null, 'next' => $f !== '' ? \App\Services\WorkflowContext::next($f, $id) : null]; }
     /** R-B_SOURCING-20: Previous / Next step of the cycle record (skipped steps jumped). */
+    /** R-B_SOURCING-42 the products grid of the cycle Details: list (reads only), ✓ save of a row, delete (set inactive when it has PO lines). */
+    public function cycleProducts(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => ['rows' => \App\Services\CycleProducts::rows($id), 'can_edit' => \App\Services\Perm::has($r->user(), 'buying.BUY'),
+        'suppliers' => DB::table('t_src_suppliers')->where('fk_id_ent', Context::ent())->where('f_active', 1)->orderBy('supplier_name')->limit(500)->get(['id', 'supplier_name as name']), 'brands' => DB::table('cat_brands')->whereIn('fk_id_ent', [0, Context::ent()])->where('f_active', 1)->orderBy('brand_name')->limit(500)->get(['id', 'brand_name as name'])]); }
+    public function cycleProductSave(Request $r, int $id, ?int $row = null) { $this->can($r, 'buying.BUY'); return $this->run(fn () => \App\Services\CycleProducts::save($id, $r->all(), $row)); }
+    public function cycleProductDelete(Request $r, int $id, int $row) { $this->can($r, 'buying.BUY'); return $this->run(fn () => \App\Services\CycleProducts::delete($id, $row)); }
+    /** R-B_SOURCING-15 the step map of a cycle (11 steps, sub-tabs, More) – reads only. */
+    public function cycleMap(Request $r, int $id) { $this->can($r, 'buying.SEE'); if (! DB::table('t_src_cycles')->where('id', $id)->where('fk_id_ent', Context::ent())->exists()) abort(404);
+        return \App\Services\WorkflowContext::map($id, \App\Services\Perm::has($r->user(), 'see_money')); }
     public function cyclePager(Request $r, int $id) { $this->can($r, 'buying.SEE'); if (! DB::table('t_src_cycles')->where('id', $id)->where('fk_id_ent', Context::ent())->exists()) abort(404);
         return \App\Services\WorkflowContext::pager($id, (string) $r->query('step', 'details'), \App\Services\Perm::has($r->user(), 'see_money')); }
     public function cycleWhatsapp(Request $r, int $id) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\CycleAlerts::whatsapp((int) Context::ent(), $id, (string) $r->input('key'), trim((string) $r->input('text')))); }

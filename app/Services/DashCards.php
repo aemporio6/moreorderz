@@ -11,7 +11,9 @@ use Illuminate\Support\Facades\DB;
  */
 class DashCards
 {
-    public const MSG = 'This section could not load – the admin has been told';
+    public const MSG = 'Could not load – retry';      /* R-B_SOURCING-41 */
+    /** R-B_SOURCING-41 only the admin (the Owner, who opens System health) sees the error line "label: error"; nobody else ever sees SQL text. */
+    public static function adminLine(string $label, \Throwable $e): ?string { $u = \Illuminate\Support\Facades\Auth::user(); return $u && ($u->role_code ?? '') === 'OWNER' ? mb_substr($label . ': ' . $e->getMessage(), 0, 300) : null; }
     /** Tests only: cards that must fail. */
     public static array $break = [];
 
@@ -29,7 +31,7 @@ class DashCards
             else DB::table('sys_error_log')->insert(RecordService::fillNotNull('sys_error_log', ['level' => 'ERROR', 'message' => $msg, 'file' => mb_substr($e->getFile(), -250), 'line' => $e->getLine(), 'fk_id_ent' => $ent,
                 'user_id' => Context::userId(), 'url' => 'card:' . $card, 'context_json' => json_encode(['card' => $card, 'label' => $label, 'query' => $card, 'company' => $ent, 'user' => Context::userId()]), 'fingerprint' => $fp, 'times_seen' => 1, 'f_alerted' => 1, 'created_at' => now(), 'last_seen' => now()]));
             if (Choices::get('DASH_ERROR_ALERT', $ent) === 'PER_DAY') TaskEngine::open('SYS_ERROR', ['dash', $card, $day], "A dashboard card could not load ($label)", ['ent' => $ent, 'description' => $msg]);      // one admin alert per card per day
-            return ['card' => $card, 'label' => $label, 'ok' => false, 'error' => self::MSG];
+            return ['card' => $card, 'label' => $label, 'ok' => false, 'error' => self::MSG] + (($line = self::adminLine($label, $e)) ? ['admin' => $line] : []);
         }
     }
 

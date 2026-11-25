@@ -1,4 +1,5 @@
 term,maps_to,kind,target_url
+11 steps,cycle step map,VOCAB,#/buying
 1688,buying dashboard,VOCAB,#/buying
 20ft,shipments,VOCAB,#/list/t_src_shipments
 24 hour,carriers and postage rates,VOCAB,#/carriers
@@ -292,6 +293,7 @@ carrier labels,carrier labels,VOCAB,#/labels
 carrier layout,carrier file layouts,VOCAB,#/fulfilment
 carriers,carriers and postage rates,VOCAB,#/carriers
 carton,packaging and box sizes,VOCAB,#/list/product_packaging
+carton data,cycle step map,VOCAB,#/buying
 carton label,label templates,VOCAB,#/list/label_template
 carton labels,fc and 3pl inbound shipments,VOCAB,#/list/fba_shipment
 cartons,packaging and box sizes,VOCAB,#/list/product_packaging
@@ -499,6 +501,9 @@ cycle code,sourcing cycles,VOCAB,#/list/src_cycle
 cycle count,stock counts,VOCAB,#/stock/counts
 cycle counting,stock counts,VOCAB,#/stock/counts
 cycle list,sourcing cycles,VOCAB,#/list/src_cycle
+cycle products,cycle step map,VOCAB,#/buying
+cycle steps,cycle step map,VOCAB,#/buying
+cycle tabs,cycle step map,VOCAB,#/buying
 cycles,buying dashboard,VOCAB,#/buying
 daily orders,fulfilment orders,VOCAB,#/fulfilment
 daily report,all reports,VOCAB,#/reports
@@ -555,6 +560,7 @@ design file,product pack artwork,VOCAB,#/list/product_artwork_file
 despatch,orders to dispatch,VOCAB,#/orders
 despatch today,orders to dispatch,VOCAB,#/orders
 destination,allocation and platform plan,VOCAB,#/list/t_src_allocations
+destination allocation,cycle step map,VOCAB,#/buying
 destination charges,freight,VOCAB,#/list/t_src_freight
 detailed sales,detailed sale report,VOCAB,#/sales-detailed
 detention,freight,VOCAB,#/list/t_src_freight
@@ -925,6 +931,8 @@ inventory count,stock counts,VOCAB,#/stock/counts
 inventory cycle,replenishment and icc reorder,VOCAB,#/list/icc
 inventory history,stock ledger,VOCAB,#/stock/ledger
 inventory level,stock on hand,VOCAB,#/stock
+inventory receiving,cycle step map,VOCAB,#/buying
+inventory transfers,cycle step map,VOCAB,#/buying
 inventory value,stock on hand,VOCAB,#/stock
 invest,sourcing investments,VOCAB,#/list/t_src_investments
 invested,sourcing investments,VOCAB,#/list/t_src_investments
@@ -1296,6 +1304,7 @@ owner rights,roles and rights,VOCAB,#/permissions
 owner statement,invoices and credit notes,VOCAB,#/invoices
 ownership,ownership transfers,VOCAB,#/list/ownership_transfer
 ownership transfer,ownership transfers,VOCAB,#/list/ownership_transfer
+ownership transfers,cycle step map,VOCAB,#/buying
 p&l,profit views,VOCAB,#/profit
 p&l account,ledger,VOCAB,#/ledger
 pack,orders to dispatch,VOCAB,#/orders
@@ -1344,6 +1353,7 @@ paye,tax and filings,VOCAB,#/compliance
 payment dispute,refunds and refund proposals,VOCAB,#/refunds
 payment hold,payouts and settlements,VOCAB,#/settlements
 payment provider,payment provider profiles,VOCAB,#/list/payment_provider_profile
+payment schedule,cycle step map,VOCAB,#/buying
 payment term status,term paid,VOCAB,#/buying
 payment terms,payments and terms,VOCAB,#/list/src_payment
 payments to supplier,payments and terms,VOCAB,#/list/src_payment
@@ -1365,6 +1375,7 @@ pending approval,approvals queue,VOCAB,#/approvals
 pending balance,payouts and settlements,VOCAB,#/settlements
 pending orders,orders to dispatch,VOCAB,#/orders
 people,people and companies,VOCAB,#/list/party
+people on this cycle,cycle step map,VOCAB,#/buying
 performance,account health,VOCAB,#/shop-health
 period close,month close,VOCAB,#/close
 permission,roles and rights,VOCAB,#/permissions
@@ -1387,6 +1398,7 @@ picking list,orders to dispatch,VOCAB,#/orders
 picklist,orders to dispatch,VOCAB,#/orders
 place order,purchase orders,VOCAB,#/list/t_src_po
 plan vs actual,budgets,VOCAB,#/budgets
+platform allocation,cycle step map,VOCAB,#/buying
 platform plan,allocation and platform plan,VOCAB,#/list/t_src_allocations
 playbook,playbooks,VOCAB,#/list/playbook_step
 playbooks,playbooks,VOCAB,#/list/playbook_step
@@ -1475,6 +1487,7 @@ production delay,production,VOCAB,#/list/t_src_production
 production schedule,production,VOCAB,#/list/t_src_production
 production status,production,VOCAB,#/list/t_src_production
 products,products,VOCAB,#/list/product
+products grid,cycle step map,VOCAB,#/buying
 products not listed,products not listed,VOCAB,#/list/t_products_shop_not_listed
 professional plan,subscriptions,VOCAB,#/subscriptions
 profile,my account,VOCAB,#/me
@@ -1870,6 +1883,7 @@ statement of account,invoices and credit notes,VOCAB,#/invoices
 statements file,bank and cash,VOCAB,#/bank
 statistics,all reports,VOCAB,#/reports
 stats,all reports,VOCAB,#/reports
+step map,cycle step map,VOCAB,#/buying
 sterling,fx rates,VOCAB,#/list/fin_fx_rate
 stf,fc and 3pl inbound shipments,VOCAB,#/list/fba_shipment
 stock,stock on hand,VOCAB,#/stock
@@ -1948,7 +1962,10 @@ system status,system health,VOCAB,#/health
 table rate,rate difference,VOCAB,#/fx
 take money out,withdrawals,VOCAB,#/list/withdrawal
 takings,sales lines,VOCAB,#/sales
+talk to today,cycle step map,VOCAB,#/buying
 tape,packaging and box sizes,VOCAB,#/list/product_packaging
+target qty,cycle step map,VOCAB,#/buying
+target unit cost,cycle step map,VOCAB,#/buying
 tariff,customs,VOCAB,#/list/t_src_customs
 tariff code,products,VOCAB,#/list/product
 tariffs,customs,VOCAB,#/list/t_src_customs

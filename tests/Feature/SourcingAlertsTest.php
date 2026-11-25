@@ -105,6 +105,50 @@ class SourcingAlertsTest extends TestCase
         foreach ([['SRC_PAY_DUE', CA::key('SRC_PAY_DUE', $t1)], ['SRC_SHIP_OVERDUE', ['SH-LATE']], ['SRC_DOC_MISSING', ['DOC' . $bad, 'Invoice']], ['SRC_LOT_NO_COST', ['LOT-T1']], ['STK_NO_COST', ['LAMP-1']]] as [$c, $k]) $this->assertFalse($this->open($c, $k), $c);      // auto-closed
     }
 
+    /** R-B_SOURCING-15 the rule test: 11 steps + More with 5 items; the PO step has 4 sub-tabs; every one of the 21 old tab keys has a URL …/cycle/<id>/<tab>. */
+    public function test_r15_step_map_11_steps_more_and_a_url_per_old_tab(): void
+    {
+        $this->world(); $m = $this->getJson("/api/cycle/{$this->cy}/map")->assertOk()->json();
+        $this->assertSame(range(1, 11), array_column($m['steps'], 'no')); $this->assertCount(5, $m['more']); $this->assertSame(['Overview', 'Summary', 'Details'], array_column($m['top'], 'label'));
+        $this->assertSame(['Purchase Orders', 'PO Lines', 'Carton / Shipping Data', 'Payment Schedule'], array_column($m['steps'][2]['tabs'], 'label'));
+        $old = ['rfq', 'samples', 'po', 'po_lines', 'cartons', 'payment_schedule', 'payments', 'production', 'qc', 'allocation', 'shipments', 'freight', 'customs', 'grn', 'inventory_receiving', 'transfers', 'platform', 'landed_cost', 'documents', 'investors', 'ownership'];
+        $tabs = collect(array_merge($m['more'], ...array_column($m['steps'], 'tabs')))->keyBy('key'); $this->assertCount(21, $old); $this->assertEqualsCanonicalizing($old, $tabs->keys()->all());
+        foreach ($old as $k) { $this->assertSame("#/cycle/{$this->cy}/$k", $tabs[$k]['url']); $this->assertNotNull(\App\Services\WorkflowContext::tabHref($this->cy, $k)); $this->assertStringContainsString((string) $this->cy, $tabs[$k]['href']); }
+        $this->assertSame(['samples', 'po_lines', 'inventory_receiving', null, null], [$tabs['rfq']['next'], $tabs['po']['next'], $tabs['grn']['next'], $tabs['inventory_receiving']['next'], $tabs['documents']['next']]);
+        $this->assertNull(\App\Services\WorkflowContext::tabHref($this->cy, 'nope')); $this->getJson('/api/cycle/999999/map')->assertStatus(404);
+    }
+
+    /** R-B_SOURCING-22 the rule test: cycle X with 2 POs, cycle Y with 3 → the payment form in X shows 2 POs (old: 5); the term list follows the chosen PO. */
+    public function test_r22_parent_dropdowns_list_only_the_cycles_records(): void
+    {
+        $this->world(); $x = $this->ins('t_src_cycles', ['cycle_code' => 'CY-X', 'status' => 'Open', 'f_active' => 1]); $y = $this->ins('t_src_cycles', ['cycle_code' => 'CY-Y', 'status' => 'Open', 'f_active' => 1]);
+        $po = fn ($cy, $no) => $this->ins('t_src_po', ['fk_id_cycle' => $cy, 'po_number' => $no, 'fk_id_supplier' => $this->sup, 'status' => 'CONFIRMED', 'f_active' => 1]);
+        $x1 = $po($x, 'PO-X1'); $x2 = $po($x, 'PO-X2'); $po($y, 'PO-Y1'); $po($y, 'PO-Y2'); $po($y, 'PO-Y3');
+        $ids = fn ($o) => array_map('intval', array_column($o['options'], 0));
+        $inX = \App\Services\FormAssist::options('t_src_payments', 'fk_id_po', null, ['fk_id_cycle' => $x]); $this->assertEqualsCanonicalizing([$x1, $x2], $ids($inX)); $this->assertSame(['fk_id_cycle'], $inX['narrowed_by']);
+        $this->assertCount(3, \App\Services\FormAssist::options('t_src_payments', 'fk_id_po', null, ['fk_id_cycle' => $y])['options']);
+        $this->assertGreaterThanOrEqual(5, count(\App\Services\FormAssist::options('t_src_payments', 'fk_id_po', null, [])['options']), 'outside a cycle the list is not narrowed');
+        $t1 = $this->ins('t_src_payment_terms', ['fk_id_cycle' => $x, 'fk_id_po' => $x1, 'term_no' => 1, 'milestone' => 'Deposit', 'planned_amount' => 10, 'f_active' => 1]); $this->ins('t_src_payment_terms', ['fk_id_cycle' => $x, 'fk_id_po' => $x2, 'term_no' => 1, 'milestone' => 'Deposit', 'planned_amount' => 10, 'f_active' => 1]);
+        $this->assertSame([$t1], $ids(\App\Services\FormAssist::options('t_src_payments', 'fk_id_term', null, ['fk_id_cycle' => $x, 'fk_id_po' => $x1])));
+        $this->assertCount(2, \App\Services\FormAssist::options('t_src_payments', 'fk_id_term', null, ['fk_id_cycle' => $x])['options']);
+    }
+
+    /** R-B_SOURCING-42 the products grid: a row needs its product (name and SKU from it), Next goes to Samples with the row, delete is refused with PO lines (set inactive). */
+    public function test_r42_cycle_products_grid_save_next_and_delete(): void
+    {
+        $this->world(); $pid = $this->ins('t_product_vendors', ['SKU_VENDOR' => 'GRID-1', 'product_name_vendor' => 'Desk lamp', 'f_active' => 1]); $p2 = $this->ins('t_product_vendors', ['SKU_VENDOR' => 'GRID-2', 'product_name_vendor' => 'Bulb', 'f_active' => 1]);
+        $this->postJson("/api/cycle/{$this->cy}/products", ['name' => 'No product'])->assertStatus(422)->assertJsonPath('errors.product.0', 'Pick the product (or + Add product) for this line.');
+        $r = $this->postJson("/api/cycle/{$this->cy}/products", ['product' => $pid, 'supplier' => $this->sup, 'target_qty' => 500, 'target_unit_cost' => 2.5])->assertOk()->json(); $this->assertSame('Product saved', $r['message']);
+        $row = collect($r['rows'])->firstWhere('id', $r['id']); $this->assertSame(['Desk lamp', 'GRID-1', 500, $this->sup], [$row['name'], $row['sku'], $row['target_qty'], $row['supplier']]);
+        $this->assertSame("#/cycle-extras/{$this->cy}?step=samples&cp={$r['id']}&supplier={$this->sup}&add=1", $row['next']);
+        $this->postJson("/api/cycle/{$this->cy}/products/{$r['id']}", ['product' => $pid, 'variation' => 'Black'])->assertOk(); $this->assertSame('Black', DB::table('t_src_cycle_products')->where('id', $r['id'])->value('variation'));
+        $this->ins('t_src_po_lines', ['fk_id_po' => $this->po, 'fk_id_product' => $pid, 'qty_ordered' => 10, 'unit_price' => 1, 'line_type' => 'PRODUCT', 'f_active' => 1]);
+        $d = $this->postJson("/api/cycle/{$this->cy}/products/{$r['id']}/delete")->assertOk()->json(); $this->assertTrue($d['inactive']); $this->assertStringContainsString('set inactive instead', $d['message']); $this->assertSame(0, (int) DB::table('t_src_cycle_products')->where('id', $r['id'])->value('f_active'));
+        $free = $this->postJson("/api/cycle/{$this->cy}/products", ['product' => $p2])->assertOk()->json('id');
+        $this->assertSame('Product deleted', $this->postJson("/api/cycle/{$this->cy}/products/$free/delete")->assertOk()->json('message')); $this->assertFalse(DB::table('t_src_cycle_products')->where('id', $free)->exists());
+        $this->assertTrue($this->getJson("/api/cycle/{$this->cy}/products")->assertOk()->json('can_edit'));
+    }
+
     public function test_contacts_with_whatsapp_logged_on_the_cycle(): void
     {
         $this->world();
@@ -113,6 +157,11 @@ class SourcingAlertsTest extends TestCase
         $c = collect(CA::contacts(1, $this->cy))->keyBy('name');
         $this->assertSame(['NL', 'FC'], [$c['Ningbo Bright Lights']['initials'], $c['Fast Cargo']['initials']]); $this->assertSame(['Supplier'], $c['Ningbo Bright Lights']['roles']); $this->assertSame('447700900123', $c['Fast Cargo']['whatsapp']);
         $this->assertSame('Cycle owner', collect(CA::contacts(1, $this->cy))->last()['roles'][0]);
+        // R-B_SOURCING-28 their open tasks on this cycle: a task on the supplier's PO shows on the supplier, one on the forwarder's shipment on the forwarder; a done task does not show
+        $task = fn ($m, $id, $t, $st = 'TODO') => $this->ins('tasks', ['fk_id_ent' => 1, 'title' => $t, 'status' => $st, 'linked_module' => $m, 'linked_record_id' => $id]);
+        $task('t_src_po', $this->po, 'Chase the proforma'); $task('t_src_shipments', $sh, 'Ask for the booking'); $task('t_src_po', $this->po, 'Old one', 'DONE');
+        $c2 = collect(CA::contacts(1, $this->cy))->keyBy('name');
+        $this->assertSame(['Chase the proforma'], array_column($c2['Ningbo Bright Lights']['tasks'], 'title')); $this->assertSame(['Ask for the booking'], array_column($c2['Fast Cargo']['tasks'], 'title'));
         $r = CA::whatsapp(1, $this->cy, $c['Fast Cargo']['key'], 'When does SH-C leave?'); $this->assertStringStartsWith('https://wa.me/447700900123?text=', $r['url']);
         $this->assertStringContainsString('Fast Cargo', (string) DB::table('sys_audit_log')->where('table_name', 't_src_cycles')->where('record_id', $this->cy)->orderByDesc('id')->value('changes_json'));
         $o = $this->getJson("/api/cycle/{$this->cy}/overview")->assertOk()->json(); $this->assertCount(12, $o['pipeline']['steps']); $this->assertArrayHasKey('contacts', $o);

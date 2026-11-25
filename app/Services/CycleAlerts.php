@@ -258,7 +258,7 @@ class CycleAlerts
     public static function overview(int $ent, int $cycleId, ?object $u): array
     {
         $c = self::cycles($ent, $cycleId)->first() ?? throw new \InvalidArgumentException('Cycle not found.');
-        $safe = function (string $part, callable $fn) use ($ent) { try { return $fn(); } catch (\Throwable $e) { report($e); self::healthAlert($ent, $part, $e); return ['error' => 'This section could not load – the admin has been told']; } };
+        $safe = function (string $part, callable $fn) use ($ent) { try { return $fn(); } catch (\Throwable $e) { report($e); self::healthAlert($ent, $part, $e); return ['error' => DashCards::MSG] + (($line = DashCards::adminLine($part, $e)) ? ['admin' => $line] : []); } };
         $pipe = $safe('pipeline', fn () => self::pipeline($c));
         $needs = $safe('needs', function () use ($ent, $cycleId) {
             $rows = array_map(fn ($r) => ['code' => $r['code'], 'p' => $r['p'], 'title' => $r['title'], 'detail' => $r['detail'], 'chip' => $r['chip'], 'due' => $r['due'], 'fix' => $r['opt']['fix_url'] ?? null], self::detect($ent, $cycleId));
@@ -292,7 +292,24 @@ class CycleAlerts
         $c = DB::table('t_src_cycles')->where('id', $cycleId)->first(['fk_id_owner', 'created_by']);
         if ($c && $c->fk_id_owner && ($a = DB::table('t_account')->where('id', $c->fk_id_owner)->first(['id', 'first_name', 'sur_name', 'whatsapp_number']))) $put('Cycle owner', 'A', (int) $a->id, trim($a->first_name . ' ' . $a->sur_name), $a->whatsapp_number, $a->whatsapp_number);      // the WhatsApp number chosen from the person's own mobiles (R-C-48)
         elseif ($c && $c->created_by && ($u = DB::table('t_users')->where('id', $c->created_by)->first(['id', 'display_name']))) $put('Cycle owner', 'U', (int) $u->id, $u->display_name, null);
+        foreach ($p as $k => $row) $p[$k]['tasks'] = self::partyTasks($ent, $cycleId, $k, $po);      /* R-B_SOURCING-28 their open tasks on this cycle */
         return array_values($p);
+    }
+
+    /** Open tasks on this cycle that belong to one party: the tasks linked to its POs / terms / quotes / shipments / freight / investments here; for the cycle owner the tasks he holds on the cycle. */
+    public static function partyTasks(int $ent, int $cycleId, string $key, array $po): array
+    {
+        [$kind, $id] = array_pad(explode(':', $key, 2), 2, ''); $id = (int) $id; $links = [];
+        if ($kind === 'S') { $mine = DB::table('t_src_po')->whereIn('id', $po ?: [0])->where('fk_id_supplier', $id)->pluck('id')->all();
+            $links = ['t_src_po' => $mine, 't_src_payment_terms' => DB::table('t_src_payment_terms')->whereIn('fk_id_po', $mine ?: [0])->pluck('id')->all(), 't_src_shipments' => DB::table('t_src_shipments')->whereIn('fk_id_po', $mine ?: [0])->where(fn ($w) => $w->whereNull('fk_id_forwarder')->orWhere('fk_id_forwarder', 0))->pluck('id')->all(),      /* a shipment with a forwarder is the forwarder's */
+                't_src_rfq' => DB::table('t_src_rfq')->where('fk_id_cycle', $cycleId)->where('fk_id_supplier', $id)->pluck('id')->all()]; }
+        elseif ($kind === 'F') $links = ['t_src_shipments' => DB::table('t_src_shipments')->whereIn('fk_id_po', $po ?: [0])->where('fk_id_forwarder', $id)->pluck('id')->all(), 't_src_freight' => DB::table('t_src_freight')->where('fk_id_cycle', $cycleId)->where('fk_id_forwarder', $id)->pluck('id')->all()];
+        elseif ($kind === 'V') $links = ['t_src_investments' => DB::table('t_src_investments')->where('fk_id_cycle', $cycleId)->where('fk_id_investor', $id)->pluck('id')->all()];
+        $q = DB::table('tasks')->where('fk_id_ent', $ent)->whereIn('status', ['TODO', 'DOING', 'STUCK', 'REWORK']);
+        if ($kind === 'A' || $kind === 'U') { $users = $kind === 'U' ? [$id] : DB::table('t_users')->where('fk_id_account', $id)->pluck('id')->all(); if (! $users) return [];
+            $q->whereIn('owner_user_id', $users)->where(fn ($w) => $w->where(fn ($x) => $x->where('linked_module', 't_src_cycles')->where('linked_record_id', $cycleId))->orWhere(fn ($x) => $x->where('linked_module', 't_src_po')->whereIn('linked_record_id', $po ?: [0]))); }
+        else { $links = array_filter($links); if (! $links) return []; $q->where(function ($w) use ($links) { foreach ($links as $m => $ids) $w->orWhere(fn ($x) => $x->where('linked_module', $m)->whereIn('linked_record_id', $ids)); }); }
+        return $q->orderBy('due_at')->limit(10)->get(['id', 'title', 'priority', 'due_at'])->map(fn ($t) => ['id' => (int) $t->id, 'title' => $t->title, 'priority' => $t->priority, 'due' => $t->due_at ? substr((string) $t->due_at, 0, 10) : null])->all();
     }
 
     /** The WhatsApp button: the chat link, and the message logged on the cycle. */
