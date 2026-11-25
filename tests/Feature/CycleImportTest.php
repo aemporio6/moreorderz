@@ -34,4 +34,18 @@ class CycleImportTest extends TestCase
         $u = $this->postJson("/api/cycles/csv/{$r['job']}/undo")->assertOk()->json();
         $this->assertSame([2, $before], [$u['removed'], DB::table('t_src_cycles')->count()]);
     }
+
+    /** Found in 7e-195: an undo that keeps a cycle (work already added) writes the status PARTIAL – the column did not have that value. */
+    public function test_undo_that_keeps_a_used_cycle_is_marked_partial(): void
+    {
+        $this->actingAs($this->owner);
+        $csv = "cycle_ref,product_name,quantity,unit_cost\nKEEP,Mug,10,1\nGONE,Cup,5,1\n";
+        $r = $this->post('/api/cycles/csv/import', ['file' => UploadedFile::fake()->createWithContent('c.csv', $csv)], ['Accept' => 'application/json'])->assertOk()->json();
+        $keep = DB::table('t_src_cycles')->where('order_ref', 'KEEP')->first();
+        DB::table('t_src_rfq')->insert(RecordService::fillNotNull('t_src_rfq', ['fk_id_ent' => 1, 'fk_id_cycle' => $keep->id, 'rfq_code' => 'RFQ-KEEP']));
+        $u = $this->postJson("/api/cycles/csv/{$r['job']}/undo")->assertOk()->json();
+        $this->assertSame([1, [$keep->cycle_code]], [$u['removed'], $u['kept']]);
+        $this->assertSame('PARTIAL', DB::table('bulk_jobs')->where('id', $r['job'])->value('status'));
+        $this->assertSame(1, DB::table('t_src_cycles')->where('order_ref', 'KEEP')->count());
+    }
 }

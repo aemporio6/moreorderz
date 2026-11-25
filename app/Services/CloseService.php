@@ -120,7 +120,10 @@ class CloseService
         // 6
         $un = DB::table('fin_bank_transactions')->where('company_id', $ent)->where('match_status', 'UNMATCHED')->whereBetween('txn_date', [$from, $to])->count();
         $set('BANK_ALL_CATEGORISED', $un ? 'RED' : 'GREEN', $un ? "$un bank line(s) dated in the month are not matched." : 'No unmatched bank line in the month.', $un, '#/bank');
-        $set('PURCHASE_VS_SUPPLIER', 'NA', $later);
+        /* R-G_CORE-80: SALE_BUY_MATCH – the sale ↔ buy findings of the shop-month (NA while no sale + buy lines were loaded for it) */
+        try { $sb = Gen1Compare::closeCount($branchId, $from); } catch (\InvalidArgumentException $e) { $sb = null; }
+        if (! $sb) $set('PURCHASE_VS_SUPPLIER', 'NA', 'No sale and buy lines were loaded for the sale ↔ buy check of this month.');
+        else { $n = $sb['lines'] + $sb['summary']; $set('PURCHASE_VS_SUPPLIER', $n ? 'RED' : 'GREEN', $n ? "{$sb['lines']} sale line(s) and {$sb['summary']} customer row(s) do not match their buying (missing, quantity or customer)." : 'Every sale line matches its buying line.', $n, "#/gen1/{$sb['id']}/match"); }
         /* R-A_SALES-62: the purchase audit's orders file against the sales of the shop-month (NA while no audit file was loaded) */
         $ar = DB::table('t_audit_main')->where('fk_id_branch', $branchId)->where('d_yr_mon', $from)->orderByDesc('id')->first();
         if (! $ar || ! DB::table('ebay_audit')->where('fk_id_audit_main', $ar->id)->exists()) $set('ORDERS_FILE_VS_SALES', 'NA', 'No orders file was loaded in the purchase audit of this month.');

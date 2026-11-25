@@ -46,11 +46,14 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('shops/{id}/kit', [AppController::class, 'shopKit'])->whereNumber('id');      // R-C-30
         Route::get('people/external/new', [AppController::class, 'externalForm']);
         Route::post('people/external/new', [AppController::class, 'externalSave']);
+        Route::post('people/external/progress', [AppController::class, 'externalProgress']);      // R-C-11
         Route::get('people/{id}/header', [AppController::class, 'personHeader'])->whereNumber('id');
         Route::get('people/{id}/where-used', [AppController::class, 'personUsed'])->whereNumber('id');
         Route::post('people/{id}/delete', [AppController::class, 'personDelete'])->whereNumber('id');
         Route::post('people/{id}/convert', [AppController::class, 'personConvert'])->whereNumber('id');      // R-C-2
         Route::get('people/sections', [AppController::class, 'personSections']);
+        Route::get('people/roles', [AppController::class, 'peopleRoles']);
+        Route::post('people/roles/add', [AppController::class, 'peopleAddRole']);      // R-C-16
         Route::post('people/sections/{id}', [AppController::class, 'personSectionSet'])->whereNumber('id');
         Route::post('people/{id}/restore', [AppController::class, 'personRestore'])->whereNumber('id');
         Route::get('people/{id}/shops', [AppController::class, 'personShops'])->whereNumber('id');
@@ -465,7 +468,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('sales/export', [OrdersController::class, 'saleExport']);
         Route::get('sales/carrier-file', [OrdersController::class, 'saleCarrierFile']);
         Route::get('gen1', [OrdersController::class, 'gen1List']);
-        Route::get('gen1/{id}/{view}', [OrdersController::class, 'gen1'])->whereNumber('id')->whereIn('view', ['summary', 'sales', 'buys']);
+        Route::get('gen1/{id}/{view}', [OrdersController::class, 'gen1'])->whereNumber('id')->whereIn('view', ['summary', 'sales', 'buys', 'match']);
+        Route::post('gen1/{id}/buy-file/{step}', [OrdersController::class, 'gen1BuyFile'])->whereNumber('id')->whereIn('step', ['check', 'import']);      // R-A_SALES-56
         Route::get('sales/unlock', [OrdersController::class, 'saleUnlockInfo']);
         Route::post('sales/unlock', [OrdersController::class, 'saleUnlock']);
         Route::get('fulfilment', [OrdersController::class, 'fulfilment']);

@@ -192,13 +192,29 @@ class ExternalContact
     private static function ins(string $t, array $d): int { return (int) DB::table($t)->insertGetId(RecordService::fillNotNull($t, $d)); }
 
     /** Check and save. Throws ValidationErrors with the posted keys. */
+    /** Test hook for R-C-9: the step that must fail (e.g. 'bank') to prove that nothing is saved. Never set outside tests. */
+    public static ?string $failAt = null;
+    public const SECTIONS = [['roles', 'Type & role', true], ['profile', 'Profile', true], ['addresses', 'Addresses', false], ['reach', 'Reach (mobile or e-mail)', true], ['company', 'Company', false], ['banks', 'Banks', false], ['paypal', 'PayPal', false]];
+
+    /** R-C-11 live status of the quick form: each section required / optional / done, and "N of 3 required sections done". Reads only. */
+    public static function progress(array $in): array
+    {
+        $s = fn ($k) => trim((string) ($in[$k] ?? '')); $rows = fn ($k, $f) => count(array_filter((array) ($in[$k] ?? []), fn ($r) => trim((string) (is_array($r) ? ($r[$f] ?? '') : $r)) !== ''));
+        $done = ['roles' => (bool) array_filter((array) ($in['roles'] ?? [])), 'profile' => $s('account_code') !== '' && $s('first_name') !== '' && $s('sur_name') !== '' && (int) ($in['current_country'] ?? 0) > 0,
+            'addresses' => $rows('addresses', 'line1') > 0, 'reach' => $rows('mobiles', 'mobile_no') + $rows('emails', 'email') > 0,      /* mobile + e-mail share the one REACH rule */
+            'company' => ($in['company_mode'] ?? 'none') !== 'none' && ($s('company_name') !== '' || (int) ($in['company_id'] ?? 0) > 0), 'banks' => $rows('banks', 'account_no') + $rows('banks', 'iban') > 0, 'paypal' => $s('paypal_email') !== ''];
+        $out = []; $n = 0; $of = 0;
+        foreach (self::SECTIONS as [$k, $title, $req]) { $out[] = ['key' => $k, 'title' => $title, 'status' => $done[$k] ? 'done' : ($req ? 'required' : 'optional')]; if ($req) { $of++; $n += $done[$k] ? 1 : 0; } }
+        return ['sections' => $out, 'done' => $n, 'of' => $of, 'counter' => "$n of $of required sections done"];
+    }
+
     public static function create(int $ent, array $in, int $userId): array
     {
         [$c, $e] = self::validate($ent, $in);
         if ($e) throw new ValidationErrors($e);
         /* R-C-8 old order: field checks first, then the look-alike scan; "Save anyway" needs a reason (dup_reason) */
         $alike = LookAlikes::guard(LookAlikes::find(trim($c['first_name'] . ' ' . $c['sur_name']), $c['emails'], array_column($c['mobiles'], 'mobile_no'), null, $ent), isset($in['dup_reason']) ? (string) $in['dup_reason'] : null);
-        $res = DB::transaction(function () use ($c, $ent, $userId) {
+        try { $res = DB::transaction(function () use ($c, $ent, $userId) {
             $today = now()->toDateString();
             $id = self::ins('t_account', ['fk_id_ent' => $ent, 'account_code' => $c['account_code'], 'first_name' => $c['first_name'], 'middle_name' => $c['middle_name'], 'sur_name' => $c['sur_name'], 'title' => $c['title'],
                 'f_active' => $c['f_active'], 'f_login' => 0, 'current_nationality' => $c['current_country'], 'old_nationality' => $c['current_country'], 'private_notes' => $c['private_notes'], 'l_account_kind' => self::KIND]);
@@ -216,11 +232,13 @@ class ExternalContact
                     'creation_date' => $today, 'company_telephone' => $c['mobiles'][0]['mobile_no'] ?? null, 'company_email_1' => $c['emails'][0] ?? null, 'company_address' => $c['addresses'] ? mb_substr(implode(', ', array_filter([$c['addresses'][0]['line1'], $c['addresses'][0]['line2'], $c['addresses'][0]['counti'], $c['addresses'][0]['post_code']])), 0, 255) : null,
                     'f_active' => 1, 'fk_director_1_home_addr' => $a1, 'fk_director_1_reg_addr' => $a1, 'fk_director_1_reg_mobile' => $m1, 'fk_director_1_reg_email' => $e1, 'f_external' => 1]);
             } elseif ($c['company_mode'] === 'existing') $co = (int) $c['company']['id'];
-            if ($co) self::ins('t_account_company_houses', ['fk_id_account' => $id, 'fk_company_house_id' => $co, 'fk_country_id' => ($c['company_mode'] === 'new' ? $c['company']['country'] : (int) DB::table('cat_company_house')->where('id', $co)->value('fk_country_id')) ?: $c['current_country'], 'creation_date' => $today, 'f_active' => 1, 'fk_doc_submitted_id' => 0]);
+            $coLink = 0;      /* the bank's company field is the person's own company link (own:t_account_company_houses), as on the Full form */
+            if ($co) $coLink = self::ins('t_account_company_houses', ['fk_id_account' => $id, 'fk_company_house_id' => $co, 'fk_country_id' => ($c['company_mode'] === 'new' ? $c['company']['country'] : (int) DB::table('cat_company_house')->where('id', $co)->value('fk_country_id')) ?: $c['current_country'], 'creation_date' => $today, 'f_active' => 1, 'fk_doc_submitted_id' => 0]);
             foreach ($c['banks'] as $b) {
+                if (self::$failAt === 'bank') throw new \RuntimeException('forced bank failure');
                 $bank = $b['bank_id'] ?: self::bankFor($b['new_bank_name'], $b['country'], $ent);
                 self::ins('t_account_banks', ['fk_id_account' => $id, 'country_id' => $b['country'], 'fk_bank_id' => $bank, 'linked_mobile' => $m1, 'linked_email' => $e1, 'linked_address' => $a1, 'account_no' => $b['account_no'] ?: null, 'sort_branch_code' => $b['sort_code'] ?: null,
-                    'iban_no' => $b['iban'] ?: null, 'swift_code' => $b['swift'] ?: null, 'f_active' => 1, 'account_type' => $co ? 'Business' : 'Personal', 'fk_id_company' => $co, 'fk_currency_id' => $b['currency_id']]);
+                    'iban_no' => $b['iban'] ?: null, 'swift_code' => $b['swift'] ?: null, 'f_active' => 1, 'account_type' => $co ? 'Business' : 'Personal', 'fk_id_company' => $coLink, 'fk_currency_id' => $b['currency_id']]);
             }
             if ($c['paypal']) {
                 $pe = $mails[$c['paypal']['email']] ?? $addMail($c['paypal']['email']);      // the PayPal e-mail is listed in E-mails too
@@ -233,8 +251,10 @@ class ExternalContact
             Audit::log('t_account', $id, 'INSERT', ['form' => 'external_contact', 'account_code' => $c['account_code'], 'roles' => $c['roles'], 'addresses' => count($addr), 'mobiles' => count($mob), 'emails' => count($mails), 'banks' => count($c['banks']), 'company' => $co ?: null, 'paypal' => (bool) $c['paypal'], 'job_history' => $job], null, $ent);
             SearchIndex::put('external_contact', 't_account', $id, $ent);
             $name = trim($c['first_name'] . ' ' . $c['sur_name']);
-            return ['id' => $id, 'job_id' => $job, 'company_id' => $co ?: null, 'message' => "{$c['account_code']} – $name saved.", 'open' => "#/rec/external_contact/$id", 'open_list' => '#/list/external_contact'];
-        });
+            return ['status' => 'ok', 'id' => $id, 'job_id' => $job, 'company_id' => $co ?: null, 'message' => "External Contact {$c['account_code']} saved.", 'name' => $name, 'open' => "#/rec/external_contact/$id", 'open_route' => "#/rec/external_contact/$id", 'open_list' => '#/list/external_contact'];
+        }); }
+        catch (\Illuminate\Database\QueryException $x) { report($x); throw new QuickSaveFailed('Nothing was saved. The database refused one of the values – the detail is in the error log.'); }      /* R-C-9 one transaction: any error rolls everything back */
+        catch (\RuntimeException $x) { if ($x instanceof QuickSaveFailed) throw $x; report($x); throw new QuickSaveFailed('Nothing was saved. ' . ($x instanceof \InvalidArgumentException ? $x->getMessage() : 'A step of the save failed – the detail is in the error log.')); }
         if ($alike) LookAlikes::logged((int) $res['id'], $alike, (string) $in['dup_reason']);
         return $res;
     }

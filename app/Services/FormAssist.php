@@ -161,6 +161,7 @@ class FormAssist
         if ($table && Vault::maskRow($table, [$f['column_name'] => 'x'])[$f['column_name']] !== 'x') return [];
         $out = []; $add = function ($v, string $why) use (&$out) { $v = (string) $v; if ($v !== '' && ! isset($out[$v]) && count($out) < 2) $out[$v] = $why; };
         if ($f['column_name'] === 'fk_id_supplier' && in_array($table, SourcingInherit::SUPPLIER_TABLES, true) && ($inh = SourcingInherit::chips($table, self::byColumn($formKey, $form)))) return array_slice($inh, 0, 4);      // R-B_SOURCING-21: the cycle's suppliers, never the product-master one
+        if ($pd = PartyDefaults::chip($f, self::byColumn($formKey, $form) + $form)) $add($pd[0], $pd[1]);      /* R-C-12 the derived default of a person's row, with its reason */
         // an HS code: what earlier products of the same category use (R-G_CORE-91)
         if ($f['column_name'] === 'hs_code' && $table === 't_src_products' && ! empty($form['category']))
             foreach (DB::table('t_src_products')->where('category', $form['category'])->whereNotNull('hs_code')->where('hs_code', '<>', '')->when(Context::ent(), fn ($q) => $q->where('fk_id_ent', Context::ent()))->groupBy('hs_code')->orderByRaw('COUNT(*) DESC')->limit(2)->pluck('hs_code') as $v) $add($v, 'used by other products of this category');

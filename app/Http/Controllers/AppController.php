@@ -157,14 +157,19 @@ class AppController extends Controller
     {
         Rights::check('ADD', 'external_contact');
         try { return \App\Services\ExternalContact::create((int) \App\Services\Context::ent(), $r->all(), (int) \Illuminate\Support\Facades\Auth::id()); }
-        catch (\App\Services\ValidationErrors $e) { return response()->json(['message' => 'Please fix ' . count($e->errors) . ' thing(s) before saving.', 'errors' => array_map(fn ($m) => [$m], $e->errors)], 422); }
+        catch (\App\Services\ValidationErrors $e) { return response()->json(['status' => 'invalid', 'message' => 'Please fix ' . count($e->errors) . ' thing(s) before saving.', 'errors' => array_map(fn ($m) => [$m], $e->errors)], 422); }
+        catch (\App\Services\QuickSaveFailed $e) { return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500); }      /* R-C-9 */
         catch (\App\Services\LookAlikeFound $e) { return response()->json(['message' => $e->getMessage(), 'status' => 'duplicate', 'people' => $e->matches], 409); }      /* R-C-8 */
         catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
     }
+    public function externalProgress(\Illuminate\Http\Request $r) { Rights::check('ADD', 'external_contact'); return \App\Services\ExternalContact::progress($r->all()); }      /* R-C-11 reads only */
     public function personHeader(\Illuminate\Http\Request $r, int $id) { $f = (string) RecordService::formOfTable('t_account'); Rights::check('VIEW', $f); RecordService::get($f, $id);
         $h = \App\Services\PersonHeader::for($id); $hideForms = array_filter(array_map(fn ($t) => RecordService::formOfTable($t), \App\Services\PersonKind::hiddenTables(\App\Services\PersonKind::of($id))));
         $h['chips'] = array_values(array_filter($h['chips'], fn ($c) => ! $c['url'] || ! in_array(explode('?', substr($c['url'], 7))[0], $hideForms, true)));      /* R-C-2 only the tabs of the person's kind */
         return $h + ['can_convert' => \App\Services\Perm::has($r->user(), 'people.convert'), 'kind_code' => ($k = \App\Services\PersonKind::of($id)), 'kind_badge' => \App\Services\PersonKind::BADGE[$k], 'convert_to' => $k === 'E' ? 'M' : 'E', 'convert_text' => \App\Services\PersonKind::CONFIRM[$k === 'E' ? 'M' : 'E'], 'kind_log' => \App\Services\PersonKind::log($id), 'hidden_tables' => \App\Services\PersonKind::hiddenTables($k), 'can_delete' => \App\Services\Perm::has($r->user(), 'admin.accounts'), 'deleted' => ! (int) DB::table('t_account')->where('id', $id)->value('f_active')]; }
+    /** R-C-16 People list › Add role to selected. */
+    public function peopleRoles() { return ['roles' => array_map(fn ($r) => ['id' => $r['id'], 'name' => $r['name']], \App\Services\ExternalContact::roles((int) \App\Services\Context::ent()))]; }
+    public function peopleAddRole(\Illuminate\Http\Request $r) { try { return \App\Services\PersonRoles::addToMany((array) $r->input('ids', []), (int) $r->input('role'), $r->user()); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
     /** R-C-2 convert Managed ↔ External (POST), its log, and the sections each kind shows (Settings). */
     public function personConvert(\Illuminate\Http\Request $r, int $id) { try { return \App\Services\PersonKind::convert($id, (string) $r->input('to'), $r->input('note'), $r->user()); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
     public function personSections(\Illuminate\Http\Request $r) { \App\Services\Perm::need($r->user(), 'people.convert'); return ['rows' => \App\Services\PersonKind::rows(), 'kinds' => ['ALL' => 'Everyone', 'M' => 'Managed Account only', 'E' => 'External Contact only']]; }

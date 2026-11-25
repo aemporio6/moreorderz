@@ -42,6 +42,8 @@ action items,my tasks,VOCAB,#/tasks
 activity,audit log,VOCAB,#/audit
 activity log,audit log,VOCAB,#/audit
 ad fees,payouts and settlements,VOCAB,#/settlements
+add role,roles of a person,VOCAB,#/list/party
+add role to selected,roles of a person,VOCAB,#/list/party
 add tracking,tracking upload,VOCAB,#/tracking-upload
 address book,people and companies,VOCAB,#/list/party
 address change,orders to dispatch,VOCAB,#/orders
@@ -64,6 +66,7 @@ alert rule,finance alerts,VOCAB,#/list/fin_alert_rule
 alerts,finance alerts,VOCAB,#/list/fin_alert_rule
 alerts list,needs action,VOCAB,#/tasks?scope=all
 alibaba,buying dashboard,VOCAB,#/buying
+aliexpress buy file,sale and buy match check,VOCAB,#/gen1
 aliexpress seller,marketplace operations hubs,VOCAB,#/hubs
 alipay,payments and terms,VOCAB,#/list/src_payment
 all columns of the file,bought from,VOCAB,#/sales
@@ -253,6 +256,7 @@ bulk import,import a file,VOCAB,#/import
 bulk location,locations and bins,VOCAB,#/list/location
 bulk message,messages and whatsapp,VOCAB,#/messages
 bulk orders,import sales,VOCAB,#/sales-import
+bulk role,roles of a person,VOCAB,#/list/party
 bulk upload,import a file,VOCAB,#/import
 bullet points,products,VOCAB,#/list/product
 bundle,products,VOCAB,#/list/product
@@ -265,7 +269,9 @@ business rules,choices,VOCAB,#/choices
 businesses,companies,VOCAB,#/list/company
 buy box,listings,VOCAB,#/list/listing
 buy evidence,bought from,VOCAB,#/sales
+buy file,sale and buy match check,VOCAB,#/gen1
 buy for order,drop shipping orders,VOCAB,#/ds-orders
+buy lines,sale and buy match check,VOCAB,#/gen1
 buy locally,quick buy,VOCAB,#/list/quick_buy
 buy note,marketplace profiles,VOCAB,#/list/mp_profile
 buy order,drop shipping orders,VOCAB,#/ds-orders
@@ -281,6 +287,7 @@ buying,buying dashboard,VOCAB,#/buying
 buying agent,buying dashboard,VOCAB,#/buying
 buying board,buying dashboard,VOCAB,#/buying
 buying history,supplier order history,VOCAB,#/supplier-orders
+buying missing,sale and buy match check,VOCAB,#/gen1
 c79,customs,VOCAB,#/list/t_src_customs
 c88,customs,VOCAB,#/list/t_src_customs
 calculator,marketplace calculator,VOCAB,#/calculator
@@ -843,6 +850,7 @@ gdrive,drive folders,VOCAB,#/drive
 general ledger,ledger,VOCAB,#/ledger
 generic,products,VOCAB,#/list/product
 getting started,first time setup,VOCAB,#/setup
+give role,roles of a person,VOCAB,#/list/party
 gl,ledger,VOCAB,#/ledger
 global shipping,carriers and postage rates,VOCAB,#/carriers
 global sources,buying dashboard,VOCAB,#/buying
@@ -1241,9 +1249,11 @@ negotiate,rfq and quotations,VOCAB,#/list/src_rfq
 negotiation,rfq and quotations,VOCAB,#/list/src_rfq
 net profit,profit views,VOCAB,#/profit
 net worth,money dashboard,VOCAB,#/money
+new external contact,external contact quick form,VOCAB,#/list/party
 new file header,learn sale columns,VOCAB,#/import
 new orders,orders to dispatch,VOCAB,#/orders
 new product,products,VOCAB,#/list/product
+new supplier contact,external contact quick form,VOCAB,#/list/party
 new user,users,VOCAB,#/users
 next day,carriers and postage rates,VOCAB,#/carriers
 next day dispatch,orders to dispatch,VOCAB,#/orders
@@ -1260,6 +1270,7 @@ not as described,cases on sales,VOCAB,#/sale-cases
 not listed,products not listed,VOCAB,#/list/t_products_shop_not_listed
 not on the high street,marketplace operations hubs,VOCAB,#/hubs
 not received,cases on sales,VOCAB,#/sale-cases
+nothing was saved,external contact quick form,VOCAB,#/list/party
 noths,marketplace operations hubs,VOCAB,#/hubs
 notifications,messages and whatsapp,VOCAB,#/messages
 notify,messages and whatsapp,VOCAB,#/messages
@@ -1431,6 +1442,7 @@ permission,roles and rights,VOCAB,#/permissions
 permissions,roles and rights,VOCAB,#/permissions
 person,people and companies,VOCAB,#/list/party
 person recycle bin,delete or restore a person,VOCAB,#/list/party
+person roles,roles of a person,VOCAB,#/list/party
 person sections,person sections by kind,VOCAB,#/person-sections
 person used in,delete or restore a person,VOCAB,#/list/party
 persons,people and companies,VOCAB,#/list/party
@@ -1590,6 +1602,7 @@ qc,qc,VOCAB,#/list/t_src_qc
 qc report,qc,VOCAB,#/list/t_src_qc
 qima,qc,VOCAB,#/list/t_src_qc
 qoh,stock on hand,VOCAB,#/stock
+qty customer,sale and buy match check,VOCAB,#/gen1
 qty sold,sales lines,VOCAB,#/sales
 quality check,qc,VOCAB,#/list/t_src_qc
 quality control,qc,VOCAB,#/list/t_src_qc
@@ -1599,6 +1612,7 @@ quarantine,held stock,VOCAB,#/stock/held
 query,customer service cases,VOCAB,#/list/customer_case
 queue,system health,VOCAB,#/health
 quick buy,quick buy,VOCAB,#/list/quick_buy
+quick contact,external contact quick form,VOCAB,#/list/party
 quotation,rfq and quotations,VOCAB,#/list/src_rfq
 quotations,rfq and quotations,VOCAB,#/list/src_rfq
 quote,rfq and quotations,VOCAB,#/list/src_rfq
@@ -1694,6 +1708,7 @@ request for quote,rfq and quotations,VOCAB,#/list/src_rfq
 requested by,requested by,VOCAB,#/list/src_research
 requester,requested by,VOCAB,#/list/src_research
 required delivery date,cycle details,VOCAB,#/buying
+required sections,external contact quick form,VOCAB,#/list/party
 resale,returns,VOCAB,#/returns
 research,research board,VOCAB,#/list/src_research
 research accuracy,research outcome,VOCAB,#/list/src_research
@@ -1738,6 +1753,8 @@ rohs,certificates,VOCAB,#/list/product_certificate
 roi,profit views,VOCAB,#/profit
 roi calculator,marketplace calculator,VOCAB,#/calculator
 role,roles and rights,VOCAB,#/permissions
+role added,roles of a person,VOCAB,#/list/party
+role removed,roles of a person,VOCAB,#/list/party
 roles,roles and rights,VOCAB,#/permissions
 royal mail,carriers and postage rates,VOCAB,#/carriers
 royal mail import file,carrier file layouts,VOCAB,#/fulfilment
@@ -1756,8 +1773,12 @@ salaries,expenses,VOCAB,#/expenses
 salary,expenses,VOCAB,#/expenses
 salary history,staff and employment,VOCAB,#/list/t_account_job_history
 sale,sales lines,VOCAB,#/sales
+sale buy check,sale and buy match check,VOCAB,#/gen1
+sale buy match,sale and buy match check,VOCAB,#/gen1
 sale case,cases on sales,VOCAB,#/sale-cases
 sale price,sales lines,VOCAB,#/sales
+sale vs buy,sale and buy match check,VOCAB,#/gen1
+sale_buy_match,sale and buy match check,VOCAB,#/gen1
 sales,sales lines,VOCAB,#/sales
 sales breakdown,detailed sale report,VOCAB,#/sales-detailed
 sales by month,annual sale report,VOCAB,#/sales-annual
@@ -2018,12 +2039,14 @@ supplier local time,cycle details,VOCAB,#/buying
 supplier order,purchase orders,VOCAB,#/list/t_src_po
 supplier order file,upload drop shipping orders,VOCAB,#/ds-upload
 supplier order history,supplier order history,VOCAB,#/supplier-orders
+supplier orders file,sale and buy match check,VOCAB,#/gen1
 supplier payment,payments and terms,VOCAB,#/list/src_payment
 supplier quote,rfq and quotations,VOCAB,#/list/src_rfq
 supplier rated d,cycle details,VOCAB,#/buying
 supplier rating,suppliers and forwarders,VOCAB,#/list/supplier
 supplier score,suppliers and forwarders,VOCAB,#/list/supplier
 supplier ships,drop shipping orders,VOCAB,#/ds-orders
+supplier_orders,sale and buy match check,VOCAB,#/gen1
 suppliers,suppliers and forwarders,VOCAB,#/list/supplier
 support,customer service cases,VOCAB,#/list/customer_case
 suppressed listing,listings,VOCAB,#/list/listing
@@ -2226,6 +2249,7 @@ veeqo,api connections,VOCAB,#/connections
 velocity,replenishment and icc reorder,VOCAB,#/list/icc
 vendor,suppliers and forwarders,VOCAB,#/list/supplier
 vendor central,marketplace operations hubs,VOCAB,#/hubs
+vendor code file,sale and buy match check,VOCAB,#/gen1
 vendors,suppliers and forwarders,VOCAB,#/list/supplier
 verified supplier,suppliers and forwarders,VOCAB,#/list/supplier
 vessel,shipments,VOCAB,#/list/t_src_shipments

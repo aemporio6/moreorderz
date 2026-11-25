@@ -109,6 +109,7 @@ class RecordService
         foreach (Registry::fields($formKey) as $f) if ($f['secret'] && $f['column_name'] && isset($row[$f['column_name']]) && Context::role() !== 'OWNER') $row[$f['column_name']] = '••••';
         $row = Vault::maskRow($table, $row);   // secrets are masked for every role; the Owner reveals one with "Reveal" (logged)
         if ($table === 't_product_vendors') $row = ProductFamily::forForm($row);      // R-D-1: the Parent / Alone switch from the stored code
+        if ($table === 't_account') $row['account_role[]'] = PersonRoles::current($id);      /* R-C-16 the form shows the person's active roles */
         return $row;
     }
 
@@ -143,6 +144,7 @@ class RecordService
         $quick = ! empty($opt['quick']);
         $data = []; $errors = [];
         $old = $id ? (array) (DB::table($table)->where($pk, $id)->first() ?? abort(404)) : [];
+        if (! $id && ($table === 't_account' || str_starts_with($table, 't_account_'))) $input = PartyDefaults::input($formKey, $table, $input);      /* R-C-12 derived defaults of a person's rows */
         foreach (self::storedFields($formKey, $table, true) as $f) {
             $col = $f['column_name'];
             if (in_array($col, self::BLOCKED, true)) continue;
@@ -188,6 +190,8 @@ class RecordService
                 't_account_mobiles' => LookAlikes::find(null, [], [(string) ($data['mobile_no'] ?? '')], (int) ($data['fk_id_account'] ?? 0)), default => LookAlikes::find(null, [(string) ($data['email'] ?? '')], [], (int) ($data['fk_id_account'] ?? 0)) };
             $alike = LookAlikes::guard($alike, $opt['dup_reason'] ?? null);
         }
+        $roleSet = $table === 't_account' ? PersonRoles::given($input) : null;      /* R-C-16 roles saved as a difference; at least one role stays */
+        if ($roleSet !== null && ! $errors && ($why = PersonRoles::check($id, $roleSet))) $errors['account_role[]'] = $why;
         $errors = FormRules::check($formKey, $data, $old, $id, $errors) + $errors;      // a form's own message (old texts) wins over the general one      // typed codes, shares, uniqueness of this form (R-F_SETUP-35)
         if ($errors) throw ValidationException::withMessages($errors);
 
@@ -199,6 +203,7 @@ class RecordService
         try {
             $res = self::write($table, $pk, $id, $data, $old, $formKey, $opt);
             if ($vault['put']) Vault::store($table, (int) $res['id'], $vault['put']);
+            if ($roleSet !== null) $res['roles'] = PersonRoles::sync((int) $res['id'], $roleSet);
             if ($vault['dropped']) $res['note'] = 'Not kept on purpose (CVV / PIN are never stored): ' . implode(', ', $vault['dropped']) . '.';
             if (! empty($bankWarn)) $res['note'] = $bankWarn;
             if ($alike) LookAlikes::logged($table === 't_account' ? (int) $res['id'] : (int) ($data['fk_id_account'] ?? 0), $alike, (string) $opt['dup_reason']);

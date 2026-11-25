@@ -464,10 +464,19 @@ class OrdersController extends Controller
     {
         return $this->run(function () use ($r, $id, $view) {
             $this->can($r, 'orders.SEE'); $money = \App\Services\Perm::has($r->user(), 'orders.MONEY');
-            return match ($view) { 'summary' => \App\Services\Gen1Compare::summary($id, $money), 'sales' => ['header' => \App\Services\Gen1Compare::info($id), 'rows' => \App\Services\Gen1Compare::sales($id, $money), 'money' => $money], 'buys' => ['header' => \App\Services\Gen1Compare::info($id), 'rows' => \App\Services\Gen1Compare::buys($id, $money), 'money' => $money], default => abort(404) };
+            return match ($view) { 'match' => \App\Services\Gen1Compare::saleBuyMatch($id, $money), 'summary' => \App\Services\Gen1Compare::summary($id, $money), 'sales' => ['header' => \App\Services\Gen1Compare::info($id), 'rows' => \App\Services\Gen1Compare::sales($id, $money), 'money' => $money], 'buys' => ['header' => \App\Services\Gen1Compare::info($id), 'rows' => \App\Services\Gen1Compare::buys($id, $money), 'money' => $money], default => abort(404) };
         });
     }
 
+    /** R-A_SALES-56 supplier orders (BUY) file of a Gen-1 month: check (never writes) / import. */
+    public function gen1BuyFile(Request $r, int $id, string $step)
+    {
+        return $this->run(function () use ($r, $id, $step) {
+            $this->can($r, 'orders.saleImport');
+            if (! $r->hasFile('file')) throw new \InvalidArgumentException('No file uploaded');
+            return \App\Services\BuyFile::import($id, $r->file('file')->getClientOriginalName(), (string) file_get_contents($r->file('file')->getRealPath()), $step === 'import');
+        });
+    }
     /** R-A_SALES-77 the carrier file of the sales list's filters (or ticked ids): Click & Drop / Evri / DPD / TikTok layout. Reads only. */
     public function saleCarrierFile(Request $r)
     {
