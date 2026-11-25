@@ -583,6 +583,8 @@ class BuyingController extends Controller
         catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
     }
     public function cycleCsvUndo(Request $r, int $job) { \App\Services\Perm::need($r->user(), 'buying.BUY'); try { return \App\Services\CycleImport::undo($job); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
+    /** R-B_SOURCING-12 "+ Add brand '<x>'" from an import check screen or a form: added knowingly, never by the file. */
+    public function brandAdd(Request $r) { try { return \App\Services\SrcNames::addBrand((int) \App\Services\Context::ent(), (string) $r->input('name'), $r->user()); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
     public function cycleCsvTemplate() { return response(\App\Services\CycleImport::template(), 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => 'attachment; filename="SRC_CYCLES_template.csv"']); }
     /** R-A_SALES-80 supplier order history (Amazon Business layout): check (never writes) / import / template. */
     public function supplierOrders(Request $r, string $step)

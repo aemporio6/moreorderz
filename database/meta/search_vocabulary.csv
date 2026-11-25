@@ -42,6 +42,7 @@ action items,my tasks,VOCAB,#/tasks
 activity,audit log,VOCAB,#/audit
 activity log,audit log,VOCAB,#/audit
 ad fees,payouts and settlements,VOCAB,#/settlements
+add brand,name matching on sourcing imports,VOCAB,#/old-entry
 add role,roles of a person,VOCAB,#/list/party
 add role to selected,roles of a person,VOCAB,#/list/party
 add tracking,tracking upload,VOCAB,#/tracking-upload
@@ -116,6 +117,7 @@ aql,qc,VOCAB,#/list/t_src_qc
 ar,outstanding who owes whom,VOCAB,#/invoice-outstanding
 arrival,shipments,VOCAB,#/list/t_src_shipments
 artwork,product pack artwork,VOCAB,#/list/product_artwork_file
+artwork download link,supplier link without login,VOCAB,#/buying
 asin,listings,VOCAB,#/list/listing
 asins,listings,VOCAB,#/list/listing
 asked by,requested by,VOCAB,#/list/src_research
@@ -824,6 +826,7 @@ forms,field registry,VOCAB,#/registry
 forwarder,freight,VOCAB,#/list/t_src_freight
 forwarder bank,supplier bank approval,VOCAB,#/approvals
 forwarder list,suppliers and forwarders,VOCAB,#/list/supplier
+forwarder not found,name matching on sourcing imports,VOCAB,#/old-entry
 forwarding,freight,VOCAB,#/list/t_src_freight
 found stock,stock ledger,VOCAB,#/stock/ledger
 four eyes,approvals queue,VOCAB,#/approvals
@@ -1080,6 +1083,7 @@ lending,loans,VOCAB,#/loans
 level,locations and bins,VOCAB,#/list/location
 limited company,companies,VOCAB,#/list/company
 line items,sales lines,VOCAB,#/sales
+link without login,supplier link without login,VOCAB,#/buying
 linnworks,api connections,VOCAB,#/connections
 liquidity,cash forecast,VOCAB,#/forecast
 list,reference register,VOCAB,#/list/reference_value
@@ -1257,6 +1261,7 @@ my settings,my account,VOCAB,#/me
 my share,my investor account,VOCAB,#/my-portal
 my stock value,my investor account,VOCAB,#/my-portal
 my work,my tasks,VOCAB,#/tasks
+name matching,name matching on sourcing imports,VOCAB,#/old-entry
 nationwide,bank and cash,VOCAB,#/bank
 natwest,bank and cash,VOCAB,#/bank
 navigation,menu builder,VOCAB,#/menu-builder
@@ -1266,6 +1271,7 @@ negotiate,rfq and quotations,VOCAB,#/list/src_rfq
 negotiation,rfq and quotations,VOCAB,#/list/src_rfq
 net profit,profit views,VOCAB,#/profit
 net worth,money dashboard,VOCAB,#/money
+never created silently,name matching on sourcing imports,VOCAB,#/old-entry
 new external contact,external contact quick form,VOCAB,#/list/party
 new file header,learn sale columns,VOCAB,#/import
 new orders,orders to dispatch,VOCAB,#/orders
@@ -1377,6 +1383,7 @@ owes,outstanding who owes whom,VOCAB,#/invoice-outstanding
 own brand,products,VOCAB,#/list/product
 own warehouse orders,fulfilment orders,VOCAB,#/fulfilment
 owner,people and companies,VOCAB,#/list/party
+owner entity not found,name matching on sourcing imports,VOCAB,#/old-entry
 owner rights,roles and rights,VOCAB,#/permissions
 owner statement,invoices and credit notes,VOCAB,#/invoices
 ownership,ownership transfers,VOCAB,#/list/ownership_transfer
@@ -1490,6 +1497,7 @@ playbooks,playbooks,VOCAB,#/list/playbook_step
 plc,companies,VOCAB,#/list/company
 pnl,profit views,VOCAB,#/profit
 po,purchase orders,VOCAB,#/list/t_src_po
+po confirm link,supplier link without login,VOCAB,#/buying
 po number,purchase orders,VOCAB,#/list/t_src_po
 po pdf,purchase orders,VOCAB,#/list/t_src_po
 policy violation,account health,VOCAB,#/shop-health
@@ -1571,6 +1579,7 @@ product type,products,VOCAB,#/list/product
 product weight,products,VOCAB,#/list/product
 production,production,VOCAB,#/list/t_src_production
 production delay,production,VOCAB,#/list/t_src_production
+production photo link,supplier link without login,VOCAB,#/buying
 production schedule,production,VOCAB,#/list/t_src_production
 production status,production,VOCAB,#/list/t_src_production
 products,products,VOCAB,#/list/product
@@ -1764,6 +1773,7 @@ returns window,returns window and seller portal,VOCAB,#/marketplaces
 revenue,sales lines,VOCAB,#/sales
 revenue share,profit split rules,VOCAB,#/waterfall
 reviews,account health,VOCAB,#/shop-health
+revoke link,supplier link without login,VOCAB,#/buying
 revolut,bank and cash,VOCAB,#/bank
 revolut business,bank and cash,VOCAB,#/bank
 rf gun,work screen phone,VOCAB,#/work
@@ -1891,6 +1901,7 @@ settlement report,payouts and settlements,VOCAB,#/settlements
 settlements,payouts and settlements,VOCAB,#/settlements
 setup,first time setup,VOCAB,#/setup
 setup options,settings,VOCAB,#/settings
+share link,supplier link without login,VOCAB,#/buying
 share percentage,profit split rules,VOCAB,#/waterfall
 shared cost,shared expense rules,VOCAB,#/list/aud_expense_rule
 shared drive,drive folders,VOCAB,#/drive
@@ -1904,6 +1915,7 @@ shelf,locations and bins,VOCAB,#/list/location
 shelves,locations and bins,VOCAB,#/list/location
 shenzhen,buying dashboard,VOCAB,#/buying
 ship by,orders to dispatch,VOCAB,#/orders
+ship date link,supplier link without login,VOCAB,#/buying
 ship from supplier,drop shipping orders,VOCAB,#/ds-orders
 ship to amazon,fc and 3pl inbound shipments,VOCAB,#/list/fba_shipment
 shipment,shipments,VOCAB,#/list/t_src_shipments
@@ -2063,13 +2075,16 @@ supplier bill,expenses,VOCAB,#/expenses
 supplier claim,inbound and grn,VOCAB,#/list/t_src_grn
 supplier contact,suppliers and forwarders,VOCAB,#/list/supplier
 supplier creditors,supplier payment schedule,VOCAB,#/supplier-schedule
+supplier link,supplier link without login,VOCAB,#/buying
 supplier list,suppliers and forwarders,VOCAB,#/list/supplier
 supplier local time,cycle details,VOCAB,#/buying
+supplier not found,name matching on sourcing imports,VOCAB,#/old-entry
 supplier order,purchase orders,VOCAB,#/list/t_src_po
 supplier order file,upload drop shipping orders,VOCAB,#/ds-upload
 supplier order history,supplier order history,VOCAB,#/supplier-orders
 supplier orders file,sale and buy match check,VOCAB,#/gen1
 supplier payment,payments and terms,VOCAB,#/list/src_payment
+supplier portal link,supplier link without login,VOCAB,#/buying
 supplier quote,rfq and quotations,VOCAB,#/list/src_rfq
 supplier rated d,cycle details,VOCAB,#/buying
 supplier rating,suppliers and forwarders,VOCAB,#/list/supplier

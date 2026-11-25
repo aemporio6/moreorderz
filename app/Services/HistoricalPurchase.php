@@ -44,17 +44,12 @@ class HistoricalPurchase
         if ($ref === '') throw new \InvalidArgumentException('order_ref is REQUIRED');
         if (! $lines) throw new \InvalidArgumentException('At least one line is required');
         return DB::transaction(function () use ($ent, $e, $u, $ref, $date, $lines, &$log) {
-            /* supplier: chosen, or found by name; a new name is created (logged NEW) */
-            $sup = ! empty($e['supplier']) ? DB::table('t_src_suppliers')->where('id', (int) $e['supplier'])->where('fk_id_ent', $ent)->first()
-                : DB::table('t_src_suppliers')->where('fk_id_ent', $ent)->whereRaw('LOWER(TRIM(supplier_name)) = ?', [mb_strtolower(trim((string) $e['supplier_name']))])->where('f_active', 1)->first();
-            if (! $sup) {
-                if (empty($e['supplier_name'])) throw new \InvalidArgumentException('Select the Supplier');
-                $sid = (int) DB::table('t_src_suppliers')->insertGetId(RecordService::fillNotNull('t_src_suppliers', ['fk_id_ent' => $ent, 'supplier_name' => mb_substr(trim((string) $e['supplier_name']), 0, 190), 'f_active' => 1, 'f_local' => 0, 'f_print_cn' => 0, 'created_by' => $u->id, 'created_at' => now()]));
-                $sup = DB::table('t_src_suppliers')->where('id', $sid)->first(); $log[] = "NEW supplier \"{$sup->supplier_name}\"";
-            }
+            /* R-B_SOURCING-12 supplier: chosen, or found by name (exact first, then contains) – never created silently */
+            $sup = SrcNames::supplier($ent, ! empty($e['supplier']) ? (int) $e['supplier'] : (string) ($e['supplier_name'] ?? ''));
+            if (! $sup) throw new \InvalidArgumentException(empty($e['supplier_name']) ? 'Select the Supplier' : SrcNames::supplierMissing(trim((string) $e['supplier_name'])));
             /* owner entity: chosen or found by code / name – never created silently */
             $owner = ! empty($e['owner']) ? (int) $e['owner'] : null;
-            if (! $owner && ($on = trim((string) ($e['owner_name'] ?? ''))) !== '') $owner = (int) (DB::table('t_account')->where(fn ($w) => $w->where('account_code', $on)->orWhereRaw("LOWER(TRIM(CONCAT_WS(' ', first_name, sur_name))) = ?", [mb_strtolower($on)]))->value('id') ?? 0) ?: null;
+            if (! $owner && trim((string) ($e['owner_name'] ?? '')) !== '') $owner = SrcNames::owner($ent, $e['owner_name'], $log);
             if (! $owner && Choices::get('OLD_ENTRY_OWNER_REQUIRED', $ent) === 'Y') throw new \InvalidArgumentException('Owner Entity (buyer) is required – companies & persons come from Setup > Investor Master - never created silently.' . (! empty($e['owner_name']) ? " \"{$e['owner_name']}\" was not found." : ''));
             /* duplicate supplier + order reference (R-B_SOURCING-7) */
             if ($x = SrcDuplicate::existing($ent, (int) $sup->id, $ref)) {
@@ -83,9 +78,10 @@ class HistoricalPurchase
                 $cps[] = $p;
             }
             $first = collect($cps)->filter()->first();
-            if (($e['brand'] ?? '') !== '' && ! ctype_digit((string) $e['brand'])) $log[] = "NOTE brand \"{$e['brand']}\" kept in the notes only (choose the brand on the cycle)";
+            $brandId = SrcNames::brand($ent, $e['brand'] ?? ''); if (! $brandId && trim((string) ($e['brand'] ?? '')) !== '') $log[] = SrcNames::brandWarn(trim((string) $e['brand']));      /* a brand is never created by an entry */
+            if (($oc = strtoupper(trim((string) ($e['currency'] ?? '')))) !== '') SrcNames::currency($oc, $log);
             $cycle = (int) DB::table('t_src_cycles')->insertGetId(['fk_id_ent' => $ent, 'cycle_code' => Numbering::next('CYC', $ent, $date), 'sourcing_date' => $date, 'requested_by' => $u->id, 'product_name' => mb_substr((string) ($first->product_name_vendor ?? 'Old purchase'), 0, 200),
-                'brand' => ctype_digit((string) ($e['brand'] ?? '')) ? (int) $e['brand'] : null, 'target_qty' => array_sum(array_map(fn ($l) => $l['line_type'] === 'PRODUCT' ? $l['qty'] : 0, $po_lines)), 'priority' => 'NORMAL', 'status' => 'OPEN', 'notes' => trim(($e['source'] ?? '') === 'CSV' ? 'CSV import' . ($e['notes'] ? ' · ' . $e['notes'] : '') : (string) ($e['notes'] ?? '')) ?: null,
+                'brand' => $brandId, 'target_qty' => array_sum(array_map(fn ($l) => $l['line_type'] === 'PRODUCT' ? $l['qty'] : 0, $po_lines)), 'priority' => 'NORMAL', 'status' => 'OPEN', 'notes' => trim(($e['source'] ?? '') === 'CSV' ? 'CSV import' . ($e['notes'] ? ' · ' . $e['notes'] : '') : (string) ($e['notes'] ?? '')) ?: null,
                 'cycle_type' => 'HISTORICAL', 'skipped_steps' => CycleAlerts::TYPE_SKIPS['HISTORICAL'], 'approval_status' => 'APPROVED', 'approved_by' => $u->id, 'approved_at' => now(), 'order_ref' => mb_substr($ref, 0, 100), 'order_ref_note' => mb_substr((string) ($e['order_ref_note'] ?? ''), 0, 100) ?: null,
                 'fk_id_owner' => $owner, 'created_by' => $u->id, 'f_active' => 1, 'created_at' => now()]);
             foreach ($cps as $i => $p) if ($p) DB::table('t_src_cycle_products')->insert(['fk_id_ent' => $ent, 'fk_id_cycle' => $cycle, 'fk_id_supplier' => $sup->id, 'fk_id_product' => $p->id, 'product_name' => $p->product_name_vendor, 'sku' => $p->SKU_VENDOR,
@@ -120,8 +116,7 @@ class HistoricalPurchase
             $accOf = fn ($l) => ($l['qty_accepted'] ?? null) === null || ($l['qty_accepted'] ?? '') === '' ? (float) ($l['qty'] ?? 0) : (float) $l['qty_accepted'];      /* R-B_SOURCING-10: a line with no receiving row counts as accepted = ordered */
             $hasRecv = ! empty($rc['date']) && collect($lines)->contains(fn ($l) => (strtoupper((string) ($l['line_type'] ?? '')) ?: 'PRODUCT') === 'PRODUCT' && $accOf($l) > 0);
             if (! empty($sh['shipped_date']) || ! empty($sh['arrived_date']) || $hasRecv || ! empty($sh['freight'])) {
-                $fw = ! empty($sh['forwarder']) ? DB::table('t_src_forwarders')->where('fk_id_ent', $ent)->whereRaw('LOWER(TRIM(forwarder_name)) = ?', [mb_strtolower(trim((string) $sh['forwarder']))])->value('id') : null;
-                if (! empty($sh['forwarder']) && ! $fw) $log[] = "WARN forwarder \"{$sh['forwarder']}\" not found – left empty";
+                $fw = SrcNames::forwarder($ent, $sh['forwarder'] ?? '', $log);
                 $ship = BuyingService::createShipment(['po' => $po, 'etd' => $sh['shipped_date'] ?? null, 'eta' => ($sh['arrived_date'] ?? null) ?: ($rc['date'] ?? null), 'mode' => $sh['mode'] ?? null, 'forwarder' => $fw]);
                 DB::table('t_src_shipments')->where('id', $ship)->update(['actual_departure' => $sh['shipped_date'] ?? null, 'actual_arrival' => ($sh['arrived_date'] ?? null) ?: ($rc['date'] ?? null), 'tracking_url' => mb_substr((string) ($sh['tracking'] ?? ''), 0, 250) ?: null]);
                 $cd = ($sh['shipped_date'] ?? null) ?: $date;
@@ -136,7 +131,7 @@ class HistoricalPurchase
             $done = false;
             if ($ship && $hasRecv) {
                 $wh = $rc['warehouse'] ?? null;
-                if ($wh && ! ctype_digit((string) $wh)) $wh = DB::table('cat_inventory_locations')->where('fk_id_ent', $ent)->whereRaw('LOWER(TRIM(location_name)) = ?', [mb_strtolower(trim((string) $wh))])->value('id');
+                if ($wh) { $wl = []; $wh = SrcNames::warehouse($ent, $wh, $wl, $ref); if ($wl) $log[] = $wl[0] . ' (the main warehouse is used)'; }
                 $wh = (int) ($wh ?: Settings::get('MAIN_WAREHOUSE', $ent, 0)) ?: (int) DB::table('cat_inventory_locations')->where('fk_id_ent', $ent)->where('f_active', 1)->whereIn('kind', ['WAREHOUSE', 'BIN'])->orderBy('id')->value('id');
                 if (! $wh) throw new \InvalidArgumentException('Received goods need a warehouse – add one under Setup › Locations.');
                 $pl = DB::table('t_src_po_lines')->where('fk_id_po', $po)->where('f_active', 1)->orderBy('id')->get()->values(); $gl = []; $k = 0; $extra = [];
@@ -279,11 +274,15 @@ class HistoricalPurchase
         foreach ($p['entries'] as $ref => $x) {
             $e = $x['entry']; $prob = [];
             if (! $e['order_date']) $prob[] = 'order_date must be YYYY-MM-DD or DD Mon YYYY';
-            $sup = DB::table('t_src_suppliers')->where('fk_id_ent', $ent)->whereRaw('LOWER(TRIM(supplier_name)) = ?', [mb_strtolower(trim((string) $e['supplier_name']))])->where('f_active', 1)->first();
-            $owner = trim((string) $e['owner_name']) !== '' ? DB::table('t_account')->where(fn ($w) => $w->where('account_code', $e['owner_name'])->orWhereRaw("LOWER(TRIM(CONCAT_WS(' ', first_name, sur_name))) = ?", [mb_strtolower(trim((string) $e['owner_name']))]))->value('id') : null;
+            $nl = []; $sup = SrcNames::supplier($ent, (string) $e['supplier_name']); if (! $sup) $prob[] = SrcNames::supplierMissing(trim((string) $e['supplier_name']));      /* R-B_SOURCING-12 the same matching and the same lines as the save */
+            $owner = SrcNames::owner($ent, $e['owner_name'] ?? '', $nl); SrcNames::currency($e['currency'] ?? '', $nl);
+            if (! empty($e['shipping']['forwarder'])) SrcNames::forwarder($ent, $e['shipping']['forwarder'], $nl);
+            if (! empty($e['received']['warehouse'])) SrcNames::warehouse($ent, $e['received']['warehouse'], $nl, (string) $ref);
+            $addBrand = trim((string) ($e['brand'] ?? '')) !== '' && ! SrcNames::brand($ent, $e['brand']) ? trim((string) $e['brand']) : null;
+            $x['warn'] = array_merge($x['warn'], $nl);
             if (! $owner && Choices::get('OLD_ENTRY_OWNER_REQUIRED', $ent) === 'Y') $prob[] = 'owner entity ' . ($e['owner_name'] ? "\"{$e['owner_name']}\" not found" : 'missing');
             $dup = $sup ? SrcDuplicate::existing($ent, (int) $sup->id, $ref) : null;
-            $out[] = ['ref' => $ref, 'supplier' => $e['supplier_name'], 'new_supplier' => ! $sup, 'date' => $e['order_date'], 'currency' => $e['currency'], 'lines' => count($e['lines']), 'rows' => $x['rows'],
+            $out[] = ['ref' => $ref, 'supplier' => $sup->supplier_name ?? $e['supplier_name'], 'supplier_found' => (bool) $sup, 'add_brand' => $addBrand, 'date' => $e['order_date'], 'currency' => $e['currency'], 'lines' => count($e['lines']), 'rows' => $x['rows'],
                 'total' => round(array_sum(array_map(fn ($l) => $l['qty'] * $l['unit_price'], $e['lines'])), 2), 'paid' => round(array_sum(array_column($e['payments'], 'amount')), 2), 'received' => (bool) $e['received']['date'],
                 'warn' => $x['warn'], 'duplicate' => $dup->cycle_code ?? null, 'problems' => $prob];
         }

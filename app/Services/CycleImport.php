@@ -31,26 +31,27 @@ class CycleImport
         if (trim($text) === '') throw new \InvalidArgumentException('Empty file.');
         $rows = PurchaseAudit::csv($text); $head = array_map(fn ($h) => strtolower(trim(preg_replace('/^\xEF\xBB\xBF/', '', (string) $h))), array_shift($rows) ?? []);
         foreach (self::REQUIRED as $c) if (! in_array($c, $head, true)) throw new \InvalidArgumentException("Missing required column: $c");
+        $addBrands = [];      /* R-B_SOURCING-12 a brand is never created by the file – the check screen offers "+ Add brand" */
         $cycles = []; $log = []; $skipped = 0;
         foreach ($rows as $i => $r) {
             if (! array_filter($r, fn ($x) => trim((string) $x) !== '')) continue;
             $a = []; foreach ($head as $k => $h) $a[$h] = trim((string) ($r[$k] ?? '')); $n = $i + 2;
             if (($a['cycle_ref'] ?? '') === '' || ($a['product_name'] ?? '') === '') { $log[] = "Line $n skipped (cycle_ref / product_name empty)"; $skipped++; continue; }
-            $sup = null; if (($a['supplier_name'] ?? '') !== '') { $sup = DB::table('t_src_suppliers')->where('fk_id_ent', $ent)->where('supplier_name', 'like', '%' . $a['supplier_name'] . '%')->orderBy('id')->value('id'); if (! $sup) $log[] = "Line $n: supplier '{$a['supplier_name']}' not found - left empty"; }
-            $brand = null; if (($a['brand'] ?? '') !== '') { $brand = DB::table('cat_brands')->where('fk_id_ent', $ent)->whereRaw('LOWER(brand_name) = ?', [mb_strtolower($a['brand'])])->value('id'); if (! $brand) $log[] = "Line $n: brand '{$a['brand']}' not found - left empty"; }
+            $sup = null; if (($a['supplier_name'] ?? '') !== '') { $sup = SrcNames::supplier($ent, (string) $a['supplier_name'])->id ?? null; if (! $sup) $log[] = "Line $n: supplier '{$a['supplier_name']}' not found - left empty"; }
+            $brand = null; if (($a['brand'] ?? '') !== '') { $brand = SrcNames::brand($ent, $a['brand']); if (! $brand) $addBrands[$a['brand']] = true; if (! $brand) $log[] = "Line $n: brand '{$a['brand']}' not found - left empty"; }
             $prod = ($a['sku'] ?? '') !== '' ? DB::table('t_product_vendors')->where('fk_id_ent', $ent)->where('SKU_VENDOR', $a['sku'])->value('id') : null;
             $ref = $a['cycle_ref'];
             $cycles[$ref] ??= ['ref' => $ref, 'date' => ($d = strtotime($a['cycle_date'] ?? '')) ? date('Y-m-d', $d) : date('Y-m-d'), 'priority' => ($a['priority'] ?? '') ?: 'Normal', 'status' => ($a['status'] ?? '') ?: 'Draft', 'notes' => ($a['notes'] ?? '') ?: null, 'products' => []];
             $cycles[$ref]['products'][] = ['name' => $a['product_name'], 'variation' => ($a['variation'] ?? '') ?: null, 'sku' => ($a['sku'] ?? '') ?: null, 'qty' => self::num($a['quantity'] ?? '0'), 'cost' => self::num($a['unit_cost'] ?? '0'),
                 'spec' => ($a['spec_notes'] ?? '') ?: null, 'supplier' => $sup ? (int) $sup : null, 'brand' => $brand ? (int) $brand : null, 'product' => $prod ? (int) $prod : null];
         }
-        return ['cycles' => array_values($cycles), 'log' => $log, 'skipped' => $skipped, 'products' => array_sum(array_map(fn ($c) => count($c['products']), $cycles))];
+        return ['add_brands' => array_keys($addBrands), 'cycles' => array_values($cycles), 'log' => $log, 'skipped' => $skipped, 'products' => array_sum(array_map(fn ($c) => count($c['products']), $cycles))];
     }
 
     public static function check(int $ent, string $text): array
     {
         $p = self::parse($ent, $text);
-        return ['cycles' => count($p['cycles']), 'products' => $p['products'], 'skipped' => $p['skipped'], 'log' => $p['log'], 'message' => 'Check: ' . count($p['cycles']) . ' cycles, ' . $p['products'] . ' products would be created. Nothing was saved.'];
+        return ['add_brands' => $p['add_brands'], 'cycles' => count($p['cycles']), 'products' => $p['products'], 'skipped' => $p['skipped'], 'log' => $p['log'], 'message' => 'Check: ' . count($p['cycles']) . ' cycles, ' . $p['products'] . ' products would be created. Nothing was saved.'];
     }
 
     public static function import(int $ent, string $text, object $u): array

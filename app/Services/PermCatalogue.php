@@ -29,6 +29,7 @@ class PermCatalogue
         'app.company_owner' => ['Company – owner', 'Forms and records', ['OWNER']],
         'buying.BUY' => ['Buy', 'Buying', ['OWNER', 'MANAGER', 'SOURCING']],
         'buying.COST' => ['Set costs', 'Buying', ['OWNER', 'MANAGER', 'FINANCE']],
+        'buying.shareLink' => ['Make and revoke a supplier link without login (PO confirm, production photos, ship date, artwork)', 'Buying', ['OWNER', 'MANAGER', 'SOURCING']],      // R-B_SOURCING-64 src.share_link
         'buying.APPROVE_OLD' => ['Approve an old (historical) purchase entry – its stock waits until then (old "Partner / Manager")', 'Buying', ['OWNER', 'PARTNER']],      // R-B_SOURCING-55 sourcing.approve_old_entry
         'buying.LANDED_FINAL' => ['Make landed cost FINAL and approve a landed-cost override (old "Partner / Manager")', 'Buying', ['OWNER', 'MANAGER', 'PARTNER']],      // R-B_SOURCING-46 / 55
         'buying.MONEY' => ['See money (see_money): sourcing values, payments, profit, investors, lot costs', 'Buying', ['OWNER', 'MANAGER', 'FINANCE', 'ACCOUNTANT', 'PARTNER', 'SOURCING']],      // R-F_SETUP-16; owner answer 21 Nov 2026: SOURCING sees the amounts (goods value, landed cost, invoices, payments) but never our bank accounts; OFF for VA, CS, STOCK

@@ -180,6 +180,8 @@ add('#/gen1', 'etsy month header and sale files', 'etsy audit|etsy month|etsy or
 add('#/sale-cases', 'case channel, priority and reply by', 'case channel|came through|reply by|case priority|overdue case|case details')
 add('#/carriers', 'carrier service facts', 'delivery days|max weight|tracked service|signature service|service weight limit|takes at most')
 add('#/marketplaces', 'returns window and seller portal', 'returns window|return window days|outside the returns window|seller portal|seller portal link')
+add('#/buying', 'supplier link without login', 'share link|supplier link|link without login|po confirm link|production photo link|ship date link|artwork download link|revoke link|supplier portal link')
+add('#/old-entry', 'name matching on sourcing imports', 'add brand|supplier not found|forwarder not found|owner entity not found|never created silently|name matching')
 add('#/merges', 'merge duplicates', 'duplicate|duplicates|merge|merge duplicates|same person twice|dedupe|de-duplicate')
 add('#/list/cutover_run', 'migration switch', 'migration|migrate|cutover|cut over|go live|old system|old tool|switch over|legacy')
 add('#/me', 'my account', 'my profile|profile|my details|change password|my settings|language|dark mode')

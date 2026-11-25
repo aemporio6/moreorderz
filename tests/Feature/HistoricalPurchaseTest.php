@@ -19,6 +19,7 @@ class HistoricalPurchaseTest extends TestCase
         parent::setUp(); $this->actingAs($this->owner); Context::set(1, $this->owner->id);
         Fx::set('USD', '2025-03-01', 0.80); Fx::set('USD', '2025-05-01', 0.80);
         $this->owner_acc = (int) DB::table('t_account')->insertGetId(RecordService::fillNotNull('t_account', ['fk_id_ent' => 1, 'account_code' => 'OWN1', 'first_name' => 'Main', 'sur_name' => 'Owner', 'f_active' => 1]));
+        DB::table('t_src_suppliers')->insert(RecordService::fillNotNull('t_src_suppliers', ['fk_id_ent' => 1, 'supplier_code' => 'S-NBH', 'supplier_name' => 'Ningbo Housewares', 'f_active' => 1]));      /* R-B_SOURCING-12: a supplier is never created by an entry */
         $this->wh = (int) DB::table('cat_inventory_locations')->insertGetId(RecordService::fillNotNull('cat_inventory_locations', ['location_name' => 'Main WH', 'kind' => 'WAREHOUSE', 'fk_id_ent' => 1, 'f_sellable' => 1, 'f_active' => 1]));
     }
 
