@@ -306,6 +306,7 @@ class DispatchService
                 $changed = ['suggested' => $svc['service'], 'chosen' => (int) $d['service'], 'reason' => trim((string) $d['service_reason'])];
             }
             if (PackService::needsWeight(isset($d['service']) ? (int) $d['service'] : null) && empty($d['weight_g'])) throw new \InvalidArgumentException('Weight is needed for this carrier service – weigh the parcel.');
+            Carriers::weightGuard(isset($d['service']) ? (int) $d['service'] : null, isset($d['weight_g']) ? (int) $d['weight_g'] : ($sug['weight_g'] ?? null));      /* R-A_SALES-90 */
             $boxId = ! empty($d['box']) ? (int) $d['box'] : $sug['box'];
             $box = $boxId ? DB::table('wh_box_sizes')->where('id', $boxId)->whereIn('fk_id_ent', [$ent, 0])->first() : null;
             if (! empty($d['box']) && ! $box) throw new \InvalidArgumentException('Box not found.');
@@ -502,7 +503,11 @@ class DispatchService
             if ($grade === 'WRONG_ITEM_RETURNED') TaskEngine::open('WH_RETURN_UNMATCHED', [$intake], "Wrong item returned on order {$sale->order_no} – it is in QUARANTINE, check what came back", ['ent' => $ent, 'module' => 'wh_return_intakes', 'record_id' => $intake]);
             EventBus::fire('RETURN_RECEIVED', 't_sale_returns', $ret, ['sale' => $sale->id, 'qty' => $qty, 'condition' => $cond, 'grade' => $grade, 'before_confirm' => $before], $ent);
             if ($cond === 'SELLABLE' && $to !== StockService::systemLocation($ent, 'RETURNS')) self::fillShorts((int) $sale->fk_product_id);
-            return ['intake' => $intake, 'matched' => true, 'return' => $ret, 'grade' => $grade, 'restock_location' => $to, 'before_confirm' => $before, 'cost_back' => $back, 'claim' => $claim, 'refund_review' => ! $refunded];
+            /* R-A_SALES-90 the returns window of the shop's marketplace profile: a return opened after order date + window is flagged */
+            $win = (int) DB::table('t_branches as b')->join('mp_profiles as p', 'p.id', '=', 'b.fk_id_mp_profile')->where('b.id', $sale->fk_id_branch)->value('p.return_window_days'); $late = null;
+            if ($win > 0 && $sale->d_order && date('Y-m-d') > date('Y-m-d', strtotime(substr((string) $sale->d_order, 0, 10) . " +$win days"))) { $late = "outside the returns window ($win days from the order date)";
+                DB::table('t_sale_returns')->where('id', $ret)->update(['note' => mb_substr(trim(($d['note'] ?? '') . ' [' . $late . ']'), 0, 255)]); }
+            return ['window_flag' => $late, 'intake' => $intake, 'matched' => true, 'return' => $ret, 'grade' => $grade, 'restock_location' => $to, 'before_confirm' => $before, 'cost_back' => $back, 'claim' => $claim, 'refund_review' => ! $refunded];
         });
     }
 

@@ -297,7 +297,13 @@ class RecordService
         $hist = DB::table('sys_audit_log as a')->leftJoin('t_users as u', 'u.id', '=', 'a.user_id')->where('a.table_name', $table)->where('a.record_id', $id)
             ->orderByDesc('a.id')->limit(50)->get(['a.action', 'a.changes_json', 'a.reason', 'a.created_at', 'u.display_name'])
             ->map(fn ($h) => ['action' => $h->action, 'at' => $h->created_at, 'by' => $h->display_name ?: 'System', 'reason' => $h->reason, 'changes' => $h->action === 'UPDATE' ? Mask::history($formKey, json_decode($h->changes_json ?: '[]', true), \Illuminate\Support\Facades\Auth::user()) : null])->all();      // R-G_CORE-62 hidden fields read "(hidden)"
+        if ($table === 'crm_customers') {      /* R-A_SALES-90 the customer's open cases; a passed reply-by date shows red */
+            $cs = DB::table('t_sale_order_reminders')->where('fk_id_customer', $id)->where('e_status', 'PENDING')->orderBy('d_reply_by')->limit(30)->get(['ebay_order_no', 'd_reply_by', 'case_channel', 'priority']);
+            if ($cs->count()) $sections['Open cases'] = $cs->map(fn ($c) => ['label' => 'Order ' . $c->ebay_order_no, 'type' => 'text', 'value' => $v = trim(implode(' · ', array_filter([SaleCases::CHANNELS[(string) $c->case_channel] ?? null, $c->priority ?: null, $c->d_reply_by ? 'reply by ' . date('d-m-Y', strtotime((string) $c->d_reply_by)) : null, $c->d_reply_by && substr((string) $c->d_reply_by, 0, 10) < date('Y-m-d') ? 'OVERDUE' : null]))) ?: 'open', 'shown' => $v,
+                'alert' => (bool) ($c->d_reply_by && substr((string) $c->d_reply_by, 0, 10) < date('Y-m-d'))])->all();
+        }
         if ($table === 'cat_company_house') $sections['Accountancy Hub (read-only here)'] = AccHub::display($id);      // kept once, in the Hub (IC-17, R-F_SETUP-35)
+        if ($table === 't_branches' && ! empty($row['fk_id_mp_profile']) && ($portal = (string) DB::table('mp_profiles')->where('id', $row['fk_id_mp_profile'])->value('seller_portal_url')) !== '' && preg_match('#^https?://#i', $portal)) $parents[] = ['label' => 'Seller portal', 'title' => 'Open the seller portal', 'url' => $portal, 'external' => true];      /* R-A_SALES-90 link button on the shop page */
         if ($table === 't_account') {      /* R-C-2 only the sections and tabs of the person's kind */
             $kind = PersonKind::of($id); foreach (PersonKind::hiddenSections($kind) as $t) unset($sections[$t]);
             $hide = PersonKind::hiddenTables($kind); $children = array_filter($children, fn ($ct) => ! in_array($ct, $hide, true), ARRAY_FILTER_USE_KEY);

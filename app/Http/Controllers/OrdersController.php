@@ -278,7 +278,7 @@ class OrdersController extends Controller
         return ['lines' => array_map(fn ($l) => array_intersect_key($l, array_flip(['sale', 'product', 'sku', 'name', 'qty', 'listing_sku', 'ean', 'wh_status'])), $lines), 'suggest' => \App\Services\PackService::suggest($ent, $lines),
             'scan_required' => \App\Services\PackService::scanOn($ent), 'weight_required' => \App\Services\PackService::needsWeight(isset($d['service']) ? (int) $d['service'] : null),
             'verify' => isset($d['scans']) ? \App\Services\PackService::verify($lines, $d['scans']) : null, 'packing_stock' => \App\Services\PackService::stockOn($ent),
-            'presets' => DB::table('t_carrier_pkg_svc')->where('f_active', 1)->orderBy('pkg_svc_name')->get(['id', 'pkg_svc_name as name', 'needs_weight', 'fk_id_carrier as carrier']),
+            'presets' => DB::table('t_carrier_pkg_svc')->where('f_active', 1)->orderBy('pkg_svc_name')->get(['id', 'pkg_svc_name as name', 'needs_weight', 'fk_id_carrier as carrier'])->map(fn ($p) => (array) $p + ['facts' => \App\Services\Carriers::serviceFacts((int) $p->id)])->all(),      /* R-A_SALES-90 delivery days, max weight, tracked, signature */
             'service' => \App\Services\CarrierRules::suggest($ent, \App\Services\CarrierRules::facts($ent, $d['order_no'], (int) $d['branch'], $r->filled('weight_g') ? (int) $r->input('weight_g') : (\App\Services\PackService::suggest($ent, $lines)['weight_g'] ?? null)))];      // R-H-30
     }
 
@@ -468,6 +468,20 @@ class OrdersController extends Controller
         });
     }
 
+    /** R-A_SALES-58 / 54 / 55 the Etsy-style month header: meta, create, delete (with its lines), sale file check / import, remove sale. */
+    public function gen1Meta(Request $r) { $this->can($r, 'orders.SEE'); return \App\Services\Gen1Files::meta((int) \App\Services\Context::ent(), (int) $r->query('flag', 1)); }
+    public function gen1Head(Request $r, int $id) { return $this->run(function () use ($r, $id) { $this->can($r, 'orders.SEE'); return \App\Services\Gen1Files::header($id); }); }
+    public function gen1Create(Request $r) { return $this->run(function () use ($r) { $this->can($r, 'orders.saleImport'); return \App\Services\Gen1Files::create((int) \App\Services\Context::ent(), $r->all()); }); }
+    public function gen1Delete(Request $r, int $id) { return $this->run(function () use ($r, $id) { $this->can($r, 'orders.saleDeleteMonth'); return \App\Services\Gen1Files::delete($id); }); }
+    public function gen1SaleRemove(Request $r, int $id) { return $this->run(function () use ($r, $id) { $this->can($r, 'orders.saleDeleteMonth'); return \App\Services\Gen1Files::removeSale($id); }); }
+    public function gen1SaleFile(Request $r, int $id, string $step)
+    {
+        return $this->run(function () use ($r, $id, $step) {
+            $this->can($r, 'orders.saleImport');
+            if (! $r->hasFile('file')) throw new \InvalidArgumentException('No file uploaded');
+            return \App\Services\Gen1Files::import($id, $r->file('file')->getClientOriginalName(), (string) file_get_contents($r->file('file')->getRealPath()), $step === 'import');
+        });
+    }
     /** R-A_SALES-56 supplier orders (BUY) file of a Gen-1 month: check (never writes) / import. */
     public function gen1BuyFile(Request $r, int $id, string $step)
     {
@@ -583,6 +597,7 @@ class OrdersController extends Controller
     // ---------- cases on a sale (R-A_SALES-71) ----------
     public function saleCases(Request $r) { return $this->run(fn () => \App\Services\SaleCases::list($r->only(['status', 'shop', 'type', 'q', 'overdue']), $r->user())); }
     public function saleCaseTypes(Request $r) { $this->can($r, 'orders.saleCase'); return ['types' => \App\Services\SaleCases::types(), 'admin' => \App\Services\SaleCases::admin($r->user()), 'reply_days' => \App\Services\SaleCases::replyDays()]; }
+    public function saleCaseFacts(Request $r, int $id) { return $this->run(fn () => \App\Services\SaleCases::facts($id, $r->only(['case_channel', 'priority', 'd_reply_by']), $r->user())); }      /* R-A_SALES-90 */
     public function saleCaseRaise(Request $r, int $id) { return $this->run(fn () => $r->boolean('quick') ? \App\Services\SaleCases::quickAdd($id, $r->user()) : \App\Services\SaleCases::raise($id, $r->input('type'), $r->input('reason'), $r->user())); }
     public function saleCaseThread(Request $r, int $id) { return $this->run(fn () => \App\Services\SaleCases::thread($id, $r->user())); }
     public function saleCaseDo(Request $r, int $id, string $what)

@@ -169,4 +169,21 @@ class Carriers
         }
         return $best;
     }
+
+    /** R-A_SALES-90 the facts of a preset's carrier service: delivery days, max weight, tracked, signature (empty = not set / no limit). */
+    public static function serviceFacts(int $presetId): array
+    {
+        $x = DB::table('t_carrier_pkg_svc as v')->join('t_carrier_services as s', 's.id', '=', 'v.fk_id_car_service')->where('v.id', $presetId)->first(['s.service_name', 's.delivery_days', 's.max_weight_kg', 's.f_tracked', 's.f_signature']);
+        if (! $x) return ['text' => ''];
+        $kg = (float) $x->max_weight_kg > 0 ? rtrim(rtrim(number_format((float) $x->max_weight_kg, 3, '.', ''), '0'), '.') : null;
+        $t = array_filter([(int) $x->delivery_days > 0 ? (int) $x->delivery_days . ' day' . ((int) $x->delivery_days === 1 ? '' : 's') : null, $kg ? "max $kg kg" : null, (int) $x->f_tracked ? 'tracked' : null, (int) $x->f_signature ? 'signature' : null]);
+        return ['service' => $x->service_name, 'delivery_days' => (int) $x->delivery_days ?: null, 'max_weight_kg' => $kg !== null ? (float) $kg : null, 'tracked' => (bool) $x->f_tracked, 'signature' => (bool) $x->f_signature, 'text' => implode(' · ', $t)];
+    }
+
+    /** A parcel heavier than the service takes is refused; empty = no limit. */
+    public static function weightGuard(?int $presetId, ?int $weightG): void
+    {
+        if (! $presetId || ! $weightG) return; $f = self::serviceFacts($presetId);
+        if (! empty($f['max_weight_kg']) && $weightG > $f['max_weight_kg'] * 1000) throw new \InvalidArgumentException($f['service'] . ' takes at most ' . rtrim(rtrim(number_format($f['max_weight_kg'], 3, '.', ''), '0'), '.') . ' kg – choose another service.');
+    }
 }

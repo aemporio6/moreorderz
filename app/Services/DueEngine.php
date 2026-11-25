@@ -68,6 +68,7 @@ class DueEngine
                     EventBus::fire('DUE_SOON', $src->source_table, (int) $row->id, ['due_item' => $id, 'date' => $date, 'title' => $title], $ent);
                     $item = DB::table('sys_due_items')->where('id', $id)->first(); $n['new']++; $n['reminded']++;
                 }
+                if ($date <= $today && ! $item->fk_id_task && ($src->code ?? '') === 'CASE_REPLY') { if ($item->status !== 'OVERDUE') DB::table('sys_due_items')->where('id', $item->id)->update(['status' => 'OVERDUE', 'updated_at' => now()]); continue; }      /* R-A_SALES-90 a case has its own task (SALE_QUERY) – the due item only shows it, no new task code */
                 if ($date <= $today && ! $item->fk_id_task) {      // on the date and not done: the task
                     $tid = TaskEngine::open($src->task_code ?: 'ACC_DUE_ITEM', [$item->source_key ?: self::key($src, (int) $row->id, $date)], $item->title . ' – due ' . $date, ['ent' => $ent, 'owner_user_id' => (int) $item->owner_user_id ?: null, 'module' => $src->source_table, 'record_id' => (int) $row->id, 'fix_url' => '#/due']);
                     DB::table('sys_due_items')->where('id', $item->id)->update(['fk_id_task' => $tid, 'status' => 'OVERDUE', 'updated_at' => now()]); $n['tasks']++;

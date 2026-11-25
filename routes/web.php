@@ -469,6 +469,12 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('sales/carrier-file', [OrdersController::class, 'saleCarrierFile']);
         Route::get('gen1', [OrdersController::class, 'gen1List']);
         Route::get('gen1/{id}/{view}', [OrdersController::class, 'gen1'])->whereNumber('id')->whereIn('view', ['summary', 'sales', 'buys', 'match']);
+        Route::get('gen1/meta', [OrdersController::class, 'gen1Meta']);      // R-A_SALES-58
+        Route::post('gen1', [OrdersController::class, 'gen1Create']);
+        Route::get('gen1/{id}/head', [OrdersController::class, 'gen1Head'])->whereNumber('id');
+        Route::post('gen1/{id}/delete', [OrdersController::class, 'gen1Delete'])->whereNumber('id');
+        Route::post('gen1/{id}/sale-remove', [OrdersController::class, 'gen1SaleRemove'])->whereNumber('id');
+        Route::post('gen1/{id}/sale-file/{step}', [OrdersController::class, 'gen1SaleFile'])->whereNumber('id')->whereIn('step', ['check', 'import']);      // R-A_SALES-54 / 55
         Route::post('gen1/{id}/buy-file/{step}', [OrdersController::class, 'gen1BuyFile'])->whereNumber('id')->whereIn('step', ['check', 'import']);      // R-A_SALES-56
         Route::get('sales/unlock', [OrdersController::class, 'saleUnlockInfo']);
         Route::post('sales/unlock', [OrdersController::class, 'saleUnlock']);
@@ -495,6 +501,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('sale-cases', [OrdersController::class, 'saleCases']);
         Route::get('sale-cases/types', [OrdersController::class, 'saleCaseTypes']);
         Route::post('sales/{id}/case', [OrdersController::class, 'saleCaseRaise'])->whereNumber('id');
+        Route::post('sale-cases/{id}/facts', [OrdersController::class, 'saleCaseFacts'])->whereNumber('id');      // R-A_SALES-90
         Route::get('sale-cases/{id}', [OrdersController::class, 'saleCaseThread'])->whereNumber('id');
         Route::post('sale-cases/{id}/{what}', [OrdersController::class, 'saleCaseDo'])->whereNumber('id');
         Route::get('shop-health', [OrdersController::class, 'shopHealth']);

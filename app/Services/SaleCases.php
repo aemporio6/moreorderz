@@ -65,6 +65,27 @@ class SaleCases
     }
 
     /** A seller raises a case: type and reason both required; errors come back per field. */
+    /** R-A_SALES-90 how a case came in, and its priority (same words as tasks). */
+    public const CHANNELS = ['MESSAGE' => 'Message', 'EMAIL' => 'E-mail', 'PHONE' => 'Phone', 'RETURN_REQUEST' => 'Return request', 'FEEDBACK' => 'Feedback', 'CLAIM' => 'Claim', 'OTHER' => 'Other'];
+    public const PRIORITIES = ['URGENT', 'HIGH', 'NORMAL', 'LOW'];
+
+    /** Sets "Came through", priority and "Reply by" of a case (each optional). Reply by moves the case's task and its due item. */
+    public static function facts(int $id, array $in, ?object $u): array
+    {
+        Perm::need($u, 'orders.saleCase'); $c = DB::table('t_sale_order_reminders')->where('id', $id)->first() ?? throw new \InvalidArgumentException('Case not found.');
+        $mine = Perm::shops($u); if ($mine !== null && ! in_array((int) $c->fk_id_branch, $mine, true)) throw new \InvalidArgumentException('Case not found.');
+        $set = [];
+        if (array_key_exists('case_channel', $in)) { $v = strtoupper(trim((string) $in['case_channel'])); if ($v !== '' && ! isset(self::CHANNELS[$v])) self::fieldError(['case_channel' => 'Choose how the case came in from the list.']); $set['case_channel'] = $v ?: null; }
+        if (array_key_exists('priority', $in)) { $v = strtoupper(trim((string) $in['priority'])); if ($v !== '' && ! in_array($v, self::PRIORITIES, true)) self::fieldError(['priority' => 'Choose the priority from the list.']); $set['priority'] = $v ?: null; }
+        if (array_key_exists('d_reply_by', $in)) { $v = trim((string) $in['d_reply_by']); if ($v !== '' && ! strtotime($v)) self::fieldError(['d_reply_by' => 'Reply by must be a date.']); $set['d_reply_by'] = $v !== '' ? date('Y-m-d', strtotime($v)) : null; }
+        if (! $set) return ['message' => 'Nothing to change.'];
+        $ch = []; foreach ($set as $k => $v) if ((string) ($c->$k ?? '') !== (string) ($v ?? '')) $ch[$k] = [$c->$k ?? null, $v];
+        if ($ch) { DB::table('t_sale_order_reminders')->where('id', $id)->update(array_map(fn ($x) => $x[1], $ch)); Audit::log('t_sale_order_reminders', $id, 'UPDATE', $ch);
+            $t = DB::table('tasks')->where('dedupe_key', 'SALE_QUERY:' . $id)->whereNotIn('status', ['DONE', 'CANCELLED'])->value('id');
+            if ($t) DB::table('tasks')->where('id', $t)->update(array_filter(['due_at' => isset($ch['d_reply_by']) ? $ch['d_reply_by'][1] : null, 'priority' => isset($ch['priority']) ? $ch['priority'][1] : null])); }
+        return ['message' => 'Case updated.', 'changed' => array_keys($ch)];
+    }
+
     public static function raise(int $saleId, mixed $type, ?string $reason, ?object $u): array
     {
         Perm::need($u, 'orders.saleCase'); $s = self::sale($saleId, $u); $reason = trim((string) $reason); $type = (int) $type; $e = [];
@@ -149,9 +170,8 @@ class SaleCases
             ->orderBy('r.ebay_order_no')->orderBy('r.id')->limit(500)->get(['r.*', 'b.shop_no', 'b.shop_name', 't.reference_name as type_name', 't.item_code', 's.d_order', 's.cust_name', 's.cust_contacts', 's.product_info', 's.qty', 's.sale_rate', 's.total_amount', 's.buy_rate', 's.buy_amount', 's.profit', 's.d_buy', 's.ds_note', 's.fk_id_import', 'cv.pkg_svc_name',
                 DB::raw("NULLIF(TRIM(CONCAT_WS(' ', NULLIF(v.first_name,''), NULLIF(v.sur_name,''))), '') as vendor_name"), 'us.display_name as by_name']);
         $d = fn ($x) => $x ? date('d-m-Y', strtotime((string) $x)) : ''; $n = fn ($x) => $x === null ? '' : number_format((float) $x, 2);
-        return ['status' => $status, 'counts' => $counts, 'admin' => $admin, 'money' => $money, 'types' => $admin ? array_merge(self::types(), self::generalId() ? [['id' => self::generalId(), 'name' => 'General']] : []) : self::types(), 'shops' => array_map(fn ($s) => ['id' => $s['id'], 'name' => $s['label']], ShopLabel::list($u)), 'reply_days' => self::replyDays(),
-            'rows' => $rows->map(fn ($r) => ['id' => (int) $r->id, 'sale' => (int) $r->fk_id_t_sale_orders, 'batch' => (int) ($r->fk_id_import ?? 0), 'shop' => trim((string) $r->shop_no) . ' (' . trim((string) $r->shop_name) . ')', 'order_no' => $r->ebay_order_no, 'date' => $d($r->d_order), 'customer' => (string) $r->cust_name, 'contacts' => (string) $r->cust_contacts, 'sku' => $r->sku_ebay, 'product' => (string) $r->product_info,
+        return ['status' => $status, 'counts' => $counts, 'admin' => $admin, 'money' => $money, 'types' => $admin ? array_merge(self::types(), self::generalId() ? [['id' => self::generalId(), 'name' => 'General']] : []) : self::types(), 'shops' => array_map(fn ($s) => ['id' => $s['id'], 'name' => $s['label']], ShopLabel::list($u)), 'reply_days' => self::replyDays(), 'channels' => self::CHANNELS, 'priorities' => self::PRIORITIES,            'rows' => $rows->map(fn ($r) => ['id' => (int) $r->id, 'sale' => (int) $r->fk_id_t_sale_orders, 'batch' => (int) ($r->fk_id_import ?? 0), 'shop' => trim((string) $r->shop_no) . ' (' . trim((string) $r->shop_name) . ')', 'order_no' => $r->ebay_order_no, 'date' => $d($r->d_order), 'customer' => (string) $r->cust_name, 'contacts' => (string) $r->cust_contacts, 'sku' => $r->sku_ebay, 'product' => (string) $r->product_info,
                 'qty' => $r->qty === null ? '' : (int) $r->qty, 'rate' => $n($r->sale_rate), 'total' => $n($r->total_amount), 'carrier' => (string) $r->pkg_svc_name, 'supplier' => (string) $r->vendor_name, 'buy_rate' => $money ? $n($r->buy_rate) : null, 'buy_amount' => $money ? $n($r->buy_amount) : null, 'profit' => $money ? $n($r->profit) : null, 'profit_neg' => $money && (float) $r->profit < 0, 'buy_date' => $d($r->d_buy), 'item_note' => (string) $r->ds_note,
-                'type' => (string) $r->type_name, 'reason' => (string) $r->va_remarks, 'admin_remarks' => (string) $r->admin_remarks, 'entered' => $d($r->d_entered), 'by' => (string) $r->by_name, 'reply_by' => $d($r->d_reply_by), 'overdue' => $r->e_status === 'PENDING' && $r->d_reply_by && $r->d_reply_by < $today, 'gone' => $r->d_order === null])->all()];
+                'type' => (string) $r->type_name, 'reason' => (string) $r->va_remarks, 'admin_remarks' => (string) $r->admin_remarks, 'entered' => $d($r->d_entered), 'by' => (string) $r->by_name, 'channel' => self::CHANNELS[(string) ($r->case_channel ?? '')] ?? '', 'case_channel' => (string) ($r->case_channel ?? ''), 'priority' => (string) ($r->priority ?? ''), 'reply_by_iso' => $r->d_reply_by ? substr((string) $r->d_reply_by, 0, 10) : '', 'reply_by' => $d($r->d_reply_by), 'overdue' => $r->e_status === 'PENDING' && $r->d_reply_by && $r->d_reply_by < $today, 'gone' => $r->d_order === null])->all()];
     }
 }

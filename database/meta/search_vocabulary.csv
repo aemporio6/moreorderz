@@ -292,6 +292,7 @@ c79,customs,VOCAB,#/list/t_src_customs
 c88,customs,VOCAB,#/list/t_src_customs
 calculator,marketplace calculator,VOCAB,#/calculator
 call for money,capital calls,VOCAB,#/capital-calls
+came through,"case channel, priority and reply by",VOCAB,#/sale-cases
 camel,research board,VOCAB,#/list/src_research
 cancel order,orders to dispatch,VOCAB,#/orders
 cancellation rate,account health,VOCAB,#/shop-health
@@ -319,7 +320,10 @@ carton label,label templates,VOCAB,#/list/label_template
 carton labels,fc and 3pl inbound shipments,VOCAB,#/list/fba_shipment
 cartons,packaging and box sizes,VOCAB,#/list/product_packaging
 case,cases on sales,VOCAB,#/sale-cases
+case channel,"case channel, priority and reply by",VOCAB,#/sale-cases
+case details,"case channel, priority and reply by",VOCAB,#/sale-cases
 case pack,products,VOCAB,#/list/product
+case priority,"case channel, priority and reply by",VOCAB,#/sale-cases
 cases,cases on sales,VOCAB,#/sale-cases
 cash,money dashboard,VOCAB,#/money
 cash and carry,quick buy,VOCAB,#/list/quick_buy
@@ -572,7 +576,9 @@ deferment,customs,VOCAB,#/list/t_src_customs
 delay at port,shipments,VOCAB,#/list/t_src_shipments
 delegation,task rules,VOCAB,#/list/task_category
 delete person,delete or restore a person,VOCAB,#/list/party
+delete sale,etsy month header and sale files,VOCAB,#/gen1
 delivered orders,sales lines,VOCAB,#/sales
+delivery days,carrier service facts,VOCAB,#/carriers
 delivery rates,carriers and postage rates,VOCAB,#/carriers
 delivery received,inbound and grn,VOCAB,#/list/t_src_grn
 delivery service,carriers and postage rates,VOCAB,#/carriers
@@ -706,11 +712,16 @@ estimated vs real margin,research outcome,VOCAB,#/list/src_research
 eta,shipments,VOCAB,#/list/t_src_shipments
 etd,shipments,VOCAB,#/list/t_src_shipments
 etsy,marketplace operations hubs,VOCAB,#/hubs
+etsy audit,etsy month header and sale files,VOCAB,#/gen1
 etsy deposit,payouts and settlements,VOCAB,#/settlements
+etsy month,etsy month header and sale files,VOCAB,#/gen1
 etsy orders,import sales,VOCAB,#/sales-import
+etsy orders report,etsy month header and sale files,VOCAB,#/gen1
 etsy payout,payouts and settlements,VOCAB,#/settlements
+etsy sale,etsy month header and sale files,VOCAB,#/gen1
 etsy shop,marketplace operations hubs,VOCAB,#/hubs
 etsy sold orders,import sales,VOCAB,#/sales-import
+etsy_orders,etsy month header and sale files,VOCAB,#/gen1
 eu rep,legal label texts,VOCAB,#/list/label_legal_text
 eur,fx rates,VOCAB,#/list/fin_fx_rate
 eur to gbp,exchange rates,VOCAB,#/fx
@@ -847,6 +858,8 @@ fx difference,rate difference,VOCAB,#/fx
 gated brand,brands,VOCAB,#/list/brand
 gbp,fx rates,VOCAB,#/list/fin_fx_rate
 gdrive,drive folders,VOCAB,#/drive
+gen1 sale sheet,etsy month header and sale files,VOCAB,#/gen1
+gen1_sale_sheet,etsy month header and sale files,VOCAB,#/gen1
 general ledger,ledger,VOCAB,#/ledger
 generic,products,VOCAB,#/list/product
 getting started,first time setup,VOCAB,#/setup
@@ -934,6 +947,7 @@ import file,import a file,VOCAB,#/import
 import from china,buying dashboard,VOCAB,#/buying
 import history,import history,VOCAB,#/import-history
 import locations,warehouse locations and SKU homes by CSV,VOCAB,#/wh-csv
+import sale etsy,etsy month header and sale files,VOCAB,#/gen1
 import sales,import sales,VOCAB,#/sales-import
 import sku homes,warehouse locations and SKU homes by CSV,VOCAB,#/wh-csv
 import vat,customs,VOCAB,#/list/t_src_customs
@@ -971,6 +985,7 @@ interest,loans,VOCAB,#/loans
 internal margin,hidden margin,VOCAB,#/invoice-margin
 international shipping,carriers and postage rates,VOCAB,#/carriers
 internet,expenses,VOCAB,#/expenses
+invalid item notes,etsy month header and sale files,VOCAB,#/gen1
 inventory,stock on hand,VOCAB,#/stock
 inventory count,stock counts,VOCAB,#/stock/counts
 inventory cycle,replenishment and icc reorder,VOCAB,#/list/icc
@@ -1168,6 +1183,7 @@ master sku,products,VOCAB,#/list/product
 masters,catalog masters,VOCAB,#/list/cat_country
 match payment,bank and cash,VOCAB,#/bank
 material,products,VOCAB,#/list/product
+max weight,carrier service facts,VOCAB,#/carriers
 media,printers,VOCAB,#/printers
 medium parcel,carriers and postage rates,VOCAB,#/carriers
 menu,menu builder,VOCAB,#/menu-builder
@@ -1207,6 +1223,7 @@ money lag,marketplace profiles,VOCAB,#/list/mp_profile
 month close,month close,VOCAB,#/close
 month confirm,month confirm,VOCAB,#/confirm
 month end,month close,VOCAB,#/close
+month header,etsy month header and sale files,VOCAB,#/gen1
 monthly fee,subscriptions,VOCAB,#/subscriptions
 monthly report,all reports,VOCAB,#/reports
 monthly sales,annual sale report,VOCAB,#/sales-annual
@@ -1336,13 +1353,16 @@ orders report,import sales,VOCAB,#/sales-import
 orders today,orders to dispatch,VOCAB,#/orders
 origin charges,freight,VOCAB,#/list/t_src_freight
 oss,vat return,VOCAB,#/vat-return
+out of month,etsy month header and sale files,VOCAB,#/gen1
 out of stock,stock on hand,VOCAB,#/stock
 output vat,vat return,VOCAB,#/vat-return
 outside refund,outside refund,VOCAB,#/refunds
+outside the returns window,returns window and seller portal,VOCAB,#/marketplaces
 outsourced warehouse,3pl profiles,VOCAB,#/list/threepl_profile
 outstanding,outstanding who owes whom,VOCAB,#/invoice-outstanding
 over delivery,inbound and grn,VOCAB,#/list/t_src_grn
 overdraft,bank and cash,VOCAB,#/bank
+overdue case,"case channel, priority and reply by",VOCAB,#/sale-cases
 overdue invoices,outstanding who owes whom,VOCAB,#/invoice-outstanding
 overdue supplier,supplier payment schedule,VOCAB,#/supplier-schedule
 overdue tasks,needs action,VOCAB,#/tasks?scope=all
@@ -1693,6 +1713,7 @@ repeat order,buying dashboard,VOCAB,#/buying
 repeat po,direct po repeat order,VOCAB,#/list/t_src_direct
 replenish,replenishment and icc reorder,VOCAB,#/list/icc
 replenishment,replenishment and icc reorder,VOCAB,#/list/icc
+reply by,"case channel, priority and reply by",VOCAB,#/sale-cases
 report,all reports,VOCAB,#/reports
 report layout,marketplace profiles,VOCAB,#/list/mp_profile
 report type,mappings and report types,VOCAB,#/list/imp_report_type
@@ -1734,10 +1755,12 @@ return received,returns,VOCAB,#/returns
 return refund,refunds and refund proposals,VOCAB,#/refunds
 return request,cases on sales,VOCAB,#/sale-cases
 return to stock,returns,VOCAB,#/returns
+return window days,returns window and seller portal,VOCAB,#/marketplaces
 returned,returns,VOCAB,#/returns
 returned item,returns,VOCAB,#/returns
 returns,returns,VOCAB,#/returns
 returns stock,held stock,VOCAB,#/stock/held
+returns window,returns window and seller portal,VOCAB,#/marketplaces
 revenue,sales lines,VOCAB,#/sales
 revenue share,profit split rules,VOCAB,#/waterfall
 reviews,account health,VOCAB,#/shop-health
@@ -1777,6 +1800,7 @@ sale buy check,sale and buy match check,VOCAB,#/gen1
 sale buy match,sale and buy match check,VOCAB,#/gen1
 sale case,cases on sales,VOCAB,#/sale-cases
 sale price,sales lines,VOCAB,#/sales
+sale sheet,etsy month header and sale files,VOCAB,#/gen1
 sale vs buy,sale and buy match check,VOCAB,#/gen1
 sale_buy_match,sale and buy match check,VOCAB,#/gen1
 sales,sales lines,VOCAB,#/sales
@@ -1843,6 +1867,8 @@ seller fulfilled,fulfilment orders,VOCAB,#/fulfilment
 seller hub,marketplace operations hubs,VOCAB,#/hubs
 seller id,shops,VOCAB,#/list/shop
 seller performance,account health,VOCAB,#/shop-health
+seller portal,returns window and seller portal,VOCAB,#/marketplaces
+seller portal link,returns window and seller portal,VOCAB,#/marketplaces
 seller rating,account health,VOCAB,#/shop-health
 seller standards,account health,VOCAB,#/shop-health
 sellerdeck,api connections,VOCAB,#/connections
@@ -1852,9 +1878,11 @@ selling price calculator,marketplace calculator,VOCAB,#/calculator
 send again for approval,old entry approval,VOCAB,#/approvals
 send to amazon,fc and 3pl inbound shipments,VOCAB,#/list/fba_shipment
 service code,carriers and postage rates,VOCAB,#/carriers
+service weight limit,carrier service facts,VOCAB,#/carriers
 session,sessions and ip allow list,VOCAB,#/sessions
 sessions,sessions and ip allow list,VOCAB,#/sessions
 set,products,VOCAB,#/list/product
+set aside rows,etsy month header and sale files,VOCAB,#/gen1
 set up,first time setup,VOCAB,#/setup
 setting,settings,VOCAB,#/settings
 settings,settings,VOCAB,#/settings
@@ -1909,6 +1937,7 @@ shortlist,research board,VOCAB,#/list/src_research
 shrinkage,stock ledger,VOCAB,#/stock/ledger
 sidebar,menu builder,VOCAB,#/menu-builder
 sign off,approvals queue,VOCAB,#/approvals
+signature service,carrier service facts,VOCAB,#/carriers
 signed for,carriers and postage rates,VOCAB,#/carriers
 significantly not as described,cases on sales,VOCAB,#/sale-cases
 silent partner,partners,VOCAB,#/partners
@@ -2062,6 +2091,7 @@ system settings,settings,VOCAB,#/settings
 system status,system health,VOCAB,#/health
 table rate,rate difference,VOCAB,#/fx
 take money out,withdrawals,VOCAB,#/list/withdrawal
+takes at most,carrier service facts,VOCAB,#/carriers
 takings,sales lines,VOCAB,#/sales
 talk to today,cycle step map,VOCAB,#/buying
 tape,packaging and box sizes,VOCAB,#/list/product_packaging
@@ -2143,6 +2173,7 @@ toy safety,certificates,VOCAB,#/list/product_certificate
 trackable,tracking upload,VOCAB,#/tracking-upload
 tracked 24,carriers and postage rates,VOCAB,#/carriers
 tracked 48,carriers and postage rates,VOCAB,#/carriers
+tracked service,carrier service facts,VOCAB,#/carriers
 tracking,tracking upload,VOCAB,#/tracking-upload
 tracking container,shipments,VOCAB,#/list/t_src_shipments
 tracking file,tracking upload,VOCAB,#/tracking-upload
