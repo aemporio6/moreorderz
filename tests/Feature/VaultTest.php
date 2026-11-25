@@ -66,7 +66,7 @@ class VaultTest extends TestCase
     public function test_reveal_needs_the_right_and_every_refusal_is_logged(): void
     {
         $p = $this->person();
-        $id = $this->actingAs($this->owner)->postJson('/api/record/t_account_bank', ['values' => ['fk_id_account' => $p, 'memorable_word' => 'bluebird']])->assertOk()->json('id');
+        $id = $this->actingAs($this->owner)->postJson('/api/record/t_account_bank', ['values' => ['fk_id_account' => $p, 'account_no' => '87654321', 'memorable_word' => 'bluebird']])->assertOk()->json('id');
         $mgr = $this->makeUser('MANAGER');
         if (! Rights::can('MANAGER', 'VIEW', 't_account_bank')) $this->markTestSkipped('The Manager does not open bank records in this menu.');
         $this->actingAs($mgr)->postJson("/api/reveal/t_account_bank/$id", ['field' => 'memorable_word'])->assertStatus(403)->assertJsonMissing(['value' => 'bluebird']);
