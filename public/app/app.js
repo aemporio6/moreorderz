@@ -4558,7 +4558,7 @@
     $$('#main [data-pack]').forEach(b => b.onclick = () => packForm(d, d.rows.find(r => r.id == b.dataset.pack), again));
     $$('#main [data-ho]').forEach(b => b.onclick = () => act('handover', { carrier: +b.dataset.ho }, again));
     if ($('#hoCode')) { const ses = d.handovers[0], inp = $('#hoCode'), res = $('#hoRes'); inp.focus();
-      const tone = { OK: 'var(--done)', DUPLICATE: 'var(--warn)', WRONG_CARRIER: 'var(--err)', NOT_READY: 'var(--err)', UNKNOWN: 'var(--err)' };
+      const tone = { VOIDED: 'var(--err)', OK: 'var(--done)', DUPLICATE: 'var(--warn)', WRONG_CARRIER: 'var(--err)', NOT_READY: 'var(--err)', UNKNOWN: 'var(--err)' };
       inp.onkeydown = async e => { if (e.key !== 'Enter' || !inp.value.trim()) return; const code = inp.value.trim(); inp.value = '';
         try { const r = await api(`handover/${ses.id}/scan`, { method: 'POST', body: { code, op_id: opId() } }); res.style.color = tone[r.result] || 'inherit'; res.textContent = (r.result === 'OK' ? '✓ ' : '✕ ') + (r.message || r.result) + ' · ' + code; if (r.scanned !== undefined) $('#hoCount').textContent = `${r.scanned} of ${r.expected}`; }
         catch (x) { res.style.color = 'var(--err)'; res.textContent = x.message; } inp.focus(); };

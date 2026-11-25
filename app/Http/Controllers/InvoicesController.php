@@ -57,6 +57,7 @@ class InvoicesController extends Controller
     public function settlePreview(Request $r, int $import) { Perm::need($r->user(), 'money.SEE'); return $this->run(fn () => array_diff_key(\App\Services\InvestorSettle::calc($this->ent(), $import, $r->only(self::IN)), ['lines' => 1])); }
     public function settle(Request $r, int $import) { Perm::need($r->user(), 'money.approve'); return $this->run(fn () => \App\Services\InvestorSettle::settle($this->ent(), $import, $r->only(self::IN), $r->user())); }
     public function generate(Request $r, int $period) { Perm::need($r->user(), 'money.EDIT'); return $this->run(fn () => Docs::generate($this->ent(), $period, $r->user())); }
+    public function portalGenerate(Request $r, int $period) { return $this->run(fn () => Docs::portalGenerate($this->ent(), $period, $r->user())); }      /* R-D-83: guarded inside – setting + own share */
     public function pay(Request $r, int $id) { Perm::need($r->user(), 'money.EDIT'); return $this->run(fn () => Docs::pay($this->ent(), $id, $r->only(['amount', 'date', 'method', 'received_into', 'reference', 'notes']), $r->file('proof'), $r->user())); }
     public function unpay(Request $r, int $payment) { Perm::need($r->user(), 'money.EDIT'); return $this->run(fn () => Docs::deletePayment($this->ent(), $payment, $r->user())); }
     public function cancel(Request $r, int $id) { Perm::need($r->user(), 'money.EDIT'); return $this->run(fn () => Docs::cancel($this->ent(), $id, (string) $r->input('reason'), $r->user())); }

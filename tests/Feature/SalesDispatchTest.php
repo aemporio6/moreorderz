@@ -310,4 +310,43 @@ class SalesDispatchTest extends TestCase
         $this->assertSame(['HIDDEN', 4, 6, 10], [DB::table('t_product_vendors')->where('id', $this->p)->value('row_state'), Stock::balance($this->p, $this->binA), Stock::balance($this->p, $this->binB), Stock::balance($this->p)]);
         try { \App\Services\ProductArchive::delete($this->p, $u); $this->fail('deleted with stock'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('stock on BOWL-01', $e->getMessage()); }
     }
+
+    /** R-H-32 / R-H-60: address change after the label → label voided automatically, the old tracking is blocked at handover, a new label makes the parcel Ready. */
+    public function test_address_change_after_label_voids_it_and_the_old_tracking_is_refused_at_handover(): void
+    {
+        \App\Services\Settings::set('WH_SCAN_CONFIRM_PACK', 'N', 1); \App\Services\Context::set(1, null);
+        $id = $this->order('ORD-1', 1); $t = Dispatch::buildPickList(1); Dispatch::pick(DB::table('wh_pick_task_lines')->where('fk_id_pick_task', $t)->value('id'));
+        $p = Dispatch::pack(['order_no' => 'ORD-1', 'branch' => $this->shop, 'weight_g' => 300, 'tracking_no' => 'OLD-TRK']);
+        $r = Dispatch::addressChanged($id, ['ship_to_address' => '2 New Street', 'ship_to_postcode' => 'AB1 2CD']);
+        $this->assertSame([$p], $r['voided']);
+        $this->assertStringContainsString('print a new label', $r['message']);
+        $this->assertSame(['VOID', 'PACKED', 'OLD-TRK', '2 New Street'], [DB::table('wh_parcels')->where('id', $p)->value('label_status'), DB::table('wh_parcels')->where('id', $p)->value('status'), DB::table('wh_parcels')->where('id', $p)->value('voided_tracking'), DB::table('t_sales')->where('id', $id)->value('ship_to_address')]);
+        $ses = Dispatch::openHandover($this->carrier);
+        $x = Dispatch::scan($ses, 'OLD-TRK');
+        $this->assertSame(['VOIDED', 'Voided label – do not send'], [$x['result'], $x['message']]);
+        try { Dispatch::newLabel($p, 'OLD-TRK', 'ADDRESS_CHANGED'); $this->fail('old tracking reused'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('was voided', $e->getMessage()); }
+        Dispatch::newLabel($p, 'NEW-TRK', 'ADDRESS_CHANGED');
+        $this->assertSame('OK', Dispatch::scan($ses, 'NEW-TRK')['result']);
+        $this->assertSame('VOIDED', Dispatch::scan($ses, 'OLD-TRK')['result'], 'the old label stays blocked');
+        $c = Dispatch::closeHandover($ses);
+        $this->assertSame([1, 2], [$c['shipped'], $c['exceptions']]);
+        try { Dispatch::voidLabel($p, 'Too late'); $this->fail('voided after handover'); } catch (\RuntimeException $e) { $this->assertStringContainsString('left with the carrier', $e->getMessage()); }
+        $this->assertStringContainsString('already left', Dispatch::addressChanged($id, ['ship_to_city' => 'Leeds'])['message']);
+    }
+
+    /** R-H-43 / R-H-16 / R-H-60: moving a SKU's home while orders are reserved – reservations hold no bin, the next pick list takes the new home. */
+    public function test_moving_the_home_while_orders_are_reserved_keeps_the_reservations(): void
+    {
+        $this->actingAs($this->makeUser('OWNER'));
+        $site = DB::table('cat_inventory_locations')->insertGetId(RecordService::fillNotNull('cat_inventory_locations', ['location_name' => 'WH1', 'kind' => 'WAREHOUSE', 'fk_id_ent' => 1, 'f_active' => 1]));
+        DB::table('cat_inventory_locations')->whereIn('id', [$this->binA, $this->binB])->update(['fk_id_site' => $site]);
+        \App\Services\SkuHomes::set(1, $this->p, $this->binA, 'PRIMARY');
+        $id = $this->order('ORD-1', 3);
+        $before = DB::table('wh_reservations')->where('fk_id_sale', $id)->first(['id', 'status', 'qty', 'qty_short']);
+        \App\Services\SkuHomes::move(1, $this->p, $this->binB, true);
+        $this->assertEquals($before, DB::table('wh_reservations')->where('fk_id_sale', $id)->first(['id', 'status', 'qty', 'qty_short']), 'the reservation is untouched');
+        $this->assertSame([0, 10], [Stock::balance($this->p, $this->binA), Stock::balance($this->p, $this->binB)]);
+        $t = Dispatch::buildPickList(1);
+        $this->assertSame([[$this->binB, 3]], DB::table('wh_pick_task_lines')->where('fk_id_pick_task', $t)->get()->map(fn ($l) => [(int) $l->fk_id_from_location, (int) $l->qty])->all(), 'the bin is chosen at pick time – the new home');
+    }
 }

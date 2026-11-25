@@ -303,6 +303,13 @@ class OrdersController extends Controller
     /** R-H-17 put back the picked units of a cancelled line; R-H-35 un-scan a parcel the carrier did not take. */
     public function putback(Request $r, int $id) { $this->can($r, 'orders.WAREHOUSE'); return $this->run(fn () => Dispatch::putback($id, $r->input('bin') ? (int) $r->input('bin') : null)); }
 
+    /** R-H-32 void a label, put a new one on, address change after the label. */
+    public function voidLabel(Request $r, int $id) { $this->can($r, 'orders.WAREHOUSE'); return $this->run(fn () => Dispatch::voidLabel($id, (string) $r->input('reason', ''))); }
+
+    public function newLabel(Request $r, int $id) { $this->can($r, 'orders.WAREHOUSE'); return $this->run(fn () => Dispatch::newLabel($id, (string) $r->input('tracking_no', ''), (string) $r->input('reason', 'VOIDED_REPLACED'))); }
+
+    public function address(Request $r, int $id) { $this->can($r, 'orders.ENTER'); return $this->run(fn () => Dispatch::addressChanged($id, array_filter($r->only(['ship_to_name', 'ship_to_address', 'ship_to_city', 'ship_to_postcode']), fn ($v) => $v !== null && $v !== ''))); }
+
     public function unscan(Request $r, int $id) { $this->can($r, 'orders.WAREHOUSE'); return $this->run(fn () => Dispatch::unscan($id, (int) $r->input('parcel'), (string) $r->input('reason', ''))); }
 
     public function closeHandover(Request $r, int $id)

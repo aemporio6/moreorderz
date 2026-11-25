@@ -32,14 +32,14 @@ class EdgeCaseRegisterTest extends TestCase
         'Order cancelled after picking (putback)' => ['SalesDispatchTest::test_cancel_after_pick_opens_a_putback_and_releases_when_the_units_are_back'],
         'Carrier takes fewer parcels than scanned' => ['SalesDispatchTest::test_carrier_takes_fewer_unscan_within_the_window_back_to_ready'],
         'SKUs retired but holding stock' => ['SalesDispatchTest::test_retired_sku_keeps_its_stock_and_cannot_be_deleted'],
+        'Moving a SKU\'s home while orders are reserved' => ['SalesDispatchTest::test_moving_the_home_while_orders_are_reserved_keeps_the_reservations', 'Part3Test::test_sku_homes_one_main_home_per_site_and_move_home_moves_units_and_queues_two_labels'],
+        'Address change after label print' => ['SalesDispatchTest::test_address_change_after_label_voids_it_and_the_old_tracking_is_refused_at_handover'],
         'Two users on the same stock; browser refresh mid-scan' => ['StockTest::test_two_pickers_at_the_same_moment_never_take_the_same_units', 'SalesDispatchTest::test_abandoned_pick_list_releases_unpicked_lines_and_keeps_picked_units_in_dispatch'],
     ];
 
     /** No test yet (R-H-60 stays PARTIAL until this list is empty). */
     public const GAPS = [
         'Wrong item; unlabelled cartons; mixed SKUs in one carton (receiving)',
-        'Moving a SKU\'s home while orders are reserved',
-        'Address change after label print',
         'Combined shipping (several orders, one parcel)',
         'Owner running out while another owner has stock',
     ];

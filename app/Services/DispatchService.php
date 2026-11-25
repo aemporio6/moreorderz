@@ -100,6 +100,58 @@ class DispatchService
         });
     }
 
+    /** R-H-32 void a label before handover: label VOID, parcel back to PACKED, the old tracking no is kept and blocked at handover ("Voided label – do not send"). */
+    public static function voidLabel(int $parcelId, string $reason): array
+    {
+        if (mb_strlen(trim($reason)) < 3) throw new \InvalidArgumentException('Give the reason for voiding the label.');
+        return DB::transaction(function () use ($parcelId, $reason) {
+            $p = DB::table('wh_parcels')->where('id', $parcelId)->where('fk_id_ent', Context::ent())->lockForUpdate()->first() ?? throw new \RuntimeException('Parcel not found.');
+            if (in_array($p->status, ['HANDED_OVER', 'DELIVERED', 'LOST'], true)) throw new \RuntimeException('This parcel has left with the carrier – the label cannot be voided.');
+            if ($p->label_status === 'VOID') throw new \RuntimeException('This label is already voided.');
+            $old = array_filter(explode(',', (string) $p->voided_tracking)); if ($p->tracking_no) $old[] = $p->tracking_no;
+            DB::table('wh_parcels')->where('id', $parcelId)->update(['label_status' => 'VOID', 'status' => 'PACKED', 'voided_tracking' => mb_substr(implode(',', array_unique($old)), 0, 500), 'tracking_no' => null]);
+            $ent = (int) $p->fk_id_ent;
+            $carrier = $p->fk_id_carrier ? DB::table('t_carriers')->where('id', $p->fk_id_carrier)->first() : null;
+            $refund = $carrier && ! (int) ($carrier->f_void_supported ?? 0);
+            Audit::log('wh_parcels', $parcelId, 'UPDATE', ['label_status' => [$p->label_status, 'VOID'], 'voided tracking' => $p->tracking_no], $reason, $ent);
+            EventBus::fire('LABEL_VOIDED', 'wh_parcels', $parcelId, ['tracking' => $p->tracking_no, 'reason' => $reason], $ent);
+            return ['message' => "Label of {$p->parcel_code} voided" . ($refund ? ' – ask the carrier for the postage refund on its site.' : '.') . ' Print a new label before handover.', 'refund_request' => $refund];
+        });
+    }
+
+    /** R-H-32 a new label for a voided parcel (reason e.g. ADDRESS_CHANGED): new tracking no, parcel Ready again. */
+    public static function newLabel(int $parcelId, string $tracking, string $reason = 'VOIDED_REPLACED'): array
+    {
+        $tracking = trim($tracking); if ($tracking === '') throw new \InvalidArgumentException('Enter the new tracking number.');
+        return DB::transaction(function () use ($parcelId, $tracking, $reason) {
+            $p = DB::table('wh_parcels')->where('id', $parcelId)->where('fk_id_ent', Context::ent())->lockForUpdate()->first() ?? throw new \RuntimeException('Parcel not found.');
+            if ($p->label_status !== 'VOID') throw new \RuntimeException('Void the old label first.');
+            if (in_array($tracking, explode(',', (string) $p->voided_tracking), true)) throw new \InvalidArgumentException('This tracking number was voided – use the new label\'s number.');
+            DB::table('wh_parcels')->where('id', $parcelId)->update(['tracking_no' => $tracking, 'label_status' => 'READY', 'status' => 'READY']);
+            DB::table('t_sales')->whereIn('id', DB::table('wh_parcel_lines')->where('fk_id_parcel', $parcelId)->pluck('fk_id_sale'))->update(['tracking_no' => $tracking]);
+            Audit::log('wh_parcels', $parcelId, 'UPDATE', ['tracking_no' => [null, $tracking], 'label_status' => ['VOID', 'READY']], $reason, (int) $p->fk_id_ent);
+            return ['message' => "New label on {$p->parcel_code} – Ready for handover."];
+        });
+    }
+
+    /** R-H-32 address change after the label: the order's new address is saved, the label of its open parcel is voided automatically and a new label is needed. */
+    public static function addressChanged(int $saleId, array $addr): array
+    {
+        return DB::transaction(function () use ($saleId, $addr) {
+            $s = DB::table('t_sales')->where('id', $saleId)->where('fk_id_ent', Context::ent())->lockForUpdate()->first() ?? throw new \RuntimeException('Order line not found.');
+            $upd = array_intersect_key($addr, array_flip(['ship_to_name', 'ship_to_address', 'ship_to_city', 'ship_to_postcode']));
+            if (! $upd) throw new \InvalidArgumentException('Enter the new address.');
+            DB::table('t_sales')->where('fk_id_ent', $s->fk_id_ent)->where('fk_id_branch', $s->fk_id_branch)->where('order_no', $s->order_no)->update($upd);
+            Audit::log('t_sales', $saleId, 'UPDATE', ['address' => $upd], 'Address changed', (int) $s->fk_id_ent);
+            $voided = [];
+            foreach (DB::table('wh_parcel_lines as l')->join('wh_parcels as p', 'p.id', '=', 'l.fk_id_parcel')->where('l.fk_id_sale', $saleId)->whereIn('p.status', ['READY', 'PACKED'])->where(fn ($w) => $w->whereNull('p.label_status')->orWhere('p.label_status', '<>', 'VOID'))->distinct()->pluck('p.id') as $pid)
+                if (DB::table('wh_parcels')->where('id', $pid)->value('tracking_no')) { self::voidLabel((int) $pid, 'ADDRESS_CHANGED'); $voided[] = (int) $pid; }
+            $left = DB::table('wh_parcel_lines as l')->join('wh_parcels as p', 'p.id', '=', 'l.fk_id_parcel')->where('l.fk_id_sale', $saleId)->where('p.status', 'HANDED_OVER')->exists();
+            EventBus::fire('ORDER_ADDRESS_CHANGED', 't_sales', $saleId, ['voided' => $voided], (int) $s->fk_id_ent);
+            return ['voided' => $voided, 'message' => $left ? 'Address saved – but the parcel has already left with the carrier; ask the carrier to redirect it.' : ($voided ? 'Address saved; the old label is voided – print a new label (reason: Address changed).' : 'Address saved.')];
+        });
+    }
+
     /** R-H-35: the carrier took fewer than scanned – within WH_HANDOVER_REOPEN_MINUTES a parcel can be un-scanned with a reason (back to Ready, units SHIPPED → DISPATCH); later it is a lost-parcel case. */
     public static function unscan(int $sessionId, int $parcelId, string $reason): array
     {
@@ -282,12 +334,13 @@ class DispatchService
             if ($opId && ($again = DB::table('wh_handover_scans')->where('fk_id_handover_session', $sessionId)->where('client_op_id', $opId)->first())) return ['result' => $again->result, 'repeat' => true];
             $code = trim($code);
             $p = DB::table('wh_parcels')->where('fk_id_ent', $s->fk_id_ent)->where(fn ($w) => $w->where('parcel_code', $code)->orWhere('tracking_no', $code))->first();
-            $result = ! $p ? 'UNKNOWN' : (DB::table('wh_handover_scans')->where('fk_id_handover_session', $sessionId)->where('fk_id_parcel', $p->id)->where('result', 'OK')->exists() ? 'DUPLICATE'
-                : ((int) $p->fk_id_carrier !== (int) $s->fk_id_carrier ? 'WRONG_CARRIER' : ($p->status !== 'READY' ? 'NOT_READY' : 'OK')));
+            $voided = $code !== '' && DB::table('wh_parcels')->where('fk_id_ent', $s->fk_id_ent)->where(fn ($w) => $w->whereRaw('FIND_IN_SET(?, voided_tracking)', [$code])->orWhere(fn ($x) => $x->where('tracking_no', $code)->where('label_status', 'VOID')))->exists();      /* R-H-32 */
+            $result = $voided ? 'VOIDED' : (! $p ? 'UNKNOWN' : (DB::table('wh_handover_scans')->where('fk_id_handover_session', $sessionId)->where('fk_id_parcel', $p->id)->where('result', 'OK')->exists() ? 'DUPLICATE'
+                : ((int) $p->fk_id_carrier !== (int) $s->fk_id_carrier ? 'WRONG_CARRIER' : ($p->status !== 'READY' ? 'NOT_READY' : 'OK'))));
             DB::table('wh_handover_scans')->insert(['fk_id_handover_session' => $sessionId, 'scanned_code' => mb_substr($code, 0, 100), 'fk_id_parcel' => $p->id ?? null, 'result' => $result, 'f_resolved' => $result === 'OK' ? 1 : 0, 'client_op_id' => $opId, 'scanned_by' => Context::userId() ?? 0, 'scanned_at' => now()]);
             if ($result === 'OK') DB::table('wh_handover_sessions')->where('id', $sessionId)->increment('scanned_count');
             elseif ($result !== 'DUPLICATE') DB::table('wh_handover_sessions')->where('id', $sessionId)->increment('exception_count');
-            $msg = ['OK' => 'OK', 'DUPLICATE' => 'Already scanned', 'WRONG_CARRIER' => 'This parcel is for another carrier – keep it back', 'NOT_READY' => 'Not ready: ' . strtolower($p->status ?? ''), 'UNKNOWN' => 'No parcel matches this code'][$result];
+            $msg = ['VOIDED' => 'Voided label – do not send', 'OK' => 'OK', 'DUPLICATE' => 'Already scanned', 'WRONG_CARRIER' => 'This parcel is for another carrier – keep it back', 'NOT_READY' => 'Not ready: ' . strtolower($p->status ?? ''), 'UNKNOWN' => 'No parcel matches this code'][$result];
             $x = DB::table('wh_handover_sessions')->where('id', $sessionId)->first();
             return ['result' => $result, 'message' => $msg, 'scanned' => (int) $x->scanned_count, 'expected' => (int) $x->expected_count];
         });
@@ -313,7 +366,7 @@ class DispatchService
                 $n++;
             }
             $left = DB::table('wh_parcels')->where('fk_id_ent', $ent)->where('fk_id_carrier', $s->fk_id_carrier)->where('status', 'READY')->count();
-            $exc = DB::table('wh_handover_scans')->where('fk_id_handover_session', $sessionId)->whereIn('result', ['UNKNOWN', 'WRONG_CARRIER', 'NOT_READY'])->where('f_resolved', 0)->count();
+            $exc = DB::table('wh_handover_scans')->where('fk_id_handover_session', $sessionId)->whereIn('result', ['UNKNOWN', 'WRONG_CARRIER', 'NOT_READY', 'VOIDED'])->where('f_resolved', 0)->count();
             DB::table('wh_handover_sessions')->where('id', $sessionId)->update(['status' => 'CLOSED', 'closed_by' => Context::userId(), 'closed_at' => now(), 'driver_name' => $driver]);
             if ($exc) TaskEngine::open('WH_HANDOVER_EXCEPTION', [$sessionId], "Handover {$s->session_code}: $exc scan(s) to resolve", ['ent' => $ent, 'module' => 'wh_handover_sessions', 'record_id' => $sessionId]);
             EventBus::fire('HANDOVER_CLOSED', 'wh_handover_sessions', $sessionId, ['shipped' => $n, 'left_ready' => $left, 'exceptions' => $exc], $ent);

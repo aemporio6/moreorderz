@@ -81,9 +81,22 @@ class InvestorDocs
     }
 
     /** R-D-83 generate the documents of a confirmed (settled) month. */
-    public static function generate(int $ent, int $periodId, object $u): array
+    /**
+     * R-D-83 investor portal: with PORTAL_CAN_GENERATE = Y an investor (login linked to his person) may create only his own document of a CONFIRMED month.
+     * "Invoice generated." / "Your invoice already exists."
+     */
+    public static function portalGenerate(int $ent, int $periodId, object $u): array
     {
-        return DB::transaction(function () use ($ent, $periodId, $u) {
+        if (Settings::get('PORTAL_CAN_GENERATE', $ent, 'N') !== 'Y') throw new \InvalidArgumentException('Invoices are made by the office. Ask them to generate this month.');
+        $acc = (int) ($u->fk_id_account ?? 0);
+        if (! $acc || ! DB::table('t_inv_period_investors')->where('fk_id_period', $periodId)->where('fk_id_investor_account', $acc)->exists()) throw new \InvalidArgumentException('You have no share in this sales month.');
+        $r = self::generate($ent, $periodId, $u, $acc);
+        return ['made' => $r['made'], 'message' => $r['made'] ? 'Invoice generated.' : 'Your invoice already exists.'];
+    }
+
+    public static function generate(int $ent, int $periodId, object $u, ?int $only = null): array
+    {
+        return DB::transaction(function () use ($ent, $periodId, $u, $only) {
             $p = DB::table('t_inv_periods')->where('id', $periodId)->where('fk_id_ent', $ent)->lockForUpdate()->first() ?? throw new \InvalidArgumentException('Sales month not found.');
             if ($p->status !== 'CONFIRMED') throw new \InvalidArgumentException('Invoices can only be generated for a confirmed and settled sales month.');
             $sbs = DB::table('t_inv_parties')->where('f_is_sbs', 1)->where('f_active', 1)->where(fn ($w) => $w->where('fk_id_ent', $ent)->orWhere('fk_id_ent', 0))->orderByDesc('fk_id_ent')->first();
@@ -106,6 +119,7 @@ class InvestorDocs
             $self = false;
             foreach (DB::table('t_inv_period_investors')->where('fk_id_period', $p->id)->orderBy('id')->get() as $iv) {
                 $type = (int) $iv->f_self ? 'SELF_SETTLEMENT' : 'INVESTOR'; if ($type === 'SELF_SETTLEMENT') $self = true;
+                if ($only !== null && (int) $iv->fk_id_investor_account !== $only) continue;      /* portal: only his own document */
                 if ($exists($type, (int) $iv->fk_id_investor_account)) continue;
                 $party = self::partyOf($ent, (int) $iv->fk_id_investor_account, 'INVESTOR');
                 $lines = array_merge(self::itemLines($p, (int) $iv->fk_id_investor_account) ?: [['ITEM', "Capital (raw cost) of the units sold - $shopName, $mon", (int) $iv->units, (float) $iv->capital]],
@@ -113,6 +127,7 @@ class InvestorDocs
                 if ($type === 'SELF_SETTLEMENT') $lines = array_merge($lines, $ownerLines);
                 $make($type, $party, $owner, (int) $iv->fk_id_investor_account, $party->company_name ?: $party->display_name, $lines, $type === 'SELF_SETTLEMENT');
             }
+            if ($only !== null) return ['made' => $made, 'message' => $made ? "$made document(s) generated." : 'All invoices for this month already exist.'];
             if (! $self && ((float) $p->owner_share > 0 || (float) $p->owner_fixed > 0) && ! $exists('OWNER_STATEMENT', null)) $make('OWNER_STATEMENT', $sbs, $owner, null, 'Owner statement', $ownerLines, true);
             if (((float) $p->va_salary > 0 || (float) $p->va_share > 0) && ! $exists('VA', null)) {
                 $va = $p->fk_va_account ? trim((string) DB::table('t_account')->where('id', $p->fk_va_account)->selectRaw("CONCAT_WS(' ', first_name, sur_name) n")->value('n')) : 'VA';

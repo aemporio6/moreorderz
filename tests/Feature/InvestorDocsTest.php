@@ -79,4 +79,21 @@ class InvestorDocsTest extends TestCase
         $this->postJson('/api/invoices/reopen/' . $this->period)->assertStatus(422)->assertJsonPath('message', 'Settlement not found or already reopened.');
         $o = (object) ['status' => 'UNPAID', 'd_due' => '2020-01-01']; $this->assertSame('Overdue', Docs::badge($o), 'overdue is computed, never stored');
     }
+
+    /** R-D-83 portal: PORTAL_CAN_GENERATE (default no); an investor creates only his own document. */
+    public function test_r83_portal_generates_only_the_investors_own_invoice(): void
+    {
+        $u = $this->makeUser('PARTNER'); DB::table('t_users')->where('id', $u->id)->update(['fk_id_account' => $this->inv]); $u->refresh();
+        $other = $this->makeUser('PARTNER');
+        $this->actingAs($u)->postJson('/api/portal/invoices/generate/' . $this->period)->assertStatus(422)->assertJsonPath('message', 'Invoices are made by the office. Ask them to generate this month.');
+        $this->assertSame('N', \App\Services\Choices::LIST['PORTAL_CAN_GENERATE'][2], 'default off');
+        \App\Services\Settings::set('PORTAL_CAN_GENERATE', 'Y', 1);
+        $this->actingAs($other)->postJson('/api/portal/invoices/generate/' . $this->period)->assertStatus(422)->assertJsonPath('message', 'You have no share in this sales month.');
+        $this->actingAs($u)->postJson('/api/portal/invoices/generate/' . $this->period)->assertOk()->assertJsonPath('message', 'Invoice generated.');
+        $this->assertSame(['INVESTOR'], DB::table('t_invoices')->where('fk_id_period', $this->period)->pluck('invoice_type')->all(), 'only his own – no owner statement, no 3PL');
+        $this->assertSame('INV-ALP-101-202610-001', DB::table('t_invoices')->where('fk_id_period', $this->period)->value('invoice_no'));
+        $this->actingAs($u)->postJson('/api/portal/invoices/generate/' . $this->period)->assertOk()->assertJsonPath('message', 'Your invoice already exists.');
+        $this->actingAs($this->owner)->postJson('/api/invoices/generate/' . $this->period)->assertOk()->assertJsonPath('message', '2 document(s) generated.');
+        $this->assertSame(1, DB::table('t_invoices')->where('fk_id_period', $this->period)->where('invoice_type', 'INVESTOR')->count(), 'the office run skips the existing one');
+    }
 }

@@ -543,6 +543,9 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('handover/{id}/scan', [OrdersController::class, 'scan'])->whereNumber('id');
         Route::post('handover/{id}/close', [OrdersController::class, 'closeHandover'])->whereNumber('id');
         Route::post('handover/{id}/unscan', [OrdersController::class, 'unscan'])->whereNumber('id');      // R-H-35
+        Route::post('parcels/{id}/void', [OrdersController::class, 'voidLabel'])->whereNumber('id');      // R-H-32
+        Route::post('parcels/{id}/new-label', [OrdersController::class, 'newLabel'])->whereNumber('id');
+        Route::post('sales/{id}/address', [OrdersController::class, 'address'])->whereNumber('id');
         Route::post('sales/{id}/putback', [OrdersController::class, 'putback'])->whereNumber('id');      // R-H-17
         Route::get('confirm', [OrdersController::class, 'confirmPreview']);
         Route::post('confirm', [OrdersController::class, 'confirm']);
@@ -606,6 +609,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('invoices', [\App\Http\Controllers\InvoicesController::class, 'index']);      // R-D-83 / 84
         Route::get('invoices/{id}', [\App\Http\Controllers\InvoicesController::class, 'show'])->whereNumber('id');
         Route::post('invoices/generate/{period}', [\App\Http\Controllers\InvoicesController::class, 'generate'])->whereNumber('period');
+        Route::post('portal/invoices/generate/{period}', [\App\Http\Controllers\InvoicesController::class, 'portalGenerate'])->whereNumber('period');      // R-D-83 portal
         Route::get('invoices/settle/{import}', [\App\Http\Controllers\InvoicesController::class, 'settlePreview'])->whereNumber('import');      // R-D-81 / 82 (preview never writes)
         Route::post('invoices/settle/{import}', [\App\Http\Controllers\InvoicesController::class, 'settle'])->whereNumber('import');
         Route::post('invoices/reopen/{period}', [\App\Http\Controllers\InvoicesController::class, 'reopen'])->whereNumber('period');
