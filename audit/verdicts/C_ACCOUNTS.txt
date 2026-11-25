@@ -23,7 +23,7 @@
 23|B|class Vault|secrets sealed, CVV / PIN never stored, card last 4 only, reveal logged
 24|F|form:t_account_address|form only
 25|F|form:t_account_doc|form only; "submitted to" log not built
-26|F|form:t_account_mobile|form only; slot rule not built
+26|B|function mobile|7e-171: SIM save rule (FormRules::mobile): required office / home, person, country, mobile no, network, SIM no, capacity (device and address optional); slot 1 … the device's slots ("Phone A has 2 slots."), not used by another active SIM of the device ("Slot 2 of Phone A is already used by …"); SMS forward never to the same mobile; the slot picker already offers only free slots (MobileSlotTest)
 27|F|form:t_account_email|form only
 28|F|form:t_account_bank|form only (account numbers masked by the vault)
 29|F|form:t_account_credit_card|form only

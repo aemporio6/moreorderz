@@ -215,4 +215,24 @@ class BuyingTest extends TestCase
         $this->assertSame([100, 3], [Stock::balance($go['product']), Stock::balance($wrong)], 'both are on the books; the wrong item has no PO price yet (SRC_LOT_NO_COST)');
         $this->assertSame('RECEIVED', DB::table('t_src_po')->where('id', $po)->value('status'), 'the PO is complete – the wrong item does not count against it');
     }
+
+    /** R-B_SOURCING-27 rule example: template "30/70" (30 % at PO, 70 % 7 days before ship), PO total 5,000, ship date 30/11 → 1,500.00 due PO date, 3,500.00 due 23/11; line change re-plans unpaid terms. */
+    public function test_payment_schedule_from_a_template(): void
+    {
+        $this->actingAs($this->owner);
+        $tpl = DB::table('cat_payment_terms')->insertGetId(['fk_id_ent' => 1, 'term_short' => '30/70', 'term_descr' => '30 % at PO, 70 % 7 days before ship', 'f_active' => 1, 'created_at' => now()]);
+        DB::table('cat_payment_term_lines')->insert([['fk_id_payment_term' => $tpl, 'term_no' => 1, 'milestone' => 'DEPOSIT', 'pct' => 30, 'due_rule' => 'ON_PO_CONFIRM', 'due_days' => 0], ['fk_id_payment_term' => $tpl, 'term_no' => 2, 'milestone' => 'BALANCE', 'pct' => 70, 'due_rule' => 'BEFORE_SHIPMENT', 'due_days' => 7]]);
+        $go = Buy::go($this->research()); Buy::acceptRfq($go['rfqs'][0]);
+        $po = Buy::createPo(['rfq' => $go['rfqs'][0], 'qty' => 100, 'date' => '2026-08-01']);
+        DB::table('t_src_po_lines')->where('fk_id_po', $po)->update(['unit_price' => 50, 'line_total' => 5000]);
+        DB::table('t_src_po')->where('id', $po)->update(['po_total' => 5000, 'fk_id_payment_term' => $tpl, 'required_ship_date' => '2026-11-30']);
+        Buy::confirmPo($po);
+        $terms = DB::table('t_src_payment_terms')->where('fk_id_po', $po)->orderBy('term_no')->get();
+        $this->assertSame([[1500.0, '2026-08-01', 'ON_PO_CONFIRM'], [3500.0, '2026-11-23', 'BEFORE_SHIPMENT']], $terms->map(fn ($t) => [(float) $t->planned_amount, $t->due_date, $t->due_rule])->all());
+        DB::table('t_src_payment_terms')->where('id', $terms[0]->id)->update(['paid_amount' => 1500, 'remaining_amount' => 0, 'status' => 'PAID']);
+        DB::table('t_src_po_lines')->where('fk_id_po', $po)->update(['line_total' => 5100]);
+        \App\Services\PoLines::total($po);
+        $this->assertSame([1500.0, 3600.0], DB::table('t_src_payment_terms')->where('fk_id_po', $po)->orderBy('term_no')->pluck('planned_amount')->map(fn ($x) => (float) $x)->all(), 'the paid term keeps its amount; the last unpaid term takes the rest – the schedule adds up');
+        $this->assertSame(0.0, Buy::recomputeTerms($po));
+    }
 }

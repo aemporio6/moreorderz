@@ -47,7 +47,7 @@ class Variations
                 'out_of_stock' => (int) $c->f_out_of_stock, 'landing_price' => (float) $c->landing_price, 'stock' => (int) $c->stock, 'marketplaces' => $m];
         }
         return ['parent' => ['id' => (int) $p->id, 'sku' => $p->SKU_VENDOR, 'name' => $p->product_name_vendor, 'landing_price' => (float) $p->landing_price], 'marketplaces' => $mps, 'rows' => $rows,
-            'colours' => DB::table('sys_field_options')->where('list_code', 'VARIANT_COLOUR')->where('f_active', 1)->orderBy('sort')->pluck('label', 'value'), 'sizes' => DB::table('sys_field_options')->where('list_code', 'VARIANT_SIZE')->where('f_active', 1)->orderBy('sort')->pluck('label', 'value'),
+            'colours' => DB::table('sys_field_options')->where('list_code', 'VARIANT_COLOUR')->where('f_active', 1)->orderBy('sort')->pluck('label', 'value'), 'colour_hex' => DB::table('sys_field_options')->where('list_code', 'VARIANT_COLOUR')->where('f_active', 1)->whereNotNull('hex')->pluck('hex', 'value'),      /* R-D-5 swatch */ 'sizes' => DB::table('sys_field_options')->where('list_code', 'VARIANT_SIZE')->where('f_active', 1)->orderBy('sort')->pluck('label', 'value'),
             'presets' => DB::table('t_carrier_pkg_svc')->where('f_active', 1)->orderBy('pkg_svc_name')->get(['id', 'pkg_svc_name as name', 'rate']), 'packings' => DB::table('t_packings')->where('f_active', 1)->orderBy('packing_name')->get(['id', 'packing_name as name', 'packing_rate as rate']),
             'can_edit' => Perm::has($u, 'stock.variations')];
     }

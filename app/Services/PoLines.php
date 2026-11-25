@@ -69,6 +69,7 @@ class PoLines
     {
         $t = round((float) DB::table('t_src_po_lines')->where('fk_id_po', $poId)->where('f_active', 1)->sum('line_total'), 2);
         DB::table('t_src_po')->where('id', $poId)->update(['po_total' => $t]);
+        BuyingService::recomputeTerms($poId);      /* R-B_SOURCING-27 unpaid terms follow the new total */
         return $t;
     }
 

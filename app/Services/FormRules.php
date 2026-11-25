@@ -28,6 +28,24 @@ class FormRules
     public static function required(string $formKey): array { return $formKey === 'cat_company_house' && self::strict($formKey) ? self::COMPANY_REQUIRED : []; }
 
     /** Clean $data in place and return field → message. $old = the stored row on edit. */
+    /** R-C-26 a SIM: 1 ≤ slot ≤ the device's slots and not used by another active SIM of the device; SMS forward target is not the mobile itself; required office/home, person, country, mobile no, network, SIM no, capacity. */
+    public static function mobile(array $data, array $old, ?int $id): array
+    {
+        $v = fn ($k) => array_key_exists($k, $data) ? $data[$k] : ($old[$k] ?? null); $e = [];
+        foreach (['l_office_home' => 'Office / home', 'fk_id_account' => 'Person', 'fk_id_country' => 'Country', 'mobile_no' => 'Mobile no', 'fk_id_mobile_network' => 'Network', 'simno' => 'SIM no', 'mobile_capacity' => 'Capacity'] as $k => $l)
+            if (trim((string) $v($k)) === '') $e[$k] = "$l is required";
+        if ($e) return $e;
+        $dev = (int) $v('fk_id_mobile_device'); $slot = (int) $v('slotno');
+        if ($dev && $slot) {
+            $d = DB::table('t_mobile_devices')->where('id', $dev)->first(['mobile_name', 'tot_slots']);
+            if ($d && ($slot < 1 || $slot > (int) $d->tot_slots)) return ['slotno' => "{$d->mobile_name} has {$d->tot_slots} slot" . ((int) $d->tot_slots === 1 ? '' : 's') . '.'];
+            $other = DB::table('t_account_mobiles')->where('fk_id_mobile_device', $dev)->where('slotno', $slot)->where(fn ($w) => $w->whereNull('f_active')->orWhere('f_active', 1))->when($id, fn ($q) => $q->where('id', '<>', $id))->value('mobile_no');
+            if ($other !== null && (int) ($v('f_active') ?? 1)) return ['slotno' => "Slot $slot of " . ($d->mobile_name ?? 'this device') . " is already used by $other"];
+        }
+        if ($id && (int) $v('sms_forward_to_mobile') === $id) return ['sms_forward_to_mobile' => 'SMS cannot be forwarded to the same mobile.'];
+        return [];
+    }
+
     public static function check(string $formKey, array &$data, array $old, ?int $id, array $already = []): array
     {
         if (Registry::table($formKey) === 't_account' && ($old['record_status'] ?? null) === 'DRAFT') $data['record_status'] = 'ACTIVE';      // the final Save of a draft person (R-C-20 / R-C-9)
@@ -62,6 +80,7 @@ class FormRules
             if (! is_array($p) || array_values($p) !== $p || array_filter($p, fn ($x) => ! is_string($x) || ! preg_match('/^\w+$/', $x))) return ['params_json' => 'Parameters must be a list of names, e.g. ["first_name","task_ref"].'];
             $data['params_json'] = json_encode(array_values($p));
         }
+        if ($table === 't_account_mobiles' && ($w = self::mobile($data, $old, $id))) return $w;      // R-C-26 slot rule, SMS forward, required set
         if ($table === 'cat_inventory_locations' && ($w = WarehouseSites::check($data, $old, $id))) return $w;      // R-H-3 / 6 system bins, bins with units
         if ($table === 'user_absence') return TaskSettings::absence($data, $old, $id);      // R-G_CORE-16
         if ($table === 'tm_delegations') return TaskSettings::delegation($data, $old, $id);      // R-G_CORE-17

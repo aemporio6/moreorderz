@@ -169,6 +169,11 @@ class BuyingService
             $dep = max(0, min(100, (float) ($po->deposit_pct ?? 30)));
             $depAmt = round($po->po_total * $dep / 100, 2); $balAmt = round($po->po_total - $depAmt, 2);
             $terms = [];
+            if (($tpl = self::templateTerms($po)) && ! DB::table('t_src_payment_terms')->where('fk_id_po', $poId)->where('f_active', 1)->exists()) {      /* R-B_SOURCING-27 the PO's payment-term template builds the schedule */
+                foreach ($tpl as [$no, $ms, $pct, $amt, $due, $rule]) $terms[] = DB::table('t_src_payment_terms')->insertGetId(['fk_id_ent' => $ent, 'fk_id_cycle' => $po->fk_id_cycle, 'fk_id_po' => $poId, 'term_no' => $no, 'milestone' => $ms, 'pct' => $pct, 'planned_amount' => $amt, 'paid_amount' => 0,
+                    'remaining_amount' => $amt, 'completion_pct' => 0, 'status' => 'DUE', 'created_by' => Context::userId(), 'f_active' => 1, 'created_at' => now(), 'due_date' => $due, 'due_rule' => $rule]);
+                $depAmt = (float) ($tpl[0][3] ?? 0); $balAmt = round($po->po_total - $depAmt, 2);
+            } else
             foreach (array_filter([[1, 'Deposit', $dep, $depAmt, $po->po_date, 'ON_CONFIRM'], [2, 'Balance', 100 - $dep, $balAmt, $po->required_ship_date ?: date('Y-m-d', strtotime($po->po_date . ' +30 days')), 'BEFORE_SHIP']], fn ($t) => $t[3] > 0) as [$no, $ms, $pct, $amt, $due, $rule]) {
                 $terms[] = DB::table('t_src_payment_terms')->insertGetId(['fk_id_ent' => $ent, 'fk_id_cycle' => $po->fk_id_cycle, 'fk_id_po' => $poId, 'term_no' => $no, 'milestone' => $ms, 'pct' => $pct, 'planned_amount' => $amt, 'paid_amount' => 0,
                     'remaining_amount' => $amt, 'completion_pct' => 0, 'status' => 'DUE', 'created_by' => Context::userId(), 'f_active' => 1, 'created_at' => now(), 'due_date' => $due, 'due_rule' => $rule]);
@@ -180,6 +185,38 @@ class BuyingService
             self::payDueTasks($ent);
             return ['terms' => $terms, 'fx_rate' => $rate];
         });
+    }
+
+    /**
+     * R-B_SOURCING-27 template lines of the PO's payment term → [term no, milestone, pct, planned, due date, due rule]; planned = round(total × pct / 100, 2), the last term = total − Σ earlier.
+     * Due: ON_PO_CONFIRM / DAYS_AFTER_INVOICE / FIXED_DATE = PO date + days; BEFORE_SHIPMENT = required ship date − days; ON_ARRIVAL / ON_BL_DATE = no date until it happens.
+     */
+    public static function templateTerms(object $po): array
+    {
+        if (! $po->fk_id_payment_term) return [];
+        $lines = DB::table('cat_payment_term_lines')->where('fk_id_payment_term', $po->fk_id_payment_term)->orderBy('term_no')->get();
+        if ($lines->isEmpty()) return [];
+        $total = round((float) $po->po_total, 2); $out = []; $sum = 0.0; $n = $lines->count();
+        foreach ($lines->values() as $i => $l) {
+            $amt = $i === $n - 1 ? round($total - $sum, 2) : round($total * (float) $l->pct / 100, 2); $sum += $amt; $days = (int) $l->due_days;
+            $due = match ((string) $l->due_rule) { 'BEFORE_SHIPMENT' => $po->required_ship_date ? date('Y-m-d', strtotime($po->required_ship_date . " -$days days")) : null, 'ON_ARRIVAL', 'ON_BL_DATE' => null, default => date('Y-m-d', strtotime($po->po_date . " +$days days")) };
+            $out[] = [(int) $l->term_no, (string) $l->milestone, (float) $l->pct, $amt, $due, (string) $l->due_rule];
+        }
+        return $out;
+    }
+
+    /** R-B_SOURCING-27 after PO lines change: terms without payments get planned = total × pct (last = the rest); the gap to the PO total ("schedule ≠ PO total by x") is returned. */
+    public static function recomputeTerms(int $poId): float
+    {
+        $po = DB::table('t_src_po')->where('id', $poId)->first(); if (! $po) return 0.0;
+        $terms = DB::table('t_src_payment_terms')->where('fk_id_po', $poId)->where('f_active', 1)->orderBy('term_no')->get(); if ($terms->isEmpty()) return 0.0;
+        $total = round((float) $po->po_total, 2); $n = $terms->count(); $sum = 0.0;
+        foreach ($terms->values() as $i => $t) {
+            if ((float) $t->paid_amount > 0 || (float) $t->pct <= 0) { $sum += (float) $t->planned_amount; continue; }      /* a term with payments (or typed by hand without %) keeps its planned amount */
+            $amt = $i === $n - 1 ? round($total - $sum, 2) : round($total * (float) $t->pct / 100, 2); $sum += $amt;
+            DB::table('t_src_payment_terms')->where('id', $t->id)->update(['planned_amount' => $amt, 'remaining_amount' => $amt]);
+        }
+        return round($total - (float) DB::table('t_src_payment_terms')->where('fk_id_po', $poId)->where('f_active', 1)->sum('planned_amount'), 2);
     }
 
     /** SRC_PAY_DUE: a term not Paid with a planned amount; with a due date the task waits until SRC_PAY_REMIND_DAYS before it (R-B_SOURCING-26 – one detector, CycleAlerts). */
