@@ -267,8 +267,14 @@ class DispatchService
     {
         return DB::transaction(function () use ($d) {
             $ent = (int) Context::ent();
-            $lines = DB::table('t_sales')->where('fk_id_ent', $ent)->where('order_no', $d['order_no'])->where('fk_id_branch', $d['branch'])->where('status', 'Pending')->where('sale_source', 'active')->lockForUpdate()->get();
+            $orders = array_values(array_unique(array_filter(array_map('strval', array_merge([$d['order_no']], (array) ($d['combine'] ?? []))), fn ($x) => trim($x) !== '')));      /* combined shipping: several orders of one buyer, one parcel (R-H-60) */
+            $lines = DB::table('t_sales')->where('fk_id_ent', $ent)->whereIn('order_no', $orders)->where('fk_id_branch', $d['branch'])->where('status', 'Pending')->where('sale_source', 'active')->lockForUpdate()->get();
             if ($lines->isEmpty()) throw new \RuntimeException('No open order lines found for this order.');
+            if (count($orders) > 1) {
+                if ($miss = array_diff($orders, $lines->pluck('order_no')->unique()->all())) throw new \InvalidArgumentException('Order ' . implode(', ', $miss) . ' has no open line in this shop.');
+                $buyer = fn ($s) => mb_strtolower(trim((string) ($s->ship_to_name ?: $s->cust_name)) . '|' . preg_replace('/\s+/', '', (string) $s->ship_to_postcode));
+                if ($lines->map($buyer)->unique()->count() > 1) throw new \InvalidArgumentException('Only orders of the same buyer and address can share one parcel.');
+            }
             if (! empty($d['sales'])) {      // Split parcel: only the chosen lines go into this parcel (R-H-29)
                 $lines = $lines->whereIn('id', array_map('intval', (array) $d['sales']))->values();
                 if ($lines->isEmpty()) throw new \InvalidArgumentException('Choose at least one line of this order for the parcel.');
@@ -280,7 +286,7 @@ class DispatchService
                 if (self::inParcel((int) $s->id)) throw new \RuntimeException("Order {$s->order_no} is already packed.");
             }
             // pack verification, weight, box (R-H-29)
-            $pl = array_values(array_filter(PackService::lines($ent, (string) $d['order_no'], (int) $d['branch']), fn ($l) => $lines->contains('id', (int) $l['sale'])));
+            $pl = array_values(array_filter(array_merge(...array_map(fn ($o) => PackService::lines($ent, (string) $o, (int) $d['branch']), $orders)), fn ($l) => $lines->contains('id', (int) $l['sale'])));
             if (PackService::scanOn($ent)) {
                 if (empty($d['scans'])) throw new \InvalidArgumentException('Scan each item of the order to verify it (or switch WH_SCAN_CONFIRM_PACK off).');
                 $v = PackService::verify($pl, (array) $d['scans']); if (! $v['ok']) throw new \InvalidArgumentException(PackService::refusal($v));

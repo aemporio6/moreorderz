@@ -190,4 +190,26 @@ class BuyingTest extends TestCase
         $this->expectExceptionMessage('No exchange rate for EUR on or before 2026-08-01');
         Buy::confirmPo($po);
     }
+
+    /** R-H-21 / R-H-60: receiving a wrong item and a mixed carton – the wrong SKU gets its own line (expected 0, flagged, SRC_QTY_MISMATCH); the PO line is counted as usual. */
+    public function test_receiving_wrong_item_and_mixed_carton(): void
+    {
+        $this->actingAs($this->owner);
+        $go = Buy::go($this->research());
+        Buy::acceptRfq($go['rfqs'][0]);
+        $po = Buy::createPo(['rfq' => $go['rfqs'][0], 'qty' => 100, 'date' => '2026-08-01']);
+        Buy::confirmPo($po);
+        $ship = Buy::createShipment(['po' => $po, 'eta' => '2026-08-18']);
+        $line = (int) DB::table('t_src_po_lines')->where('fk_id_po', $po)->value('id');
+        $wrong = (int) DB::table('t_product_vendors')->insertGetId(RecordService::fillNotNull('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'WRONG-1', 'product_name_vendor' => 'Not ordered', 'stock' => 0, 'f_active' => 1, 'e_product_type' => 'pool']));
+        try { Buy::createGrn(['shipment' => $ship, 'location' => $this->wh, 'lines' => [['product' => $wrong, 'received' => 0]]]); $this->fail('no qty'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('enter how many arrived', $e->getMessage()); }
+        $grn = Buy::createGrn(['shipment' => $ship, 'location' => $this->wh, 'date' => '2026-08-20', 'lines' => [['po_line' => $line, 'received' => 100], ['product' => $wrong, 'received' => 3]]]);      /* one mixed carton: the ordered SKU and 3 of another */
+        $rows = DB::table('t_src_grn_lines')->where('fk_id_grn', $grn)->orderBy('id')->get();
+        $this->assertSame([[100.0, 100.0, null], [0.0, 3.0, 'Wrong item – not on the PO']], $rows->map(fn ($r) => [(float) $r->expected_qty, (float) $r->received_qty, $r->notes])->all());
+        $this->assertTrue(TaskEngine::isOpen('SRC_QTY_MISMATCH', ['GRN' . $grn]));
+        $this->assertSame(103, (int) DB::table('t_src_grn')->where('id', $grn)->value('units_received'));
+        Buy::postGrn($grn);
+        $this->assertSame([100, 3], [Stock::balance($go['product']), Stock::balance($wrong)], 'both are on the books; the wrong item has no PO price yet (SRC_LOT_NO_COST)');
+        $this->assertSame('RECEIVED', DB::table('t_src_po')->where('id', $po)->value('status'), 'the PO is complete – the wrong item does not count against it');
+    }
 }

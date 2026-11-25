@@ -305,7 +305,15 @@ class BuyingService
             $gid = DB::table('t_src_grn')->insertGetId(['fk_id_ent' => $ent, 'grn_code' => ($no = Numbering::next('GRN', $ent, $date)), 'grn_number' => $no, 'fk_id_cycle' => $s->fk_id_cycle, 'fk_id_shipment' => $s->id, 'fk_id_warehouse' => $d['location'],
                 'arrival_date' => $date, 'grn_date' => $date, 'received_by' => (string) Context::userId(), 'posting_status' => 'DRAFT', 'status' => 'DRAFT', 'created_by' => Context::userId(), 'f_active' => 1, 'created_at' => now(), 'grn_source' => 'PO']);
             $exp = 0; $rec = 0; $dmg = 0; $mis = 0;
+            $wrong = [];
             foreach ($in as $l) {
+                if (empty($l['po_line']) && ! empty($l['product'])) {      /* R-H-21 wrong item: a SKU not on the PO → its own line, expected 0, flagged, SRC_QTY_MISMATCH */
+                    $p = DB::table('t_product_vendors')->where('id', (int) $l['product'])->where('fk_id_ent', $ent)->first() ?? throw new \InvalidArgumentException('Wrong item: product not found.');
+                    $r = (float) ($l['received'] ?? 0); if ($r <= 0) throw new \InvalidArgumentException("Wrong item {$p->SKU_VENDOR}: enter how many arrived.");
+                    DB::table('t_src_grn_lines')->insert(['fk_id_grn' => $gid, 'fk_id_po_line' => null, 'fk_id_product' => $p->id, 'sku' => $p->SKU_VENDOR, 'expected_qty' => 0, 'received_qty' => $r, 'accepted_qty' => $r, 'damaged_qty' => 0, 'missing_qty' => 0,
+                        'fk_id_location' => self::grnLoc($ent, $l['location'] ?? null) ?? $d['location'], 'notes' => 'Wrong item – not on the PO', 'created_by' => Context::userId(), 'created_at' => now()]);
+                    $rec += $r; $wrong[] = "$r × {$p->SKU_VENDOR}"; continue;
+                }
                 $link = $links[$l['po_line']] ?? throw new \RuntimeException('A GRN line must be on this shipment.');
                 $r = (float) $l['received']; $dg = (float) ($l['damaged'] ?? 0); $ms = (float) ($l['missing'] ?? max(0, $link->actual_qty - $r));
                 if ($r < 0 || $dg < 0 || $dg > $r) throw new \InvalidArgumentException('Received and damaged quantities do not fit.');
@@ -313,6 +321,7 @@ class BuyingService
                     'expected_qty' => $link->actual_qty, 'received_qty' => $r, 'accepted_qty' => $r - $dg, 'damaged_qty' => $dg, 'missing_qty' => $ms, 'fk_id_location' => self::grnLoc($ent, $l['location'] ?? null) ?? $d['location'], 'created_by' => Context::userId(), 'created_at' => now()]);
                 $exp += $link->actual_qty; $rec += $r; $dmg += $dg; $mis += $ms;
             }
+            if ($wrong) TaskEngine::open('SRC_QTY_MISMATCH', ['GRN' . $gid], "GRN $no: wrong item(s) not on the PO – " . implode(', ', $wrong) . ' – check with the supplier', ['ent' => $ent, 'module' => 't_src_grn', 'record_id' => (int) $gid]);
             DB::table('t_src_grn')->where('id', $gid)->update(['expected_units' => $exp, 'units_received' => $rec, 'damaged_units' => $dmg, 'missing_units' => $mis, 'shortage_qty' => $mis, 'damage_pct' => $rec > 0 ? round($dmg / $rec * 100, 2) : 0]);
             return (int) $gid;
         });

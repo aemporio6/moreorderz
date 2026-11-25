@@ -444,4 +444,41 @@ class SalesDispatchTest extends TestCase
         $this->assertStringContainsString('rejected', \App\Services\WarehouseSlotting::decide(1, (int) $sq->id, false, $u)['message']);
         try { \App\Services\WarehouseSlotting::decide(1, (int) $sq->id, true, $u); $this->fail('decided twice'); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('already rejected', $e->getMessage()); }
     }
+
+    /** R-H-60 combined shipping: several orders of the same buyer, shop and carrier in one parcel ("Combine"); another buyer is refused. */
+    public function test_combined_shipping_one_parcel_for_two_orders_of_one_buyer(): void
+    {
+        \App\Services\Settings::set('WH_SCAN_CONFIRM_PACK', 'N', 1); \App\Services\Context::set(1, null);
+        $buyer = ['ship_to_name' => 'Jane Buyer', 'ship_to_postcode' => 'AB1 2CD'];
+        $a = $this->order('ORD-1', 1, $buyer); $b = $this->order('ORD-2', 2, ['ship_to_postcode' => 'ab12cd'] + $buyer); $c = $this->order('ORD-3', 1, ['ship_to_name' => 'Other Person', 'ship_to_postcode' => 'ZZ9 9ZZ']);
+        $t = Dispatch::buildPickList(1); foreach (DB::table('wh_pick_task_lines')->where('fk_id_pick_task', $t)->pluck('id') as $l) Dispatch::pick($l);
+        try { Dispatch::pack(['order_no' => 'ORD-1', 'branch' => $this->shop, 'combine' => ['ORD-3'], 'tracking_no' => 'X']); $this->fail('other buyer'); } catch (\InvalidArgumentException $e) { $this->assertSame('Only orders of the same buyer and address can share one parcel.', $e->getMessage()); }
+        $p = Dispatch::pack(['order_no' => 'ORD-1', 'branch' => $this->shop, 'combine' => ['ORD-2'], 'weight_g' => 900, 'tracking_no' => 'TRK-C']);
+        $this->assertEqualsCanonicalizing([$a, $b], DB::table('wh_parcel_lines')->where('fk_id_parcel', $p)->pluck('fk_id_sale')->map(fn ($x) => (int) $x)->all(), 'one parcel, both orders');
+        $this->assertSame(['PACKED', 'PACKED', 'TRK-C'], [DB::table('t_sales')->where('id', $a)->value('wh_status'), DB::table('t_sales')->where('id', $b)->value('wh_status'), DB::table('t_sales')->where('id', $b)->value('tracking_no')]);
+        try { Dispatch::pack(['order_no' => 'ORD-2', 'branch' => $this->shop]); $this->fail('packed twice'); } catch (\RuntimeException $e) { $this->assertStringContainsString('already packed', $e->getMessage()); }
+        $ses = Dispatch::openHandover($this->carrier); Dispatch::scan($ses, 'TRK-C');
+        $this->assertSame(1, Dispatch::closeHandover($ses)['shipped']);
+        $this->assertSame([1, 2, 'PICKED'], [(int) DB::table('t_sales')->where('id', $a)->value('qty_shipped'), (int) DB::table('t_sales')->where('id', $b)->value('qty_shipped'), DB::table('wh_reservations')->where('fk_id_sale', $c)->value('status')]);
+    }
+
+    /** R-H-59 warehouse reports: stock by SKU side by side, orders awaiting, shipped awaiting confirm. */
+    public function test_warehouse_reports_stock_by_sku_awaiting_and_shipped(): void
+    {
+        $R = \App\Services\ReportService::class;
+        $id = $this->order('ORD-1', 3);
+        $row = collect($R::run(1, 'wh_sku', '2026-08-01', '2026-08-31', 'WAREHOUSE')['rows'])->firstWhere('sku', 'BOWL-01');
+        $this->assertSame([10, 10, 3, 7], [$row['physical'], $row['book'], $row['reserved'], $row['available']]);
+        $this->assertSame('To pick', collect($R::run(1, 'wh_awaiting', '2026-08-01', '2026-08-31', 'WAREHOUSE')['rows'])->firstWhere('order', 'ORD-1')['step']);
+        $this->assertSame(['A-A-01', 4], (fn ($r) => [$r['bin'], $r['units']])(collect($R::run(1, 'wh_bin', '2026-08-01', '2026-08-31', 'STOCK')['rows'])->firstWhere('bin', 'A-A-01')));
+        \App\Services\Settings::set('WH_SCAN_CONFIRM_PACK', 'N', 1);
+        $t = Dispatch::buildPickList(1); foreach (DB::table('wh_pick_task_lines')->where('fk_id_pick_task', $t)->pluck('id') as $l) Dispatch::pick($l);
+        Dispatch::pack(['order_no' => 'ORD-1', 'branch' => $this->shop, 'tracking_no' => 'TRK-R']);
+        $this->assertSame(['TRK-R'], array_column($R::run(1, 'wh_ready', '2026-08-01', '2026-08-31', 'WAREHOUSE')['rows'], 'tracking'));
+        $ses = Dispatch::openHandover($this->carrier); Dispatch::scan($ses, 'TRK-R'); Dispatch::closeHandover($ses);
+        $sa = $R::run(1, 'wh_shipped_awaiting', '2026-08-01', '2026-08-31', 'WAREHOUSE');
+        $this->assertSame([['shop' => 'Shop A', 'month' => '2026-08', 'lines' => 1, 'units' => 3]], $sa['rows']);
+        $this->assertSame(3, Stock::balance($this->p, Stock::systemLocation(1, 'SHIPPED')), 'equals the SHIPPED bin');
+        $this->assertFalse(\App\Services\ReportService::allowed('wh_sku', 'VA'));
+    }
 }

@@ -32,7 +32,7 @@ class ReportCatalogueTest extends TestCase
             $x = ReportService::run(1, $r['key'], $from, $to, 'OWNER');
             $this->assertIsArray($x['rows'], $r['key']); $this->assertNotEmpty($x['columns'], $r['key']);
         }
-        $this->assertCount(26, ReportService::catalogue('OWNER'));      // + Team engagements (R-C-40)
+        $this->assertCount(33, ReportService::catalogue('OWNER'));      // + Team engagements (R-C-40), + 7 warehouse reports (R-H-59)
         $v = ReportService::run(1, 'valuation', $from, $to, 'OWNER');
         $this->assertSame([26.0, 52.0], [(float) $v['totals']['units'], $v['totals']['value']]);
         $this->assertSame(Ledger::balance(1, '1200'), $v['totals']['value'], 'valuation at today = stock in the books');

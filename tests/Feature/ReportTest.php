@@ -84,7 +84,7 @@ class ReportTest extends TestCase
         $this->assertSame([], $this->actingAs($va)->getJson('/api/reports')->assertOk()->json('reports'));
         $this->getJson('/api/reports/sales_shop')->assertStatus(403);
         $list = array_column($this->actingAs($wh)->getJson('/api/reports')->json('reports'), 'key');
-        $this->assertSame(['in_transit', 'stock', 'stock_location'], array_values(array_intersect(['in_transit', 'stock', 'stock_location'], $list))); $this->assertCount(3, $list, 'warehouse: stock, stock by location, goods on the way – never money reports');
+        $this->assertSame(['in_transit', 'stock', 'stock_location'], array_values(array_intersect(['in_transit', 'stock', 'stock_location'], $list))); $this->assertCount(10, $list, 'warehouse: stock, stock by location, goods on the way + the 7 warehouse reports (R-H-59); never money reports');
         $s = $this->getJson('/api/reports/stock')->assertOk()->json();
         $this->assertNotContains('value', array_column($s['columns'], 'key'), 'warehouse sees units, not money');
         $this->assertArrayNotHasKey('value', $s['rows'][0]);

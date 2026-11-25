@@ -245,7 +245,7 @@ class OrdersController extends Controller
     public function pack(Request $r)
     {
         $this->can($r, 'orders.WAREHOUSE');
-        $d = $r->validate(['order_no' => 'required|string|max:100', 'branch' => 'required|integer', 'carrier' => 'nullable|integer', 'service' => 'nullable|integer', 'box' => 'nullable|integer', 'weight_g' => 'nullable|integer|min:1', 'tracking_no' => 'nullable|string|max:60', 'scans' => 'nullable|array|max:500', 'scans.*' => 'nullable|string|max:80', 'sales' => 'nullable|array|max:200', 'sales.*' => 'integer', 'service_reason' => 'nullable|string|max:255']);
+        $d = $r->validate(['order_no' => 'required|string|max:100', 'branch' => 'required|integer', 'carrier' => 'nullable|integer', 'service' => 'nullable|integer', 'box' => 'nullable|integer', 'weight_g' => 'nullable|integer|min:1', 'tracking_no' => 'nullable|string|max:60', 'scans' => 'nullable|array|max:500', 'scans.*' => 'nullable|string|max:80', 'sales' => 'nullable|array|max:200', 'sales.*' => 'integer', 'combine' => 'nullable|array|max:20', 'combine.*' => 'string|max:100', 'service_reason' => 'nullable|string|max:255']);
         return $this->run(function () use ($d) { $id = Dispatch::pack(array_filter($d, fn ($v) => $v !== null));
             $pj = \App\Services\PrintService::auto((int) Context::ent(), 'WH_AUTOPRINT_PACKING_SLIP', 'PACKING_SLIP', [$id], 'AUTO_PACK');
             return ['id' => $id, 'print' => $pj && $pj['status'] === 'PRINTED' ? $pj + ['url' => "/api/print-jobs/{$pj['job']}/pdf"] : null, 'parcel_code' => DB::table('wh_parcels')->where('id', $id)->value('parcel_code'), 'message' => 'Parcel packed and ready']; });
@@ -307,6 +307,14 @@ class OrdersController extends Controller
     public function slotting(Request $r) { $this->can($r, 'orders.SEE'); return ['rows' => \App\Services\WarehouseSlotting::list((int) Context::ent())]; }
 
     public function slottingDecide(Request $r, int $id) { return $this->run(fn () => \App\Services\WarehouseSlotting::decide((int) Context::ent(), $id, (bool) $r->input('approve'), $r->user())); }
+
+    /** R-H-35 parcels of handovers closed inside WH_HANDOVER_REOPEN_MINUTES – they can still be un-scanned. */
+    public function handoverRecent(Request $r)
+    {
+        $this->can($r, 'orders.SEE'); $ent = (int) Context::ent(); $min = (int) \App\Services\Settings::get('WH_HANDOVER_REOPEN_MINUTES', $ent, 60);
+        return ['minutes' => $min, 'rows' => DB::table('wh_parcels as p')->join('wh_handover_sessions as h', 'h.id', '=', 'p.fk_id_handover_session')->where('h.fk_id_ent', $ent)->where('h.status', 'CLOSED')->where('h.closed_at', '>=', now()->subMinutes($min))
+            ->where('p.status', 'HANDED_OVER')->orderByDesc('h.closed_at')->limit(100)->get(['p.id', 'p.parcel_code', 'p.order_no', 'p.tracking_no', 'h.id as session', 'h.session_code', 'h.closed_at'])];
+    }
 
     /** R-H-32 void a label, put a new one on, address change after the label. */
     public function voidLabel(Request $r, int $id) { $this->can($r, 'orders.WAREHOUSE'); return $this->run(fn () => Dispatch::voidLabel($id, (string) $r->input('reason', ''))); }

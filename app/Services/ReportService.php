@@ -19,6 +19,13 @@ class ReportService
         'sales_day' => ['Sales', 'Sales by day', 'Orders, units and value per order date.', ['OWNER', 'MANAGER', 'TL', 'FINANCE', 'ACCOUNTANT'], true],
         'stock' => ['Stock', 'Stock on hand and days of cover', 'Units and value per product today, sold in the last 30 days, and how long the stock lasts at that pace.', ['OWNER', 'MANAGER', 'WAREHOUSE', 'SOURCING', 'FINANCE', 'ACCOUNTANT'], false],
         'stock_location' => ['Stock', 'Stock by location', 'Units and value per location today.', ['OWNER', 'MANAGER', 'WAREHOUSE', 'FINANCE', 'ACCOUNTANT'], false],
+        'wh_bin' => ['Warehouse', 'Stock by bin', 'Per site and bin: SKU, units, home role and when the bin was last counted (R-H-59 #1).', ['OWNER', 'MANAGER', 'WAREHOUSE', 'STOCK'], false],
+        'wh_sku' => ['Warehouse', 'Stock by SKU: physical, book, available', 'Per SKU side by side: units in sellable bins, units on the books, reserved, available (R-H-59 #2).', ['OWNER', 'MANAGER', 'WAREHOUSE', 'STOCK'], false],
+        'wh_awaiting' => ['Warehouse', 'Orders awaiting pick / pack / handover', 'Open own-stock order lines with dispatch-by and warehouse status (R-H-59 #7).', ['OWNER', 'MANAGER', 'WAREHOUSE', 'STOCK'], false],
+        'wh_ready' => ['Warehouse', 'Parcels ready, not handed over', 'Ready parcels with carrier, tracking and when they were packed (R-H-59 #8).', ['OWNER', 'MANAGER', 'WAREHOUSE', 'STOCK'], false],
+        'wh_abc' => ['Warehouse', 'ABC analysis', 'ABC class, pick lines and units per SKU and site from the last nightly run (R-H-59 #11).', ['OWNER', 'MANAGER', 'WAREHOUSE', 'STOCK'], false],
+        'wh_returns' => ['Warehouse', 'Returns by grade', 'Returns received in the period per grade and SKU (R-H-59 #17).', ['OWNER', 'MANAGER', 'WAREHOUSE', 'STOCK'], true],
+        'wh_shipped_awaiting' => ['Warehouse', 'Shipped awaiting confirm', 'Per shop and month: units shipped and still waiting for Month Confirm (R-H-59 #19).', ['OWNER', 'MANAGER', 'WAREHOUSE', 'STOCK'], false],
         'purchases' => ['Buying', 'Purchase orders', 'Each purchase order of the period: ordered, received, paid and still open.', ['OWNER', 'MANAGER', 'SOURCING', 'FINANCE', 'ACCOUNTANT'], true],
         'suppliers' => ['Buying', 'Supplier balances', 'Per supplier today: paid in advance for goods not received, and owed for goods received.', ['OWNER', 'MANAGER', 'FINANCE', 'ACCOUNTANT'], false],
         'cash' => ['Money', 'Cash in and out by kind', 'Every movement on the bank accounts in the period, grouped by what it was for, per month.', self::FIN, true],
@@ -114,6 +121,75 @@ class ReportService
             'cover' => $s > 0 ? (string) (int) round((int) $r->units / ($s / 30)) : ((int) $r->units > 0 ? 'no sales' : ''), 'min_level' => (string) (int) $r->min_level, 'state' => (int) $r->units <= (int) $r->min_level && (int) $r->min_level > 0 ? 'LOW' : '']; })->all();
         return [[['sku', 'SKU', 'text'], ['name', 'Product', 'text'], ['units', 'Units on hand', 'int'], ['value', 'Value at cost', 'money'], ['sold_30', 'Sold in the last 30 days', 'int'], ['cover', 'Days of cover', 'text'], ['min_level', 'Minimum', 'text'], ['state', 'State', 'text']], $out,
             'As it stands now (the dates do not apply). Value is the landed cost of the lots on the shelf and equals the stock account in the books. Days of cover = units ÷ (units sold in the last 30 days ÷ 30).'];
+    }
+
+    // ───────────── warehouse (R-H-59) ─────────────
+
+    private static function r_wh_bin(int $ent, string $from, string $to): array
+    {
+        $rows = DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->join('cat_inventory_locations as c', 'c.id', '=', 'b.fk_id_location')->join('t_product_vendors as p', 'p.id', '=', 'l.fk_id_product')
+            ->leftJoin('cat_inventory_locations as s', 's.id', '=', 'c.fk_id_site')->leftJoin('t_product_locations as h', fn ($j) => $j->on('h.fk_id_location', '=', 'c.id')->on('h.fk_id_product', '=', 'l.fk_id_product'))
+            ->where('l.company_id', $ent)->where('b.qty', '<>', 0)->groupBy('c.id', 'c.location_name', 's.location_name', 'p.SKU_VENDOR', 'h.home_role', 'h.last_counted_at')->orderBy('s.location_name')->orderBy('c.location_name')
+            ->selectRaw('s.location_name site, c.location_name bin, p.SKU_VENDOR sku, SUM(b.qty) units, h.home_role, h.last_counted_at')->get();
+        return [[['site', 'Site', 'text'], ['bin', 'Bin', 'text'], ['sku', 'SKU', 'text'], ['units', 'Units', 'int'], ['home', 'Home role', 'text'], ['counted', 'Last counted', 'text']],
+            $rows->map(fn ($r) => ['site' => $r->site ?? '', 'bin' => $r->bin, 'sku' => $r->sku, 'units' => (int) $r->units, 'home' => $r->home_role ?? '', 'counted' => $r->last_counted_at ? substr((string) $r->last_counted_at, 0, 10) : ''])->all(), 'As it stands now (the dates do not apply).'];
+    }
+
+    private static function r_wh_sku(int $ent, string $from, string $to): array
+    {
+        $book = DB::table('fin_lots')->where('company_id', $ent)->where('qty_left', '>', 0)->groupBy('fk_id_product')->selectRaw('fk_id_product, SUM(qty_left) q')->pluck('q', 'fk_id_product');
+        $rows = [];
+        foreach (DB::table('t_product_vendors')->where('fk_id_ent', $ent)->whereIn('id', $book->keys()->all() ?: [0])->orderBy('SKU_VENDOR')->get(['id', 'SKU_VENDOR', 'product_name_vendor']) as $p) {
+            $sell = (int) DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->join('cat_inventory_locations as c', 'c.id', '=', 'b.fk_id_location')->where('l.fk_id_product', $p->id)
+                ->where(fn ($w) => $w->whereNull('c.kind')->orWhereNotIn('c.kind', StockService::NOT_SELLABLE))->where(fn ($w) => $w->whereNull('c.f_sellable')->orWhere('c.f_sellable', 1))->sum('b.qty');
+            $res = (int) DB::table('wh_reservations')->where('fk_id_product', $p->id)->whereIn('status', ['OPEN', 'ALLOCATED'])->sum(DB::raw('qty - COALESCE(qty_picked,0)'));
+            $rows[] = ['sku' => $p->SKU_VENDOR, 'name' => $p->product_name_vendor, 'physical' => $sell, 'book' => (int) $book[$p->id], 'reserved' => $res, 'available' => StockService::available((int) $p->id)];
+        }
+        return [[['sku', 'SKU', 'text'], ['name', 'Product', 'text'], ['physical', 'Physical (sellable bins)', 'int'], ['book', 'On the books', 'int'], ['reserved', 'Reserved', 'int'], ['available', 'Available', 'int']], $rows,
+            'As it stands now. On the books also counts units picked, shipped awaiting Month Confirm and held (damaged, returns).'];
+    }
+
+    private static function r_wh_awaiting(int $ent, string $from, string $to): array
+    {
+        $rows = \App\Services\Perm::mine(DB::table('t_sales as s'), 's.fk_id_branch')->leftJoin('t_branches as b', 'b.id', '=', 's.fk_id_branch')->where('s.fk_id_ent', $ent)->where('s.status', 'Pending')->where('s.sale_source', 'active')
+            ->whereRaw("COALESCE(s.wh_status,'') NOT IN ('SHIPPED','RELEASED')")->where(fn ($w) => $w->whereNull('s.fulfilment_channel')->orWhere('s.fulfilment_channel', 'SELF'))->orderByRaw('s.dispatch_by IS NULL, s.dispatch_by')->limit(2000)
+            ->get(['b.shop_name', 's.order_no', 's.sku', 's.qty', 's.dispatch_by', 's.wh_status']);
+        $step = ['RESERVED' => 'To pick', 'SHORT' => 'Short', 'PICKING' => 'Picking', 'PICKED' => 'To pack', 'PACKED' => 'To hand over', 'PUTBACK' => 'Put back'];
+        return [[['shop', 'Shop', 'text'], ['order', 'Order', 'text'], ['sku', 'SKU', 'text'], ['qty', 'Units', 'int'], ['due', 'Dispatch by', 'text'], ['step', 'Waiting for', 'text']],
+            $rows->map(fn ($r) => ['shop' => $r->shop_name ?? '', 'order' => $r->order_no, 'sku' => $r->sku, 'qty' => (int) $r->qty, 'due' => $r->dispatch_by ? substr((string) $r->dispatch_by, 0, 16) : '', 'step' => $step[$r->wh_status] ?? ($r->wh_status ?: 'To reserve')])->all(), 'As it stands now.'];
+    }
+
+    private static function r_wh_ready(int $ent, string $from, string $to): array
+    {
+        $rows = DB::table('wh_parcels as p')->leftJoin('t_carriers as c', 'c.id', '=', 'p.fk_id_carrier')->leftJoin('t_branches as b', 'b.id', '=', 'p.fk_id_branch')->where('p.fk_id_ent', $ent)->where('p.status', 'READY')->orderBy('p.packed_at')
+            ->get(['p.parcel_code', 'b.shop_name', 'p.order_no', 'c.carrier_name', 'p.tracking_no', 'p.packed_at', 'c.collection_cutoff_time']);
+        return [[['parcel', 'Parcel', 'text'], ['shop', 'Shop', 'text'], ['order', 'Order', 'text'], ['carrier', 'Carrier', 'text'], ['tracking', 'Tracking', 'text'], ['packed', 'Packed at', 'text'], ['cutoff', 'Carrier cut-off', 'text']],
+            $rows->map(fn ($r) => ['parcel' => $r->parcel_code, 'shop' => $r->shop_name ?? '', 'order' => $r->order_no, 'carrier' => $r->carrier_name ?? '', 'tracking' => $r->tracking_no ?? '', 'packed' => substr((string) $r->packed_at, 0, 16), 'cutoff' => $r->collection_cutoff_time ?? ''])->all(), 'As it stands now.'];
+    }
+
+    private static function r_wh_abc(int $ent, string $from, string $to): array
+    {
+        $rows = DB::table('wh_product_stats as st')->join('t_product_vendors as p', 'p.id', '=', 'st.fk_id_product')->leftJoin('cat_inventory_locations as s', 's.id', '=', 'st.fk_id_site')->where('p.fk_id_ent', $ent)
+            ->orderBy('st.abc_class')->orderByDesc('st.pick_lines_period')->get(['s.location_name', 'p.SKU_VENDOR', 'st.abc_class', 'st.pick_lines_period', 'st.units_period', 'st.computed_at']);
+        return [[['site', 'Site', 'text'], ['sku', 'SKU', 'text'], ['class', 'Class', 'text'], ['picks', 'Pick lines', 'int'], ['units', 'Units picked', 'int'], ['at', 'Worked out', 'text']],
+            $rows->map(fn ($r) => ['site' => $r->location_name ?? '', 'sku' => $r->SKU_VENDOR, 'class' => $r->abc_class, 'picks' => (int) $r->pick_lines_period, 'units' => (int) $r->units_period, 'at' => substr((string) $r->computed_at, 0, 10)])->all(), 'From the last nightly run (WH_ABC_DAYS look-back).'];
+    }
+
+    private static function r_wh_returns(int $ent, string $from, string $to): array
+    {
+        $rows = DB::table('wh_return_intakes as r')->leftJoin('t_product_vendors as p', 'p.id', '=', 'r.fk_id_product')->where('r.fk_id_ent', $ent)->whereBetween(DB::raw('DATE(r.received_at)'), [$from, $to])
+            ->groupBy('r.grade', 'p.SKU_VENDOR')->orderBy('r.grade')->selectRaw('r.grade, p.SKU_VENDOR sku, COUNT(*) n, SUM(COALESCE(r.qty,0)) units')->get();
+        return [[['grade', 'Grade', 'text'], ['sku', 'SKU', 'text'], ['count', 'Returns', 'int'], ['units', 'Units', 'int']],
+            $rows->map(fn ($r) => ['grade' => DispatchService::GRADES[$r->grade] ?? ($r->grade ?: 'Not matched yet'), 'sku' => $r->sku ?? '', 'count' => (int) $r->n, 'units' => (int) $r->units])->all(), null];
+    }
+
+    private static function r_wh_shipped_awaiting(int $ent, string $from, string $to): array
+    {
+        $rows = \App\Services\Perm::mine(DB::table('t_sales as s'), 's.fk_id_branch')->leftJoin('t_branches as b', 'b.id', '=', 's.fk_id_branch')->where('s.fk_id_ent', $ent)->where('s.status', 'Pending')->where('s.sale_source', 'active')
+            ->whereRaw('COALESCE(s.qty_shipped,0) - COALESCE(s.qty_returned_unconfirmed,0) > 0')->groupBy('b.shop_name', DB::raw("DATE_FORMAT(s.d_order, '%Y-%m')"))
+            ->selectRaw("b.shop_name, DATE_FORMAT(s.d_order, '%Y-%m') month, COUNT(*) n_lines, SUM(COALESCE(s.qty_shipped,0) - COALESCE(s.qty_returned_unconfirmed,0)) units")->orderBy('month')->get();
+        return [[['shop', 'Shop', 'text'], ['month', 'Month', 'text'], ['lines', 'Lines', 'int'], ['units', 'Units shipped awaiting Confirm', 'int']],
+            $rows->map(fn ($r) => ['shop' => $r->shop_name ?? '', 'month' => $r->month, 'lines' => (int) $r->n_lines, 'units' => (int) $r->units])->all(), 'As it stands now: equals the SHIPPED bin (R-H-37).'];
     }
 
     private static function r_stock_location(int $ent, string $from, string $to): array

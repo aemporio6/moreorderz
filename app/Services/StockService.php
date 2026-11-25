@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\DB;
 class StockService
 {
     /** Movement types that never change value in the ledger accounts (a move between places of the same owner). */
-    private const NOT_SELLABLE = ['DAMAGED', 'RETURNS', 'PRODUCTION', 'TRANSIT', 'WRITTEN_OFF', 'QUARANTINE', 'MISSING', 'SUPPLIER', 'CUSTOMER', 'SHIPPED', 'DISPATCH', 'RECEIVING'];
+    public const NOT_SELLABLE = ['DAMAGED', 'RETURNS', 'PRODUCTION', 'TRANSIT', 'WRITTEN_OFF', 'QUARANTINE', 'MISSING', 'SUPPLIER', 'CUSTOMER', 'SHIPPED', 'DISPATCH', 'RECEIVING'];
 
     /**
      * Receive units: one lot per line. Called by GRN post (step 3) and by the opening stock entry.
