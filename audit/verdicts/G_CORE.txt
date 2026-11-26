@@ -74,8 +74,8 @@
 74|B|stagedTemplate|product bulk upload: Vendor, Vendor inventory, Shop and file all required with the old texts, columns A-I, parent / child / alone tree, carrier and packing by name or id with look-alike, template download with the carrier and packing lists, preview, confirm, Undo per batch; ProductImportsTest
 75|B|class TempCleanup|nightly mo:cleanup-temp at 02:30 company time (COMPANY_TIMEZONE): held uploads (ds_tmp) older than retention_import_upload_days = 1, generator files (csv_convert) older than retention_generator_days = 0, old temp rows; saved mappings / batches kept; the clean-up on page actions removed; each run logged (sys_job_runs TEMP_CLEANUP) and shown on System › Health; TempCleanupTest
 76|B|class Chains|shop form: required marketplace, shop no., owner, owner address, owner mobile, shop name, ISO code (registry); active default Yes; owner cascade – the owner's active addresses and mobiles (7e-145) and his companies with "Director n: name Share: x%" labels, "No company for this owner – press + Add"; a new owner clears and reloads the three fields; VA / seller is read-only from the shop assignments (B14 correction); ShopRolesTest r76
-77|P|tracking-upload|tracking upload per marketplace layout
-78|P|class PriceService|expected price from the period on the order date
+77|B|EXPORT_HEAD|same thing as R-A_SALES-77 (built): carrier file of the filtered fulfilment rows – 25 columns in the rule's order, TikTokSale_YmdHis.csv (24-hour), phone rule by Choice FULFIL_PHONE_FORMAT (national / old), shop + date + search column filters with the seller's scope, other carriers' layouts (CarrierFiles); verdict was stale
+78|B|function expectedCost|same thing as R-A_SALES-27 / 28 / 29 (built): expected cost from the price period in force on the order date, never the period's old price; the line keeps its cost source; lot cost replaces it at month confirm; verdict was stale
 79|P|function vaSalary|VA share in the waterfall; frozen batch % not built
 80|B|Gen1Compare::saleBuyMatch|SALE_BUY_MATCH: sale line joined to its buying line on the month + order_id_buy_in_sale → BUYING_MISSING / QTY_CUSTOMER / CUSTOMER / QTY / OK with the price difference; summary codes BUYING_MISSING / QTY_DIFF / OK (same customer, buy address contains the sale address); every non-OK row is a finding with a Fix link (tab Sale ↔ buy check); Month Close check PURCHASE_VS_SUPPLIER counts them (NA without sale + buy lines); test SaleBuyMatchTest::test_g80
 81|P|gdCopy|supplier purchase audit exists (PurchaseAudit: GD BUY / HOLD checks, Amazon audit, suppliers by audit profile not hard-coded); added fix Copy tracking and address from BUY to HOLD with preview, history per row and Undo; open: the "own inventory vendor" setting is not used
@@ -114,7 +114,7 @@
 114|P|function fit|loaded media checked at print; "switch media on the Work screen" not built
 115|B|function testPage|test page + calibration per printer x media, required before live jobs
 116|B|function replace|routes most-specific-wins, backup printer, replace printer in one step
-121|P|class ErrorPages|one error page for 403 (names the right, audit row DENIED), 404 (search + Home, also for an unknown address inside the app) and 500 ("logged as E-id"; message, file and SQL only in sys_error_log; API calls get the same short text); open: the command-line version does not print the short text + id yet
+121|B|class ErrorPages|one error page for 403 (names the right, audit row DENIED), 404 (search + Home, also an unknown address inside the app), 500 ("logged as E-id"; message, file, SQL only in sys_error_log; API calls get the same short text); the command line prints the same short text + id (App\\Exceptions\\Handler); ErrorPagesTest
 122|P|class OldImport|old logs copied as history tables; one time line on the record not built
 123|N||documentation index
 124|B|function boot|+ Create catalogue generated from the registry forms

@@ -136,7 +136,7 @@ class WarehouseSettings
                 'min' => $d[4]['min'] ?? null, 'max' => $d[1] === 'text' ? null : ($d[4]['max'] ?? null), 'optional' => ! empty($d[4]['optional'])];
             $tabs[] = ['name' => $tab, 'rows' => $rows];
         }
-        return ['tabs' => $tabs, 'history' => TypedSettings::history($ent, array_keys(self::defs()), 'WAREHOUSE_SETTING'),
+        return ['tabs' => $tabs, 'loc_preview' => LocationGenerator::preview($ent) /* R-H-4 live preview */, 'history' => TypedSettings::history($ent, array_keys(self::defs()), 'WAREHOUSE_SETTING'),
             'profiles' => [['label' => 'Channels (per marketplace profile)', 'url' => '#/list/mp_profile'], ['label' => 'Carriers (per carrier profile)', 'url' => '#/list/t_carriers'], ['label' => 'Bank holidays', 'url' => '#/list/non_working_day'], ['label' => 'Printers and routes', 'url' => '#/settings/printer'], ['label' => 'Roles and rights', 'url' => '#/permissions']]];
     }
 

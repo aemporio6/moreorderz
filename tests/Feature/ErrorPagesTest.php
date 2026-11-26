@@ -34,6 +34,11 @@ class ErrorPagesTest extends TestCase
         $this->assertStringContainsString('no_such_table_zz', (string) $row->context_json); $this->assertStringContainsString('GET _t/boom', (string) $row->url);
         $j = $this->getJson('/api/_t/boom')->assertStatus(500)->json(); $this->assertSame(['message', 'error_id'], array_keys($j));
         $this->assertMatchesRegularExpression('/^Something went wrong – the error was logged as E-\d+\.$/', $j['message']); $this->assertStringNotContainsString('no_such_table', json_encode($j));
+        // the command-line version: the same short text and the id; details only in the log
+        $n = (int) DB::table('sys_error_log')->max('id'); $line = \App\Services\ErrorPages::cli(new \RuntimeException('secret detail zz')); $this->assertSame('Something went wrong – the error was logged as E-' . ($n + 1) . '.', $line);
+        $this->assertStringContainsString('secret detail zz', (string) DB::table('sys_error_log')->where('id', $n + 1)->value('message')); $this->assertSame('cli', DB::table('sys_error_log')->where('id', $n + 1)->value('url'));
+        $this->assertInstanceOf(\App\Exceptions\Handler::class, app(\Illuminate\Contracts\Debug\ExceptionHandler::class));
+        $this->assertSame('orders.fulfilExport', \App\Services\Perm::code('sales.export_shipping'), 'R-D-55 right name');
         // our own refusals keep their plain sentence (not an error page)
         $this->postJson('/api/inventory-sharing', ['action' => 'PUSH', 'ids' => []])->assertStatus(422)->assertJsonPath('message', 'Tick at least one row.');
     }

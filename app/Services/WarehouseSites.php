@@ -131,8 +131,11 @@ class WarehouseSites
             $site = self::siteOf($parent); if (! $site) return ['fk_id_parent' => 'Choose a site or a zone of a site as the parent.'];
             $data['fk_id_site'] = $site;
             $name = trim((string) ($data['location_name'] ?? $old['location_name'] ?? ''));
-            if ($kind === 'BIN' && $name !== '' && DB::table('cat_inventory_locations')->where('fk_id_site', $site)->where('kind', 'BIN')->where('location_name', $name)->when($id, fn ($q) => $q->where('id', '<>', $id))->exists())
-                return ['location_name' => "Bin $name already exists in this site."];
+            if ($kind === 'BIN' && $name !== '') {      /* R-H-4: unique per site – letter case and separators do not make a new code */
+                $n = LocationGenerator::norm($name); $siteName = (string) DB::table('cat_inventory_locations')->where('id', $site)->value('location_name');
+                foreach (DB::table('cat_inventory_locations')->where('fk_id_site', $site)->where('kind', 'BIN')->when($id, fn ($q) => $q->where('id', '<>', $id))->get(['location_name', 'location_code']) as $o)
+                    if (LocationGenerator::norm((string) $o->location_name) === $n || ($o->location_code !== null && LocationGenerator::norm((string) $o->location_code) === $n)) return ['location_name' => 'Bin code ' . mb_strtoupper($name) . " already exists in $siteName."];
+            }
         }
         if (! $id) return [];
         if (! empty($old['system_role'])) {

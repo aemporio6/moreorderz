@@ -27,6 +27,13 @@ class ErrorPages
         } catch (\Throwable $x) { return null; }
     }
 
+    /** The command-line version: the same short text and the id; the details are in sys_error_log. */
+    public static function cli(\Throwable $e): string
+    {
+        $id = self::log($e, null);
+        return self::T500 . ($id ?? '0') . '.';
+    }
+
     public static function denied(?Request $r, ?string $right): void
     {
         try { Audit::log('sys_permissions', 0, 'DENIED', ['right' => [null, (string) $right], 'page' => [null, $r ? mb_substr($r->method() . ' ' . $r->path(), 0, 200) : '']], null, Context::ent() ?: null); } catch (\Throwable $x) {}

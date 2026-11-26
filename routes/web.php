@@ -267,6 +267,9 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('allocation-plan', [StockController::class, 'allocPlan']);      // R-F_SETUP-47
         Route::post('allocation-plan/{id}/confirm', [StockController::class, 'allocConfirm'])->whereNumber('id');
         Route::post('allocation-plan/{id}/dismiss', [StockController::class, 'allocDismiss'])->whereNumber('id');
+        Route::get('stock/bin-code-preview', [StockController::class, 'binCodePreview']);      // R-H-4 live preview (reads only)
+        Route::match(['get', 'post'], 'stock/bin-rename', [StockController::class, 'binRename']);      // GET = preview
+        Route::post('stock/bin-rename/undo/{job}', [StockController::class, 'binRenameUndo'])->whereNumber('job');
         Route::get('inventory-sharing', [StockController::class, 'sharing']);      // R-D-94
         Route::post('inventory-sharing', [StockController::class, 'sharingBulk']);
         Route::get('product-imports/staged/template', [StockController::class, 'stagedTemplate']);      // R-G_CORE-74

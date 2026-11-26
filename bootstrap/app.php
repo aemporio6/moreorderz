@@ -18,5 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
-        $exceptions->render(fn (\Throwable $e, Request $request) => \App\Services\ErrorPages::render($e, $request));      // R-G_CORE-121 one error page; details only in sys_error_log
-    })->create();
+        $exceptions->render(fn (\Throwable $e, Request $request) => \App\Services\ErrorPages::render($e, $request));
+    })
+    ->withSingletons([\Illuminate\Contracts\Debug\ExceptionHandler::class => \App\Exceptions\Handler::class])      // R-G_CORE-121 command-line errors: short text + id
+    ->create();

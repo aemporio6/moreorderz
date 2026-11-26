@@ -28,7 +28,7 @@ class LocationTreeTest extends TestCase
         $this->assertSame([$site, $site], [(int) $rows[1]->fk_id_site, (int) $rows[2]->fk_id_site], 'the site is filled from the tree');
         $label = collect(Registry::options(['source' => 'table:cat_inventory_locations', 'options_full' => null], 1, 'W3-B-2'))->first(fn ($o) => (int) $o[0] === $bin);
         $this->assertSame('WH1 › W3 › W3-B-2 (Shelf)', $label[1] ?? null);
-        try { RecordService::save('location', ['name' => 'W3-B-2', 'code' => 'W3-B-2b', 'kind' => 'BIN', 'parent' => $zone]); $this->fail('same bin twice'); } catch (\Throwable $e) { $this->assertStringContainsString('already exists in this site', json_encode(method_exists($e, 'errors') ? $e->errors() : $e->getMessage())); }
+        try { RecordService::save('location', ['name' => 'W3-B-2', 'code' => 'W3-B-2b', 'kind' => 'BIN', 'parent' => $zone]); $this->fail('same bin twice'); } catch (\Throwable $e) { $this->assertStringContainsString('Bin code W3-B-2 already exists in WH1.', json_encode(method_exists($e, 'errors') ? $e->errors() : $e->getMessage())); }
         $old = $this->save('location', ['name' => 'OLD-1', 'code' => 'OLD-1', 'kind' => 'SHELF', 'parent' => $site]);
         $this->assertSame('BIN', DB::table('cat_inventory_locations')->where('id', $old)->value('kind'), 'the old kind SHELF is read as BIN');
     }

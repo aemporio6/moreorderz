@@ -99,6 +99,11 @@ class StockController extends Controller
     public function allocConfirm(Request $r, int $id) { return $this->wh(fn () => \App\Services\AllocationPlan::confirm($id, $r->user())); }
     public function allocDismiss(Request $r, int $id) { return $this->wh(fn () => \App\Services\AllocationPlan::dismiss($id, (string) $r->input('reason'), $r->user())); }
 
+    /** R-H-4 bin code format: live preview of three sample codes for the values on screen; rename all (preview → apply → undo). */
+    public function binCodePreview(Request $r) { $this->can($r, 'admin.owner'); return ['preview' => \App\Services\LocationGenerator::preview((int) Context::ent(), array_filter($r->only(['WH_LOC_FORMAT', 'WH_LOC_SEPARATOR', 'WH_LOC_PAD', 'WH_LOC_LEVEL_STYLE']), fn ($v) => $v !== null))]; }
+    public function binRename(Request $r) { $this->can($r, 'stock.bins'); return $this->wh(fn () => \App\Services\LocationGenerator::rename((int) Context::ent(), $r->isMethod('post'), $r->user())); }
+    public function binRenameUndo(Request $r, int $job) { return $this->wh(fn () => \App\Services\LocationGenerator::renameUndo($job, $r->user())); }
+
     public function familyUndo(Request $r, int $job) { return $this->wh(fn () => \App\Services\ProductImports::familyUndo($job, $r->user())); }
     public function stagedTemplate(Request $r) { try { return response(\App\Services\ProductImports::stagedTemplate($r->user()), 200, ['Content-Type' => 'text/csv; charset=UTF-8', 'Content-Disposition' => 'attachment; filename="products_bulk_template.csv"']); } catch (\Illuminate\Auth\Access\AuthorizationException $e) { abort(403); } }
     public function stagedMeta(Request $r) { return \App\Services\ProductImports::stagedMeta((int) Context::ent(), $r->user()); }

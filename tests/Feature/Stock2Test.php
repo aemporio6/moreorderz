@@ -120,12 +120,28 @@ class Stock2Test extends TestCase
     public function test_bin_generator_previews_creates_and_never_makes_a_bin_twice(): void
     {
         $pre = LocationGenerator::run(1, ['parent' => $this->wh, 'zone' => 'a', 'levels' => 2, 'positions' => 3], false);
-        $this->assertSame(['A-A-01', 'A-A-02', 'A-A-03', 'A-B-01', 'A-B-02', 'A-B-03'], $pre['codes']);
+        $this->assertSame(['A-A-1', 'A-A-2', 'A-A-3', 'A-B-1', 'A-B-2', 'A-B-3'], $pre['codes']);      // R-H-4: zero padding 0 = none (the default)
         $this->assertSame(6, LocationGenerator::run(1, ['parent' => $this->wh, 'zone' => 'A', 'levels' => 2, 'positions' => 3], true)['created']);
         $again = LocationGenerator::run(1, ['parent' => $this->wh, 'zone' => 'A', 'levels' => 3, 'positions' => 3], true);
         $this->assertSame([3, 6, 3], [$again['created'], $again['skipped'], count($again['ids'])]);
-        $bin = DB::table('cat_inventory_locations')->where('location_code', 'A-C-02')->first();
-        $this->assertSame(['BIN', $this->wh, 'A-C-02'], [$bin->kind, (int) $bin->fk_id_parent, $bin->barcode_value]);
+        $bin = DB::table('cat_inventory_locations')->where('location_code', 'A-C-2')->first();
+        $this->assertSame(['BIN', $this->wh, 'A-C-2'], [$bin->kind, (int) $bin->fk_id_parent, $bin->barcode_value]);
+        // R-H-4 format with live preview: tokens, separator, level style, padding; unique per site without case / separators; rename all with undo
+        $this->assertSame('W3-B-2 · R1-A-1 · C1-A-1', LocationGenerator::preview(1));
+        $this->assertSame('WH1.W3.02.02 · WH1.R1.01.01 · WH1.C1.01.01', LocationGenerator::preview(1, ['WH_LOC_FORMAT' => '{site}-{ZONE}-{LEVEL}-{POS}', 'WH_LOC_SEPARATOR' => '.', 'WH_LOC_PAD' => 2, 'WH_LOC_LEVEL_STYLE' => 'NUMBER']));
+        $this->actingAs($this->owner); $this->assertSame('W3_B_2 · R1_A_1 · C1_A_1', $this->getJson('/api/stock/bin-code-preview?WH_LOC_SEPARATOR=_')->assertOk()->json('preview'));
+        $whName = (string) DB::table('cat_inventory_locations')->where('id', $this->wh)->value('location_name');
+        $dd = ['kind' => 'BIN', 'fk_id_parent' => $this->wh, 'location_name' => 'a c 2']; $dup = \App\Services\WarehouseSites::check($dd, [], null); $this->assertSame("Bin code A C 2 already exists in $whName.", $dup['location_name'] ?? null);
+        $this->assertSame(0, LocationGenerator::run(1, ['parent' => $this->wh, 'zone' => 'A', 'levels' => 3, 'positions' => 3], true)['created'], 'the same codes are never made twice');
+        $hand = (int) DB::table('cat_inventory_locations')->insertGetId(\App\Services\RecordService::fillNotNull('cat_inventory_locations', ['location_name' => 'HAND-1', 'location_code' => 'HAND-1', 'kind' => 'BIN', 'fk_id_ent' => 1, 'fk_id_parent' => $this->wh, 'fk_id_site' => $this->wh, 'f_active' => 1]));
+        \App\Services\Settings::set('WH_LOC_PAD', '2', 1, $this->owner->id);      // changing the format never renames existing bins
+        $this->assertSame('A-C-2', DB::table('cat_inventory_locations')->where('id', $bin->id)->value('location_code'));
+        $pv = $this->getJson('/api/stock/bin-rename')->assertOk()->json(); $this->assertSame([false, 9], [$pv['applied'], $pv['count']]); $this->assertContains(['old' => 'A-C-2', 'new' => 'A-C-02'], $pv['changes']);
+        $this->assertSame('A-C-2', DB::table('cat_inventory_locations')->where('id', $bin->id)->value('location_code'), 'the preview writes nothing');
+        $rn = $this->postJson('/api/stock/bin-rename')->assertOk()->json(); $this->assertTrue($rn['applied']);
+        $this->assertSame(['A-C-02', 'A-C-02', 'HAND-1'], [DB::table('cat_inventory_locations')->where('id', $bin->id)->value('location_code'), DB::table('cat_inventory_locations')->where('id', $bin->id)->value('barcode_value'), DB::table('cat_inventory_locations')->where('id', $hand)->value('location_code')]);
+        $this->assertSame(0, $this->getJson('/api/stock/bin-rename')->json('count'));
+        $this->postJson('/api/stock/bin-rename/undo/' . $rn['job'])->assertOk(); $this->assertSame('A-C-2', DB::table('cat_inventory_locations')->where('id', $bin->id)->value('location_code')); $this->postJson('/api/stock/bin-rename/undo/' . $rn['job'])->assertStatus(422);
         $this->expectExceptionMessage('between 1 and 2,000');
         LocationGenerator::run(1, ['parent' => $this->wh, 'zone' => 'A', 'levels' => 100, 'positions' => 100], false);
     }
