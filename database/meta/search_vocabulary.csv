@@ -153,6 +153,7 @@ background jobs,system health,VOCAB,#/health
 backup,system health,VOCAB,#/health
 backups,system health,VOCAB,#/health
 bacs,bank and cash,VOCAB,#/bank
+bad data,data quality checks,VOCAB,#/data-quality
 balance,money dashboard,VOCAB,#/money
 balance due,payments and terms,VOCAB,#/list/src_payment
 balance payment,purchase orders,VOCAB,#/list/t_src_po
@@ -375,6 +376,7 @@ chat,messages and whatsapp,VOCAB,#/messages
 check in,inbound and grn,VOCAB,#/list/t_src_grn
 checklist,my tasks,VOCAB,#/tasks
 checks,month close,VOCAB,#/close
+child active parent inactive,data quality checks,VOCAB,#/data-quality
 child asin,listings,VOCAB,#/list/listing
 child sku,products,VOCAB,#/list/product
 china,buying dashboard,VOCAB,#/buying
@@ -549,6 +551,8 @@ dap,freight,VOCAB,#/list/t_src_freight
 dark mode,my account,VOCAB,#/me
 dashboard,home,VOCAB,#/home
 dashboard reports,all reports,VOCAB,#/reports
+data quality,data quality checks,VOCAB,#/data-quality
+data quality checks,data quality checks,VOCAB,#/data-quality
 date range report,payouts and settlements,VOCAB,#/settlements
 days of cover,replenishment and icc reorder,VOCAB,#/list/icc
 days of stock,replenishment and icc reorder,VOCAB,#/list/icc
@@ -641,6 +645,7 @@ dpd bulk upload,carrier file layouts,VOCAB,#/fulfilment
 dpd file,carrier file layouts,VOCAB,#/fulfilment
 dpd label,carrier labels,VOCAB,#/labels
 dpd local,carriers and postage rates,VOCAB,#/carriers
+dq checks,data quality checks,VOCAB,#/data-quality
 drawings,partners,VOCAB,#/partners
 drive,drive folders,VOCAB,#/drive
 drop ship,drop shipping orders,VOCAB,#/ds-orders
@@ -760,6 +765,7 @@ factory,buying dashboard,VOCAB,#/buying
 factory progress,production,VOCAB,#/list/t_src_production
 fail rate,qc,VOCAB,#/list/t_src_qc
 faire,marketplace operations hubs,VOCAB,#/hubs
+family counts,data quality checks,VOCAB,#/data-quality
 family import,product family and parent child import,VOCAB,#/product-imports
 family link,product family and parent child import,VOCAB,#/product-imports
 faster payment,bank and cash,VOCAB,#/bank
@@ -922,6 +928,7 @@ hermes,carriers and postage rates,VOCAB,#/carriers
 hermes file,carrier file layouts,VOCAB,#/fulfilment
 hermes label,carrier labels,VOCAB,#/labels
 hidden margin,hidden margin,VOCAB,#/invoice-margin
+hide on shop,inventory sharing,VOCAB,#/inventory-sharing
 highlands surcharge,carriers and postage rates,VOCAB,#/carriers
 hiring,staff and employment,VOCAB,#/list/t_account_job_history
 historical entry approval,old entry approval,VOCAB,#/approvals
@@ -965,6 +972,7 @@ in production,production,VOCAB,#/list/t_src_production
 in stock,stock on hand,VOCAB,#/stock
 in transit,shipments,VOCAB,#/list/t_src_shipments
 inactive listing,listings,VOCAB,#/list/listing
+inactive parent,data quality checks,VOCAB,#/data-quality
 inbound,inbound and grn,VOCAB,#/list/t_src_grn
 inbound plan,fc and 3pl inbound shipments,VOCAB,#/list/fba_shipment
 inbound shipment,fc and 3pl inbound shipments,VOCAB,#/list/fba_shipment
@@ -1000,6 +1008,7 @@ inventory cycle,replenishment and icc reorder,VOCAB,#/list/icc
 inventory history,stock ledger,VOCAB,#/stock/ledger
 inventory level,stock on hand,VOCAB,#/stock
 inventory receiving,cycle step map,VOCAB,#/buying
+inventory sharing,inventory sharing,VOCAB,#/inventory-sharing
 inventory transfers,cycle step map,VOCAB,#/buying
 inventory value,stock on hand,VOCAB,#/stock
 invest,sourcing investments,VOCAB,#/list/t_src_investments
@@ -1030,6 +1039,7 @@ item code,products,VOCAB,#/list/product
 item id,listings,VOCAB,#/list/listing
 item not received,cases on sales,VOCAB,#/sale-cases
 item note,bought from,VOCAB,#/sales
+item note no vendor,data quality checks,VOCAB,#/data-quality
 item record,product record,VOCAB,#/list/product_variation
 item sold,sales lines,VOCAB,#/sales
 items,products,VOCAB,#/list/product
@@ -1069,6 +1079,7 @@ language,my account,VOCAB,#/me
 laptop,account kit,VOCAB,#/list/t_mobile_device
 large letter,carriers and postage rates,VOCAB,#/carriers
 last mile,freight,VOCAB,#/list/t_src_freight
+last push,inventory sharing,VOCAB,#/inventory-sharing
 late dispatch,orders to dispatch,VOCAB,#/orders
 late orders,orders to dispatch,VOCAB,#/orders
 late shipment rate,account health,VOCAB,#/shop-health
@@ -1368,6 +1379,7 @@ origin charges,freight,VOCAB,#/list/t_src_freight
 oss,vat return,VOCAB,#/vat-return
 out of month,etsy month header and sale files,VOCAB,#/gen1
 out of stock,stock on hand,VOCAB,#/stock
+out of sync,inventory sharing,VOCAB,#/inventory-sharing
 output vat,vat return,VOCAB,#/vat-return
 outside refund,outside refund,VOCAB,#/refunds
 outside the returns window,returns window and seller portal,VOCAB,#/marketplaces
@@ -1426,6 +1438,7 @@ parcelforce label,carrier labels,VOCAB,#/labels
 parcels,orders to dispatch,VOCAB,#/orders
 parent asin,listings,VOCAB,#/list/listing
 parent child import,product family and parent child import,VOCAB,#/product-imports
+parent inactive,data quality checks,VOCAB,#/data-quality
 parent sku,products,VOCAB,#/list/product
 parent sku child sku,product family and parent child import,VOCAB,#/product-imports
 partial refund,refunds and refund proposals,VOCAB,#/refunds
@@ -1543,6 +1556,7 @@ price history,prices and price log,VOCAB,#/reports/price_log
 price list,rfq and quotations,VOCAB,#/list/src_rfq
 price list our,prices and price log,VOCAB,#/reports/price_log
 price log,prices and price log,VOCAB,#/reports/price_log
+price on shop,inventory sharing,VOCAB,#/inventory-sharing
 price per listing,listings,VOCAB,#/list/listing
 price quote,rfq and quotations,VOCAB,#/list/src_rfq
 prices,prices and price log,VOCAB,#/reports/price_log
@@ -1636,6 +1650,8 @@ purchase pipeline,buying dashboard,VOCAB,#/buying
 purchase record on sale,bought from,VOCAB,#/sales
 purchases,buying dashboard,VOCAB,#/buying
 purchasing,buying dashboard,VOCAB,#/buying
+push now,inventory sharing,VOCAB,#/inventory-sharing
+push stock,inventory sharing,VOCAB,#/inventory-sharing
 put away,locations and bins,VOCAB,#/list/location
 put back,orders to dispatch,VOCAB,#/orders
 put-away,locations and bins,VOCAB,#/list/location
@@ -1650,6 +1666,7 @@ qty customer,sale and buy match check,VOCAB,#/gen1
 qty sold,sales lines,VOCAB,#/sales
 quality check,qc,VOCAB,#/list/t_src_qc
 quality control,qc,VOCAB,#/list/t_src_qc
+quantity offered,inventory sharing,VOCAB,#/inventory-sharing
 quantity on hand,stock on hand,VOCAB,#/stock
 quantity sold,sales lines,VOCAB,#/sales
 quarantine,held stock,VOCAB,#/stock/held
@@ -1962,6 +1979,7 @@ short delivery,inbound and grn,VOCAB,#/list/t_src_grn
 short profile,person sections by kind,VOCAB,#/person-sections
 short shipped,inbound and grn,VOCAB,#/list/t_src_grn
 shortlist,research board,VOCAB,#/list/src_research
+show on shop,inventory sharing,VOCAB,#/inventory-sharing
 shrinkage,stock ledger,VOCAB,#/stock/ledger
 sidebar,menu builder,VOCAB,#/menu-builder
 sign off,approvals queue,VOCAB,#/approvals
@@ -1977,6 +1995,7 @@ sku home,sku homes,VOCAB,#/sku-homes
 sku homes csv,warehouse locations and SKU homes by CSV,VOCAB,#/wh-csv
 sku label,label templates,VOCAB,#/list/label_template
 sku mapping,listings,VOCAB,#/list/listing
+sku on shops,inventory sharing,VOCAB,#/inventory-sharing
 skus,products,VOCAB,#/list/product
 sla,task rules,VOCAB,#/list/task_category
 slot,locations and bins,VOCAB,#/list/location
@@ -2062,6 +2081,8 @@ stock owner,lots and owners,VOCAB,#/stock/lots
 stock owner change,ownership transfers,VOCAB,#/list/ownership_transfer
 stock pool,pool,VOCAB,#/stock/pool
 stock report,stock on hand,VOCAB,#/stock
+stock sharing,inventory sharing,VOCAB,#/inventory-sharing
+stock sync result,inventory sharing,VOCAB,#/inventory-sharing
 stock take,stock on hand,VOCAB,#/stock
 stock transfer,transfers,VOCAB,#/stock/ledger?act=transfer
 stock valuation,stock on hand,VOCAB,#/stock
@@ -2362,6 +2383,7 @@ when to order,replenishment and icc reorder,VOCAB,#/list/icc
 where is sku,sku homes,VOCAB,#/sku-homes
 where used,delete or restore a person,VOCAB,#/list/party
 which marketplace,allocation and platform plan,VOCAB,#/list/t_src_allocations
+which shop gets which sku,inventory sharing,VOCAB,#/inventory-sharing
 which warehouse,allocation and platform plan,VOCAB,#/list/t_src_allocations
 white label,products,VOCAB,#/list/product
 whitelist,sessions and ip allow list,VOCAB,#/sessions

@@ -170,6 +170,8 @@ add('#/registry', 'field registry', 'field|fields|form|forms|field registry|form
 add('#/menu-builder', 'menu builder', 'menu|menus|sidebar|navigation|menu builder')
 add('#/list/reference_value', 'reference register', 'list|lists|dropdown|dropdowns|reference|reference list|lookup|lookups|values list')
 add('#/list/cat_country', 'catalog masters', 'country|countries|master data|masters|catalog masters|units|unit of measure|uom|incoterm list|port|ports|bank list|currency list')
+add('#/data-quality', 'data quality checks', 'data quality|data quality checks|item note no vendor|parent inactive|child active parent inactive|family counts|inactive parent|dq checks|bad data')
+add('#/inventory-sharing', 'inventory sharing', 'inventory sharing|stock sharing|which shop gets which sku|quantity offered|out of sync|stock sync result|push now|push stock|last push|show on shop|hide on shop|price on shop|shared stock|sku on shops')
 add('#/wh-csv', 'warehouse locations and SKU homes by CSV', 'wh_locations|wh_sku_homes|import locations|export locations|import bins|export bins|bin csv|locations csv|sku homes csv|import sku homes|export sku homes|bulk bins|bin list upload|deactivate bin|deactivate location|rename bin')
 add('#/person-sections', 'person sections by kind', 'person sections|sections by kind|managed account|external contact|convert person|convert to external|convert to managed|short profile|profile tabs|external contact tabs|account type change|kind of person')
 add('#/list/party', 'delete or restore a person', 'delete person|remove person|where used|person used in|cannot remove role|restore person|person recycle bin')

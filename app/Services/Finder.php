@@ -51,6 +51,8 @@ class Finder
         ['Supplier order history', 'amazon business orders supplier orders order history purchase history business orders', '#/supplier-orders', 'buying.BUY'],
         ['Gen-1 sale ↔ buy check', 'sale buy match buying missing qty customer supplier orders buy file aliexpress gen-1 legacy compare', '#/gen1', 'orders.SEE'],
         ['Products: families and parent + child file', 'product family link import parent child sku staged import csv generator import inventory', '#/product-imports', 'stock.CHANGE'],
+        ['Data quality', 'data quality checks item note no vendor child active parent inactive family counts active out of stock inactive', '#/data-quality', 'stock.SEE'],
+        ['Inventory sharing', 'which shop gets which sku price quantity offered stock sync push out of sync show hide on shop listing share', '#/inventory-sharing', 'stock.SEE'],
         ['Warehouse locations and SKU homes (CSV)', 'wh_locations wh_sku_homes import export locations bins sku homes csv deactivate rename bin', '#/wh-csv', 'stock.SEE'],
         ['Person sections by kind', 'managed account external contact convert person sections tabs short profile kind', '#/person-sections', 'people.convert'],
         ['Supplier payment schedule', 'supplier terms owe due overdue deposit balance', '#/supplier-schedule', 'money.forecast'],

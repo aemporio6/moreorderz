@@ -91,4 +91,44 @@ class ProductImportsTest extends TestCase
         $s2 = $this->post('/api/product-imports/staged', ['vendor' => $v] + $this->file('q.csv', "Q1,,Thing,,,1,1,,\n"), ['Accept' => 'application/json'])->assertOk()->json();
         $this->postJson('/api/product-imports/staged/clear')->assertOk(); $this->getJson('/api/product-imports/staged/' . $s2['job'])->assertStatus(422);
     }
+    /** R-G_CORE-74: carrier matched by name with a look-alike; Undo removes every product of the batch. */
+    public function test_g74_bulk_upload_lookalike_and_undo(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id);
+        $v = $this->f('t_vendors', ['fk_id_ent' => 1, 'vendor_name' => 'G74 Vendor', 'iso_vendor' => 'G7', 'f_active' => 1]);
+        $car = $this->f('t_carriers', ['fk_id_ent' => 1, 'carrier_name' => 'RM', 'f_active' => 1]); $pre = $this->f('t_carrier_pkg_svc', ['pkg_svc_name' => 'Royal Mail 48', 'fk_id_carrier' => $car, 'f_active' => 1]);
+        $wh = $this->f('cat_inventory_locations', ['location_name' => 'G74 WH', 'kind' => 'WAREHOUSE', 'fk_id_ent' => 1, 'f_sellable' => 1, 'f_active' => 1]); \App\Services\Settings::set('MAIN_WAREHOUSE', (string) $wh, 1);
+        // the rule: 3 rows (parent P1, child with blank parent, single S2), carrier "Royal Mail 48" by name → P1 Parent with 1 child, S2 Alone; Undo removes all 3
+        $csv = "G74-P1,,Set,Royal Mail 48,,,,,\n,G74-C1,Set red,royal mail 48,,4.00,2,,\nG74-S2,,Solo,Royal Mail 84,,5.00,1,,\n"; $n = DB::table('t_product_vendors')->count();
+        $s = $this->post('/api/product-imports/staged', ['vendor' => $v] + $this->file('p.csv', $csv), ['Accept' => 'application/json'])->assertOk()->json();
+        $this->assertSame(['parent', 1, 'single'], [$s['tree'][0]['kind'], count($s['tree'][0]['children']), $s['tree'][1]['kind']]);
+        $this->assertStringContainsString('carrier preset "Royal Mail 84" not found – left empty. Did you mean "royal mail 48"?', implode(' ', $s['log']));
+        $r = $this->postJson('/api/product-imports/staged/' . $s['job'] . '/confirm')->assertOk()->json(); $this->assertSame($n + 3, DB::table('t_product_vendors')->count()); $this->assertSame($s['job'], $r['job']);
+        $this->assertSame($pre, (int) DB::table('t_product_vendors')->where('SKU_VENDOR', 'G74-C1')->value('fk_id_car_pkg_svc'));
+        $this->postJson('/api/product-imports/staged/undo/' . $r['job'])->assertOk();
+        $this->assertSame(0, DB::table('t_product_vendors')->whereIn('SKU_VENDOR', ['G74-P1', 'G74-C1', 'G74-S2'])->count(), 'all 3 SKUs are free again');
+        $this->assertSame(0, DB::table('fin_lots')->whereIn('fk_id_product', $r['products'])->where('qty_left', '>', 0)->count()); $this->postJson('/api/product-imports/staged/undo/' . $r['job'])->assertStatus(422);
+    }
+
+    /** R-G_CORE-82 data-quality checks: one task per red row, closed by itself when fixed; family counts. */
+    public function test_g82_data_quality_tasks_open_and_close(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id);
+        $mk = fn (string $sku, array $x = []) => $this->f('t_product_vendors', $x + ['fk_id_ent' => 1, 'SKU_VENDOR' => $sku, 'product_name_vendor' => $sku, 'stock' => 0, 'f_active' => 1, 'e_product_type' => 'pool', 'f_parent' => 1, 'f_out_of_stock' => 0]);
+        $p1 = $mk('DQ-P1', ['f_parent' => 2]); $c1 = $mk('DQ-C1', ['f_parent' => 3, 'f_id_parent' => $p1]); $c2 = $mk('DQ-C2', ['f_parent' => 3, 'f_id_parent' => $p1, 'f_out_of_stock' => 1]); $c3 = $mk('DQ-C3', ['f_parent' => 3, 'f_id_parent' => $p1, 'f_active' => 0]);
+        $this->assertSame(['opened' => 0, 'closed' => 0], \App\Services\DataQuality::run(1)['parent_inactive']);
+        $fam = collect($this->getJson('/api/data-quality')->assertOk()->json('families'))->firstWhere('sku', 'DQ-P1'); $this->assertSame([1, 1, 1], [$fam['active'], $fam['out_of_stock'], $fam['inactive']]);
+        // the rule: parent P1 set inactive while child C1 active → one task "Child C1 active but parent P1 inactive"; reactivate P1 → task auto-closed
+        DB::table('t_product_vendors')->where('id', $p1)->update(['f_active' => 0]);
+        $this->postJson('/api/data-quality/run')->assertOk(); \App\Services\DataQuality::run(1);
+        $t = DB::table('tasks')->where('dedupe_key', 'DQ_PARENT_INACTIVE:' . $c1)->get(); $this->assertCount(1, $t, 'one task per record, not one per run'); $this->assertSame('Child DQ-C1 active but parent DQ-P1 inactive', $t[0]->title);
+        $this->assertSame(2, DB::table('tasks')->where('rule_code', 'DQ_PARENT_INACTIVE')->whereNotIn('status', ['DONE', 'APPROVED', 'CANCELLED'])->count(), 'C1 and C2 are active children; C3 is inactive');
+        DB::table('t_product_vendors')->where('id', $p1)->update(['f_active' => 1]); $this->assertSame(2, \App\Services\DataQuality::run(1)['parent_inactive']['closed']);
+        $this->assertSame('DONE', DB::table('tasks')->where('id', $t[0]->id)->value('status'));
+        // item note with no vendor and not bought locally
+        $sale = $this->f('t_sales', ['fk_id_ent' => 1, 'order_no' => 'DQ-1', 'd_order' => '2026-11-03', 'sku' => 'DQ-C1', 'qty' => 1, 'status' => 'Pending', 'ds_note' => 'gift wrap', 'bought_local' => 0, 'created_at' => now()]);
+        $this->assertSame(1, \App\Services\DataQuality::run(1)['item_note']['opened']); $this->assertSame(1, DB::table('tasks')->where('dedupe_key', 'DQ_ITEM_NOTE:' . $sale)->count());
+        DB::table('t_sales')->where('id', $sale)->update(['bought_local' => 1]); $this->assertSame(1, \App\Services\DataQuality::run(1)['item_note']['closed']);
+        $va = $this->makeUser('VA'); $this->actingAs($va)->postJson('/api/data-quality/run')->assertStatus(403);
+    }
 }

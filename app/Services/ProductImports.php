@@ -97,7 +97,7 @@ class ProductImports
         if ($rows && preg_match('/sku/i', implode(' ', array_slice($rows[0], 0, 2)))) array_shift($rows);      /* a heading row */
         $presets = DB::table('t_carrier_pkg_svc')->where('f_active', 1)->get(['id', 'pkg_svc_name'])->mapWithKeys(fn ($p) => [mb_strtolower(trim((string) $p->pkg_svc_name)) => (int) $p->id])->all();
         $packs = DB::table('t_packings')->where('f_active', 1)->get(['id', 'packing_name'])->mapWithKeys(fn ($p) => [mb_strtolower(trim((string) $p->packing_name)) => (int) $p->id])->all();
-        $pick = function (string $v, array $map, string $what, int $n, array &$log) { if ($v === '') return null; if (ctype_digit($v) && in_array((int) $v, $map, true)) return (int) $v; if (isset($map[mb_strtolower($v)])) return $map[mb_strtolower($v)]; $log[] = "Row $n: $what \"$v\" not found – left empty."; return null; };
+        $pick = function (string $v, array $map, string $what, int $n, array &$log) { if ($v === '') return null; if (ctype_digit($v) && in_array((int) $v, $map, true)) return (int) $v; if (isset($map[mb_strtolower($v)])) return $map[mb_strtolower($v)]; $names = []; foreach ($map as $nm => $id) $names[$id] = $nm; $hint = OldBulkProducts::pick($v, $names, $what)['error'] ?? ''; $log[] = "Row $n: $what \"$v\" not found – left empty." . (($k = mb_strpos($hint, 'did you mean')) !== false ? ' ' . ucfirst(mb_substr($hint, $k)) : ''); return null; };
         $tree = []; $log = []; $cur = null; $seen = [];
         foreach ($rows as $i => $r) {
             $n = $i + 1; $ps = $r[0] ?? ''; $cs = $r[1] ?? '';
@@ -162,7 +162,7 @@ class ProductImports
             if ($lots) { $loc = (int) (Settings::get('MAIN_WAREHOUSE', $ent, 0) ?: DB::table('cat_inventory_locations')->where('fk_id_ent', $ent)->where('f_active', 1)->where('f_sellable', 1)->whereIn('kind', ['WAREHOUSE', 'BIN'])->whereNull('system_role')->orderByRaw("kind = 'WAREHOUSE' DESC")->orderBy('id')->value('id')) ?: StockService::systemLocation($ent, 'UNASSIGNED');      /* the main warehouse, else the first sellable place, else UNASSIGNED */ StockService::receive($ent, array_map(fn ($l) => $l + ['location' => $loc, 'unit_cost' => 0], $lots), 'OPENING', (int) $j->id, ['lot_source' => 'OPENING']); $units = array_sum(array_column($lots, 'qty')); }
             DB::table('bulk_jobs')->where('id', $j->id)->update(['status' => 'APPLIED', 'applied_at' => now(), 'change_json' => json_encode(['products' => $ids])]);
             foreach ($ids as $id) SearchIndex::put((string) RecordService::formOfTable('t_product_vendors'), 't_product_vendors', $id, $ent);
-            return $made + ['opening_units' => $units, 'products' => $ids, 'message' => "Saved: {$made['parents']} parent(s), {$made['children']} child(ren), {$made['singles']} single product(s); $units unit(s) as opening stock (cost 0 – set the cost on the lots)."];
+            return $made + ['job' => (int) $j->id, 'opening_units' => $units, 'products' => $ids, 'message' => "Saved: {$made['parents']} parent(s), {$made['children']} child(ren), {$made['singles']} single product(s); $units unit(s) as opening stock (cost 0 – set the cost on the lots)."];
         });
     }
 }

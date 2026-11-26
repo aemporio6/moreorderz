@@ -86,6 +86,14 @@ class StockController extends Controller
     public function oldBulkConfirm(Request $r, int $job) { return $this->wh(fn () => \App\Services\OldBulkProducts::confirm((int) Context::ent(), $job, $r->user())); }
     public function oldBulkUndo(Request $r, int $job) { return $this->wh(fn () => \App\Services\OldBulkProducts::undo((int) Context::ent(), $job, $r->user())); }
 
+    /** R-D-94 inventory sharing (reads; bulk show / hide / price / push now). */
+    public function sharing(Request $r) { return $this->wh(fn () => \App\Services\InventorySharing::list((int) Context::ent(), ['shop' => $r->query('shop'), 'sku' => $r->query('sku'), 'out_of_sync' => $r->boolean('out_of_sync')], $r->user())); }
+    public function sharingBulk(Request $r) { return $this->wh(fn () => \App\Services\InventorySharing::bulk((int) Context::ent(), strtoupper((string) $r->input('action')), (array) $r->input('ids', []), $r->input('value'), $r->user())); }
+
+    public function dataQuality(Request $r) { return $this->wh(fn () => \App\Services\DataQuality::page((int) Context::ent(), $r->user())); }
+    public function dataQualityRun(Request $r) { \App\Services\Perm::need($r->user(), 'stock.CHANGE'); return $this->wh(fn () => \App\Services\DataQuality::run((int) Context::ent()) + ['message' => 'Checked – tasks opened for red rows and closed for fixed ones.']); }
+    public function stagedUndo(Request $r, int $job) { return $this->wh(fn () => \App\Services\OldBulkProducts::undo((int) Context::ent(), $job, $r->user(), 'product_staged')); }
+
     public function familyUndo(Request $r, int $job) { return $this->wh(fn () => \App\Services\ProductImports::familyUndo($job, $r->user())); }
     public function stagedMeta(Request $r) { return \App\Services\ProductImports::stagedMeta((int) Context::ent(), $r->user()); }
     public function stagedClear(Request $r) { \App\Services\Perm::need($r->user(), 'stock.CHANGE'); return \App\Services\ProductImports::stagedClear($r->user()); }

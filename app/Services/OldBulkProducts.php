@@ -122,13 +122,15 @@ class OldBulkProducts
     }
 
     /** Undo: opening lots are voided (refused when units are sold or moved), price rows removed; a product without stock history is removed, one with it is kept as deleted. */
-    public static function undo(int $ent, int $jobId, object $u): array
+    public static function undo(int $ent, int $jobId, object $u, string $key = self::KEY): array
     {
         Perm::need($u, 'stock.CHANGE');
-        $j = DB::table('bulk_jobs')->where('id', $jobId)->where('list_key', self::KEY)->first() ?? throw new \InvalidArgumentException('Batch not found.');
+        $j = DB::table('bulk_jobs')->where('id', $jobId)->where('list_key', $key)->first() ?? throw new \InvalidArgumentException('Batch not found.');
         if ($j->status !== 'APPLIED') throw new \InvalidArgumentException('This batch was already undone.');
         if ((int) $j->fk_id_account !== (int) $u->id && ($u->role_code ?? '') !== 'OWNER') throw new \InvalidArgumentException('Only the person who loaded it (or the Owner) undoes it.');
-        $c = json_decode((string) $j->change_json, true);
+        $c = json_decode((string) $j->change_json, true); $c['products'] = array_map('intval', $c['products'] ?? []);
+        $c['lots'] ??= DB::table('fin_lots')->where('company_id', $ent)->whereIn('fk_id_product', $c['products'] ?: [0])->where(fn ($w) => $w->whereNull('lot_status')->orWhere('lot_status', '<>', 'VOID'))->pluck('id')->all();      /* R-G_CORE-74: the parent + child import keeps only the product ids */
+        usort($c['products'], fn ($a, $b) => $b <=> $a);      /* children before their parents */
         return DB::transaction(function () use ($c, $j, $ent) {
             $sold = DB::table('t_sales')->whereIn('fk_product_id', $c['products'] ?: [0])->count(); if ($sold) throw new \InvalidArgumentException("$sold sale(s) already use these products – this batch cannot be undone.");
             foreach ($c['lots'] ?? [] as $lot) StockService::voidLot($ent, (int) $lot, 'Undo of bulk upload ' . $j->job_no);

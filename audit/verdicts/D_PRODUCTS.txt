@@ -78,7 +78,7 @@
 91|F|form:product_certificate|form only; expiry task not built
 92|F|form:label_regulation_profile|form only
 93|F|form:product_image|form only
-94|M||inventory sharing screen not built
+94|P|InventorySharing|screen Stock > Inventory sharing: listing per shop x SKU, shown / hidden, price, quantity offered after the profile buffer, last push + result, out-of-sync filter, bulk show / hide / set price / push now, menu row; open: the visibility column is the listing state, not the R-D-20 marketplace visibility; dropship profile is matched by the listing vendor only
 95|F|form:t_inv_settings|form only
 96|F|form:threepl_profile|form only
 97|F|form:dropship_supplier_profile|form only
