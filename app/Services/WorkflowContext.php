@@ -157,6 +157,7 @@ class WorkflowContext
     {
         $table = Registry::table($form) ?? $form; $out = ['fk_id_cycle' => $cycleId];
         foreach (array_merge(self::PREFILL[$table] ?? [], ['supplier']) as $k) { $col = self::KEYS[$k]; if (! empty($ctx[$k]) && Schema::hasColumn($table, $col)) $out[$col] = $ctx[$k]; }
+        foreach ((array) ($ctx['catalog'] ?? []) as $col => $v) if ($v && empty($out[$col]) && Schema::hasColumn($table, $col)) $out[$col] = (int) $v;      /* R-F_SETUP-46: a catalog record added inside the cycle is offered on every later form that has it */
         if ($table === 't_src_payments' && ! empty($out['fk_id_term']) && empty($out['fk_id_po'])) $out['fk_id_po'] = (int) DB::table('t_src_payment_terms')->where('id', $out['fk_id_term'])->value('fk_id_po');
         return $out;
     }
@@ -173,7 +174,7 @@ class WorkflowContext
     }
 
     /** R-F_SETUP-46 catalog tables whose new record is carried into the next step form: table => column on the step tables. */
-    public const CATALOG = ['cat_inventory_locations' => 'fk_id_warehouse', 'cat_ports' => 'fk_id_port_loading', 'cat_incoterms' => 'fk_id_incoterm', 'cat_currencies' => 'fk_id_currency', 'cat_payment_terms' => 'fk_id_payment_term'];
+    public const CATALOG = ['cat_inventory_locations' => 'fk_id_warehouse', 'cat_ports' => 'fk_id_port_loading', 'cat_incoterm' => 'fk_id_incoterm', 'cat_currency' => 'fk_id_currency', 'cat_payment_terms' => 'fk_id_payment_term'];
 
     /**
      * R-F_SETUP-46 "Save & Next" from a catalog form opened inside a cycle (from the step $fromKey): the server takes the id of the record just saved,

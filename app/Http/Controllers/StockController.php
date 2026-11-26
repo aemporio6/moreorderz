@@ -100,6 +100,7 @@ class StockController extends Controller
     public function allocDismiss(Request $r, int $id) { return $this->wh(fn () => \App\Services\AllocationPlan::dismiss($id, (string) $r->input('reason'), $r->user())); }
 
     public function familyUndo(Request $r, int $job) { return $this->wh(fn () => \App\Services\ProductImports::familyUndo($job, $r->user())); }
+    public function stagedTemplate(Request $r) { try { return response(\App\Services\ProductImports::stagedTemplate($r->user()), 200, ['Content-Type' => 'text/csv; charset=UTF-8', 'Content-Disposition' => 'attachment; filename="products_bulk_template.csv"']); } catch (\Illuminate\Auth\Access\AuthorizationException $e) { abort(403); } }
     public function stagedMeta(Request $r) { return \App\Services\ProductImports::stagedMeta((int) Context::ent(), $r->user()); }
     public function stagedClear(Request $r) { \App\Services\Perm::need($r->user(), 'stock.CHANGE'); return \App\Services\ProductImports::stagedClear($r->user()); }
     public function stagedStage(Request $r) { return $this->wh(fn () => \App\Services\ProductImports::stage((int) Context::ent(), $r->only(['vendor', 'vendor_inventory', 'shop']), $r->hasFile('file') ? $r->file('file')->getClientOriginalName() : null, $r->hasFile('file') ? (string) file_get_contents($r->file('file')->getRealPath()) : null, $r->user())); }

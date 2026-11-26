@@ -104,7 +104,8 @@ class CarrierPresetsTest extends TestCase
         $r = CP::migrate('t_product_vendors', 'fk_id_car_pkg_svc', [$a => $virtual, $b => '99999999'], true, $this->owner);
         if (isset($real['preset'])) { $this->assertSame(1, $r['converted']); $this->assertSame($low, (int) DB::table('t_product_vendors')->where('id', $a)->value('fk_id_car_pkg_svc')); }
         $this->assertSame(99999999, (int) DB::table('t_product_vendors')->where('id', $b)->value('fk_id_car_pkg_svc'), 'an unclear value is not converted');
-        $list = collect($this->getJson('/api/carrier-values/review')->assertOk()->json('rows')); $row = $list->firstWhere('record', $b); $this->assertSame('99999999', $row['old_value']);
+        $list = collect($this->getJson('/api/carrier-values/review')->assertOk()->json('rows')); $row = $list->firstWhere('record', $b); $this->assertSame('99999999', $row['old_value']); $this->assertSame('V', $row['name'], 'the record is shown by its name');
+        $routes = []; foreach (\App\Http\Controllers\AppController::menu('OWNER') as $sec) foreach ($sec['items'] as $it) $routes[] = $it['route']; $this->assertContains('#/carrier-values', $routes);
         $this->postJson('/api/carrier-values/review/' . $row['id'], ['preset' => $low])->assertOk(); $this->assertSame($low, (int) DB::table('t_product_vendors')->where('id', $b)->value('fk_id_car_pkg_svc'));
         $this->actingAs($mgr)->getJson('/api/carrier-values/review')->assertStatus(422);
         try { CP::migrate('t_users', 'id', [1 => '1'], false); $this->fail(); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('does not hold carrier presets', $e->getMessage()); }

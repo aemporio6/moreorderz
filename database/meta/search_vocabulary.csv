@@ -99,6 +99,7 @@ amazon shipping,carriers and postage rates,VOCAB,#/carriers
 amazon uk,marketplace operations hubs,VOCAB,#/hubs
 amazon us,marketplace operations hubs,VOCAB,#/hubs
 amazon warehouse,fc and 3pl inbound shipments,VOCAB,#/list/fba_shipment
+ambiguous carrier,old carrier values,VOCAB,#/carrier-values
 american express,bank and cash,VOCAB,#/bank
 amex,bank and cash,VOCAB,#/bank
 analytics,all reports,VOCAB,#/reports
@@ -320,6 +321,8 @@ carrier csv,carrier file layouts,VOCAB,#/fulfilment
 carrier label,carrier labels,VOCAB,#/labels
 carrier labels,carrier labels,VOCAB,#/labels
 carrier layout,carrier file layouts,VOCAB,#/fulfilment
+carrier review list,old carrier values,VOCAB,#/carrier-values
+carrier values to decide,old carrier values,VOCAB,#/carrier-values
 carriers,carriers and postage rates,VOCAB,#/carriers
 carton,packaging and box sizes,VOCAB,#/list/product_packaging
 carton data,cycle step map,VOCAB,#/buying
@@ -1335,6 +1338,8 @@ oem,buying dashboard,VOCAB,#/buying
 offer,listings,VOCAB,#/list/listing
 offers,listings,VOCAB,#/list/listing
 office cost,expenses,VOCAB,#/expenses
+old carrier value,old carrier values,VOCAB,#/carrier-values
+old carrier values,old carrier values,VOCAB,#/carrier-values
 old entry,old purchase entry,VOCAB,#/old-entry
 old orders from supplier,old purchase entry,VOCAB,#/old-entry
 old purchase,old purchase entry,VOCAB,#/old-entry
@@ -2290,6 +2295,7 @@ unit of measure,catalog masters,VOCAB,#/list/cat_country
 unit price,rfq and quotations,VOCAB,#/list/src_rfq
 units,catalog masters,VOCAB,#/list/cat_country
 units sold,sales lines,VOCAB,#/sales
+unknown carrier value,old carrier values,VOCAB,#/carrier-values
 unlisted,products not listed,VOCAB,#/list/t_products_shop_not_listed
 unloading,inbound and grn,VOCAB,#/list/t_src_grn
 unmatched,bank and cash,VOCAB,#/bank
@@ -2363,6 +2369,7 @@ vinted sales,import sales,VOCAB,#/sales-import
 vip customer,customers,VOCAB,#/list/crm_customer
 virgin money,bank and cash,VOCAB,#/bank
 virtual assistant,va statements,VOCAB,#/va-statements
+virtual preset,old carrier values,VOCAB,#/carrier-values
 void,void a purchase,VOCAB,#/stock/lots
 void fill,packaging and box sizes,VOCAB,#/list/product_packaging
 void label,orders to dispatch,VOCAB,#/orders

@@ -185,7 +185,11 @@ class CarrierPresets
     public static function reviewList(?object $u): array
     {
         if (($u->role_code ?? '') !== 'OWNER') throw new \InvalidArgumentException('Only the Owner sees this list.');
-        return DB::table('mo_carrier_value_review')->where('fk_id_ent', self::ent())->where('status', 'OPEN')->orderBy('id')->limit(500)->get()->map(fn ($r) => ['id' => (int) $r->id, 'table' => $r->table_name, 'record' => (int) $r->record_id, 'old_value' => $r->old_value, 'candidates' => json_decode((string) $r->candidates_json, true) ?: []])->all();
+        return DB::table('mo_carrier_value_review')->where('fk_id_ent', self::ent())->where('status', 'OPEN')->orderBy('id')->limit(500)->get()->map(function ($r) {
+            $row = (array) DB::table($r->table_name)->where('id', $r->record_id)->first(); $name = ''; foreach ([Registry::labelColumn($r->table_name), 'product_name_vendor', 'SKU_VENDOR', 'listing_title', 'marketplace_sku', 'order_no'] as $lc) if ($lc && trim((string) ($row[$lc] ?? '')) !== '') { $name = (string) $row[$lc]; break; }      /* the record by its name – nobody reads an id */
+            $cand = array_map(fn ($c) => $c + ['label' => ($p = DB::table('t_carrier_pkg_svc')->where('id', (int) ($c['preset'] ?? 0))->first()) ? self::label($p) : ''], json_decode((string) $r->candidates_json, true) ?: []);
+            return ['id' => (int) $r->id, 'table' => $r->table_name, 'record' => (int) $r->record_id, 'name' => $name, 'old_value' => $r->old_value, 'candidates' => $cand];
+        })->all();
     }
 
     /** The Owner picks the preset for one unclear value. */

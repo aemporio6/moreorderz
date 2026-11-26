@@ -93,6 +93,13 @@ class WorkflowContextTest extends TestCase
         $this->assertSame([$cy, $po, $wh], [$r['preset']['fk_id_cycle'], $r['preset']['fk_id_po'], $r['preset']['fk_id_warehouse']]);
         $ctx = json_decode((string) DB::table('sys_workflow_context')->where(['workflow' => 'SRC_CYCLE', 'entity_id' => $cy, 'user_id' => $this->owner->id])->value('context_json'), true);
         $this->assertSame($wh, $ctx['catalog']['fk_id_warehouse'], 'the context is kept on the server'); $this->assertSame($po, $ctx['po']);
+        // the other catalog forms: a new incoterm added while on Samples goes on to the Purchase order form; the warehouse stays offered on later forms that have it
+        $inc = $this->f('cat_incoterm', ['incoterm_code' => 'F46', 'incoterm_name' => 'F46 terms']);
+        $r2 = $this->postJson('/api/cycle/next', ['form' => 'cat_incoterm', 'id' => $inc, 'cycle' => $cy, 'from' => 'samples'])->assertOk()->json();
+        $this->assertSame(['t_src_po', $inc], [$r2['next']['form'], $r2['preset']['fk_id_incoterm']]);
+        foreach (['cat_ports' => 'fk_id_port_loading', 'cat_currency' => 'fk_id_currency', 'cat_payment_terms' => 'fk_id_payment_term'] as $t => $col) $this->assertSame($col, \App\Services\WorkflowContext::CATALOG[$t]);
+        foreach (array_keys(\App\Services\WorkflowContext::CATALOG) as $t) $this->assertTrue(\Illuminate\Support\Facades\Schema::hasTable($t), "catalog table $t exists");
+        $this->assertSame($wh, \App\Services\WorkflowContext::prefill('t_src_shipments', $cy, \App\Services\WorkflowContext::get($cy, $this->owner->id))['fk_id_warehouse']);
         $this->postJson('/api/cycle/next', ['form' => 'warehouse', 'id' => 99999999, 'cycle' => $cy, 'from' => 'allocation'])->assertStatus(422)->assertJsonPath('message', 'The saved record was not found.');
         $this->postJson('/api/cycle/next', ['form' => 't_src_rfq', 'id' => 1, 'cycle' => $cy, 'from' => 'allocation'])->assertStatus(422)->assertJsonPath('message', 'This form has no next step inside a cycle.');
     }

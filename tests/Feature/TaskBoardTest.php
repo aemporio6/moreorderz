@@ -31,6 +31,10 @@ class TaskBoardTest extends TestCase
         $this->postJson("/api/tasks/$t/drop", ['column' => 'APPROVED'])->assertStatus(422); $this->assertSame('DONE', DB::table('tasks')->where('id', $t)->value('status'));
         $this->actingAs($mgr)->postJson("/api/tasks/$t/drop", ['column' => 'APPROVED', 'quality' => 'GOOD'])->assertOk(); $this->assertSame('APPROVED', DB::table('tasks')->where('id', $t)->value('status'));
         $this->assertGreaterThanOrEqual(3, DB::table('task_history')->where('task_id', $t)->count(), 'every drag is in the history like a button press');
+        // the rule: drag a RULE task (SRC_LOT_NO_COST) to APPROVED while its problem exists → refused with the IC-9 message
+        $rt = $this->task(['owner_user_id' => $va->id, 'source' => 'RULE', 'rule_code' => 'SRC_LOT_NO_COST', 'dedupe_key' => 'SRC_LOT_NO_COST:board', 'title' => 'Lot L-9 has no cost', 'status' => 'DOING']);
+        $this->actingAs($mgr)->postJson("/api/tasks/$rt/drop", ['column' => 'APPROVED', 'quality' => 'GOOD'])->assertStatus(422)->assertJsonPath('message', 'Refused: problem still present: Lot L-9 has no cost');
+        $this->assertSame('DOING', DB::table('tasks')->where('id', $rt)->value('status'));
         // the view choice is kept per person
         $this->actingAs($va)->postJson('/api/tasks/board/view', ['view' => 'calendar'])->assertOk(); $this->assertSame('calendar', $this->getJson('/api/tasks/board')->json('view'));
         $this->assertSame('kanban', TB::view($other)); $this->postJson('/api/tasks/board/view', ['view' => 'gantt'])->assertStatus(422);

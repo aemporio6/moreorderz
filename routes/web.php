@@ -266,6 +266,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('allocation-plan/{id}/dismiss', [StockController::class, 'allocDismiss'])->whereNumber('id');
         Route::get('inventory-sharing', [StockController::class, 'sharing']);      // R-D-94
         Route::post('inventory-sharing', [StockController::class, 'sharingBulk']);
+        Route::get('product-imports/staged/template', [StockController::class, 'stagedTemplate']);      // R-G_CORE-74
         Route::get('product-imports/staged/meta', [StockController::class, 'stagedMeta']);      // R-D-53
         Route::post('product-imports/staged/clear', [StockController::class, 'stagedClear']);
         Route::post('product-imports/staged', [StockController::class, 'stagedStage']);

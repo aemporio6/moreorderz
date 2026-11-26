@@ -83,6 +83,18 @@ class ProductImports
             'shops' => array_values(array_map(fn ($s) => ['id' => $s['id'], 'label' => $s['label']], ShopLabel::list($u, ['active_only' => true]))), 'columns' => ['parent SKU', 'child SKU', 'name', 'carrier preset', 'packing', 'sale price', 'qty', 'weight', 'dimensions']];
     }
 
+    /** R-G_CORE-74 template: columns A–I with one example family, and the current carrier and packing names in columns K and L (the importer reads A–I only). */
+    public static function stagedTemplate(object $u): string
+    {
+        Perm::need($u, 'stock.CHANGE');
+        $car = DB::table('t_carrier_pkg_svc')->where('f_active', 1)->where('pkg_svc_name', '<>', '')->orderBy('pkg_svc_name')->pluck('pkg_svc_name')->unique()->values()->all(); $pk = DB::table('t_packings')->where('f_active', 1)->orderBy('packing_name')->pluck('packing_name')->unique()->values()->all();
+        $rows = [['Parent SKU', 'Child SKU', 'Product Name', 'Carrier', 'Packing', 'Sale Price', 'Qty', 'Weight', 'Dimensions', '', 'Carrier names you can use', 'Packing names you can use'],
+            ['EXAMPLE-P1', '', 'Example family (delete these 3 rows)', $car[0] ?? '', $pk[0] ?? '', '', '', '', ''], ['', 'EXAMPLE-C1', 'Example child', $car[0] ?? '', $pk[0] ?? '', '4.99', '10', '120', '10x5'], ['EXAMPLE-S2', '', 'Example single product', '', '', '5.99', '3', '', '']];
+        for ($i = 0, $n = max(count($car), count($pk)); $i < $n; $i++) { $rows[$i + 1] ??= array_fill(0, 9, ''); $rows[$i + 1] = array_pad($rows[$i + 1], 10, ''); $rows[$i + 1][10] = $car[$i] ?? ''; $rows[$i + 1][11] = $pk[$i] ?? ''; }
+        $out = "\xEF\xBB\xBF"; foreach ($rows as $r) $out .= implode(',', array_map(fn ($v) => preg_match('/[",\n]/', (string) $v) ? '"' . str_replace('"', '""', (string) $v) . '"' : (string) $v, $r)) . "\r\n";
+        return $out;
+    }
+
     /** Opening the screen clears the person's staging. (A POST – a GET never writes.) */
     public static function stagedClear(object $u): array { DB::table('bulk_jobs')->where('list_key', self::STAGE)->where('fk_id_account', $u->id)->where('status', 'PREVIEW')->delete(); return ['message' => 'Staging cleared.']; }
 
@@ -91,9 +103,12 @@ class ProductImports
     {
         Perm::need($u, 'stock.CHANGE');
         $vendor = (int) ($in['vendor'] ?? 0); if (! $vendor || ! DB::table('t_vendors')->where('id', $vendor)->exists()) throw new \InvalidArgumentException('Please select Vendor.');
+        $inv = (int) ($in['vendor_inventory'] ?? 0); if (! $inv || ! DB::table('t_vendors')->where('id', $inv)->exists()) throw new \InvalidArgumentException('Please select Vendor Inventory.');      /* R-G_CORE-74: every header choice is required */
+        $shop = (int) ($in['shop'] ?? 0); if (! $shop || ! DB::table('t_branches')->where('id', $shop)->where('fk_id_ent', $ent)->exists()) throw new \InvalidArgumentException('Please select Shop.');
+        if (! Perm::shopAllowed($u, $shop)) throw new \InvalidArgumentException('This shop is not one of yours.');
         if ($fileName === null || $text === null) throw new \InvalidArgumentException('Please select a file to upload.');
         if (strtolower(pathinfo($fileName, PATHINFO_EXTENSION)) !== 'csv') throw new \InvalidArgumentException('Invalid file type. Please upload an Excel file (CSV).');
-        $rows = self::rows($text);
+        $rows = array_values(array_filter(self::rows($text), fn ($r) => implode('', array_slice($r, 0, 9)) !== ''));      /* the template keeps its name lists in columns K and L – rows with nothing in A–I are not products */
         if ($rows && preg_match('/sku/i', implode(' ', array_slice($rows[0], 0, 2)))) array_shift($rows);      /* a heading row */
         $presets = DB::table('t_carrier_pkg_svc')->where('f_active', 1)->get(['id', 'pkg_svc_name'])->mapWithKeys(fn ($p) => [mb_strtolower(trim((string) $p->pkg_svc_name)) => (int) $p->id])->all();
         $packs = DB::table('t_packings')->where('f_active', 1)->get(['id', 'packing_name'])->mapWithKeys(fn ($p) => [mb_strtolower(trim((string) $p->packing_name)) => (int) $p->id])->all();

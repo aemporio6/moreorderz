@@ -52,7 +52,7 @@
 63|B|CarrierPresets::combos|combination browser + add: unsaved combination -> preset at rate 0 + task CAR_RATE_MISSING, "already in the group" count, log
 64|F|form:car_preset_group_item|form only
 65|P|CarrierPresets::dropdown|dropdown service built (order, default, Other presets, current) + preview; the carrier fields of the forms do not call it yet
-66|P|mo_carrier_value_review|virtual id conversion with ambiguous/unknown review list and Owner resolve built; no screen for the review list, runs at data load
+66|B|mo_carrier_value_review|old virtual carrier ids: converted when exactly one preset fits, otherwise kept and listed; screen "Old carrier values to decide" (menu row, record by name, candidates, Owner picks from the carrier dropdown), dry run writes nothing; CarrierPresetsTest
 68|B|class ListDefaults|protected default list items: the default (e.g. condition "New") cannot be deleted or deactivated ("The default \"New\" condition cannot be deleted."), an item in use is refused with "This condition is used by n product(s). Reassign them first." and a Reassign action in the bulk preview (bulk/{key}/reassign); ProductsBatchTest r68; dev DB has no conditions so the browser step was not clicked
 69|F|form:cat_brands|forms only
 70|F|form:cat_product_type|forms only

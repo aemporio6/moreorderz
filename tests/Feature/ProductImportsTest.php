@@ -66,10 +66,10 @@ class ProductImportsTest extends TestCase
         $wh = $this->f('cat_inventory_locations', ['location_name' => 'Staged WH', 'kind' => 'WAREHOUSE', 'fk_id_ent' => 1, 'f_sellable' => 1, 'f_active' => 1]); \App\Services\Settings::set('MAIN_WAREHOUSE', (string) $wh, 1);
         $csv = "P1,,Mug set,Stage 48,Small box S,,,,\n,P1-A,Mug red,Stage 48,Small box S,5.50,3,0.4,10x10x10\n,P1-B,Mug blue,,,6.00,,,\nP2,,Solo plate,No such preset,,9.99,2,,\n,,,,,,,,\n";
         $this->post('/api/product-imports/staged', $this->file('p.csv', $csv), ['Accept' => 'application/json'])->assertStatus(422)->assertJsonPath('message', 'Please select Vendor.');
-        $this->post('/api/product-imports/staged', ['vendor' => $v], ['Accept' => 'application/json'])->assertStatus(422)->assertJsonPath('message', 'Please select a file to upload.');
-        $this->post('/api/product-imports/staged', ['vendor' => $v] + $this->file('p.xlsx', $csv), ['Accept' => 'application/json'])->assertStatus(422)->assertJsonPath('message', 'Invalid file type. Please upload an Excel file (CSV).');
+        $this->post('/api/product-imports/staged', ['vendor' => $v, 'vendor_inventory' => $v, 'shop' => $this->hdrShop()], ['Accept' => 'application/json'])->assertStatus(422)->assertJsonPath('message', 'Please select a file to upload.');
+        $this->post('/api/product-imports/staged', ['vendor' => $v, 'vendor_inventory' => $v, 'shop' => $this->hdrShop()] + $this->file('p.xlsx', $csv), ['Accept' => 'application/json'])->assertStatus(422)->assertJsonPath('message', 'Invalid file type. Please upload an Excel file (CSV).');
         $n = DB::table('t_product_vendors')->count();
-        $s = $this->post('/api/product-imports/staged', ['vendor' => $v] + $this->file('p.csv', $csv), ['Accept' => 'application/json'])->assertOk()->json();
+        $s = $this->post('/api/product-imports/staged', ['vendor' => $v, 'vendor_inventory' => $v, 'shop' => $this->hdrShop()] + $this->file('p.csv', $csv), ['Accept' => 'application/json'])->assertOk()->json();
         // the rule: rows P1 / P1-A / P1-B / P2 / (blank) → parent P1 with 2 children and P2 as a single product
         $this->assertSame([1, 2, 1], [$s['parents'], $s['children'], $s['singles']]);
         $this->assertSame(['P1', 'parent', ['P1-A', 'P1-B']], [$s['tree'][0]['sku'], $s['tree'][0]['kind'], array_column($s['tree'][0]['children'], 'sku')]); $this->assertSame(['P2', 'single'], [$s['tree'][1]['sku'], $s['tree'][1]['kind']]);
@@ -88,9 +88,37 @@ class ProductImportsTest extends TestCase
         $this->assertSame([3, 1, 2, 0], [(int) $lots($a->id), (int) $lots($b->id), (int) $lots($p2->id), (int) $lots($p1->id)], 'qty enters as OPENING lots (default 1); never on the parent');
         $this->postJson('/api/product-imports/staged/' . $s['job'] . '/confirm')->assertStatus(422);
         // opening the screen clears the person's staging
-        $s2 = $this->post('/api/product-imports/staged', ['vendor' => $v] + $this->file('q.csv', "Q1,,Thing,,,1,1,,\n"), ['Accept' => 'application/json'])->assertOk()->json();
+        $s2 = $this->post('/api/product-imports/staged', ['vendor' => $v, 'vendor_inventory' => $v, 'shop' => $this->hdrShop()] + $this->file('q.csv', "Q1,,Thing,,,1,1,,\n"), ['Accept' => 'application/json'])->assertOk()->json();
         $this->postJson('/api/product-imports/staged/clear')->assertOk(); $this->getJson('/api/product-imports/staged/' . $s2['job'])->assertStatus(422);
     }
+    private function hdrShop(): int
+    {
+        static $id = []; $k = spl_object_id($this); if (isset($id[$k])) return $id[$k];
+        $mp = $this->f('cat_marketplaces', ['fk_id_ent' => 1, 'marketplace_short' => 'Hdr' . uniqid(), 'f_active' => 1]);
+        return $id[$k] = $this->f('t_branches', ['fk_id_ent' => 1, 'fk_id_marketplace' => $mp, 'shop_no' => 'H' . substr(uniqid(), -5), 'iso_branch' => 'H' . substr(uniqid(), -4), 'shop_name' => 'Header shop', 'f_active' => 1]);
+    }
+
+    /** R-G_CORE-74: every header choice is required (old texts); the template carries the carrier and packing names. */
+    public function test_g74_header_choices_required_and_template_with_lists(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id);
+        $v = $this->f('t_vendors', ['fk_id_ent' => 1, 'vendor_name' => 'Hdr Vendor', 'iso_vendor' => 'HV', 'f_active' => 1]); $shop = $this->hdrShop(); $file = $this->file('p.csv', "T1,,Thing,,,1,1,,\n");
+        $car = $this->f('t_carriers', ['fk_id_ent' => 1, 'carrier_name' => 'RM', 'f_active' => 1]); $this->f('t_carrier_pkg_svc', ['pkg_svc_name' => 'Template Mail 48', 'fk_id_carrier' => $car, 'f_active' => 1]); $this->f('t_packings', ['fk_id_ent' => 1, 'packing_name' => 'Template Bag', 'f_active' => 1]);
+        $post = fn (array $h) => $this->post('/api/product-imports/staged', $h + $file, ['Accept' => 'application/json']);
+        $post([])->assertStatus(422)->assertJsonPath('message', 'Please select Vendor.');
+        $post(['vendor' => $v])->assertStatus(422)->assertJsonPath('message', 'Please select Vendor Inventory.');
+        $post(['vendor' => $v, 'vendor_inventory' => $v])->assertStatus(422)->assertJsonPath('message', 'Please select Shop.');
+        $this->post('/api/product-imports/staged', ['vendor' => $v, 'vendor_inventory' => $v, 'shop' => $shop], ['Accept' => 'application/json'])->assertStatus(422)->assertJsonPath('message', 'Please select a file to upload.');
+        $t = $this->get('/api/product-imports/staged/template')->assertOk(); $this->assertStringContainsString('products_bulk_template.csv', (string) $t->headers->get('Content-Disposition')); $csv = $t->getContent();
+        $this->assertStringContainsString('Parent SKU,Child SKU,Product Name,Carrier,Packing,Sale Price,Qty,Weight,Dimensions,,Carrier names you can use,Packing names you can use', $csv);
+        $this->assertStringContainsString('Template Mail 48', $csv); $this->assertStringContainsString('Template Bag', $csv);
+        // the template itself can be loaded: its 3 example rows are products, the rows that only hold names are not
+        for ($i = 0; $i < 4; $i++) $this->f('t_packings', ['fk_id_ent' => 1, 'packing_name' => "Template Bag $i", 'f_active' => 1]);
+        $s = $this->post('/api/product-imports/staged', ['vendor' => $v, 'vendor_inventory' => $v, 'shop' => $shop] + $this->file('t.csv', (string) $this->get('/api/product-imports/staged/template')->getContent()), ['Accept' => 'application/json'])->assertOk()->json();
+        $this->assertSame(['EXAMPLE-P1', 'EXAMPLE-S2'], array_column($s['tree'], 'sku')); $this->assertCount(1, $s['tree'][0]['children']);
+        $va = $this->makeUser('VA'); $this->actingAs($va)->get('/api/product-imports/staged/template')->assertStatus(403);
+    }
+
     /** R-G_CORE-74: carrier matched by name with a look-alike; Undo removes every product of the batch. */
     public function test_g74_bulk_upload_lookalike_and_undo(): void
     {
@@ -100,7 +128,7 @@ class ProductImportsTest extends TestCase
         $wh = $this->f('cat_inventory_locations', ['location_name' => 'G74 WH', 'kind' => 'WAREHOUSE', 'fk_id_ent' => 1, 'f_sellable' => 1, 'f_active' => 1]); \App\Services\Settings::set('MAIN_WAREHOUSE', (string) $wh, 1);
         // the rule: 3 rows (parent P1, child with blank parent, single S2), carrier "Royal Mail 48" by name → P1 Parent with 1 child, S2 Alone; Undo removes all 3
         $csv = "G74-P1,,Set,Royal Mail 48,,,,,\n,G74-C1,Set red,royal mail 48,,4.00,2,,\nG74-S2,,Solo,Royal Mail 84,,5.00,1,,\n"; $n = DB::table('t_product_vendors')->count();
-        $s = $this->post('/api/product-imports/staged', ['vendor' => $v] + $this->file('p.csv', $csv), ['Accept' => 'application/json'])->assertOk()->json();
+        $s = $this->post('/api/product-imports/staged', ['vendor' => $v, 'vendor_inventory' => $v, 'shop' => $this->hdrShop()] + $this->file('p.csv', $csv), ['Accept' => 'application/json'])->assertOk()->json();
         $this->assertSame(['parent', 1, 'single'], [$s['tree'][0]['kind'], count($s['tree'][0]['children']), $s['tree'][1]['kind']]);
         $this->assertStringContainsString('carrier preset "Royal Mail 84" not found – left empty. Did you mean "royal mail 48"?', implode(' ', $s['log']));
         $r = $this->postJson('/api/product-imports/staged/' . $s['job'] . '/confirm')->assertOk()->json(); $this->assertSame($n + 3, DB::table('t_product_vendors')->count()); $this->assertSame($s['job'], $r['job']);
