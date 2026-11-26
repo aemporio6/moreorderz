@@ -97,6 +97,21 @@ class SalesReportsTest extends TestCase
         $this->assertSame((int) date('Y'), SalesReports::year(1999));
     }
 
+    /** R-G_CORE-79: VA % from the batch; profit 120, fee 20 → after-fee 100 → VA 20.00, Store 80.00; VA 0 % → both "N/A"; no % → both 0.00. */
+    public function test_g79_va_and_store_share_with_the_example_of_the_rule(): void
+    {
+        $this->world();
+        $b = $this->batch($this->shop, 11, 20, 20); $this->line($this->shop, $b, '2026-11-10', 300, 180, 120);
+        $z = $this->batch($this->shop, 10, 0, 0); $this->line($this->shop, $z, '2026-10-10', 50, 20, 30);
+        $n = $this->batch($this->shop, 9, 0, 0); $this->line($this->shop, $n, '2026-09-10', 50, 20, 30);
+        DB::table('t_sale_imports')->whereIn('id', [$b, $z])->update(['fk_id_va_account' => $this->va]); DB::table('t_sale_imports')->where('id', $n)->update(['fk_id_va_account' => 0]);
+        $r = SalesReports::annual(['year' => 2026, 'shop' => $this->shop], $this->owner);
+        $this->assertSame([100.0, 20.0, 80.0], [$r['rows'][10]['after_fee'], $r['rows'][10]['va_share'], $r['rows'][10]['store_share']]);
+        $this->assertSame([null, null, true], [$r['rows'][9]['va_share'], $r['rows'][9]['store_share'], $r['rows'][9]['shares_na'] ?? null]);
+        $this->assertSame([0.0, 0.0], [$r['rows'][8]['va_share'], $r['rows'][8]['store_share']]);
+        $csv = SalesReports::download('annual', 'csv', ['year' => 2026, 'shop' => $this->shop], $this->owner)['body']; $this->assertStringContainsString('N/A', $csv);
+    }
+
     public function test_refresh_va_percent_is_owner_only_logged_and_refused_when_the_month_is_closed(): void
     {
         $this->world(); $b = $this->batch($this->shop, 7, 40, 5); $this->line($this->shop, $b, '2026-07-05', 1000, 200, 800);

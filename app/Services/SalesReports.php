@@ -88,7 +88,7 @@ class SalesReports
         $by = self::lines($year, $f, $u)->groupByRaw('MONTH(s.d_order)')->selectRaw('MONTH(s.d_order) m, COALESCE(SUM(s.total_amount),0) sale, COALESCE(SUM(s.buy_amount),0) buy, COALESCE(SUM(s.qty),0) qty, COALESCE(SUM(s.profit),0) profit, COALESCE(SUM(CASE WHEN s.profit < 0 THEN -s.profit ELSE 0 END),0) loss')->get()->keyBy('m');
         // fee and saved VA share: the batches of each month that hold lines of the filter (each batch once)
         $bq = DB::table('t_sale_imports')->where('fk_id_ent', Context::ent())->where('period_year', $year)->whereIn('id', self::lines($year, $f, $u)->where('s.fk_id_import', '>', 0)->distinct()->select('s.fk_id_import'));
-        $bat = $bq->groupBy('period_month')->selectRaw('period_month m, COALESCE(SUM(marketplace_fee),0) fee, COALESCE(SUM(va_share_amount),0) va, COUNT(DISTINCT va_share_percentage) kinds, MAX(va_share_percentage) pct')->get()->keyBy('m');
+        $bat = $bq->groupBy('period_month')->selectRaw('period_month m, COALESCE(SUM(marketplace_fee),0) fee, COALESCE(SUM(va_share_amount),0) va, COUNT(DISTINCT va_share_percentage) kinds, MAX(va_share_percentage) pct, MAX(COALESCE(fk_id_va_account,0)) va_acc')->get()->keyBy('m');
         // daily totals of shops without order files are never mixed into the order lines: shown apart
         $sum = self::lines($year, $f, $u, true)->groupByRaw('MONTH(s.d_order)')->selectRaw('MONTH(s.d_order) m, COALESCE(SUM(s.total_amount),0) sale, COALESCE(SUM(s.buy_amount),0) buy, COALESCE(SUM(s.qty),0) qty, COALESCE(SUM(s.profit),0) profit')->get()->keyBy('m'); $summary = ['rows' => [], 'total' => ['sale' => 0.0, 'buy' => 0.0, 'qty' => 0, 'profit' => 0.0]];
         for ($m = 1; $m <= 12; $m++) { $x = $sum[$m] ?? null; $r = ['m' => $m, 'month' => self::MONTHS[$m - 1], 'sale' => round((float) ($x->sale ?? 0), 2), 'buy' => round((float) ($x->buy ?? 0), 2), 'qty' => (int) ($x->qty ?? 0), 'profit' => round((float) ($x->profit ?? 0), 2)]; if (! $money) unset($r['buy'], $r['profit']); $summary['rows'][] = $r;
@@ -99,8 +99,11 @@ class SalesReports
             $l = $by[$m] ?? null; $b = $bat[$m] ?? null; $profit = round((float) ($l->profit ?? 0), 2); $fee = round((float) ($b->fee ?? 0), 2); $after = round($profit - $fee, 2); $va = round((float) ($b->va ?? 0), 2);
             $r = ['m' => $m, 'month' => self::MONTHS[$m - 1], 'sale' => round((float) ($l->sale ?? 0), 2), 'buy' => round((float) ($l->buy ?? 0), 2), 'qty' => (int) ($l->qty ?? 0), 'fee' => $fee, 'profit' => $profit, 'after_fee' => $after,
                 'va_pct' => $b ? ((int) $b->kinds > 1 ? 'mixed' : (float) $b->pct) : null, 'va_share' => $va, 'store_share' => round($after - $va, 2), 'net' => round($after - $va, 2), 'loss' => round((float) ($l->loss ?? 0), 2)];
+            /* R-G_CORE-79: no job-history % on the batch → both shares 0.00; both "N/A" unless VA % and Store % are both above 0 */
+            if (! $b || ($r['va_pct'] !== 'mixed' && (float) $b->pct <= 0 && ! (int) $b->va_acc)) { $r['va_share'] = 0.0; $r['store_share'] = 0.0; }      // no VA % (no job-history row) on the batch
+            elseif ($r['va_pct'] !== 'mixed' && ((float) $b->pct <= 0 || (float) $b->pct >= 100)) { $r['va_share'] = null; $r['store_share'] = null; $r['shares_na'] = true; }
             if ($b) $pcts[(string) $r['va_pct']] = 1;
-            foreach (['sale', 'buy', 'qty', 'fee', 'profit', 'after_fee', 'va_share', 'store_share', 'net', 'loss'] as $k) $tot[$k] = $k === 'qty' ? $tot[$k] + $r[$k] : round($tot[$k] + $r[$k], 2);
+            foreach (['sale', 'buy', 'qty', 'fee', 'profit', 'after_fee', 'va_share', 'store_share', 'net', 'loss'] as $k) $tot[$k] = $k === 'qty' ? $tot[$k] + $r[$k] : round($tot[$k] + (float) $r[$k], 2);
             $rows[] = $r;
         }
         $shop = ! empty($f['shop']) ? collect(ShopLabel::list($u))->firstWhere('id', (int) $f['shop']) : null;
@@ -141,7 +144,7 @@ class SalesReports
         Perm::need($u, 'orders.saleExport'); $stamp = date('YmdHis', $now ? strtotime($now) : time()); $m = fn ($v) => number_format((float) $v, 2, '.', '');
         if ($report === 'annual') {
             $d = self::annual($f, $u); $cols = $d['see_cost'] ? self::ANNUAL_COLS : array_intersect_key(self::ANNUAL_COLS, array_flip(['month', 'sale', 'qty'])); $head = array_values($cols);
-            $grid = array_map(fn ($r) => array_map(fn ($k) => in_array($k, ['month', 'qty'], true) ? (string) $r[$k] : $m($r[$k]), array_keys($cols)), array_merge($d['rows'], [$d['total']]));
+            $grid = array_map(fn ($r) => array_map(fn ($k) => in_array($k, ['month', 'qty'], true) ? (string) $r[$k] : (in_array($k, ['va_share', 'store_share'], true) && ! empty($r['shares_na']) ? 'N/A' : $m($r[$k])), array_keys($cols)), array_merge($d['rows'], [$d['total']]));
             $name = ($format === 'pdf' ? 'sale_export_for_' : 'sale_export_of_') . $d['year'] . '_' . $stamp . '.' . $format; $title = 'Annual Sale Report ' . $d['year']; $sub = ($d['shop']['label'] ?? 'All shops') . ' · cost basis: ' . self::BASIS; $paper = [210, 297]; $colour = ['profit' => array_search('Profit', $head), 'loss' => array_search('Loss', $head)];
         } else {
             $d = self::detailed($f, $u); $keys = $d['see_cost'] ? ['total' => 'Total', 'purchase' => 'Purchase', 'qty' => 'Qty', 'profit' => 'Profit'] : ['total' => 'Total', 'qty' => 'Qty']; $head = ['Shop', 'Owner', 'VA'];

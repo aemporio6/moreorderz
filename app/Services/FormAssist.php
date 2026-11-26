@@ -111,7 +111,8 @@ class FormAssist
             if ($bad) $opts = array_map(fn ($o) => in_array((string) $o[0], $bad, true) ? [$o[0], $o[1] . ' ⚠ ' . BuyingService::RATED_D] + $o : $o, $opts);
         }
         if ($q && ! $filters && ! in_array(explode(':', (string) $f['source'])[0], ['ref', 'table', 'own', 'party'], true)) $opts = array_values(array_filter($opts, fn ($o) => mb_stripos($o[1], $q) !== false || mb_stripos($o[0], $q) !== false));
-        return ['options' => $opts, 'more' => count($opts) >= $limit, 'narrowed_by' => array_keys($filters), 'recent' => self::recent($formKey, $name)] + ($q && ! $opts && ! $filters ? ['did_you_mean' => self::closest($f, $ent, $q)] : []);
+        $colors = $t === 'cat_tags' && $opts ? DB::table('cat_tags')->whereIn('id', array_map(fn ($o) => (int) $o[0], $opts))->whereRaw("tag_color REGEXP '^#[0-9a-fA-F]{6}$'")->pluck('tag_color', 'id')->all() : [];      // R-D-13 each option painted in its tag colour
+        return ['options' => $opts, 'colors' => (object) $colors, 'more' => count($opts) >= $limit, 'narrowed_by' => array_keys($filters), 'recent' => self::recent($formKey, $name)] + ($q && ! $opts && ! $filters ? ['did_you_mean' => self::closest($f, $ent, $q)] : []);
     }
 
     /** Form standard (d): nothing matches the typed text → the closest names of the same list (spelling), at most 3. */

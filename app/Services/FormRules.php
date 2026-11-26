@@ -59,6 +59,7 @@ class FormRules
         $def = [];      // R-D-68: the default item of a list is never switched off
         if ($id && array_key_exists('f_active', $data) && ! (int) $data['f_active'] && (int) ($old['f_active'] ?? 1) && ($t = Registry::table($formKey)) && ($m = ListDefaults::protect($t, $id, (string) ($old[Registry::labelColumn($t) ?: 'id'] ?? $id)))) $def = ['f_active' => str_replace('cannot be deleted', 'cannot be switched off', $m)];
         $ch = Registry::table($formKey) === 't_account' ? PersonChannels::check($data, $old, $id) : [];      // R-G_CORE-48 channels per person
+        $ch += in_array(Registry::table($formKey), ['cat_tags', 'cat_brands'], true) ? self::tagBrand((string) Registry::table($formKey), $data, $old, $id) : [];      // R-D-69 tags and brands
         return $def + $code + $inherit + $ch + OwnItems::check($formKey, $data, $old, $id) + self::checkForm($formKey, $data, $old, $id, $already);      // R-C-20: an own item must be the person's own
     }
 
@@ -66,6 +67,24 @@ class FormRules
      * R-B_SOURCING-43 manual landed-cost line (a cycle without the data): total = Σ the ten buckets, per unit = accepted > 0 ? total ÷ accepted (4 dp) : 0,
      * cost source MANUAL. A line made by a landed-cost run is changed by a new run or an override, never by hand.
      */
+    /** R-D-69: tag name trimmed + Title Case, unique (trimmed, any case) "Tag name already exist", colour required; brand name trimmed + first letter upper, unique per linked company. */
+    private static function tagBrand(string $table, array &$data, array $old, ?int $id): array
+    {
+        $ent = (int) (Context::ent() ?? 0); $e = [];
+        if ($table === 'cat_tags') {
+            if (array_key_exists('tag_name', $data) || ! $id) { $n = ucwords(preg_replace('/\s+/u', ' ', trim((string) ($data['tag_name'] ?? '')))); $data['tag_name'] = $n;
+                if ($n === '') $e['tag_name'] = 'Tag name is required.';
+                elseif (DB::table('cat_tags')->whereRaw('LOWER(TRIM(tag_name)) = ?', [mb_strtolower($n)])->where(fn ($w) => $w->whereIn('fk_id_ent', [0, $ent])->orWhereNull('fk_id_ent'))->when($id, fn ($q) => $q->where('id', '<>', $id))->exists()) $e['tag_name'] = 'Tag name already exist'; }
+            if ((array_key_exists('tag_color', $data) || ! $id) && trim((string) ($data['tag_color'] ?? '')) === '') $e['tag_color'] = 'Tag colour is required – pick it.';
+        }
+        if ($table === 'cat_brands' && (array_key_exists('brand_name', $data) || ! $id)) {
+            $n = preg_replace('/\s+/u', ' ', trim((string) ($data['brand_name'] ?? ''))); $n = $n === '' ? '' : mb_strtoupper(mb_substr($n, 0, 1)) . mb_substr($n, 1); $data['brand_name'] = $n;
+            $co = (int) ($data['fk_id_company_house'] ?? $old['fk_id_company_house'] ?? 0);
+            if ($n !== '' && $co && DB::table('cat_brands')->where('fk_id_company_house', $co)->whereRaw('LOWER(TRIM(brand_name)) = ?', [mb_strtolower($n)])->when($id, fn ($q) => $q->where('id', '<>', $id))->exists()) $e['brand_name'] = "Brand \"$n\" already exists for this company.";
+        }
+        return $e;
+    }
+
     private static function landedManual(array &$data, array $old, ?int $id): array
     {
         if ($id && ($old['landed_status'] ?? 'MANUAL') !== 'MANUAL') return ['_form' => 'This line was made by a landed-cost run – change it with a new run or an override.'];

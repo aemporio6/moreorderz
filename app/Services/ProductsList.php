@@ -20,7 +20,7 @@ class ProductsList
     /** PRODUCT_ROW_STATUS: value => [label, colour] in the order they are tested */
     public const ROW_STATUS = ['OOS' => ['Manual out of stock', '#e45573'], 'INACTIVE' => ['Inactive', '#c1318b'], 'PARENT' => ['Parent (family)', '#15a985'], 'ALONE' => ['On its own', '#f0c902']];
     public const TYPES = ['JOINT' => 'Joint (2+ investors)', 'HOLDING' => 'Holding (1 investor)', 'CENTRAL' => 'Central (pool)', 'PRIVATE' => 'Private'];
-    public const DEFAULT_COLS = ['image' => 'Image', 'name' => 'Name', 'sku' => 'SKU', 'owner' => 'Owner', 'type' => 'Type', 'marketplaces' => 'Marketplaces', 'qty' => 'Qty', 'cover' => 'Cover', 'wac' => 'WAC £', 'listings' => 'Listings', 'status' => 'Status'];
+    public const DEFAULT_COLS = ['image' => 'Image', 'name' => 'Name', 'sku' => 'SKU', 'owner' => 'Owner', 'type' => 'Type', 'tags' => 'Tags', 'marketplaces' => 'Marketplaces', 'qty' => 'Qty', 'cover' => 'Cover', 'wac' => 'WAC £', 'listings' => 'Listings', 'status' => 'Status'];
     public const PRICING_COLS = ['raw' => 'Raw', 'vat' => 'VAT', 'postage' => 'Postage', 'packing_rate' => 'Packing', 'fee' => 'Fee', 'final_sale' => 'Final sale', 'cost' => 'Cost (FIFO)', 'margin' => 'Margin £', 'margin_pct' => 'Margin %',
         'stock' => 'Stock', 'min_level' => 'Min level', 'alert' => 'Alert?', 'family' => 'Family?', 'variant' => 'Variant', 'created' => 'Created', 'country' => 'Country', 'weight' => 'Weight', 'dimensions' => 'Dimensions',
         'carrier' => 'Carrier', 'packing' => 'Packing', 'image_url' => 'Image URL', 'expiry' => 'Expiry', 'description' => 'Description'];
@@ -120,6 +120,13 @@ class ProductsList
     public const FILTERS = ['icc', 'company', 'category', 'brand', 'carrier', 'investor', 'logistic', 'supplier', 'trend', 'country', 'ean', 'asin', 'mode', 'tag', 'oos'];
 
     /** R-D-36 the filter bar (each is an AND; the same EXISTS rules everywhere the list is used: page, export, search). */
+    /** The tags of a product: the Tags field, else the old Tag 1–3. */
+    public static function tagIds(object $p): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', explode(',', (string) ($p->tag_ids ?? ''))))));
+        return $ids ?: array_values(array_unique(array_filter([(int) ($p->f_tag1 ?? 0), (int) ($p->f_tag2 ?? 0), (int) ($p->f_tag3 ?? 0)])));
+    }
+
     public static function filters($q, array $f, int $ent): void
     {
         $n = fn (string $k) => (int) ($f[$k] ?? 0); $mp = $n('mp');
@@ -137,7 +144,7 @@ class ProductsList
         if ($n('company')) { $co = $n('company'); $q->whereExists(fn ($x) => $x->from('t_product_visibility as cv')->join('t_branches as cb', fn ($j) => $j->on('cb.fk_id_marketplace', '=', 'cv.fk_id_marketplace')->where(fn ($w) => $w->whereColumn('cb.id', 'cv.fk_id_branch')->orWhere('cv.fk_id_branch', 0)))
             ->whereColumn('cv.fk_id_product', 'p.id')->where('cb.fk_id_company', $co)->where('cb.f_active', 1)); }      /* company of a shop the product is visible in */
         if (in_array($md = strtoupper((string) ($f['mode'] ?? '')), ['POOL', 'PRIVATE'], true)) $q->whereExists(fn ($x) => $x->from('t_product_visibility as mv')->whereColumn('mv.fk_id_product', 'p.id')->whereRaw('UPPER(mv.visibility_mode) = ?', [$md])->when($mp, fn ($w) => $w->where('mv.fk_id_marketplace', $mp)));      /* with a marketplace chip: that marketplace's mode; without: any */
-        if (in_array($tg = (int) ($f['tag'] ?? 0), [1, 2, 3], true)) $q->where("p.f_tag$tg", 1);
+        if ($tg = (int) ($f['tag'] ?? 0)) $q->where(fn ($w) => $w->whereRaw('FIND_IN_SET(?, p.tag_ids)', [$tg])->orWhere('p.f_tag1', $tg)->orWhere('p.f_tag2', $tg)->orWhere('p.f_tag3', $tg));      // R-D-13 filter by tag (the Tags field, old Tag 1–3 too)
         if (in_array($ic = strtoupper((string) ($f['icc'] ?? '')), ['RED', 'YELLOW', 'OK'], true)) $q->where('p.icc_status', $ic)->whereNotNull('p.icc_run_at');      /* R-G_CORE-103 the ICC chart's slice */
         if (! empty($f['oos'])) $q->where(fn ($w) => $w->where('p.f_out_of_stock', 1)->orWhere('p.stock', '<=', 0));      /* out of stock = the flag, or nothing left */
     }
@@ -164,7 +171,7 @@ class ProductsList
         $mps = DB::table('cat_marketplaces')->whereIn('fk_id_ent', [0, $ent])->where('f_active', 1)->orderBy('marketplace_short')->get(['id', DB::raw("COALESCE(NULLIF(marketplace_short,''), NULLIF(marketplace_descr,''), id) as name")]);
         $money = $u && Perm::has($u, 'stock.prices');
         return ['rows' => $out, 'total' => $total, 'page' => $page, 'pages' => $pages, 'per' => $per, 'sizes' => self::SIZES, 'footer' => "Showing {$a}–{$b} of $total · Page $page of $pages",
-            'pager' => range(max(1, $page - 3), min($pages, $page + 3)), 'marketplaces' => $mps, 'columns' => self::DEFAULT_COLS, 'pricing_columns' => self::PRICING_COLS, 'row_status' => self::ROW_STATUS, 'types' => self::TYPES, 'owner_types' => self::OWNER_TYPES,
+            'pager' => range(max(1, $page - 3), min($pages, $page + 3)), 'marketplaces' => $mps, 'columns' => self::DEFAULT_COLS, 'tag_list' => DB::table('cat_tags')->where(fn ($w) => $w->whereIn('fk_id_ent', [0, $ent])->orWhereNull('fk_id_ent'))->where('f_active', 1)->orderBy('tag_name')->get(['id', 'tag_name as name', DB::raw("CASE WHEN tag_color REGEXP '^#[0-9a-fA-F]{6}$' THEN tag_color ELSE '#6c757d' END as color")]), 'pricing_columns' => self::PRICING_COLS, 'row_status' => self::ROW_STATUS, 'types' => self::TYPES, 'owner_types' => self::OWNER_TYPES,
             'view' => self::view($u), 'filter_lists' => self::filterLists($ent), 'filters' => array_filter(array_intersect_key($f, array_flip(self::FILTERS)), fn ($v) => $v !== null && $v !== ''), 'money' => $money, 'pricing_needs_mp' => ($f['set'] ?? '') === 'pricing' && ! $mp];
     }
 
@@ -178,13 +185,13 @@ class ProductsList
         $inv = DB::table('t_product_investors')->whereIn('fk_id_product', $ids)->groupBy('fk_id_product')->selectRaw('fk_id_product p, COUNT(DISTINCT fk_id_account) n')->pluck('n', 'p');
         $lst = DB::table('t_product_listings')->whereIn('fk_id_product', $ids)->where('f_active', 1)->groupBy('fk_id_product')->selectRaw('fk_id_product p, COUNT(*) n')->pluck('n', 'p');
         $img = DB::table('t_product_vendors_images')->whereIn('fk_id_product_vendors', $ids)->orderByDesc('f_main')->orderBy('sort_no')->orderBy('id')->get(['fk_id_product_vendors', 'thumb_url', 'image_url'])->groupBy('fk_id_product_vendors');
-        $wac = self::wac($ids);
+        $wac = self::wac($ids); $tagAll = DB::table('cat_tags')->get(['id', 'tag_name', 'tag_color'])->keyBy('id');      // R-D-13 coloured chips
         $mps = DB::table('cat_marketplaces')->whereIn('fk_id_ent', [0, $ent])->where('f_active', 1)->orderBy('marketplace_short')->get(['id', DB::raw("COALESCE(NULLIF(marketplace_short,''), NULLIF(marketplace_descr,''), id) as name")]);
         $money = $u && Perm::has($u, 'stock.prices');
         $pr = $pricing && $mp ? DB::table('t_product_marketplace_prices')->whereIn('fk_id_product', $ids)->where('fk_id_marketplace', $mp)->get()->keyBy('fk_id_product') : collect();
         $sh = $pricing && $mp ? DB::table('t_product_marketplace_shipping')->whereIn('fk_id_product', $ids)->where('fk_id_marketplace', $mp)->get()->keyBy('fk_id_product') : collect();
         $countries = $pricing ? DB::table('cat_country')->whereIn('id', $rows->pluck('fk_id_country_make')->filter()->unique()->all() ?: [0])->pluck('country_name', 'id') : collect();
-        return $rows->map(function ($p) use ($kids, $vis, $inv, $lst, $img, $wac, $mps, $mp, $pricing, $pr, $sh, $money, $countries) {
+        return $rows->map(function ($p) use ($kids, $vis, $inv, $lst, $img, $wac, $mps, $mp, $pricing, $pr, $sh, $money, $countries, $tagAll) {
             $id = (int) $p->id; $n = (int) ($kids[$id] ?? 0); $parent = $n > 0;      // a family = it has active children (f_parent is 1 on every row, so it is not used)
             $v = $vis[$id] ?? collect(); $modes = []; foreach ($v as $x) $modes[(int) $x->fk_id_marketplace] = strtoupper((string) $x->visibility_mode);
             $owners = $v->pluck('ent_name')->filter()->unique()->values()->all();
@@ -194,6 +201,7 @@ class ProductsList
                 'sku' => trim((string) $p->SKU_VENDOR) . ' · MP-' . $id, 'owner' => count($owners) > 1 ? 'Multiple' : ($owners[0] ?? ''), 'owners' => $owners,
                 'type' => self::type((int) ($inv[$id] ?? 0), $modes, $mp), 'pills' => $mps->map(fn ($m) => ['id' => (int) $m->id, 'name' => $m->name, 'visible' => isset($modes[(int) $m->id]), 'mode' => $modes[(int) $m->id] ?? null])->all(),
                 'qty' => (int) $p->stock, 'cover' => $cov['status'], 'cover_basis' => $cov['basis'], 'wac' => $money ? ($wac[$id]['wac'] ?? null) : null, 'wac_tip' => $money && isset($wac[$id]) ? 'WAC = £' . number_format($wac[$id]['total'], 2) . ' / ' . $wac[$id]['qty'] : null,
+                'tags' => collect(self::tagIds($p))->map(fn ($t) => isset($tagAll[$t]) ? ['id' => $t, 'name' => $tagAll[$t]->tag_name, 'color' => preg_match('/^#[0-9a-f]{6}$/i', (string) $tagAll[$t]->tag_color) ? $tagAll[$t]->tag_color : '#6c757d'] : null)->filter()->values()->all(),
                 'listings' => (int) ($lst[$id] ?? 0) ?: 'none', 'active' => (bool) $p->f_active, 'state' => $p->row_state ?? 'ACTIVE', 'hidden_reason' => $p->hidden_reason ?? null, 'row_status' => $status, 'colour' => self::ROW_STATUS[$status][1]];
             if ($pricing) {
                 $r = ['fk_id_marketplace' => $mp, 'raw_price' => (float) ($pr[$id]->raw_price ?? $p->raw_price ?? 0), 'sale_price' => (float) ($pr[$id]->sale_price ?? $p->sale_price ?? 0), 'marketplace_fee' => (float) ($pr[$id]->marketplace_fee ?? 0),
@@ -214,7 +222,7 @@ class ProductsList
     {
         return match ($k) {
             'image' => (string) ($r['image'] ?? ''), 'name' => trim($r['full_name'] . ' ' . $r['suffix']), 'owner' => $r['owner'] === 'Multiple' ? 'Multiple (' . implode(', ', $r['owners']) . ')' : $r['owner'],
-            'type' => (string) ($r['type'] ?? ''), 'marketplaces' => implode(', ', array_map(fn ($p) => $p['name'] . ($p['visible'] ? ' (' . ($p['mode'] ?: '') . ')' : ''), array_filter($r['pills'], fn ($p) => $p['visible']))),
+            'type' => (string) ($r['type'] ?? ''), 'tags' => implode(', ', array_column($r['tags'] ?? [], 'name')), 'marketplaces' => implode(', ', array_map(fn ($p) => $p['name'] . ($p['visible'] ? ' (' . ($p['mode'] ?: '') . ')' : ''), array_filter($r['pills'], fn ($p) => $p['visible']))),
             'status' => $r['active'] ? 'ACTIVE' : 'INACTIVE', 'wac' => $r['wac'] === null ? '' : number_format((float) $r['wac'], 2, '.', ''),
             default => is_bool($r[$k] ?? null) ? ($r[$k] ? 'Yes' : 'No') : (is_float($r[$k] ?? null) ? number_format($r[$k], 2, '.', '') : strip_tags((string) ($r[$k] ?? ''))),
         };

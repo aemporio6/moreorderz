@@ -223,6 +223,14 @@ class RecordService
         if ($errors) throw ValidationException::withMessages($errors);
 
         $data = StepFormulas::apply($table, $data, $old);      /* R-B_SOURCING-33 the live formulas, recomputed on the server */
+        foreach (Registry::fields($formKey) as $hf) if (in_array($hf['type'], ['text', null, ''], true) && preg_match('/hex colou?r/i', (string) $hf['help']) && isset($data[$hf['column_name']]) && $data[$hf['column_name']] !== '') {      // R-D-69 hex #rrggbb
+            $hv = strtolower(trim((string) $data[$hf['column_name']])); if (preg_match('/^[0-9a-f]{6}$/', $hv)) $hv = '#' . $hv;
+            if (! preg_match('/^#[0-9a-f]{6}$/', $hv)) throw ValidationException::withMessages([$hf['column_name'] => 'Enter a colour as #rrggbb (for example #dc3545) or pick it.']); else $data[$hf['column_name']] = $hv;
+        }
+        if ($table === 't_product_vendors' && array_key_exists('tag_ids', $data)) {      // R-D-13 Tag 1–3 are read-only copies of the first three tags, kept in step by the system
+            $t = array_values(array_unique(array_filter(array_map('intval', is_array($data['tag_ids']) ? $data['tag_ids'] : explode(',', (string) $data['tag_ids'])))));
+            $data['tag_ids'] = implode(',', $t); foreach ([1, 2, 3] as $i) $data["f_tag$i"] = $t[$i - 1] ?? 0;
+        }
         try { $data = Fx::fillRow($table, $data, $old, (int) Context::ent()); } catch (\RuntimeException $e) { throw ValidationException::withMessages(['exchange_rate' => $e->getMessage()]); }      /* R-B_SOURCING-32 */
         if ($table === 't_account_banks') $data = array_merge($data, SupplierBanks::beforeSave($data, $old, $id));      /* SUP_BANK: a new or changed supplier / forwarder bank waits for the phone check and the Owner */
         if ($table === 'drp_items') foreach (['ship_address', 'ship_phone'] as $mc) if (isset($data[$mc]) && Vault::isMasked($data[$mc])) unset($data[$mc]);      // a masked value shown to the person is never saved back over the real one

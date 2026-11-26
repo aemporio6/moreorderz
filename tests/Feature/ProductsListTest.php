@@ -104,10 +104,10 @@ class ProductsListTest extends TestCase
         $this->assertSame([$a], $ids('q=mp-' . $a)); $this->assertSame([$a], $ids('q=MP-' . $a)); $this->assertSame([$a], $ids('q=garden hose')); $this->assertSame([$a], $ids('q=upc36a'));
         // the rule: chip eBay + Private shows only products whose eBay visibility is PRIVATE; without a marketplace chip: any marketplace
         $this->assertSame([$a], $ids("q=F36-&mp={$this->ebay}&mode=PRIVATE")); $this->assertSame([$b], $ids("q=F36-&mp={$this->ebay}&mode=POOL")); $this->assertEqualsCanonicalizing([$a, $b], $ids('q=F36-&mode=PRIVATE'));
-        $this->assertSame([$a], $ids("q=F36-&category=$type")); $this->assertSame([$a], $ids("q=F36-&brand=$brand")); $this->assertSame([$a], $ids("q=F36-&supplier=$sup")); $this->assertSame([$a], $ids('q=F36-&tag=2'));
+        $this->assertSame([$a], $ids("q=F36-&category=$type")); $this->assertSame([$a], $ids("q=F36-&brand=$brand")); $this->assertSame([$a], $ids("q=F36-&supplier=$sup")); $this->assertSame([$a], $ids('q=F36-&tag=1'));
         $this->assertSame([$b], $ids('q=F36-&ean=5036000000028')); $this->assertSame([], $ids('q=F36-&ean=50360000000')); $this->assertSame([$b], $ids('q=F36-&asin=B0ASIN36'));
         $this->assertSame([$b], $ids("q=F36-&carrier=$car")); $this->assertEqualsCanonicalizing([$a, $b], $ids("q=F36-&company=$co"), 'A is private in a shop of the company, B is pool on its marketplace'); $this->assertSame([$b], $ids('q=F36-&oos=1'));
-        $this->assertSame([], $ids("q=F36-&category=$type&tag=1"), 'filters add up');
+        $this->assertSame([], $ids("q=F36-&category=$type&tag=999999"), 'filters add up');
         $d = $this->getJson("/api/products?per=20&q=F36-&brand=$brand")->json(); $this->assertSame(['brand' => (string) $brand], $d['filters']); $this->assertContains('Brand 36', array_column($d['filter_lists']['brand'], 'name')); $this->assertContains('Supplier 36', array_column($d['filter_lists']['supplier'], 'name'));
     }
     /** R-D-44 locations of a product: ledger units, full-path label, note, badge, warning for an inactive location. */

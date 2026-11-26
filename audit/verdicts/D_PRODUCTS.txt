@@ -10,7 +10,7 @@
 10|B|class CentralInventory|right products.edit_central (Owner, Manager): products of the central vendor (PRODUCT_DEFAULT_VENDOR) blocked for others with "Cannot add item of Local Inventory" / "Cannot edit item of Local Inventory"; ProductsBatchTest r10
 11|F|form:t_product_vendor|supplier / cost fields on the form; landing price inherit rule partly (lot cost)
 12|F|form:t_product_vendor|form only
-13|F|form:cat_tags|form only; multi-tag field / chips not built
+13|B|function tagIds|one multi-select Tags (tag_ids) – Tag 1–3 kept in step as copies of the first three (save + migration 000186); coloured chips on the products list and its export, tag filter by tag (Tags field or old Tag 1–3), options and chosen values painted in the tag colour, colour picker for every text field whose help says "hex colour"; TagChipsTest
 14|P|form:t_product_vendor|product record with Stock and Prices buttons; the 11 tabs / deep links not built
 15|F|form:product_mp_value|form only
 16|P|function page|history tab per record (field old -> new); labels instead of ids partly
@@ -54,7 +54,7 @@
 65|B|formOptions|one carrier dropdown for every form: every registry carrier field (product, shop default, sale line, manual sale, preset group) gets CarrierPresets::formOptions – offered groups for the marketplace / shop, rule order, a preset once, default of the first group for a new row, "(current: x)" for a saved value no longer offered; product price rows and the sale Edit carrier are grouped the same way; fulfilment and not-listed lists follow its order; preview on the groups screen; CarrierPresetsTest
 66|B|mo_carrier_value_review|old virtual carrier ids: converted when exactly one preset fits, otherwise kept and listed; screen "Old carrier values to decide" (menu row, record by name, candidates, Owner picks from the carrier dropdown), dry run writes nothing; CarrierPresetsTest
 68|B|class ListDefaults|protected default list items: the default (e.g. condition "New") cannot be deleted or deactivated ("The default \"New\" condition cannot be deleted."), an item in use is refused with "This condition is used by n product(s). Reassign them first." and a Reassign action in the bulk preview (bulk/{key}/reassign); ProductsBatchTest r68; dev DB has no conditions so the browser step was not clicked
-69|F|form:cat_brands|forms only
+69|B|function tagBrand|tag: name required, trimmed Title Case, unique trimmed / any case "Tag name already exist", colour required (#rrggbb with picker, hex checked), swatch in the list, active, "No Tags found."; brand: name trimmed first letter upper, company required, active default on, unique per linked company (look-alike warning of the name field), company → brands on the legal-text form; TagChipsTest
 70|F|form:cat_product_type|forms only
 71|F|form:cat_vendors|form only
 73|B|function stage|marketplace → shop (active, the person's shops, auto-selected when one), month + year (next year … −3), platform, Ignore / Replace, .csv / .txt, > 0 bytes, 10 MB + 10,000 rows as settings, server size message, 32-hex token bound to the person with JSON meta outside the web folder, removed after 24 h; answer = headers, samples (60), saved or guessed mapping, missing saved columns, warnings. Rule tests pass (11 MB refused before upload, a seller sees only his shops); clicked in a browser
