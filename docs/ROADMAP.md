@@ -4,7 +4,7 @@ The single list of everything: what is done, what is being built, what comes nex
 It lives in the code (docs/ROADMAP.md) and opens in the tool under Home › Plan & progress. Every batch updates it before it is deployed.
 Nothing the owner asked for may be dropped from this list. A line only leaves "Next" or "Discussed" by moving to "Done", with its date.
 
-Updated: 27 Nov 2026, 04:15 (Pakistan time)
+Updated: 27 Nov 2026, 05:30 (Pakistan time)
 
 ## The owner's standing rules (every screen, every batch is checked against these)
 0. **Better than the source (owner 27-11 02:42).** Whatever comes from the old tool or MY TOOL is not just copied: it becomes easier, dynamic, smart and improved – and it fits inside this system, connected to the rest, never something apart.
@@ -90,6 +90,7 @@ The whole list is on one screen: **Home › Old tool check** – every old scree
 - Security: no secrets, no real data in the public repo; nothing is typed into password boxes for the owner.
 
 ## Done (newest first)
+- 27-11: Packaging engine + PO packing; product vault; old tool product images shown again (39 of the first 50 products have their photo back).
 - 27-11: Carrier presets inside a group; location loop check; product manager; old-tool lines rechecked (45 really open).
 - 27-11: Create from the root + navigation; search however it is typed.
 - 27-11: Old tool check (Home): old screens and old data against the new tool; certificate expiry tasks.
