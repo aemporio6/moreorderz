@@ -32,6 +32,9 @@ class OldToolCheck
             $here = (bool) DB::selectOne('SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = ? AND table_name = ?', [$new, $t])->n;
             $r = ($rep[$t] ?? collect())->sortBy(fn ($y) => [(int) $y->f_dry, -((int) $y->imported + (int) $y->already_there + (int) $y->merged)])->first();
             $cols = array_map(fn ($c) => $c->c, DB::select('SELECT column_name AS c FROM information_schema.columns WHERE table_schema = ? AND table_name = ? ORDER BY ordinal_position', [$oldDb, $t]));
+            $extra = OldExtras::here($t);      // the last tables brought to their place by mo:old-extras
+            if ($extra !== null) { $r = (object) ['plan' => 'EXTRA', 'imported' => $extra, 'already_there' => 0, 'merged' => 0, 'failed' => 0, 'f_dry' => 0, 'note' => 'brought to its place (IP / VPN list, warehouse list, central lists)'];
+                if ($t === 'ota_lookups') $n = (int) DB::selectOne("SELECT COUNT(DISTINCT lookup_type, LOWER(TRIM(name))) AS n FROM `$oldDb`.`ota_lookups` WHERE TRIM(name) <> ''")->n; }
             $rows[] = ['table' => $t, 'columns' => array_values(array_filter($cols, fn ($c) => ! preg_match(OldImport::SECRET, $c))), 'old' => $n, 'here' => $here ? (int) DB::table($t)->count() : null, 'plan' => $r->plan ?? OldImport::plan($t),
                 'imported' => $r ? (int) $r->imported + (int) $r->already_there + (int) $r->merged : null, 'failed' => $r ? (int) $r->failed : null, 'dry_only' => $r ? (bool) $r->f_dry : null, 'note' => $r->note ?? null];
         }
