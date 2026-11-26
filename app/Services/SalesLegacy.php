@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * Gen-2 money rules kept for the migration compare (R-A_SALES-52).
  * - The Gen-2 values (profit, loss, purchase amount, product sale price, raw, status) are copied into the legacy columns of t_sales – never recomputed.
- * - Loss_Sale lines: Confirmed + loss flag, with a SAL_ZERO line in their history. The Gen-2 change log (t_product_sale_change_log) goes into history.
+ * - Loss_Sale lines: Confirmed + loss flag, with a SAL_ZERO line in their history. The Gen-2 change log (t_product_sale_change_log) goes into sys_history (R-G_CORE-122).
  * - Compare report per shop / month: count, qty, sale, old purchase / profit against the new rule (purchase = raw × qty + carrier + packing for every qty),
  *   each difference explained: "qty = 1 postage" (Gen-2 left carrier + packing out of a qty-1 purchase), loss lines, refunds; the rest is "not explained".
  */
@@ -23,15 +23,7 @@ class SalesLegacy
             $rows[] = ['fk_id_ent' => $s->fk_id_ent, 'table_name' => 't_sales', 'record_id' => $s->id, 'action' => 'UPDATE', 'changes_json' => json_encode(['task' => 'SAL_ZERO', 'status' => ['Loss_Sale', 'Confirmed + loss flag']]), 'reason' => 'Gen-2 Loss_Sale (task type SAL_ZERO)', 'user_id' => null, 'created_at' => $s->created_at ?? now()];
         }
         foreach (array_chunk($rows, 500) as $c) DB::table('sys_audit_log')->insert($c);
-        $log = 0;
-        if (DB::getSchemaBuilder()->hasTable('t_product_sale_change_log') && ! DB::table('sys_audit_log')->where('reason', 'like', 'Gen-2 change log%')->exists()) {
-            $ents = DB::table('t_product_vendors')->pluck('fk_id_ent', 'id');
-            foreach (DB::table('t_product_sale_change_log')->orderBy('id')->get() as $c) {
-                DB::table('sys_audit_log')->insert(['fk_id_ent' => $ents[$c->fk_product_id] ?? null, 'table_name' => 't_product_vendors', 'record_id' => $c->fk_product_id, 'action' => 'UPDATE', 'changes_json' => mb_substr((string) $c->changed_fields, 0, 60000) ?: '{}',
-                    'reason' => mb_substr('Gen-2 change log · ' . ($c->changed_by ?: 'unknown'), 0, 255), 'user_id' => null, 'created_at' => $c->created_at ?? now()]);
-                $log++;
-            }
-        }
+        $log = (int) (History::cutover()['t_product_sale_change_log'] ?? 0);      // R-G_CORE-122 the Gen-2 change log goes into the one history (sys_history), once
         return ['sal_zero' => count($rows), 'change_log' => $log];
     }
 

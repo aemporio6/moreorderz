@@ -115,7 +115,7 @@
 115|B|function testPage|test page + calibration per printer x media, required before live jobs
 116|B|function replace|routes most-specific-wins, backup printer, replace printer in one step
 121|B|class ErrorPages|one error page for 403 (names the right, audit row DENIED), 404 (search + Home, also an unknown address inside the app), 500 ("logged as E-id"; message, file, SQL only in sys_error_log; API calls get the same short text); the command line prints the same short text + id (App\\Exceptions\\Handler); ErrorPagesTest
-122|P|class OldImport|old logs copied as history tables; one time line on the record not built
+122|B|class History|sys_history (entity, record, field, old → new, user, time, legacy table + row id); the old logs t_sale_change_log, t_product_sale_change_log, t_product_inventory_child_change_log, t_src_audit_log, t_inv_audit_log copied once at cut-over (migration 000189, old-data import, Gen-2 log) – a second run adds nothing; every writer now writes sys_history only (sale Log History reads v_sale_change_log); the record History tab shows audit + history rows in one time line with the chip "from the old tool"; OneHistoryTest
 123|N||documentation index
 124|B|function boot|+ Create catalogue generated from the registry forms
 125|B|sidebar_modules|menu in workflow order, 17 sections, by role

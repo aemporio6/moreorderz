@@ -119,7 +119,7 @@ class CsvConvert
     public static function undoUpdate(string $key, ?object $u): array
     {
         Perm::need($u, 'orders.importUpdate');
-        $rows = DB::table('t_sale_change_log as l')->join('t_sales as s', 's.id', '=', 'l.fk_id_sale')->where('l.save_key', $key)->where('l.action', 'FILE_UPDATE')->where('s.fk_id_ent', Context::ent())->get(['l.*', 's.status', 's.f_locked']);
+        $rows = DB::table('v_sale_change_log as l')->join('t_sales as s', 's.id', '=', 'l.fk_id_sale')->where('l.save_key', $key)->where('l.action', 'FILE_UPDATE')->where('s.fk_id_ent', Context::ent())->get(['l.*', 's.status', 's.f_locked']);
         if ($rows->isEmpty()) throw new \InvalidArgumentException('Nothing to undo for this run.');
         $done = 0; $kept = [];
         DB::transaction(function () use ($rows, $u, $key, &$done, &$kept) {
@@ -127,7 +127,7 @@ class CsvConvert
                 if ($r->field_name === 'mo_sale_fulfilment.f_done') { DB::table('mo_sale_fulfilment')->where('fk_id_sale', $r->fk_id_sale)->where('f_done', (int) $r->new_value)->update(['f_done' => (int) $r->old_value]); $done++; continue; }
                 if ($r->status !== 'Pending' || (int) $r->f_locked) { $kept[] = "line {$r->fk_id_sale}: {$r->status}"; continue; }
                 $n = DB::table('t_sales')->where('id', $r->fk_id_sale)->where($r->field_name, $r->new_value)->update([$r->field_name => $r->old_value, 'updated_at' => now()]);
-                if ($n) { $done++; DB::table('t_sale_change_log')->insert(['fk_id_sale' => $r->fk_id_sale, 'save_key' => mb_substr('undo:' . $key, 0, 40), 'action' => 'FILE_UNDO', 'field_name' => $r->field_name, 'field_label' => $r->field_label, 'old_value' => $r->new_value, 'new_value' => $r->old_value, 'fk_id_user' => $u->id, 'changed_by' => mb_substr((string) ($u->display_name ?: $u->login_id), 0, 150), 'changed_at' => now()]); }
+                if ($n) { $done++; History::sale(['fk_id_sale' => $r->fk_id_sale, 'save_key' => mb_substr('undo:' . $key, 0, 40), 'action' => 'FILE_UNDO', 'field_name' => $r->field_name, 'field_label' => $r->field_label, 'old_value' => $r->new_value, 'new_value' => $r->old_value, 'fk_id_user' => $u->id, 'changed_by' => mb_substr((string) ($u->display_name ?: $u->login_id), 0, 150), 'changed_at' => now()]); }
                 else $kept[] = "line {$r->fk_id_sale}: {$r->field_label} changed again since";
             }
             Audit::log('t_sales', null, 'UPDATE', ['undo' => $key, 'fields' => $done], 'Update existing data – undo');
@@ -223,8 +223,8 @@ class CsvConvert
             foreach ($changes as $c) { DB::table('t_sales')->where('id', $c['id'])->where('status', 'Pending')->update(array_column($c['diff'], 'new', 'column') + ['f_edited' => 1, 'updated_at' => now()]);
                 if ($tiktok && in_array('tracking_no', array_column($c['diff'], 'column'), true) && ($fx = DB::table('mo_sale_fulfilment')->where('fk_id_sale', $c['id'])->first()) && ! (int) $fx->f_done) {
                     DB::table('mo_sale_fulfilment')->where('fk_id_sale', $c['id'])->update(['f_done' => 1]);
-                    DB::table('t_sale_change_log')->insert(['fk_id_sale' => $c['id'], 'save_key' => mb_substr($key, 0, 40), 'action' => 'FILE_UPDATE', 'field_name' => 'mo_sale_fulfilment.f_done', 'field_label' => 'Status', 'old_value' => '0', 'new_value' => '1', 'fk_id_user' => $u->id, 'changed_by' => mb_substr($by, 0, 150), 'changed_at' => now()]); }
-                foreach ($c['diff'] as $d) DB::table('t_sale_change_log')->insert(['fk_id_sale' => $c['id'], 'save_key' => mb_substr($key, 0, 40), 'action' => 'FILE_UPDATE', 'field_name' => $d['column'], 'field_label' => $d['label'], 'old_value' => $d['old'], 'new_value' => $d['new'], 'fk_id_user' => $u->id, 'changed_by' => mb_substr($by, 0, 150), 'changed_at' => now()]); }
+                    History::sale(['fk_id_sale' => $c['id'], 'save_key' => mb_substr($key, 0, 40), 'action' => 'FILE_UPDATE', 'field_name' => 'mo_sale_fulfilment.f_done', 'field_label' => 'Status', 'old_value' => '0', 'new_value' => '1', 'fk_id_user' => $u->id, 'changed_by' => mb_substr($by, 0, 150), 'changed_at' => now()]); }
+                foreach ($c['diff'] as $d) History::sale(['fk_id_sale' => $c['id'], 'save_key' => mb_substr($key, 0, 40), 'action' => 'FILE_UPDATE', 'field_name' => $d['column'], 'field_label' => $d['label'], 'old_value' => $d['old'], 'new_value' => $d['new'], 'fk_id_user' => $u->id, 'changed_by' => mb_substr($by, 0, 150), 'changed_at' => now()]); }
             Audit::log('t_sales', null, 'UPDATE', ['file' => $meta['name'], 'lines' => count($changes)], 'Update existing data');
         });
         $copy = self::keepCopy($token, $meta['name']); foreach (['csv', 'json'] as $e) @unlink(self::dir() . "/$token.$e");

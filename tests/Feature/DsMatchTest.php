@@ -121,7 +121,7 @@ class DsMatchTest extends TestCase
         for ($i = 1; $i <= 8; $i++) $this->item(['ship_name' => "Buyer Number$i", 'ship_address' => "$i Elm Street", 'ship_city' => 'Bath', 'ship_postcode' => "BA$i 1ZZ"]);
         // the event of an applied supplier file runs Re-match by itself
         $m = DsMatch::afterDsBatch($this->shop, 7, 2026); $this->assertSame('8 of 10 not matched line(s) are now matched to drop shipping items. 2 still not matched.', $m['message']);
-        $id = (int) DB::table('t_sales')->where('order_no', 'R-1')->value('id'); $log = DB::table('t_sale_change_log')->where('fk_id_sale', $id)->where('action', 'Re-match')->orderBy('id')->get();
+        $id = (int) DB::table('t_sales')->where('order_no', 'R-1')->value('id'); $log = DB::table('v_sale_change_log')->where('fk_id_sale', $id)->where('action', 'Re-match')->orderBy('id')->get();
         $this->assertSame(['Inventory', 'Drop shipping item', 'Buy Amount', 'Profit (recalculated)'], $log->pluck('field_label')->all()); $this->assertSame(['Not matched', 'Drop shipping (AliExpress)'], [$log[0]->old_value, $log[0]->new_value]); $this->assertStringEndsWith('of 5 columns matched', $log[1]->new_value);
         $this->assertSame('There are no Pending not matched lines in this view.', DsMatch::rematch(['batch' => $r['batch'], 'status' => 'Confirmed'], $this->owner)['message']);
         $again = DsMatch::rematch(['batch' => $r['batch']], $this->owner); $this->assertSame('0 of 2 not matched line(s) are now matched to drop shipping items. 2 still not matched.', $again['message']);

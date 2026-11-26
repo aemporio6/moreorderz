@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * The sales list and the actions on one sale line (RULES_A_SALES §3, §5, §6).
  * One line formula everywhere (R-A_SALES-28); actions follow one state table (R-A_SALES-36);
- * every change is written to the line's log (t_sale_change_log) field by field.
+ * every change is written to the line's log field by field (sys_history, read as v_sale_change_log – R-G_CORE-122).
  */
 class SaleLines
 {
@@ -140,7 +140,7 @@ class SaleLines
     private static function log(int $saleId, string $action, array $rows, ?string $key = null): void
     {
         $u = Auth::user(); $key = $key ?: uniqid('s', true);
-        foreach ($rows as [$field, $label, $old, $new]) DB::table('t_sale_change_log')->insert(['fk_id_sale' => $saleId, 'save_key' => mb_substr($key, 0, 40), 'action' => $action, 'field_name' => $field, 'field_label' => $label, 'old_value' => $old === null ? null : (string) $old, 'new_value' => $new === null ? null : (string) $new,
+        foreach ($rows as [$field, $label, $old, $new]) History::sale(['fk_id_sale' => $saleId, 'save_key' => mb_substr($key, 0, 40), 'action' => $action, 'field_name' => $field, 'field_label' => $label, 'old_value' => $old === null ? null : (string) $old, 'new_value' => $new === null ? null : (string) $new,
             'fk_id_user' => $u->id ?? null, 'changed_by' => $u ? ($u->display_name ?: $u->login_id) : 'system', 'changed_at' => now()]);
     }
 
@@ -431,7 +431,7 @@ class SaleLines
     {
         $s = DB::table('t_sales')->where('id', $id)->where('fk_id_ent', Context::ent())->first();
         if ($s && ! Perm::shopAllowed(Auth::user(), (int) $s->fk_id_branch)) abort(403, 'This shop is not one of your shops.');
-        return DB::table('t_sale_change_log')->where('fk_id_sale', $id)->orderByDesc('id')->limit(300)->get(['action', 'field_label', 'old_value', 'new_value', 'changed_by', 'changed_at', 'save_key'])->map(fn ($r) => (array) $r)->all();
+        return DB::table('v_sale_change_log')->where('fk_id_sale', $id)->orderByDesc('changed_at')->orderByDesc('id')->limit(300)->get(['action', 'field_label', 'old_value', 'new_value', 'changed_by', 'changed_at', 'save_key'])->map(fn ($r) => (array) $r)->all();
     }
 
     // ---------- R-A_SALES-42 / 48: the list ----------

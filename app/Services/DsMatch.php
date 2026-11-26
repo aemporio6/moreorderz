@@ -193,7 +193,7 @@ class DsMatch
         if ($s->sale_source !== 'ds') throw new \InvalidArgumentException('This is not a drop shipping line.');
         $loss = (float) $s->profit < 0;
         DB::table('t_sales')->where('id', $saleId)->update(['ds_note' => mb_substr(($loss ? 'loss accepted: ' : 'margin accepted: ') . trim($note), 0, 255), 'updated_at' => now()]);
-        DB::table('t_sale_change_log')->insert(['fk_id_sale' => $saleId, 'save_key' => uniqid('ma'), 'action' => 'Accept margin', 'field_name' => 'ds_note', 'field_label' => 'Drop shipping margin', 'old_value' => 'below the minimum', 'new_value' => 'accepted: ' . mb_substr(trim($note), 0, 200), 'fk_id_user' => $u->id ?? null, 'changed_by' => $u->display_name ?: $u->login_id, 'changed_at' => now()]);
+        History::sale(['fk_id_sale' => $saleId, 'save_key' => uniqid('ma'), 'action' => 'Accept margin', 'field_name' => 'ds_note', 'field_label' => 'Drop shipping margin', 'old_value' => 'below the minimum', 'new_value' => 'accepted: ' . mb_substr(trim($note), 0, 200), 'fk_id_user' => $u->id ?? null, 'changed_by' => $u->display_name ?: $u->login_id, 'changed_at' => now()]);
         TaskEngine::close('SAL_DS_MARG', [$saleId], 'Accepted with a note');
         return ['message' => 'Accepted. The note is kept on the line.'];
     }
@@ -241,7 +241,7 @@ class DsMatch
                 DB::table('t_sales')->where('id', $l->id)->where('status', 'Pending')->where('sale_source', 'unmatched')->update($upd); $out['matched']++; self::marginTask((int) $l->id);
                 if ($log) { $key = uniqid('rm'); $who = $u ? ($u->display_name ?: $u->login_id) : 'system'; $m = fn ($v) => number_format((float) $v, 2, '.', '');
                     foreach ([['sale_source', 'Inventory', 'Not matched', 'Drop shipping (' . ($plat[$it->fk_platform] ?? 'platform') . ')'], ['fk_drp_item', 'Drop shipping item', '', "#{$it->id} - {$f['n']} of 5 columns matched"], ['buy_amount', 'Buy Amount', $m($l->buy_amount), $m($buy)], ['profit', 'Profit (recalculated)', $m($l->profit), $m($total - $buy)]] as [$fn, $fl, $old, $new])
-                        DB::table('t_sale_change_log')->insert(['fk_id_sale' => $l->id, 'save_key' => $key, 'action' => 'Re-match', 'field_name' => $fn, 'field_label' => $fl, 'old_value' => $old, 'new_value' => $new, 'fk_id_user' => $u->id ?? null, 'changed_by' => $who, 'changed_at' => now()]); }
+                        History::sale(['fk_id_sale' => $l->id, 'save_key' => $key, 'action' => 'Re-match', 'field_name' => $fn, 'field_label' => $fl, 'old_value' => $old, 'new_value' => $new, 'fk_id_user' => $u->id ?? null, 'changed_by' => $who, 'changed_at' => now()]); }
             } else {
                 DB::table('t_sales')->where('id', $l->id)->update(['ds_match_count' => $a['best'][$l->id] ?? 0, 'ds_note' => mb_substr(self::why($l) . '; ' . ($a['note'][$l->id] ?? "no drop shipping item matched (best 0 of 5, $min needed)"), 0, 255), 'buy_rate' => 0, 'buy_amount' => 0, 'profit' => 0, 'cost_source' => 'unmatched', 'updated_at' => now()]);
                 $out['still']++;
@@ -314,7 +314,7 @@ class DsMatch
             if ($o = DB::table('t_sales')->where('fk_drp_item', $itemId)->first()) throw new \InvalidArgumentException("This drop shipping item is already linked to order {$o->order_no}.");
             $f = self::score(self::saleSide($s), $it); $cur = strtoupper(trim((string) $it->currency)) ?: Fx::base(); $buy = Fx::toBase((float) $it->total_cost, $cur, (string) ($it->d_order ?: $s->d_order), (int) $s->fk_id_ent); $total = (float) $s->total_amount;
             DB::table('t_sales')->where('id', $saleId)->update(['fk_drp_item' => $it->id, 'ds_match_count' => $f['n'], 'ds_match_json' => json_encode($f + ['picked' => true]), 'buy_amount' => $buy, 'profit' => round($total - $buy, 2), 'd_buy' => $it->d_order, 'f_edited' => 1, 'updated_at' => now()]);
-            DB::table('t_sale_change_log')->insert(['fk_id_sale' => $saleId, 'save_key' => uniqid('pk'), 'action' => 'Pick drop shipping item', 'field_name' => 'fk_drp_item', 'field_label' => 'Drop shipping item', 'old_value' => '#' . $s->fk_drp_item, 'new_value' => "#{$it->id} (picked by hand between equal matches)", 'fk_id_user' => $u->id ?? null, 'changed_by' => $who, 'changed_at' => now()]);
+            History::sale(['fk_id_sale' => $saleId, 'save_key' => uniqid('pk'), 'action' => 'Pick drop shipping item', 'field_name' => 'fk_drp_item', 'field_label' => 'Drop shipping item', 'old_value' => '#' . $s->fk_drp_item, 'new_value' => "#{$it->id} (picked by hand between equal matches)", 'fk_id_user' => $u->id ?? null, 'changed_by' => $who, 'changed_at' => now()]);
             self::marginTask($saleId);
             return ['message' => "The line now uses drop shipping item #{$it->id}."];
         }));
@@ -371,7 +371,7 @@ class DsMatch
             if ($o = DB::table('t_sales')->where('fk_drp_item', $itemId)->first()) throw new \InvalidArgumentException("This drop shipping item is already linked to order {$o->order_no}.");
             $f = self::score(self::saleSide($s), $it); $cur = strtoupper(trim((string) $it->currency)) ?: Fx::base(); $buy = Fx::toBase((float) $it->total_cost, $cur, (string) ($it->d_order ?: $s->d_order), (int) $s->fk_id_ent); $total = (float) $s->total_amount;
             DB::table('t_sales')->where('id', $s->id)->update(['sale_source' => 'ds', 'fk_drp_item' => $it->id, 'ds_match_count' => $f['n'], 'ds_match_json' => json_encode($f + ['manual' => true]), 'ds_note' => '', 'sale_rate' => $total, 'buy_rate' => 0, 'buy_amount' => $buy, 'profit' => round($total - $buy, 2), 'd_buy' => $it->d_order, 'cost_source' => 'dropship', 'f_edited' => 1, 'updated_at' => now()]);
-            DB::table('t_sale_change_log')->insert(['fk_id_sale' => $s->id, 'save_key' => uniqid('dl'), 'action' => 'Link drop shipping', 'field_name' => 'fk_drp_item', 'field_label' => 'Drop shipping item', 'old_value' => 'Not matched', 'new_value' => "#{$it->id} by hand: " . mb_substr(trim($reason), 0, 180), 'fk_id_user' => $u->id ?? null, 'changed_by' => $u->display_name ?: $u->login_id, 'changed_at' => now()]);
+            History::sale(['fk_id_sale' => $s->id, 'save_key' => uniqid('dl'), 'action' => 'Link drop shipping', 'field_name' => 'fk_drp_item', 'field_label' => 'Drop shipping item', 'old_value' => 'Not matched', 'new_value' => "#{$it->id} by hand: " . mb_substr(trim($reason), 0, 180), 'fk_id_user' => $u->id ?? null, 'changed_by' => $u->display_name ?: $u->login_id, 'changed_at' => now()]);
             self::marginTask((int) $s->id);
             return ['message' => "Linked to drop shipping item #{$it->id}."];
         }));
@@ -386,7 +386,7 @@ class DsMatch
             if ($s->sale_source !== 'ds') throw new \InvalidArgumentException('This is not a drop shipping line.');
             if ($s->status !== 'Pending' || (int) $s->f_locked) throw new \InvalidArgumentException("Only Pending lines can be changed. This line is {$s->status}.");
             DB::table('t_sales')->where('id', $s->id)->update(['sale_source' => 'unmatched', 'fk_drp_item' => null, 'ds_match_json' => null, 'ds_note' => mb_substr(self::why($s) . '; unlinked by hand: ' . trim($reason), 0, 255), 'buy_rate' => 0, 'buy_amount' => 0, 'profit' => 0, 'cost_source' => 'unmatched', 'd_buy' => null, 'f_edited' => 1, 'updated_at' => now()]);
-            DB::table('t_sale_change_log')->insert(['fk_id_sale' => $s->id, 'save_key' => uniqid('du'), 'action' => 'Unlink drop shipping', 'field_name' => 'fk_drp_item', 'field_label' => 'Drop shipping item', 'old_value' => '#' . $s->fk_drp_item, 'new_value' => 'Not matched: ' . mb_substr(trim($reason), 0, 180), 'fk_id_user' => $u->id ?? null, 'changed_by' => $u->display_name ?: $u->login_id, 'changed_at' => now()]);
+            History::sale(['fk_id_sale' => $s->id, 'save_key' => uniqid('du'), 'action' => 'Unlink drop shipping', 'field_name' => 'fk_drp_item', 'field_label' => 'Drop shipping item', 'old_value' => '#' . $s->fk_drp_item, 'new_value' => 'Not matched: ' . mb_substr(trim($reason), 0, 180), 'fk_id_user' => $u->id ?? null, 'changed_by' => $u->display_name ?: $u->login_id, 'changed_at' => now()]);
             self::marginTask((int) $s->id);
             return ['message' => 'The line is not matched again.'];
         });

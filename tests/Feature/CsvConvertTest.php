@@ -72,7 +72,7 @@ class CsvConvertTest extends TestCase
         $this->assertSame(0, DB::table('t_sales')->whereNotNull('tracking_no')->where('tracking_no', '<>', '')->count());      // the preview saves nothing
         $r = C::update($s['token'], $this->shop, $o, $this->owner, true); $this->assertStringContainsString('20 line(s) changed, 1 refused (confirmed), 1 not found', $r['message']);
         $this->assertSame(20, DB::table('t_sales')->whereIn('id', $ids)->where('tracking_no', 'like', 'TRK%')->count()); $this->assertSame(20, DB::table('t_sales')->whereIn('id', $ids)->where('cust_name', 'Jo')->count());      // only order_tracking changes
-        $this->assertSame(20, DB::table('t_sale_change_log')->whereIn('fk_id_sale', $ids)->where('action', 'FILE_UPDATE')->count()); $this->assertNull(DB::table('t_sales')->where('order_no', 'U-21')->value('tracking_no'));      // 20 history rows; the confirmed line untouched
+        $this->assertSame(20, DB::table('v_sale_change_log')->whereIn('fk_id_sale', $ids)->where('action', 'FILE_UPDATE')->count()); $this->assertNull(DB::table('t_sales')->where('order_no', 'U-21')->value('tracking_no'));      // 20 history rows; the confirmed line untouched
     }
     /** R-D-54: TikTok update = find order no → tracking + status 1; the batch keeps a copy for undo (30 days); formats kept as imp_mappings rows; shop required. */
     public function test_d54_tiktok_update_status_undo_copy_and_mappings(): void

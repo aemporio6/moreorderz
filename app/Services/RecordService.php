@@ -332,6 +332,8 @@ class RecordService
         $hist = DB::table('sys_audit_log as a')->leftJoin('t_users as u', 'u.id', '=', 'a.user_id')->where('a.table_name', $table)->where('a.record_id', $id)
             ->orderByDesc('a.id')->limit(50)->get(['a.action', 'a.changes_json', 'a.reason', 'a.created_at', 'u.display_name'])
             ->map(fn ($h) => ['action' => $h->action, 'at' => $h->created_at, 'by' => $h->display_name ?: 'System', 'reason' => $h->reason, 'changes' => $h->action === 'UPDATE' ? Mask::history($formKey, json_decode($h->changes_json ?: '[]', true), \Illuminate\Support\Facades\Auth::user()) : null])->all();      // R-G_CORE-62 hidden fields read "(hidden)"
+        /* R-G_CORE-122 one time line: audit rows + field changes of sys_history (old-tool rows marked) */
+        $hist = collect($hist)->merge(History::forRecord($table, $id))->sortByDesc(fn ($h) => (string) $h['at'])->take(80)->values()->all();
         if ($table === 'crm_customers') {      /* R-A_SALES-90 the customer's open cases; a passed reply-by date shows red */
             $cs = DB::table('t_sale_order_reminders')->where('fk_id_customer', $id)->where('e_status', 'PENDING')->orderBy('d_reply_by')->limit(30)->get(['ebay_order_no', 'd_reply_by', 'case_channel', 'priority']);
             if ($cs->count()) $sections['Open cases'] = $cs->map(fn ($c) => ['label' => 'Order ' . $c->ebay_order_no, 'type' => 'text', 'value' => $v = trim(implode(' · ', array_filter([SaleCases::CHANNELS[(string) $c->case_channel] ?? null, $c->priority ?: null, $c->d_reply_by ? 'reply by ' . date('d-m-Y', strtotime((string) $c->d_reply_by)) : null, $c->d_reply_by && substr((string) $c->d_reply_by, 0, 10) < date('Y-m-d') ? 'OVERDUE' : null]))) ?: 'open', 'shown' => $v,

@@ -729,3 +729,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-214: R-G_CORE-114 label media switch, R-C-44 Access section on the person, R-D-51 and R-D-54 finished – PARTIAL → BUILT. 877 tests (874 + 3), suite once 320 s, browser check clean (SAME), phone 390. BUILT 1094 / PARTIAL 186 / FORM ONLY 103 / MISSING 50.
 - 7e-215: R-G_CORE-79 VA / Store share N/A rule, R-D-13 coloured tags, R-D-69 tags and brands – BUILT. 879 tests (877 + 2), suite once 326 s, browser check clean (SAME), phone 390. BUILT 1098 / PARTIAL 185 / FORM ONLY 100 / MISSING 50.
 - 7e-216: R-G_CORE-85 invoicing settings and R-G_CORE-87 opening lock + status lists – BUILT. 881 tests (879 + 2), suite once 354 s, browser check clean (SAME), phone 390. BUILT 1100 / PARTIAL 183 / FORM ONLY 100 / MISSING 50.
+- 7e-217: R-G_CORE-122 one history (sys_history, cut-over copy, one time line) BUILT. 882 tests, suite once 362 s. BUILT 1100 / PARTIAL 183 / FORM ONLY 100 / MISSING 50.

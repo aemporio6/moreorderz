@@ -212,7 +212,7 @@ class OldImportTest extends TestCase
             $this->assertSame(['Confirmed', 1, 'Loss_Sale'], [$g['G-2']->status, (int) $g['G-2']->f_loss_line, $g['G-2']->legacy_status]);
             $this->assertSame(['Refunded', 'damaged+lost', 10.0], [$g['G-3']->status, $g['G-3']->refund_loss_nature, (float) $g['G-3']->refund_loss_amount], 'natures with "_" shown as "+"');
             $this->assertSame('Gen-2 Loss_Sale (task type SAL_ZERO)', DB::table('sys_audit_log')->where('table_name', 't_sales')->where('record_id', $g['G-2']->id)->value('reason'));
-            $this->assertSame('Gen-2 change log · TL - Made Up', DB::table('sys_audit_log')->where('table_name', 't_product_vendors')->where('record_id', 9701)->where('reason', 'like', 'Gen-2 change log%')->value('reason'));
+            $this->assertSame('TL - Made Up', DB::table('sys_history')->where('entity', 't_product_vendors')->where('record_id', 9701)->where('legacy_table', 't_product_sale_change_log')->value('changed_by'), 'the Gen-2 change log is in the one history (R-G_CORE-122)');
             OldImport::transactions('mo_old_test', ['mask' => true]);      // again: no second history line
             $this->assertSame(1, DB::table('sys_audit_log')->where('table_name', 't_sales')->where('record_id', $g['G-2']->id)->count());
 

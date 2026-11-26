@@ -490,7 +490,7 @@ class SalesImport
                     DB::table('t_sale_imports')->where('id', $target)->increment('saved_rows'); DB::table('t_sale_imports')->where('id', $o['batch'])->where('saved_rows', '>', 0)->decrement('saved_rows');
                 } else $kept++;
                 DB::table('t_sales')->where('id', $s->id)->update($new + ['updated_at' => now()]);
-                DB::table('t_sale_change_log')->insert(['fk_id_sale' => $s->id, 'save_key' => $key, 'action' => 'Out of period', 'field_name' => 'f_out_of_period', 'field_label' => 'Dated outside the month', 'old_value' => 'not answered', 'new_value' => mb_substr("$what: " . trim($reason), 0, 250), 'fk_id_user' => $u->id ?? null, 'changed_by' => $who, 'changed_at' => now()]);
+                History::sale(['fk_id_sale' => $s->id, 'save_key' => $key, 'action' => 'Out of period', 'field_name' => 'f_out_of_period', 'field_label' => 'Dated outside the month', 'old_value' => 'not answered', 'new_value' => mb_substr("$what: " . trim($reason), 0, 250), 'fk_id_user' => $u->id ?? null, 'changed_by' => $who, 'changed_at' => now()]);
             }
             DB::table('t_sale_imports')->where('id', $o['batch'])->update(['out_of_period_rows' => DB::table('t_sales')->where('fk_id_import', $o['batch'])->where('f_out_of_period', '>=', 1)->count()]);
             Audit::log('t_sale_imports', $o['batch'], 'UPDATE', ['out_of_period' => $mode, 'moved' => $moved, 'kept' => $kept, 'not_moved' => count($stuck)], trim($reason), $ent);
@@ -592,7 +592,7 @@ class SalesImport
             $key = mb_substr(mb_strtolower(trim($nosku ? (string) $s->product_info : (string) $s->sku)), 0, 190);
             if ($key !== '') DB::table('mo_sku_aliases')->updateOrInsert(['fk_id_ent' => $s->fk_id_ent, 'fk_id_marketplace' => (int) $s->fk_id_marketplace, 'kind' => $nosku ? 'TITLE' : 'SKU', 'alias_key' => $key], ['fk_id_product' => $p->id, 'created_by' => $u->id ?? null, 'updated_at' => now(), 'created_at' => now()]);
             if (($s->fulfilment_channel ?: 'SELF') === 'SELF') DispatchService::reserve((int) $s->id);
-            DB::table('t_sale_change_log')->insert(['fk_id_sale' => $s->id, 'save_key' => uniqid('l'), 'action' => 'Link to product', 'field_name' => 'fk_product_id', 'field_label' => 'Product', 'old_value' => 'Not matched', 'new_value' => $p->SKU_VENDOR, 'fk_id_user' => $u->id ?? null, 'changed_by' => $u ? ($u->display_name ?: $u->login_id) : 'system', 'changed_at' => now()]);
+            History::sale(['fk_id_sale' => $s->id, 'save_key' => uniqid('l'), 'action' => 'Link to product', 'field_name' => 'fk_product_id', 'field_label' => 'Product', 'old_value' => 'Not matched', 'new_value' => $p->SKU_VENDOR, 'fk_id_user' => $u->id ?? null, 'changed_by' => $u ? ($u->display_name ?: $u->login_id) : 'system', 'changed_at' => now()]);
             $period = substr((string) $s->d_order, 0, 7); $left = DB::table('t_sales')->where('fk_id_import', $s->fk_id_import)->where('sale_source', 'unmatched')->count();
             if (! $left) TaskEngine::close('SAL_UNMATCHED', [$s->fk_id_branch, $period], 'All lines matched');
             return ['message' => 'Linked to ' . $p->SKU_VENDOR . ' and remembered for the next import.', 'left' => $left];

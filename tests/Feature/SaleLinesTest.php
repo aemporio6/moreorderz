@@ -138,7 +138,7 @@ class SaleLinesTest extends TestCase
         $this->assertSame('Sale updated and the line recalculated.', $r['message']); $this->assertSame(5, $r['log_rows']);
         $s = DB::table('t_sales')->where('id', $id)->first();
         $this->assertSame(['2', '20.00', '12.00', '14.25', '5.75', '1'], [(string) $s->qty, $s->total_amount, $s->buy_rate, $s->buy_amount, $s->profit, (string) $s->f_edited]);
-        $this->assertSame(['Buy Amount (recalculated)', 'Buy Rate (recalculated)', 'Profit (recalculated)', 'Quantity', 'Total Amount'], DB::table('t_sale_change_log')->where('fk_id_sale', $id)->orderBy('field_label')->pluck('field_label')->all());
+        $this->assertSame(['Buy Amount (recalculated)', 'Buy Rate (recalculated)', 'Profit (recalculated)', 'Quantity', 'Total Amount'], DB::table('v_sale_change_log')->where('fk_id_sale', $id)->orderBy('field_label')->pluck('field_label')->all());
         $this->assertCount(5, $this->getJson("/api/sales/$id/log")->assertOk()->json('rows'));
         // a total typed by hand is kept; a line that is no longer Pending cannot be changed
         $this->postJson("/api/sales/$id/edit", ['total_amount' => '19.00'])->assertOk(); $this->assertSame('19.00', DB::table('t_sales')->where('id', $id)->value('total_amount'));
@@ -161,7 +161,7 @@ class SaleLinesTest extends TestCase
         // carrier 2.00 → 3.10: profit 4.74 → 3.64
         $this->assertSame('Carrier/packing updated and the line recalculated.', $this->postJson("/api/sales/$id/carrier", ['fk_id_car_pkg_svc' => $this->svc3, 'fk_id_packing' => $this->pack])->assertOk()->json('message'));
         $s = DB::table('t_sales')->where('id', $id)->first(); $this->assertSame(['3.10', '9.35', '3.64', '6.00'], [$s->carrier_rate, $s->buy_amount, $s->profit, $s->raw_price]);
-        $log = DB::table('t_sale_change_log')->where('fk_id_sale', $id)->pluck('new_value', 'field_label')->all();
+        $log = DB::table('v_sale_change_log')->where('fk_id_sale', $id)->pluck('new_value', 'field_label')->all();
         $this->assertSame('RM-Small 24 (£3.10)', $log['Carrier']); $this->assertArrayHasKey('Buy Amount (recalculated)', $log); $this->assertArrayHasKey('Profit (recalculated)', $log);
         // "No packing" = 0; a not-matched line has no carrier of ours
         $this->postJson("/api/sales/$id/carrier", ['fk_id_car_pkg_svc' => $this->svc3, 'fk_id_packing' => 0])->assertOk(); $this->assertSame('3.89', DB::table('t_sales')->where('id', $id)->value('profit'));
@@ -189,7 +189,7 @@ class SaleLinesTest extends TestCase
         $this->assertSame('Sale refunded. Profit is now -8.00.', $r['message']); $this->assertFalse($r['return_expected']);
         $s = DB::table('t_sales')->where('id', $id)->first();
         $this->assertSame(['Refunded', '-8.00', '0.00', 'Product_Carrier', '8.00', 'Arrived broken', 'Owner', '1'], [$s->status, $s->profit, $s->total_amount, $s->refund_loss_nature, $s->refund_loss_amount, $s->refund_reason, $s->refunded_by_name, (string) $s->f_edited]);
-        $this->assertSame('Refund Sale', DB::table('t_sale_change_log')->where('fk_id_sale', $id)->value('action'));
+        $this->assertSame('Refund Sale', DB::table('v_sale_change_log')->where('fk_id_sale', $id)->value('action'));
         $c = DB::table('t_sale_charges')->where('fk_id_sale', $id)->first(); $this->assertSame(['REFUND_FULL', '12.99'], [$c->kind, $c->amount]);
         $this->assertSame("This line is no longer Pending, so it can't be refunded.", $msg($ok));
         // view mode, and the state table: a Refunded line shows "View Refund" and no Edit

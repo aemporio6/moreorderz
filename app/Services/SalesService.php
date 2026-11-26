@@ -256,7 +256,7 @@ class SalesService
                 }
                 if ($s->status === 'Confirmed') $upd['status'] = 'Pending';
                 DB::table('t_sales')->where('id', $s->id)->update($upd); $n++;
-                DB::table('t_sale_change_log')->insert(['fk_id_sale' => $s->id, 'save_key' => $key, 'action' => 'Unlock', 'field_name' => 'status', 'field_label' => 'Status', 'old_value' => $s->status . ' (locked)', 'new_value' => ($upd['status'] ?? $s->status) . ' – unlocked: ' . mb_substr($reason, 0, 180), 'fk_id_user' => $u->id ?? null, 'changed_by' => $who, 'changed_at' => now()]);
+                History::sale(['fk_id_sale' => $s->id, 'save_key' => $key, 'action' => 'Unlock', 'field_name' => 'status', 'field_label' => 'Status', 'old_value' => $s->status . ' (locked)', 'new_value' => ($upd['status'] ?? $s->status) . ' – unlocked: ' . mb_substr($reason, 0, 180), 'fk_id_user' => $u->id ?? null, 'changed_by' => $who, 'changed_at' => now()]);
             }
             // the revenue journal(s) of this shop + month are reversed
             foreach (DB::table('gl_journals')->where('fk_id_ent', $ent)->where('source_type', 'SALE_CONFIRM')->where('source_id', $branchId)->where('memo', "Sales {$shop->shop_name} $month")->whereNull('reversed_by_id')->whereNull('reverses_id')->pluck('id') as $j) Ledger::reverse((int) $j, null, "Unlock of sales {$shop->shop_name} $month: " . mb_substr($reason, 0, 120));
