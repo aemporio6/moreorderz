@@ -323,4 +323,16 @@ class CoreAreaTest extends TestCase
         $list = "P2G1  H00ABC0123456781   1 x [ K1-AAA ]\nP2G2  H00ABC0123456782   1 x [ K2-BBB ]\n";
         $this->assertCount(2, \App\Services\CarrierLabels::read($list, null, [], [])['trackings'], 'a picking list shows several numbers on one page');
     }
+
+    public function test_json_compressed_and_home_task_card_light(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id); Perm::flush();
+        $plain = $this->getJson('/api/boot')->assertOk();
+        $gz = $this->get('/api/boot', ['Accept' => 'application/json', 'Accept-Encoding' => 'gzip, br'])->assertOk();
+        $this->assertSame('gzip', $gz->headers->get('Content-Encoding'));
+        $this->assertSame($plain->getContent(), gzdecode($gz->getContent()), 'same data, smaller');
+        $this->assertLessThan(strlen($plain->getContent()) / 3, strlen($gz->getContent()));
+        $t = \App\Services\TaskLists::tiles($this->owner); $m = \App\Services\TaskLists::mine($this->owner)['tiles'];
+        $this->assertSame($m, $t, 'the Home card counts the same as My tasks');
+    }
 }

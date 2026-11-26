@@ -55,6 +55,15 @@ class TaskLists
 
     /* ---------- R-G_CORE-36 My tasks ---------- */
 
+    /** Home card "My tasks": the four numbers only (owner 26-11 'slow' – the full lists are for the My tasks page). */
+    public static function tiles(object $u): array
+    {
+        $today = TaskHealth::today(); $ents = fn ($w) => $w->whereIn('fk_id_ent', Context::ents() ?: [0])->orWhere('fk_id_ent', 0)->orWhereNull('fk_id_ent'); $q = fn () => DB::table('tasks')->where($ents)->where('owner_user_id', $u->id)->whereIn('status', self::OPEN);
+        $approve = self::visible(self::base(), $u)->where('t.status', 'DONE')->where('t.source', '<>', 'RULE')->where('t.owner_user_id', '<>', $u->id)->get(self::COLS)->filter(fn ($t) => TaskScore::refusal($t, $u) === null)->count();
+        $stuck = DB::table('tasks')->where($ents)->where('status', 'STUCK')->where('stuck_on_type', 'USER')->where('stuck_on_id', $u->id)->count();
+        return ['open' => $q()->count(), 'late' => $q()->whereNotNull('due_at')->whereRaw('DATE(due_at) < ?', [$today])->count(), 'due_today' => $q()->whereRaw('DATE(due_at) = ?', [$today])->count(), 'waiting_on_me' => $approve + $stuck];
+    }
+
     public static function mine(object $u): array
     {
         $today = TaskHealth::today();
@@ -63,7 +72,9 @@ class TaskLists
             ->orderByRaw("FIELD(t.priority,'URGENT','HIGH','NORMAL','LOW')")->orderBy('t.id')->limit(300)->get(self::COLS);
         $approve = self::visible(self::base(), $u)->where('t.status', 'DONE')->where('t.source', '<>', 'RULE')->where('t.owner_user_id', '<>', $u->id)->orderBy('t.due_at')->get(self::COLS)->filter(fn ($t) => TaskScore::refusal($t, $u) === null)->values();
         $stuck = self::base()->where('t.status', 'STUCK')->where('t.stuck_on_type', 'USER')->where('t.stuck_on_id', $u->id)->orderBy('t.due_at')->get(self::COLS);
-        $cover = self::visible(self::base(), $u)->whereIn('t.status', self::OPEN)->whereNotNull('t.owner_user_id')->where('t.owner_user_id', '<>', $u->id)->orderBy('t.due_at')->get(self::COLS)
+        /* owner 26-11 'slow': first the people who are away (a handful), then only their open tasks – not every open task of the company checked one by one */
+        $away = DB::table('tasks')->where(fn ($w) => $w->whereIn('fk_id_ent', Context::ents() ?: [0])->orWhere('fk_id_ent', 0)->orWhereNull('fk_id_ent'))->whereIn('status', self::OPEN)->whereNotNull('owner_user_id')->where('owner_user_id', '<>', $u->id)->distinct()->pluck('owner_user_id')->filter(fn ($o) => TaskOwner::absent((int) $o))->values()->all();
+        $cover = self::visible(self::base(), $u)->whereIn('t.status', self::OPEN)->whereIn('t.owner_user_id', $away ?: [0])->orderBy('t.due_at')->get(self::COLS)
             ->filter(fn ($t) => TaskOwner::absent((int) $t->owner_user_id) && (self::boss($u) || TaskOwner::usable((int) $t->owner_user_id) === (int) $u->id))->values();
         $helper = self::visible(self::base(), $u)->whereIn('t.status', self::OPEN)->whereIn('t.id', DB::table('task_helpers')->where('user_id', $u->id)->select('task_id'))->orderBy('t.due_at')->get(self::COLS);
         $late = $mine->filter(fn ($t) => $t->due_at && substr((string) $t->due_at, 0, 10) < $today)->count();

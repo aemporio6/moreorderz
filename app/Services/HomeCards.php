@@ -63,7 +63,7 @@ class HomeCards
             return ['label' => 'Sales this month', 'value' => number_format($v, 2), 'foot' => number_format($n) . ' sale line(s) in ' . date('F Y'), 'tone' => '', 'go' => '#/sales?from=' . date('Y-m-01') . '&to=' . date('Y-m-t')];
         }, true);
         self::register(['*'], function ($ent, $u) {      // R-G_CORE-36: the same groups as My tasks feed Home "Needs action"
-            $d = TaskLists::mine($u)['tiles']; $need = $d['late'] + $d['due_today'] + $d['waiting_on_me'];
+            $d = TaskLists::tiles($u); $need = $d['late'] + $d['due_today'] + $d['waiting_on_me'];
             return ['label' => 'My tasks', 'value' => $d['open'], 'foot' => $need ? "needs action: {$d['late']} late · {$d['due_today']} due today · {$d['waiting_on_me']} waiting on me" : 'nothing needs action',
                 'tone' => $d['late'] ? 'err' : ($need ? 'warn' : 'done'), 'go' => '#/tasks'];
         });
