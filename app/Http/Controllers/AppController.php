@@ -28,7 +28,7 @@ class AppController extends Controller
         return [
             'user' => ['id' => $u->id, 'name' => $u->display_name ?: $u->login_id, 'role' => $va ? $va[0] : $role, 'role_name' => $va ? $va[1] : ($u->custom_role ?: $role)],
             'view_as' => $va ? $va[1] : null,
-            'ent' => Context::ent(), 'companies' => $companies, 'menu' => self::menu($va ? $va[0] : $role), 'create' => self::createCatalogue($va ? $va[0] : $role),
+            'ent' => Context::ent(), 'companies' => $companies, 'words' => \App\Services\SimpleWords::MAP /* owner 26-11: the one list of easy words */, 'menu' => self::menu($va ? $va[0] : $role), 'create' => self::createCatalogue($va ? $va[0] : $role),
             'setup_open' => $role === 'OWNER' && \App\Services\SetupWizard::open((int) Context::ent()),
             'task_header' => \App\Services\TaskRoles::header($u),      // R-G_CORE-20
             'tasks_open' => DB::table('tasks')->where('owner_user_id', $u->id)->whereNotIn('status', ['DONE', 'APPROVED', 'CANCELLED'])->count(),

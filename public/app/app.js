@@ -48,6 +48,20 @@
     $('#toasts').appendChild(t); setTimeout(done, 30000);
   }
   const busy = on => { $('#loader').style.display = on ? 'flex' : 'none'; };
+  /* Owner 26-11: easy everyday words everywhere. ONE list (SimpleWords on the server, sent in boot.words). It changes the words of the screen –
+     headings, labels, buttons, menu, column titles, hints, messages – never what a person typed and never the data inside table cells. */
+  const easyWords = () => {
+    const map = (S.boot && S.boot.words) || {}, keys = Object.keys(map).sort((a, b) => b.length - a.length); if (!keys.length || easyWords.on) return; easyWords.on = true;
+    const re = new RegExp('(?<![A-Za-z0-9_#/.-])(' + keys.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')(?![A-Za-z0-9_/-]|\\.[A-Za-z0-9])', 'gi');
+    const swap = t => t.replace(re, m => { const to = map[m.toLowerCase()]; return m.length > 1 && m === m.toUpperCase() ? to.toUpperCase() : (m[0] === m[0].toUpperCase() ? to[0].toUpperCase() + to.slice(1) : to); });
+    const WORDS = 'h1,h2,h3,h4,th,label,legend,summary,button,.btn,.sub,.lbl,.chip,.empty,.toast,.small.muted,.card-h,.fld > label,nav a,#side a,#side .nav-head,.modal-h,.hint,option[value=""]';
+    const DATA = 'td,input,textarea,select,code,pre,.mono,[contenteditable],[data-raw]';
+    const fix = el => { if (!el || el.nodeType !== 1) return; const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); let n; const todo = [];
+      while ((n = tw.nextNode())) { const p = n.parentElement; if (!p || !n.nodeValue || n.nodeValue.length < 5) continue; const w = p.closest(WORDS); if (!w) continue; const dt = p.closest(DATA); if (dt && !(w !== dt && dt.contains(w))) continue; if (p.closest('td') && !w.matches('button,.btn,.chip')) continue;      /* in a table cell only buttons and status chips are words; the rest is data */ todo.push(n); }
+      todo.forEach(n => { const v = swap(n.nodeValue); if (v !== n.nodeValue) n.nodeValue = v; });
+      el.querySelectorAll && el.querySelectorAll('[placeholder],[title]').forEach(x => { for (const a of ['placeholder', 'title']) { const v = x.getAttribute(a); if (v) { const y = swap(v); if (y !== v) x.setAttribute(a, y); } } }); };
+    fix(document.body); new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => n.nodeType === 1 ? fix(n) : (n.nodeType === 3 && n.parentElement ? fix(n.parentElement) : null)))).observe(document.body, { childList: true, subtree: true });
+  };
   const toast = (msg, kind = 'ok', link) => { const t = document.createElement('div'); t.className = 'toast ' + kind;
     t.innerHTML = `<span>${esc(msg)}</span>${link ? ` <a href="${esc(link)}">Open</a>` : ''}`; $('#toasts').appendChild(t); setTimeout(() => t.remove(), 6000); };
   MO.toast = toast;
@@ -5439,6 +5453,7 @@
   // ---------- start ----------
   (async function start() {
     try { S.boot = await api('boot'); } catch (e) { return; }
+    easyWords();      /* owner 26-11: easy words on every screen */
     try { const h = location.hash; if (h && h.startsWith('#/')) S.route = h; } catch (e) {}
     drawTop(); render();
     window.addEventListener('popstate', () => { let h = ''; try { h = location.hash; } catch (e) {} if (h && h !== S.route) go(h, false); });
