@@ -544,3 +544,4 @@ td.bad{color:var(--err);font-weight:600}
 .gn-t{font-weight:600;margin-top:4px;line-height:1.35}
 .gn-f{padding:8px 16px;border-top:1px solid var(--line)}
 @media (max-width:700px){.gn-btn span{display:none}.gn-btn{bottom:84px}}
+.gn-panel[hidden],.gn-btn b[hidden]{display:none!important}
