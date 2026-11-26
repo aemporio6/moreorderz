@@ -26,6 +26,12 @@ class PersonLinks
             $n = DB::table('t_src_po')->where('fk_id_buyer_account', $id)->where('f_active', 1)->count();
             if ($n || DB::table('t_account_marketplaces')->where('id', $id)->value('market_place_type') === 'Buyer') $out[] = ['text' => "Purchases ($n)", 'url' => $n ? '#/list/t_src_po?fk_id_buyer_account=' . $id : null, 'count' => $n];
         }
+        if ($table === 't_account_emails' && ($e = DB::table('t_account_emails')->where('id', $id)->first(['email', 'recovery_email', 'recovery_owner_name']))) {      // R-C-27 the recovery chain, shown on both records
+            if ($e->recovery_email && ($r = DB::table('t_account_emails')->whereRaw('LOWER(TRIM(email)) = ?', [mb_strtolower(trim($e->recovery_email))])->where('id', '<>', $id)->first(['id', 'fk_id_account'])))
+                $out[] = ['text' => 'Recovered by ' . $e->recovery_email . ' (' . self::name((int) $r->fk_id_account) . ')', 'url' => '#/rec/t_account_email/' . $r->id];
+            elseif ($e->recovery_email) $out[] = ['text' => 'Recovered by ' . $e->recovery_email . ($e->recovery_owner_name ? ' (' . $e->recovery_owner_name . ')' : '') . ' – not in the tool', 'url' => null];
+            if ($e->email) foreach (DB::table('t_account_emails')->whereRaw('LOWER(TRIM(recovery_email)) = ?', [mb_strtolower(trim($e->email))])->where('id', '<>', $id)->get(['id', 'email']) as $r) $out[] = ['text' => 'Recovery e-mail of ' . $r->email, 'url' => '#/rec/t_account_email/' . $r->id];
+        }
         if ($table === 't_account_credit_cards' && ($u = self::cardUsage($id))) $out[] = ['text' => $u['text'], 'url' => null, 'usage' => $u];
         if ($table === 't_account_company_houses' && ($l = DB::table('t_account_company_houses')->where('id', $id)->first(['fk_id_account', 'fk_company_house_id'])) && ($p = self::companyPreview((int) $l->fk_company_house_id, (int) $l->fk_id_account)) && $p['slot'])
             $out[] = ['text' => 'Director ' . $p['slot'] . ' · ' . collect($p['directors'])->firstWhere('slot', $p['slot'])['share'] . '%', 'url' => '#/rec/cat_company_house/' . $l->fk_company_house_id];

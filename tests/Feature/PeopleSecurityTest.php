@@ -250,4 +250,33 @@ class PeopleSecurityTest extends TestCase
         $this->post('/login/code', ['code' => $m[1]])->assertRedirect('/');
         $this->assertAuthenticatedAs($this->owner->fresh());
     }
+
+    public function test_c24_c27_d2_c5_entities_recovery_chain_supplier_party_and_saved_code(): void
+    {
+        $this->as($this->owner);
+        $p = $this->person('Links'); $q = $this->person('Helper');
+        // R-C-24 an address not used for all entities keeps its entity links
+        $e1 = $this->f('cat_module_entities', ['entity_name' => 'Marketplace', 'iso_entity' => 'MP', 'f_active' => 1]); $e2 = $this->f('cat_module_entities', ['entity_name' => 'Bank', 'iso_entity' => 'BK', 'f_active' => 1]);
+        $a = (int) RecordService::save('t_account_address', ['fk_id_account' => $p, 'line1' => '2 Office Rd', 'l_address_type' => 'O', 'f_used_for_all_entities' => 0, 'entities[]' => [$e1, $e2], 'f_active' => 1])['id'];
+        $this->assertSame([$e1, $e2], $this->getJson("/api/record/t_account_address/$a")->json('values')['entities[]']);
+        RecordService::save('t_account_address', ['f_used_for_all_entities' => 1], $a);
+        $this->assertSame(0, DB::table('t_account_addresses_entities')->where('fk_id_address', $a)->count(), 'used for all → no links');
+        // R-C-27 the recovery chain shows on both e-mails
+        $m1 = $this->f('t_account_emails', ['fk_id_account' => $p, 'email' => 'main@example.com', 'recovery_email' => 'backup@example.com', 'f_active' => 1]);
+        $m2 = $this->f('t_account_emails', ['fk_id_account' => $q, 'email' => 'backup@example.com', 'f_active' => 1]);
+        $this->assertStringStartsWith('Recovered by backup@example.com (Helper', $this->getJson("/api/page/t_account_email/$m1")->json('uses.0.text'));
+        $this->assertSame('Recovery e-mail of main@example.com', $this->getJson("/api/page/t_account_email/$m2")->json('uses.0.text'));
+        // D2 a supplier is a party with the role Supplier, its name kept in step
+        $sid = (int) RecordService::save('t_src_suppliers', ['supplier_name' => 'Party Supplier Ltd', 'f_active' => 1])['id'];
+        $acc = (int) DB::table('t_src_suppliers')->where('id', $sid)->value('fk_id_account');
+        $this->assertGreaterThan(0, $acc);
+        $this->assertSame(['E', 'C'], array_values((array) DB::table('t_account')->where('id', $acc)->first(['l_account_kind', 'l_party_type'])));
+        $this->assertContains('Supplier', collect($this->getJson('/api/people/external')->json('rows'))->firstWhere('id', $acc)['roles']);
+        RecordService::save('t_src_suppliers', ['supplier_name' => 'Party Supplier Group'], $sid);
+        $this->assertSame('Party Supplier Group', DB::table('t_account')->where('id', $acc)->value('first_name'));
+        // R-C-5 after a new person: "Saved · {code}" and the profile stays open
+        $c = (int) DB::table('cat_country')->value('id');
+        $r = $this->postJson('/api/record/t_account', ['values' => ['account_code' => 'SV' . substr(uniqid(), -6), 'title' => 'Mr', 'first_name' => 'Saved', 'sur_name' => 'Person', 'current_nationality' => $c, 'old_nationality' => $c]])->assertOk()->json();
+        $this->assertStringStartsWith('Saved · SV', $r['message']); $this->assertSame('#/rec/t_account/' . $r['id'], $r['open']);
+    }
 }

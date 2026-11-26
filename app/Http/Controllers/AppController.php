@@ -315,12 +315,14 @@ class AppController extends Controller
         catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
         $title = Registry::fields($key)[0]['form_title'];
         // the label and code of what was saved: a dropdown that opened "+ Add" selects it, and the toast says what it is
-        $table = Registry::table($key); $label = null; $code = null;
+        $table = Registry::table($key); $label = null; $code = null; $row = [];
         if ($table && ($row = (array) DB::table($table)->where(Registry::pk($table), $res['id'])->first())) {
             $lc = Registry::labelColumn($table); $label = $lc ? (string) ($row[$lc] ?? '') : '';
             if ($table === 't_account') $label = trim(($row['first_name'] ?? '') . ' ' . ($row['sur_name'] ?? ''));
             foreach (Registry::fields($key) as $f) if (str_starts_with((string) $f['default_rule'], 'numbering:') && ! empty($row[$f['column_name']])) { $code = (string) $row[$f['column_name']]; break; }
         }
+        if ($table === 't_account' && ! empty($res['id']) && empty($res['pending'])) return $res + ['label' => $label ?: '#' . $res['id'], 'code' => $row['account_code'] ?? null, 'message' => 'Saved · ' . ($row['account_code'] ?? $res['id']), 'open' => "#/rec/$key/{$res['id']}", 'open_record' => "#/rec/$key/{$res['id']}"];      // R-C-5: stay on the person's profile
+        if (! empty($res['pending'])) return $res + ['label' => $label ?: '#' . $res['id'], 'code' => $code, 'message' => $res['note'], 'open' => "#/approvals", 'open_record' => $res['id'] ? "#/rec/$key/{$res['id']}" : '#/approvals'];      // D11 the change waits for the Owner
         return $res + ['label' => $label !== '' && $label !== null ? $label : ($code ?: '#' . $res['id']), 'code' => $code, 'message' => ($res['created'] ? 'Saved in ' : 'Updated in ') . $title . ($code ? ' · ' . $code : ''), 'open' => "#/list/$key", 'open_record' => "#/rec/$key/{$res['id']}"];
     }
 

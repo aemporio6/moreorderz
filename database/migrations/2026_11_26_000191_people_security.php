@@ -44,7 +44,10 @@ return new class extends Migration
         DB::table('sys_registry')->where('form_key', 't_account_subscription')->where('field_name', 'fk_ipburger_id')->update(['show_if' => 'item_kind=IP', 'label' => 'IP account paid']);
         DB::table('sys_registry')->where('form_key', 't_account_subscription')->where('field_name', 'fk_company_house_id')->update(['show_if' => 'item_kind=COMPANY', 'label' => 'Company paid for']);
         if (! DB::table('sys_registry')->where('form_key', 'cat_subscription_items')->where('field_name', 'kind')->exists() && DB::table('sys_registry')->where('form_key', 'cat_subscription_items')->exists())
-            DB::table('sys_registry')->insert($this->field('cat_subscription_items', 'kind', 'Kind', 'select', null, 'cat_subscription_items', 'kind', '[["TOOL","Tool / service"],["IP","IP account"],["COMPANY","Company"]]', 'IP shows "IP account paid", Company shows "Company paid for".', 'const:TOOL'));
+            DB::table('sys_registry')->insert($this->field('cat_subscription_items', 'kind', 'Kind', 'select', 'list:SUBSCRIPTION_KIND', 'cat_subscription_items', 'kind', null, 'IP shows "IP account paid", Company shows "Company paid for".', 'const:TOOL'));
+        if (! DB::table('sys_field_lists')->where('list_code', 'SUBSCRIPTION_KIND')->exists()) DB::table('sys_field_lists')->insert(['list_code' => 'SUBSCRIPTION_KIND', 'title' => 'Subscription item kind', 'f_fixed' => 1, 'note' => 'R-C-33: the kind decides which picker the subscription form shows', 'created_at' => now()]);
+        foreach ([['TOOL', 'Tool / service', 1], ['IP', 'IP account', 2], ['COMPANY', 'Company', 3]] as [$v, $l, $o]) if (! DB::table('sys_field_options')->where('list_code', 'SUBSCRIPTION_KIND')->where('value', $v)->exists())
+            DB::table('sys_field_options')->insert(['list_code' => 'SUBSCRIPTION_KIND', 'value' => $v, 'label' => $l, 'sort' => $o, 'f_active' => 1]);
 
         if (! Schema::hasColumn('t_account_social_media', 'fk_id_branch')) Schema::table('t_account_social_media', fn (Blueprint $t) => $t->integer('fk_id_branch')->nullable());
         if (! DB::table('sys_registry')->where('form_key', 't_account_social_media')->where('field_name', 'fk_id_branch')->exists())
@@ -63,6 +66,17 @@ return new class extends Migration
 
         if (! DB::table('wa_templates')->where('code', 'LOGIN_CODE')->exists())
             DB::table('wa_templates')->insert(['code' => 'LOGIN_CODE', 'title' => 'Sign-in code', 'audience' => 'OWNER', 'body' => 'Your MoreOrderz sign-in code is {code}. It works for 5 minutes. Never share it.', 'f_active' => 1, 'language' => 'en', 'approval_status' => 'PENDING', 'params_json' => '["code"]']);
+        // R-C-50 the old plain notification e-mail password: emptied, and no field any more
+        if (Schema::hasColumn('t_account_emails', 'notification_email_pass')) DB::table('t_account_emails')->whereNotNull('notification_email_pass')->update(['notification_email_pass' => null]);
+        DB::table('sys_registry')->where('form_key', 't_account_email')->where('field_name', 'notification_email_pass')->delete();
+        // R-C-24 an address not used for all entities is linked to the chosen ones (t_account_addresses_entities)
+        if (! DB::table('sys_registry')->where('form_key', 't_account_address')->where('field_name', 'entities[]')->exists() && DB::table('sys_registry')->where('form_key', 't_account_address')->exists()) {
+            $r = $this->field('t_account_address', 'entities[]', 'Used for', 'multiselect', 'table:cat_module_entities', 't_account_addresses_entities', 'fk_id_entites', null, 'The modules this address is used for, when it is not used for all of them.');
+            DB::table('sys_registry')->insert(['section' => 'Addresses', 'section_no' => 1, 'field_no' => 3, 'show_if' => 'f_used_for_all_entities=0'] + $r);
+        }
+        // D2 one party list: every supplier is a party (role SUPPLIER) linked to its supplier profile
+        if (! Schema::hasColumn('t_src_suppliers', 'fk_id_account')) Schema::table('t_src_suppliers', fn (Blueprint $t) => $t->integer('fk_id_account')->nullable()->index());
+        \App\Services\SupplierParty::ensureAll();
         \App\Services\Registry::forget();
     }
 

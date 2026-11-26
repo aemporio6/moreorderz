@@ -138,6 +138,7 @@ class RecordService
         $row = Vault::maskRow($table, $row);   // secrets are masked for every role; the Owner reveals one with "Reveal" (logged)
         if ($table === 't_product_vendors') $row = ProductFamily::forForm($row);      // R-D-1: the Parent / Alone switch from the stored code
         if ($table === 't_account') $row['account_role[]'] = PersonRoles::current($id);      /* R-C-16 the form shows the person's active roles */
+        if ($table === 't_account_addresses') $row['entities[]'] = PersonRules::entities($id);      /* R-C-24 the modules the address is used for */
         return $row;
     }
 
@@ -243,6 +244,7 @@ class RecordService
             $res = self::write($table, $pk, $id, $data, $old, $formKey, $opt);
             if ($vault['put']) Vault::store($table, (int) $res['id'], $vault['put']);
             if ($roleSet !== null) $res['roles'] = PersonRoles::sync((int) $res['id'], $roleSet);
+            if ($table === 't_account_addresses' && (array_key_exists('entities[]', $input) || array_key_exists('f_used_for_all_entities', $data))) PersonRules::syncEntities((int) $res['id'], $input['entities[]'] ?? null);      // R-C-24
             if ($vault['dropped']) $res['note'] = 'Not kept on purpose (CVV / PIN are never stored): ' . implode(', ', $vault['dropped']) . '.';
             if (! empty($bankWarn)) $res['note'] = $bankWarn;
             if ($held) { $res['pending'] = true; $res['approval'] = $held['approval']; $res['note'] = trim(($res['note'] ?? '') . ' ' . $held['note']); }
@@ -296,6 +298,7 @@ class RecordService
             if ($table === 't_product_vendors' && $created) ProductFamily::created((int) $id, (int) ($data['fk_id_ent'] ?? $ent ?? 0));      // R-D-1: a 0.00 price row per marketplace
             if ($table === 'fin_partner_users') PartnerOnboarding::refresh((int) DB::table('fin_partner_users')->where($pk, $id)->value('investor_id'), 'Partner login linked');      // R-FIN-3 login_created
             if ($table === 't_account_employment') PersonRules::employmentSaved((int) $id);      // R-C-52 one active employment row
+            if ($table === 't_src_suppliers') SupplierParty::ensure((int) $id);      // D2 the supplier's party (made once, the name kept in step)
             if ($table === 't_account_branches') ShopAssignments::saved((int) $id, $created);      // R-C-41: event + VA cache      // FEE / COST freight-cost row, SAMPLE row, PO total (R-B_SOURCING-6)
             if (str_starts_with($table, 't_src_') && ($uid = (int) (\Illuminate\Support\Facades\Auth::id() ?? 0))) WorkflowContext::remember($table, (int) $id, $uid);      // R-B_SOURCING-18: the cycle's carried context
             if (str_starts_with($table, 't_src_') || $table === 'fin_lots') CycleAlerts::touched();      // sourcing alerts run again after the save (R-B_SOURCING-26)

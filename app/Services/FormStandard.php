@@ -17,10 +17,10 @@ use Illuminate\Support\Facades\Schema;
  */
 class FormStandard
 {
-    public const CENTRAL = ['table', 'list', 'party', 'ref', 'own', 'chain'];
+    public const CENTRAL = ['table', 'list', 'party', 'ref', 'own', 'chain', 'buyer'];
     /** Dropdowns whose items only the system makes – no "+ Add" by hand, with the reason. */
     public const SYSTEM_SOURCES = ['t_sale_orders' => 'orders come from the sales import', 'fin_statements' => 'statements come from the bank import',
-        'print_adapters' => 'the printer drivers the tool can talk to', 't_users' => 'logins are made in Users & rights (Owner)', 'chain:device_slots' => 'the free slots of the chosen device'];
+        'print_adapters' => 'the printer drivers the tool can talk to', 't_users' => 'logins are made in Users & rights (Owner)', 'chain:device_slots' => 'the free slots of the chosen device', 'buyer:accounts' => 'the buyer marketplace accounts of People (R-C-31) – added on the person\'s Marketplace accounts tab'];
 
     public static function fixedList(string $code): bool
     {

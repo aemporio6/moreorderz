@@ -42,24 +42,24 @@ MR-1298|N||working rule
 MR-1299|N||working rule
 MR-1300|N||working rule
 MR-1301|B|function transferOwnership|investors own lots; profit follows the units sold from their lots
-MR-1302|P|form:t_account|one party list; supplier profile as its own form
+MR-1302|B|class SupplierParty|7e-219: one party list – every supplier is a party (External Contact, type Company, role Supplier) linked to its supplier profile; name kept in step
 MR-1303|B|function boot|+ Create with the everyday forms, full form opens with context
 MR-1304|P|in_quick|quick forms with required fields from the registry
 MR-1305|B|class Vault|secrets encrypted in the tool with a reveal log (the "other way" of the decision)
 MR-1306|B|function consumeForSale|FIFO everywhere
-MR-1307|P|visible_to|field visibility by role from the registry; Owner / HR-only sections on save not verified
+MR-1307|B|people.personal_data|7e-219: D7 Owner and the HR right only – sections hidden for everyone else and refused on save (PeopleSecurityTest d7)
 MR-1308|P|in_quick|Quick = grouped key fields of the same form, same save
 MR-1309|B|class FormStandard|+ Add opens the master form, context pre-filled, saves to the master, returns selected
 MR-1310|B|class Registry|field definitions live as data (4,084 fields)
-MR-1311|M||maker-checker for supplier bank / ownership / price floor / settings not built
+MR-1311|B|class MasterChanges|7e-219: D11 pending → Owner approval; supplier bank keeps its phone check (SupplierBanks)
 MR-1312|M||ICC module not built
 MR-1313|P|class CashForecast|cash forecast + profit views + marketplace API adapters (not run with real keys); decision engine not built
-MR-1314|F|form:t_account|team member form with its sections
+MR-1314|B|form:t_account|team member form as Person + Account kit tabs (sub-lists), employment / previous employment for Owner / HR
 MR-1317|B|function save|one form per record, one save path
 MR-1318|P|in_quick|Quick mode
 MR-1319|B|function addOption|+ Add on every dropdown (form or in place, the new value saved to its central list and seen by every form); fixed and system-made lists keep a stated reason (FormStandard::audit, 0 left without). FormStandardTest.
 MR-1320|P|function chips|registry forms: chips, help, default tag, - / +, searchable dropdowns, cascading lists – on every field; open: the hand-made dialogs of the screens (orders, bank, stock …) do not have chips / help yet
-MR-1321|P|visible_to|registry visibility
+MR-1321|B|people.personal_data|7e-219: same as MR-0037 (Registry::visible OWNER_HR, Mask::row staff bank, RecordService list)
 MR-1322|P|function boot|clean pages
 MR-1323|P|function put|every save goes to search, history, events; not every dropdown / module
 MR-1324|M||ICC not built
@@ -98,11 +98,11 @@ MR-0029|B|Needs action \(everyone\)|Home cards per role (Owner, Partner, Manager
 MR-0030|B|class SalesCard|buying dashboard shows the cards of the other modules from the same figures: sales, invoicing / profit, investors, team activity, inventory health, payments, glance (R-F_SETUP-20 … 34)
 MR-0031|M||ICC not built
 MR-0036|B|function mine|role x right matrix as data (screens, forms See/Add/Change/Delete/Export, approve rights, menu, reports), made roles, per-person extra / taken away with reason and end date, field rules, shop scope on lists and summary screens, view-as; PermissionTest
-MR-0037|P|visible_to|field visibility from the registry; Owner / HR-only on save not verified
-MR-0038|M||maker-checker for supplier bank / ownership / price floor / settings not built
-MR-0039|P|APPROVAL_LIMIT|approval limits per action (expense, payment, adjustment, withdrawal); tiers per role not built
+MR-0037|B|people.personal_data|7e-219: personal data (ID numbers, documents, salary, staff bank numbers, employment) visible_to OWNER_HR = Owner + right people.personal_data (give it to an HR role); hidden fields are not in answers / lists and not changed on save; staff bank numbers row by row (PeopleSecurityTest d7)
+MR-0038|B|class MasterChanges|7e-219: maker-checker from sys_approval_rules: supplier bank (own engine with phone check), lot ownership (record form + Stock screen), price floor (listing min_price), company settings (t_enterprise), approval limits, expense rules – a non-approver's risky values wait in sys_approvals MASTER_CHANGE, written with history on the Owner's yes (PeopleSecurityTest d11)
+MR-0039|B|function decideLimit|7e-219: sys_approval_limits per role code (VA 500, Finance 2,500, above → Owner) on every approval; the entry limits per action stay APPROVAL_LIMIT_* (PeopleSecurityTest e8)
 MR-0040|B|class Vault|vault: CVV / PIN never stored, secrets encrypted
-MR-0042|P|accounts-dash|Accounts dashboard with kit counts and expiring items; kit linked to shop with due dates partly
+MR-0042|B|M42 the rest of the kit|7e-219: Account kit of a shop: seller accounts with health + subscriptions (tools / VPN / VPS) with cost per month and next payment, IP accounts, PCs with hotspot SIM, social media; due dates list; due engine rows for subscriptions, IPs, cards, SIM recharge, IDs, documents (PeopleSecurityTest c33)
 MR-0044|B|mo_recycle_bin|delete = switch off / recycle bin with Restore and Undo everywhere; no hard delete
 MR-0058|B|class HistoricalPurchase|Quick buy (local purchase) and Old purchase entry (#/old-entry: order, payments, shipment & costs, received – makes the same cycle, PO, lots and landed cost) – verdict was stale
 MR-0059|M||ICC not built
@@ -136,7 +136,7 @@ MR-0120|N||process rule
 MR-0121|P|class BuyingService|buying chain idea -> PO -> pay -> ship -> GRN -> landed cost; cartons, production, allocations, transfers, documents as forms only
 MR-0122|P|class StockService|stock, lots, prices, counts built; product master tabs, variations, duplicate, alerts page not built
 MR-0123|P|class SaleLines|sales list + columns, edit / refund / carrier per sale, sale log, delete with Undo, bulk delete with preview, reminders, cases, annual + detailed reports, month confirm, account health view, daily order entry (fulfilment queue with the carrier file) built; custom export templates not built
-MR-0124|F|form:t_account|person master and sub-lists as forms; vault built
+MR-0124|B|class PersonRules|7e-219: person master with its sub-lists (addresses, documents, photo IDs, mobiles, e-mails, banks, cards, marketplace / PayPal / IP / PC / subscriptions / social / company links), roles, vault, and the shared person rules on every tab
 MR-0125|P|class MoneyService|bank, expenses, approvals, money files, close, partners built; alerts, old invoicing not built
 MR-0126|B|delegationPropose|my / all / team views, templates + items, rules on / off, channels, categories, absence + delegation, comments, checklist, bulk, CSV import + template, bell, digest preview, record search / link – built (see MR-0108); verdict was stale
 MR-0127|F|form:acc_obligation|forms only
@@ -211,7 +211,7 @@ MR-1401|B|class Registry|registry drives forms, quick forms, Create, filters, se
 MR-1402|B|class Numbering|numbering from a locked sequence
 MR-1403|B|class Fx|amounts in original currency + base at the rate of the date
 MR-1404|P|form:t_account|party and product masters as in the old tool
-MR-1405|P|function attempt|password hash, authenticator 2-step, encrypted vault, rights; WhatsApp code not built
+MR-1405|B|class LoginCode|7e-219: password hash, authenticator app 2-step, WhatsApp sign-in code for Owner / Finance / Partner without the app (Choice LOGIN_CODE_ROLES; only when number + connection + approved template), encrypted vault, CSRF, rights (PeopleSecurityTest a10)
 MR-1406|P|class Merges|one people list, duplicates merged with a map
 MR-1407|P|form:t_src_suppliers|supplier master (own form), not yet folded into the party list
 MR-1408|P|form:t_product_vendor|one product master used by stock and buying
@@ -353,12 +353,12 @@ MR-0273|B|form:cat_warehouses|standard form + list with role rights and history
 MR-0274|B|class PermCatalogue|one roles master + one Roles and rights screen; the old second roles screen switched off (R-C-43)
 MR-0275|B|form:cat_account_type|standard form + list with role rights and history
 MR-0276|B|class ExternalContact|quick-create external contact with look-alike / duplicate check (R-C-8 / 10)
-MR-0277|P|class Vault|person form with sub-list forms and vault; the 15-tab profile logic not built
-MR-0278|F|form:t_account_address|form
-MR-0279|F|form:t_account_addresses_entity|form
-MR-0280|F|form:t_account_doc|form
-MR-0282|F|form:t_account_in_type|form
-MR-0283|F|form:t_account_mobile|form
+MR-0277|B|class PersonRules|7e-219: the old tab logic comes back as the sub-list forms + PersonRules (checks of every tab) + "Used for" lines; all SQL bound (query builder); no GET delete
+MR-0278|B|form:t_account_address|7e-219: one addresses tab (the duplicate old CRUD not carried), form rights, POST-only delete, entity links inside the address form
+MR-0279|B|function syncEntities|7e-219: address ↔ module entity links folded into the address form ("Used for", when not used for all)
+MR-0280|B|form:t_account_doc|7e-219: one documents tab with the file link (duplicate CRUD not carried), Owner / HR fields
+MR-0282|B|class PersonRoles|roles saved as a difference on the person with a history line per change (duplicate role CRUD not carried)
+MR-0283|B|form:t_account_mobile|7e-219: one mobiles tab with the device / slot rules and the format check (duplicate CRUD not carried)
 MR-0284|B|form:t_mobile_device|standard form + list with role rights and history
 MR-0285|B|function users|users screen without passwords, hashed, roles
 MR-0286|B|form:cat_src_lov|standard form + list with role rights and history
@@ -413,5 +413,5 @@ MR-0342|B|class WaCommands|signed webhook, receipts, replies act on tasks / appr
 MR-0237|B|function rateOn|preset = carrier × package × service with a real row id; rates carry a start date, matrix with gaps, rate history
 MR-0390|B|class LotOwners|rules R-B_SOURCING-56 … 63 all built
 MR-0395|B|class EventCatalogue|rules R-G_CORE-94 … 98 all built
-MR-1479|M||probation due item / one active employment row not built
+MR-1479|B|PROBATION_END|7e-219: probation end → due item 14 days before (sys_due_sources PROBATION_END), one active employment row per person (PeopleSecurityTest c52)
 MR-1484|N||migration note (the import lists rows it cannot place in its report)

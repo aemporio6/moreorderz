@@ -29,7 +29,7 @@ class BugListTest extends TestCase
 
     public function test_c47_no_secret_in_any_list_or_export_and_no_get_delete(): void
     {
-        $this->actingAs($this->owner);
+        $this->actingAs($this->owner); \App\Services\Choices::set('SECURE_FORMS', 'tax_period', 1);      // the phone-app step of secure pages has its own test
         foreach (['t_account_credit_card', 't_account_ipburger', 't_account_subscription', 't_account_email', 't_account_marketplace', 't_account_paypal'] as $form) {
             $table = \App\Services\Registry::table($form); if (! $table) continue;
             $secret = array_keys(array_filter(Vault::kinds($table), fn ($k) => $k === 'NEVER'));

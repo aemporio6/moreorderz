@@ -210,6 +210,24 @@ class PersonRules
         }
     }
 
+    /** R-C-24 the module entities an address is used for (when it is not used for all). */
+    public static function entities(int $address): array
+    {
+        return DB::table('t_account_addresses_entities')->where('fk_id_address', $address)->where(fn ($w) => $w->whereNull('f_active')->orWhere('f_active', 1))->orderBy('id')->pluck('fk_id_entites')->map(fn ($x) => (int) $x)->all();
+    }
+
+    /** Writes the links; "used for all entities" on → no links (the address serves every module). */
+    public static function syncEntities(int $address, $given): void
+    {
+        $all = (int) DB::table('t_account_addresses')->where('id', $address)->value('f_used_for_all_entities') === 1;
+        $want = $all ? [] : array_values(array_unique(array_filter(array_map('intval', is_array($given) ? $given : explode(',', (string) $given)))));
+        if (! $all && $given === null) return;      // the form did not send the list: keep it
+        $have = self::entities($address);
+        foreach (array_diff($have, $want) as $e) DB::table('t_account_addresses_entities')->where('fk_id_address', $address)->where('fk_id_entites', $e)->delete();
+        foreach (array_diff($want, $have) as $e) DB::table('t_account_addresses_entities')->insert(['fk_id_address' => $address, 'fk_id_entites' => $e, 'f_active' => 1]);
+        if (array_diff($have, $want) || array_diff($want, $have)) Audit::log('t_account_addresses', $address, 'UPDATE', ['entities' => [$have, $want]], null, (int) (Context::ent() ?? 0));
+    }
+
     /** R-C-25 where a photo ID / document was submitted: marketplace, PayPal and company links pointing at it. */
     public static function submittedTo(string $kind, int $id): array
     {
