@@ -198,7 +198,11 @@ class ConnectTest extends TestCase
         for ($i = 0; $i < 4; $i++) { DB::table('tm_messages')->where('id', $f)->update(['send_after' => null]); Messenger::sendDue(); }
         $this->assertSame([4, 'FAILED'], [(int) DB::table('tm_messages')->where('id', $f)->value('retry_count'), DB::table('tm_messages')->where('id', $f)->value('status')]);
         $this->assertStringContainsString('Template not approved', DB::table('tm_messages')->where('id', $f)->value('error'));
-        $this->assertTrue(DB::table('tasks')->where('rule_code', 'SYS_WA_FAILING')->exists());
+        $this->assertFalse(DB::table('tasks')->where('rule_code', 'SYS_WA_FAILING')->exists(), 'one failure is under WA_FAIL_LIMIT (5) – MR-1526');
+        \App\Services\Settings::set('WA_FAIL_LIMIT', '2', 1);
+        $g = Messenger::queueWa(1, $partner, '447700900123', 'STATEMENT', ['month' => 'x', 'profit' => '1', 'balance' => '1', 'link' => 'l']);
+        for ($i = 0; $i < 4; $i++) { DB::table('tm_messages')->where('id', $g)->update(['send_after' => null]); Messenger::sendDue(); }
+        $this->assertTrue(DB::table('tasks')->where('rule_code', 'SYS_WA_FAILING')->exists(), 'the second failure reaches the limit');
         $this->assertSame(0, DB::table('wa_outbound')->count() + DB::table('email_outbound')->count(), 'the old outboxes are no longer written');
     }
 

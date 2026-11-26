@@ -55,6 +55,8 @@ class LostParcels
         if (trim($ref) === '' || $amount <= 0) throw new \InvalidArgumentException('Give the claim reference and an amount above zero.');
         DB::table('wh_parcels')->where('id', $id)->update(['claim_status' => 'CLAIMED', 'claim_ref' => mb_substr(trim($ref), 0, 60), 'claim_amount' => round($amount, 2)]);
         Audit::log('wh_parcels', $id, 'UPDATE', ['claim_status' => ['LOST_INVESTIGATING', 'CLAIMED'], 'claim_ref' => $ref, 'claim_amount' => round($amount, 2), 'claim_date' => $date ?: date('Y-m-d')], null, $ent);
+        /* MR-0551 WH_PARCEL_LOST is a money code: a claim above TASK_URGENT_MONEY makes the task URGENT */
+        if ($amount > (float) Settings::get('TASK_URGENT_MONEY', $ent, 1000)) DB::table('tasks')->where('rule_code', 'WH_PARCEL_LOST')->where('linked_record_id', $id)->whereIn('status', ['TODO', 'DOING', 'STUCK', 'REWORK'])->update(['priority' => 'URGENT']);
         return ['message' => "Claim {$ref} of " . number_format($amount, 2) . ' recorded.'];
     }
 

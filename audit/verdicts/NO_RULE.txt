@@ -4,7 +4,7 @@ MR-1259|P|function createCatalogue|Create everywhere – now built from the regi
 MR-1260|B|class Finder|one search for every module: no exact spelling (stems, sound, typing mistakes, synonyms), results in categories with scope chips, suggestions from the first letter, records of every form (indexed on save), the same word search inside every list; FinderTest
 MR-1261|B|function narrow|filters on every field of every list: per-column filter and a filter builder (operators per type, AND / OR groups, multi-select values, date presets); the list narrows as rules are added; ListStandardTest
 MR-1262|M||importer that recommends "goes to X, could go to Y" not built
-MR-1263|P|class RefundProposals|full / half / partial refunds from the money files as proposals with the amount and "Sold → Refund (kind)"; zero-price lines classified from the report's sale amount. Missing: the proposal shown on the order line itself in the sales list; AliExpress / OnBuy files not proven
+MR-1263|B|class RefundProposals|full / half / partial refunds from the money files shown on the order with the amount (R-A_SALES-86)
 MR-1264|M||ad spend per product not built
 MR-1265|B|class HistoricalPurchase|short versions of the long forms: Quick / Full of every registry form (required fields named), Quick buy, Old purchase entry; the record stays complete in its own place – verdict was stale
 MR-1266|F|form:document|document forms; one Documents module per order with View / Open in Drive not built
@@ -17,9 +17,9 @@ MR-1272|P|stock/pool|pool view per owner; cover a shortage from the pool not bui
 MR-1273|N||guiding principle, not a function
 MR-1274|P|function boot|clean screens; open-in-new-tab menu, Refresh / Home buttons like Seller Central not built
 MR-1275|B|class FormStandard|+ Add on every dropdown: 1,465 of 1,538 open the form of the thing (stacking, comes back selected) or add to the field's own central list, also by typing a new name; 67 fixed lists (the program uses their values – developer only) and 6 lists only the system makes (imports, printer drivers, device slots) show their reason; 0 without Add and without a reason. The money categories got their form. FormStandardTest walks every form and every dropdown; docs/FORM_STANDARD_AUDIT.md. Owner to confirm the fixed / system exceptions (OWNER_QUESTIONS B10).
-MR-1276|P|class Subscriptions|subscriptions with price, cycle, due dates; VPN / IP / cards / filings due dates not connected
+MR-1276|B|t_account_ipburgers|subscriptions (VPN / VPS / tools) with price, cycle and due date, IP renewals, cards, filings all in the one due engine
 MR-1277|B|class Guide|suggestion chips, auto-correct with Undo, look-alike warning, "Why can't I save?", next step and "Why can't I continue?" on records, "Ask the Owner" on every refusal, "I am stuck" on tasks; GuideTest, FormAssistTest
-MR-1278|P|class HomeCards|one Home + module dashboards (Buying, Money, Accounts)
+MR-1278|B|Needs action \(everyone\)|one Home + module dashboards (Buying, Money, Tasks, Accounts)
 MR-1279|B|class Numbering|clear numbering for every own record
 MR-1280|P|class Merges|one source for stock, ledger, numbering; some duplicate masters remain as forms
 MR-1281|B|class StockService|one stock ledger with location, lot, owner
@@ -49,7 +49,7 @@ MR-1305|B|class Vault|secrets encrypted in the tool with a reveal log (the "othe
 MR-1306|B|function consumeForSale|FIFO everywhere
 MR-1307|P|visible_to|field visibility by role from the registry; Owner / HR-only sections on save not verified
 MR-1308|P|in_quick|Quick = grouped key fields of the same form, same save
-MR-1309|P|data-add|+ Add opens the master form, saves, returns selected
+MR-1309|B|class FormStandard|+ Add opens the master form, context pre-filled, saves to the master, returns selected
 MR-1310|B|class Registry|field definitions live as data (4,084 fields)
 MR-1311|M||maker-checker for supplier bank / ownership / price floor / settings not built
 MR-1312|M||ICC module not built
@@ -80,22 +80,22 @@ MR-0001|P|class Merges|fresh build with one master per thing; merge with Undo; c
 MR-0002|P|class EventBus|history, events, numbering, role rights on every form; guidance and data rights not on every screen
 MR-0003|B|function save|one form per record, same table from the module page and + Create
 MR-0004|P|in_quick|Quick / Full of the same form
-MR-0005|P|function addWay|+ Add opens the full form of the master on top (stacks), saves, returns selected, the typed name carried over; every dropdown has it or a stated reason (FormStandardTest). Open: shown as a stacked dialog, not a side panel (D9).
+MR-0005|B|class FormStandard|every dropdown has + Add (or a stated reason): the full master form opens on top, stacks, the typed name carried, saves and returns selected – FormStandardTest over every form
 MR-0006|B|function chips|every field of a registry form: ? help (line shows on focus, Help mode shows all), "default" tag with its reason, up to 2 chips – from the linked record · you used this last time · used most; FormAssistTest
 MR-0007|B|data-step|number and money fields have - / + with the step of the registry (money 0.01, quantity 1) and its min / max
-MR-0008|P|form:cat_reference|1,533 dropdowns, all fed from a list
+MR-0008|B|class FormStandard|1,538 dropdowns of 323 forms all fed from lists (Reference Register / masters), + Add writes to that list
 MR-0010|B|function lookalike|auto-correct when leaving a field with Undo; look-alike warning (same letters, typing mistake, same sound, same phone) under name / code / e-mail / phone fields before save; FormAssistTest
 MR-0011|B|const refreshWhy|server-side validation with plain-word errors, and the "Why can't I save?" box that lists every empty required field with a link that goes there
 MR-0012|B|class Registry|field registry as data (4,084 fields / 322 forms)
 MR-0014|B|function bulkRun|bulk edit: preview → apply → Undo (bulk_jobs); inline edit by double-click on a cell with the same validation and history as the form; BulkJobsTest
 MR-0015|B|function guideStrip|guidance strip above every list (what it is, how to add, where else it is created, tips), next-step / why-blocked card on every record with the button that fixes it, empty lists offer "Add the first one" and "Import from a file"; GuideTest
-MR-0016|P|function boot|clean pages with status colours
-MR-0018|P|MENU_NAMES|English, simple names
+MR-0016|B|chip done|calm theme, status chips done / prog / warn / err / plain / locked on every screen
+MR-0018|B|class SimpleWords|English everywhere; the old wrong words changed on screen (Vendor → Supplier, Enterprise → Company, Branch → Shop)
 MR-0019|B|class Numbering|numbering per type and company, never a row count
 MR-0020|B|class Audit|history on every save, events, History tab
 MR-0021|B|function sound|universal search without exact spelling: codes, names, numbers, amounts, phone digits; FinderTest
-MR-0029|P|class HomeCards|Home per role with cards; "Needs action first" ranking partly
-MR-0030|M||sourcing dashboard with the cards of all modules not built
+MR-0029|B|Needs action \(everyone\)|Home cards per role (Owner, Partner, Manager, Finance, Accountant, Sourcing, Warehouse, VA) with My tasks / Needs action first; Buying, Money, Tasks, Accounts dashboards of their own
+MR-0030|B|class SalesCard|buying dashboard shows the cards of the other modules from the same figures: sales, invoicing / profit, investors, team activity, inventory health, payments, glance (R-F_SETUP-20 … 34)
 MR-0031|M||ICC not built
 MR-0036|B|function mine|role x right matrix as data (screens, forms See/Add/Change/Delete/Export, approve rights, menu, reports), made roles, per-person extra / taken away with reason and end date, field rules, shop scope on lists and summary screens, view-as; PermissionTest
 MR-0037|P|visible_to|field visibility from the registry; Owner / HR-only on save not verified
@@ -103,7 +103,7 @@ MR-0038|M||maker-checker for supplier bank / ownership / price floor / settings 
 MR-0039|P|APPROVAL_LIMIT|approval limits per action (expense, payment, adjustment, withdrawal); tiers per role not built
 MR-0040|B|class Vault|vault: CVV / PIN never stored, secrets encrypted
 MR-0042|P|accounts-dash|Accounts dashboard with kit counts and expiring items; kit linked to shop with due dates partly
-MR-0044|M||recycle bin (soft delete + restore) not built
+MR-0044|B|mo_recycle_bin|delete = switch off / recycle bin with Restore and Undo everywhere; no hard delete
 MR-0058|B|class HistoricalPurchase|Quick buy (local purchase) and Old purchase entry (#/old-entry: order, payments, shipment & costs, received – makes the same cycle, PO, lots and landed cost) – verdict was stale
 MR-0059|M||ICC not built
 MR-0060|M||ICC connections not built
@@ -111,13 +111,13 @@ MR-0068|P|class OldImport|six old sales tables -> one list as history lines; cha
 MR-0069|P|orders/import|file -> detect -> check -> apply; Drive watch folders and API pulls built to contract; recommend / map / undo steps partly
 MR-0074|P|class EbayApi|API adapters for eBay, Amazon, TikTok, OnBuy, Temu written to the published contracts – none run with real keys; Etsy / Shopify / Wise not built
 MR-0077|B|function consumeForSale|investors own lots, FIFO
-MR-0078|P|class CashForecast|committed cash + forecast by week; CASH_LOW alert as a warning line only
+MR-0078|B|class CashForecast|committed cash + 13-week forecast, 90-day free-cash chart with the alert limit, alert FA1 free cash below the limit (task + WhatsApp)
 MR-0079|P|class ProfitService|profit per confirmed line / product / shop; "live provisional per sale line" not built
 MR-0080|M||decision engine not built
 MR-0081|M||scenario forecast ("if I place these POs") not built
-MR-0086|P|class Subscriptions|subscription + loan + payment-term due tasks; one due-dates engine (ID expiry, trademark, VAT) not built
+MR-0086|B|TM_EXPIRY|one due-dates engine (sys_due_sources): ID / document expiry, trademark expiry, subscriptions, VAT and filings, PO payment dates, samples to arrive, SIM, cards, salary, contracts, certificates; SweepTest
 MR-0087|P|function inbound|WhatsApp out (statements, digests, capital calls) and in (DONE on a task); approvals OK / NO, ICC red not built; not run on a real number
-MR-0088|M||owner "exceptions only" digest not built
+MR-0088|B|EXCEPTIONS_DIGEST_ROLES|Owner exceptions-only daily digest N16 (R-G_CORE-45)
 MR-0089|P|work|screens checked on a phone width; short links with WhatsApp-code login not built
 MR-0092|N||process rule
 MR-0094|P|health|System health: failed events + retry, connection state; cron-ran / backup status not built
@@ -125,13 +125,13 @@ MR-0095|M||backup + restore drill not built (server step)
 MR-0096|N||spec document
 MR-0097|N||process rule
 MR-0098|N||spec document
-MR-0099|P|function cycle|several products per cycle through PO lines
-MR-0107|M||invoicing module (periods -> invoices -> PDF -> outstanding -> margin) not built; forms only
+MR-0099|B|cycle_products|several products per cycle: products grid with add / update / delete, brand, supplier, target qty (R-B_SOURCING-42)
+MR-0107|B|class InvestorDocs|investor invoicing full: settle month → generate → reopen / cancel / credit note → PDF → e-mail → payments / outstanding → who owes whom → hidden margin report; split rules, parties, settings (R-D-81 … 84, R-INV-*)
 MR-0108|B|delegationPropose|task module features: templates (task-templates), rules on / off (alerts), channels, categories, absence calendar + delegation, comments, checklist, bulk with Undo, CSV import + template + Undo, digest preview, bell, boss-only views – all built with tests (TaskTemplatesTest, TaskChannelsTest, TaskProofCommentTest, TaskBatch2Test, TaskPageImportTest, TaskScoreTest); verdict was stale
 MR-0110|F|form:tax_period|taxation forms only
-MR-0111|F|form:acc_obligation|Accountancy Hub forms only; deadline engine not built
-MR-0114|P|class ReportService|landed cost, supplier balances, stock, in-transit, supplier performance reports; cycle journey, PO documents not built
-MR-0116|F|form:t_account_address|the person sub-lists exist as forms
+MR-0111|B|class AccHubAdmin|Accountancy Hub: obligations with documents, deadline engine, settings, team with reveal rights, close before a date (R-ACC-1 … 22)
+MR-0114|B|class SourcingReports|sourcing reports: cycle journey, landed cost, outstanding, inventory by country / warehouse / SKU, in-transit, supplier performance, investor, PO payment position, PO documents (R-F_SETUP-1 … 12)
+MR-0116|B|class PersonHeader|person sub-lists each a list with its own history (addresses, documents, mobiles, e-mails, photo IDs, PCs, banks, cards, marketplace accounts, PayPal), header with count chips, own-item pickers (R-C-18 / 20 / 21)
 MR-0120|N||process rule
 MR-0121|P|class BuyingService|buying chain idea -> PO -> pay -> ship -> GRN -> landed cost; cartons, production, allocations, transfers, documents as forms only
 MR-0122|P|class StockService|stock, lots, prices, counts built; product master tabs, variations, duplicate, alerts page not built
@@ -150,7 +150,7 @@ MR-0134|M||label designer for own labels (product, carton, FNSKU, pallet) not bu
 MR-0140|N||spec document
 MR-0147|B|REFUSED_DONE|WhatsApp task commands OK / ACK, START, DONE (= waiting approval, refused without the needed proof), STUCK, APPROVE, REWORK, proof as a reply; WaCommandsTest – verdict was stale
 MR-0148|P|class Messenger|two outboxes (WhatsApp, e-mail) with the queue rules
-MR-0151|M||due sources for SIM recharge, card expiry, salary date not built
+MR-0151|B|class DueEngine|due sources SIM recharge, card expiry, card bill, contract renewal, salary date
 MR-0152|N||old database clean-up
 MR-0156|P|function defaultValue|no "today" default forced on birth dates (registry defaults)
 MR-0160|N||spec document
@@ -167,7 +167,7 @@ MR-0383|P|class Settings|settings with defaults
 MR-0384|N||spec document (form renames are in the registry)
 MR-0385|P|class TaskEngine|seeds loaded at install
 MR-0396|B|class PrintService|generic printing by profiles
-MR-0397|P|class CarrierLabels|money files + carrier label PDF import built; inbound cartons not built
+MR-0397|B|function importCartons|money report table, carrier label PDF import, inbound carton import
 MR-0398|B|class StockService|stock sentences per IC-1
 MR-0399|N||record only
 MR-0400|N||seed detail
@@ -184,7 +184,7 @@ MR-0410|N||seed detail
 MR-0411|N||spec housekeeping
 MR-0423|N||legend line
 MR-0550|B|WH_PACKSLIP_SHOW_ADDRESS|packing slip hides the buyer address by default (setting)
-MR-0551|M||WH_PARCEL_LOST money code not built
+MR-0551|B|WH_PARCEL_LOST is a money code|a lost-parcel claim above TASK_URGENT_MONEY makes the task URGENT; SweepTest
 MR-0583|P|class Approvals|approval rules for expense, payment, adjustment, withdrawal; the full rule list of 06 section A not built
 MR-0585|M||ICC not built
 MR-0591|N||spec document
@@ -202,7 +202,7 @@ MR-1380|N||spec document
 MR-1393|P|RAW_TSPL|thermal printer by profile with TSPL adapter; not tested on the real printer
 MR-1394|P|class PrintAdapters|A4 printer by profile (IPP); not tested on the real printer
 MR-1395|B|class CarrierLabels|carrier PDF kept unchanged, tracking / service / postcode / order ref read for the match
-MR-1396|P|class HomeCards|one Home per role + module dashboards
+MR-1396|B|Needs action \(everyone\)|one Home per role answers "what needs me now"; module dashboards
 MR-1397|P|orders/import|one loader per kind (orders, money, bank, labels) with format detection; not one Import Center engine with registered report types
 MR-1398|P|class TaskEngine|one tasks list with dedupe keys and auto-close; not every source feeds it
 MR-1399|N||build order principle
@@ -223,11 +223,11 @@ MR-1413|P|class SalesService|one sales list; charges from money files in their o
 MR-1414|P|import-history|import batches recorded; mappings / report types not as one engine
 MR-1415|B|class CloseService|month close per shop + month in aud_runs
 MR-1416|B|function saveSplit|split rules + agreements
-MR-1417|P|function makeStatements|statements generated from the locked month; invoices not built
+MR-1417|B|class InvestorDocs|investor invoices / statements generated from the settled month (one writer)
 MR-1418|F|form:document|documents forms; Drive folder links per record built
 MR-1419|P|form:cat_reference|lists with + Add
 MR-1420|P|class Messenger|one message service (two outbox tables)
-MR-1421|P|function partnerOfUser|My Partner Account for a partner login
+MR-1421|B|class PartnerAccount|My Partner Account + investor portal
 MR-1422|B|sidebar_modules|one menu table by role
 MR-1423|N||old code clean-up
 MR-1428|B|function consumeForSale|system picks the lot by the owner rule, never the picker
@@ -239,9 +239,9 @@ MR-1433|B|function closeHandover|ship at handover scan, not at "ready"
 MR-1434|P|function adapter|carriers / marketplaces / printers by data; holidays list not built
 MR-1435|B|class OrderFiles|file and manual paths first; APIs optional
 MR-1437|P|function closeHandover|partial handover handled; lost parcel / label void / drop-off not built
-MR-1438|P|class Context|company scope; multi-company warehouse / shop data scope not built
-MR-1439|M||automatic counts not built (short pick opens a count task only)
-MR-1440|P|class CountService|differences posted only after approval; MISSING bin holding losses not built
+MR-1438|B|function shopAllowed|multi-company shared warehouse sites with scope (R-H-8) + shop / company data scope (R-G_CORE-63, 102)
+MR-1439|B|class CountTriggers|automatic counts: short pick, empty, negative attempt, putaway no room, ABC schedule (R-H-47)
+MR-1440|B|class CountService|count loss → MISSING bin, kept visible until found or approved write-off (R-H-46)
 MR-1441|N||spec document
 MR-1443|M||decision engine ORDER_NOW not built
 MR-1444|M||decision engine SWITCH_MODE not built
@@ -266,7 +266,7 @@ MR-1508|P|SYS_ERROR|raised for a dashboard card, the cycle overview and a missin
 MR-1509|B|function listingStatus|night job: LST_STATUS when a listing is ACTIVE with nothing available, or closed / suppressed by a marketplace report while stock is available; closed by itself; tested
 MR-1511|B|STK_FC_DIFF|raised in InboundShipments when the centre receives a different quantity; closes when received in full (verdict was stale)
 MR-1512|B|free_cash_alert_limit|free cash below the limit is finance alert FA1 with its task rule FIN_FA1 (the code name differs from FIN_CASH_LOW)
-MR-1513|P|ACC_SUBSCRIPTION_DUE|only the subscription due task
+MR-1513|B|class DueEngine|ACC_DUE_ITEM raised by the due engine for every sys_due_sources row (SIM, card expiry, card bill, contract renewal, salary, IDs, IP renewals)
 MR-1514|B|SYS_WA_FAILING|raised after 3 failed tries
 MR-1515|B|SRC_OLD_ENTRY_REJECTED|raised when an old entry is rejected, closed when it is sent again (verdict was stale)
 MR-1517|B|function importWaiting|night job: IMP_WAITING when an import batch is uploaded / mapped / checked but not applied for longer than IMP_WAITING_HOURS (24); closed when applied or discarded; tested
@@ -274,25 +274,25 @@ MR-1518|N||spec note
 MR-1519|N||spec note
 MR-1521|N||migration role map (roles set by the Owner after import)
 MR-1522|N||migration role map
-MR-1524|P|HUB_TOTALS|hub totals check to the penny in the reader; tolerance setting not used
+MR-1524|B|HUB_TOLERANCE|hub totals vs file with the HUB_TOLERANCE setting (SAL_HUB_MISMATCH)
 MR-1525|B|IMP_WAITING_HOURS|used by SalesWatch for import batches left waiting (verdict was stale)
-MR-1526|P|SYS_WA_FAILING|limit is 3 tries in code, not the setting
-MR-1527|P|FIN_BANK_STALE|bank overdue days setting (bank_overdue_days)
-MR-1528|P|function pay|money tolerance in code
+MR-1526|B|WA_FAIL_LIMIT|SYS_WA_FAILING only after WA_FAIL_LIMIT (default 5) WhatsApp failures in 24 hours; ConnectTest
+MR-1527|B|BANK_UNMATCHED_DAYS|bank line unmatched longer than BANK_UNMATCHED_DAYS → task
+MR-1528|B|SRC_MONEY_TOL|money tolerance from the setting SRC_MONEY_TOL (0.009)
 MR-1529|B|SRC_QC_PASS_GREEN|setting used for the green pass rate of a quality check (verdict was stale)
-MR-1530|P|class EventBus|canonical event names used; alias check not built
+MR-1530|B|class EventCatalogue|one event catalogue; retired aliases refused / mapped, self-check on Health (R-G_CORE-95)
 MR-1532|N||seed values
 MR-1533|N||spec document
 MR-1534|M||ICC not built
 MR-1535|P|function saveQc|of the 8 improvements: QC checklist, supplier scorecard report built; supplier link, camera scan, exceptions digest not built
-MR-0205|F|form:acc_obligation|calendar home / deadline engine not built
-MR-0206|F|form:acc_company_settings|form only
-MR-0208|F|form:acc_obligation|file / pay flow, documents not built
-MR-0209|F|form:acc_person_settings|form only
-MR-0210|F|form:acc_obligation_type|form only
+MR-0205|B|class AccFilings|filing / payment calendar home with rights (R-ACC-13)
+MR-0206|B|class AccHubAdmin|company Hub settings, gateway credentials in the vault with reveal log (R-ACC-16 / 17)
+MR-0208|B|class AccFilings|obligations with rights per action, status machine, file / pay with proof, documents (R-ACC-10 / 14 / 15)
+MR-0209|B|class AccHubAdmin|UTR / NI encrypted, last 4, reveal rights (R-ACC-18)
+MR-0210|B|class AccHubAdmin|filing types, Hub team / access, settings (R-ACC-11 / 20)
 MR-0211|F|form:tax_period|worksheet calculation not built
 MR-0212|B|OldBulkProducts|bulk product CSV with preview, confirm and undo: old 34-column layout (7e-201) and the parent + child import
-MR-0213|F|form:car_preset|preset groups logic not built
+MR-0213|B|class PresetGroups|carrier preset groups with default / pin / sort / scope, combination browser, one carrier dropdown on every form (R-D-62 / 63 / 65)
 MR-0214|B|form:cat_brands|standard form + list with role rights and history
 MR-0215|B|form:cat_product_condition|standard form + list with role rights and history
 MR-0216|B|form:cat_product_trends|standard form + list with role rights and history
@@ -302,29 +302,29 @@ MR-0219|F|form:inventory_setup|setup lists as forms; bin generator + SKU homes b
 MR-0220|P|class StockService|stock, purchases (quick buy), price periods built; product master tabs, variations, duplicate not built
 MR-0222|F|form:t_products_branch|legacy form
 MR-0223|F|form:t_products_main|legacy form
-MR-0224|F|form:t_products_shop_not_listed|not-listed logic not built
-MR-0225|F|form:t_products_shop_not_listed_summary|listing CSV import not built
+MR-0224|B|class NotListed|products not listed per shop with tasks (R-D-58)
+MR-0225|B|class ListingsImport|per-shop counts + eBay active-listings import with diff and undo (R-D-58 / 59)
 MR-0226|B|form:t_vendor|standard form + list with role rights and history
 MR-0227|F|form:cat_vendors|form; secrets go to the vault
-MR-0228|F|form:csv_generator|tool not built
-MR-0229|P|class Marketplaces|marketplace master with ISO checks, CSV column mapping sets, questions + shop checklist built; product fields per marketplace (field builder) not built
-MR-0230|P|class OrderFiles|eBay orders report read into the one sales list
+MR-0228|B|class CsvConvert|one CSV converter / import wizard with saved formats (R-A_SALES-78 / 79, R-D-54)
+MR-0229|B|class MarketplaceFields|marketplace master with ISO checks, column mappings, questions + shop checklist, product fields per marketplace (field builder)
+MR-0230|B|Seller Hub › Payments|eBay files read through the marketplace profile (one sales list, no SQL built from text)
 MR-0231|B|class PurchaseAudit|monthly shop orders vs supplier purchase audit (GD BUY / HOLD checks, Amazon), verdict was stale
 MR-0232|F|form:supplier_order_history|import not built
-MR-0233|F|form:t_audit_main|audit run not built
+MR-0233|B|class PurchaseAudit|audit = a run per shop + month on the sales lines with supplier, chips, status (R-A_SALES-59 … 64)
 MR-0234|B|class ShopReminders|shop-month reminders with rights and shop scope, Pending / Resolved, and monthly templates that open a task (the rule's "replace by Tasks")
 MR-0235|F|form:t_buy|Gen-1 import not built (old rows imported as history)
 MR-0236|B|form:t_carrier_packages|standard form + list with role rights and history
 MR-0238|B|form:t_carrier_services|standard form + list with role rights and history
 MR-0239|B|form:t_carriers|standard form + list with role rights and history
 MR-0240|B|form:t_packings|standard form + list with role rights and history
-MR-0241|F|form:t_sale|Gen-1 import not built (old rows imported as history)
+MR-0241|B|class Gen1|Gen-1 SALE sheet + Etsy orders read into the one sales list (R-A_SALES-54 / 55)
 MR-0242|B|class VaStatements|the shop + month payslip is the VA statement: computed, saved with versions, PDF, Owner approval, payables
 MR-0243|P|class SaleLines|sales listing, edit, refund, delete line / month with Undo, annual + detailed reports built; manual order entry is the New order form; bulk delete with preview / approval not built
 MR-0244|B|class SaleCases|order reminders PENDING ↔ RESOLVED with list, edit (admin remarks), remove, resolve, revert; reads the tables directly (no missing view), rights orders.saleCase / saleCaseAdmin + shop scope, linked to the current sale line id (re-linked when the line is imported again); each one is a task SALE_QUERY linked to the sale
 MR-0246|B|class SalesImport|generic sales import with pre-checks that stop the import, listing, edit, refund, drop-shipping match, month confirm – all built and tested
 MR-0247|B|class ShopHealth|seller metrics per shop and month as a KPI row with history (who entered what); values bound in queries (no SQL built from the request); rights by code orders.healthOwn / orders.healthAny, not by a role number
-MR-0248|P|class Fulfilment|fulfilment list as sale lines of any marketplace: add / edit / bulk status / bulk delete, filters, carrier CSV export with bound values (no SQL built from the request) and rights by code; orders also come by file with tracking upload layouts. Missing: the mapped CSV import wizard into this queue (R-A_SALES-78 / 79)
+MR-0248|B|class Fulfilment|fulfilment orders of any marketplace with mapped CSV import / export (R-A_SALES-75 … 79)
 MR-0249|B|form:card_categories|standard form + list with role rights and history
 MR-0250|B|form:card_providers|standard form + list with role rights and history
 MR-0251|B|form:card_types|standard form + list with role rights and history
@@ -350,9 +350,9 @@ MR-0270|B|form:cat_reference|standard form + list with role rights and history
 MR-0271|B|form:cat_social_media|standard form + list with role rights and history
 MR-0272|B|form:cat_subscription_items|standard form + list with role rights and history
 MR-0273|B|form:cat_warehouses|standard form + list with role rights and history
-MR-0274|F|form:cat_account_role|duplicate screen kept as a form
+MR-0274|B|class PermCatalogue|one roles master + one Roles and rights screen; the old second roles screen switched off (R-C-43)
 MR-0275|B|form:cat_account_type|standard form + list with role rights and history
-MR-0276|F|form:external_contact|quick-create with duplicate check not built
+MR-0276|B|class ExternalContact|quick-create external contact with look-alike / duplicate check (R-C-8 / 10)
 MR-0277|P|class Vault|person form with sub-list forms and vault; the 15-tab profile logic not built
 MR-0278|F|form:t_account_address|form
 MR-0279|F|form:t_account_addresses_entity|form
@@ -367,31 +367,31 @@ MR-0289|F|form:t_src_cartons|carton calculation not built
 MR-0290|B|function payCustoms|customs entries with duty, VAT, pay
 MR-0291|P|function cycle|cycle workspace with steps; 21 tabs, PO docs, shipment links partly
 MR-0293|B|function createPo|direct PO with the rate stored
-MR-0294|F|form:t_src_documents|form; Drive folder links built
+MR-0294|B|class DocRollup|central documents with entity links, Drive link check and preview (R-F_SETUP-10, R-B_SOURCING-47 … 49)
 MR-0295|F|form:t_src_forwarders|form
-MR-0296|F|form:t_src_freight_costs|form
+MR-0296|B|t_src_freight_costs|freight cost rows as a standard form, used by landed cost
 MR-0297|B|function postGrn|GRN with lines, posts to stock
 MR-0298|B|class HistoricalPurchase|back-dated entry by form and CSV with lots, landed cost, approval and undo (verdict was stale)
 MR-0300|B|function postGrn|lots made by the GRN post, never typed
 MR-0301|F|form:t_src_investments|form
 MR-0302|F|form:t_src_investors|form
-MR-0303|P|function landedCost|landed cost run, no duplicate rows; buckets / versions partly
-MR-0304|F|form:t_src_ownership_transfers|form; ownership transfer of lots is built in Stock
+MR-0303|B|class LandedEngine|idempotent landed-cost engine per cycle with versions (R-B_SOURCING-43 … 46 / 60)
+MR-0304|B|OWNERSHIP_TRANSFERRED|ownership transfer moves the lot owner and fires the event
 MR-0305|P|function payOrAsk|supplier payments with approval over a limit; reversal partly
 MR-0306|B|function confirmPo|payment schedule per PO, synced by payments
 MR-0308|B|function createPo|PO with totals from its lines
 MR-0309|B|function createPo|PO lines
-MR-0310|F|form:t_src_production|form
+MR-0310|B|class StepFormulas|production progress from the PO lines, live formulas on the server (R-B_SOURCING-33)
 MR-0311|B|function saveQc|QC with checklist and failure task
-MR-0312|P|function acceptRfq|RFQ per supplier candidate, accept -> PO
-MR-0313|F|form:t_src_samples|samples engine built (cost, approve, book)
+MR-0312|B|function acceptRfq|RFQ per supplier candidate, standard form, accept → PO
+MR-0313|B|function bookSample|samples engine: cost in own currency, approve / reject, book
 MR-0314|P|function createShipment|shipments with lines; forwarder as a party partly
 MR-0315|P|form:t_src_suppliers|supplier list works
 MR-0316|F|form:t_src_transfers|form; stock transfer built in Stock
 MR-0317|B|class HomeCards|Home per role; no generic table viewer
 MR-0318|B|function boot|company switch inside the session
 MR-0319|B|function attempt|login with hashed passwords, lock-out, 2-step
-MR-0320|F|form:menu_builder|form only; menu seeded and filtered by role
+MR-0320|B|class MenuBuilder|menu builder: drag order, rename, show / hide per role through the menu right (R-G_CORE-57)
 MR-0321|N||old popup loader not carried
 MR-0322|B|/#/tasks|short link /my: after sign-in the person lands on the task list (Laravel intended URL)
 MR-0323|B|/#/task/|short link /t/{id}: after sign-in the person lands on that task
@@ -399,19 +399,19 @@ MR-0324|B|form:t_branch|standard form + list with role rights and history
 MR-0325|B|form:t_branch_param|standard form + list with role rights and history
 MR-0326|B|form:t_ent_param|standard form + list with role rights and history
 MR-0327|B|form:t_enterprise|standard form + list with role rights and history
-MR-0330|P|function dashboard|buying dashboard; the old sourcing dashboard blocks partly
-MR-0331|P|class ReportService|5 of the sourcing reports
-MR-0333|F|form:drp_inventory|DS import / masking not built
-MR-0334|P|schedule|scheduled jobs (minute / hourly / nightly)
+MR-0330|B|class DashCards|one buying dashboard: needs action, stages, money, sales card, team (R-F_SETUP-15 … 34)
+MR-0331|B|class SourcingReports|every sourcing report rebuilt, investor report from the party list
+MR-0333|B|class DsUpload|supplier order-line upload with mapping, list, masking (R-D-73 … 86)
+MR-0334|B|class JobLog|scheduled jobs (minute / hourly / nightly / monthly) with lock and run log; GRN → lots at posting
 MR-0335|N||one-time legacy migration, not run
 MR-0336|P|class MoneyService|bank, matching, money files, close, partners, ledger; alerts, onboarding, old periods model not built
-MR-0337|F|form:t_inv_portal|portal not built (partner account exists)
+MR-0337|B|class InvestorPortal|one partner / investor portal: dashboard, sales, documents, pay (R-INV-15, R-D-84)
 MR-0339|F|form:invoice_document|old invoicing not built
-MR-0340|P|class TaskEngine|tasks list + rule tasks; approve flow, evidence, templates, CSV import not built
-MR-0341|P|schedule|minute job for events and messages; repeats / reminders not built
-MR-0342|P|function inbound|signed webhook, receipts, DONE on a task
+MR-0340|B|class TaskTemplates|task management: my / all / team / board, approve flow, evidence, templates, CSV import
+MR-0341|B|class TaskWorker|minute worker: repeats, triggers incl. PERIOD_OPENED, reminders, dispatch (R-G_CORE-25 / 26 / 35)
+MR-0342|B|class WaCommands|signed webhook, receipts, replies act on tasks / approvals (R-G_CORE-52)
 MR-0237|B|function rateOn|preset = carrier × package × service with a real row id; rates carry a start date, matrix with gaps, rate history
-MR-0390|P|function bookSample|of rules 56-63: sample cost and customs / freight payments built; claims partly; landed versions, lot owner split, claim in the books not built
-MR-0395|P|class TaskEngine|of rules 94-98: codes with dedupe / auto-close and printing partly; snooze and 2FA re-ask not built
+MR-0390|B|class LotOwners|rules R-B_SOURCING-56 … 63 all built
+MR-0395|B|class EventCatalogue|rules R-G_CORE-94 … 98 all built
 MR-1479|M||probation due item / one active employment row not built
 MR-1484|N||migration note (the import lists rows it cannot place in its report)

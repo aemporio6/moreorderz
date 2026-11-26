@@ -78,7 +78,8 @@ class TmQueue
                 $permanent = $e instanceof \DomainException || ($e instanceof ApiError && $e->auth);
                 if ($permanent || $tries > $max_) {
                     DB::table('tm_messages')->where('id', $m->id)->update(['status' => 'FAILED', 'failed_at' => now(), 'retry_count' => $tries, 'error' => mb_substr($e->getMessage(), 0, 255)]); $done['failed']++;
-                    if ($m->channel === 'WHATSAPP' && ! $e instanceof \DomainException) TaskEngine::open('SYS_WA_FAILING', [$ent], 'WhatsApp messages are not going out: ' . mb_substr($e->getMessage(), 0, 150), ['ent' => $ent, 'fix_url' => '#/messages']);
+                    /* MR-1526: SYS_WA_FAILING after WA_FAIL_LIMIT (5) WhatsApp failures in 24 hours */
+                    if ($m->channel === 'WHATSAPP' && ! $e instanceof \DomainException && DB::table('tm_messages')->where('channel', 'WHATSAPP')->where('status', 'FAILED')->where('failed_at', '>=', date('Y-m-d H:i:s', time() - 86400))->count() >= max(1, (int) Settings::get('WA_FAIL_LIMIT', $ent, 5))) TaskEngine::open('SYS_WA_FAILING', [$ent], 'WhatsApp messages are not going out: ' . mb_substr($e->getMessage(), 0, 150), ['ent' => $ent, 'fix_url' => '#/messages']);
                 } else {
                     DB::table('tm_messages')->where('id', $m->id)->update(['status' => 'QUEUED', 'retry_count' => $tries, 'error' => mb_substr($e->getMessage(), 0, 255),
                         'send_after' => $now->modify('+' . ((int) AlertRules::threshold('send_retry_minutes') ?: 10) . ' minutes')->format('Y-m-d H:i:s')]); $done['retry']++;
