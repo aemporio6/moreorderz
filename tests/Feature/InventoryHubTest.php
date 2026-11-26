@@ -93,4 +93,23 @@ class InventoryHubTest extends TestCase
             $this->getJson("/api/stock/product/$p")->assertStatus(403);
         }
     }
+
+    /** Next #5: Guide me knows the new screens – unlinked FBA SKUs, shops without quantities, files waiting in Import anything. */
+    public function test_guide_me_on_the_new_screens(): void
+    {
+        $this->actingAs($this->owner); \App\Services\Context::set(1, $this->owner->id);
+        $mp = DB::table('cat_marketplaces')->insertGetId(\App\Services\RecordService::fillNotNull('cat_marketplaces', ['fk_id_ent' => 1, 'marketplace_short' => 'AMAZON_GM']));
+        $shop = DB::table('t_branches')->insertGetId(\App\Services\RecordService::fillNotNull('t_branches', ['fk_id_ent' => 1, 'fk_id_marketplace' => $mp, 'shop_no' => 'GM1', 'iso_branch' => 'GM1', 'shop_name' => 'Shop GM', 'f_active' => 1]));
+        \App\Services\FbaLedger::locations(1);
+        DB::table('fin_fba_stock_snapshots')->insert(\App\Services\RecordService::fillNotNull('fin_fba_stock_snapshots', ['branch_id' => $shop, 'snapshot_date' => date('Y-m-d'), 'sku' => 'B0GUIDEME1', 'fulfillable' => 4, 'reserved' => 0]));
+        $p = DB::table('t_product_vendors')->insertGetId(\App\Services\RecordService::fillNotNull('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'GM-1', 'product_name_vendor' => 'Guide lamp', 'stock' => 0, 'f_active' => 1, 'e_product_type' => 'pool']));
+        DB::table('t_product_listings')->insert(\App\Services\RecordService::fillNotNull('t_product_listings', ['fk_id_ent' => 1, 'fk_id_product' => $p, 'fk_id_branch' => $shop, 'fk_id_marketplace' => $mp, 'marketplace_sku' => 'GM-1-M', 'status' => 'ACTIVE', 'f_active' => 1, 'fulfilment' => 'FBM']));
+        \Illuminate\Support\Facades\Cache::flush();
+        $g = $this->getJson('/api/guide-now?route=' . urlencode('#/inventory'))->assertOk()->json('items');
+        $texts = implode(' | ', array_column($g, 'text'));
+        $this->assertStringContainsString('FBA SKU(s) / ASIN(s) are not linked', $texts);
+        $this->assertStringContainsString('No shop has sent its quantities yet', $texts);
+        DB::table('mo_intake')->insert(['fk_id_ent' => 1, 'name' => 'x.pdf', 'status' => 'NEW', 'created_at' => now(), 'updated_at' => now()]);
+        $this->assertStringContainsString('wait to be placed', implode(' | ', array_column($this->getJson('/api/guide-now?route=' . urlencode('#/import'))->json('items'), 'text')));
+    }
 }

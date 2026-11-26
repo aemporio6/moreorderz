@@ -1,0 +1,1850 @@
+{
+"made": "2026-11-27",
+"source": "old MoreOrderz controllers (138) joined with the register audit",
+"controllers": [
+{
+"controller": "Acc_hub",
+"functions": 5,
+"lines": 6,
+"status": {
+"BUILT": 5,
+"NOT_APPLICABLE": 1
+},
+"open": []
+},
+{
+"controller": "Acc_hub_company",
+"functions": 7,
+"lines": 3,
+"status": {
+"BUILT": 3
+},
+"open": []
+},
+{
+"controller": "Acc_hub_cron",
+"functions": 1,
+"lines": 2,
+"status": {
+"BUILT": 2
+},
+"open": []
+},
+{
+"controller": "Acc_hub_obligation",
+"functions": 8,
+"lines": 4,
+"status": {
+"BUILT": 4
+},
+"open": []
+},
+{
+"controller": "Acc_hub_personal",
+"functions": 5,
+"lines": 3,
+"status": {
+"BUILT": 3
+},
+"open": []
+},
+{
+"controller": "Acc_hub_setup",
+"functions": 7,
+"lines": 3,
+"status": {
+"BUILT": 3
+},
+"open": []
+},
+{
+"controller": "CSVBulkReader",
+"functions": 4,
+"lines": 3,
+"status": {
+"BUILT": 3
+},
+"open": []
+},
+{
+"controller": "CSV_generator",
+"functions": 13,
+"lines": 6,
+"status": {
+"BUILT": 5,
+"NOT_APPLICABLE": 1
+},
+"open": []
+},
+{
+"controller": "Car_preset",
+"functions": 16,
+"lines": 5,
+"status": {
+"BUILT": 3,
+"FORM_ONLY": 1,
+"PARTIAL": 1
+},
+"open": [
+{
+"reg": "MR-0930",
+"status": "FORM_ONLY",
+"text": "[Missing] Presets inside a group: pin, default, order, clean-up, history.",
+"note": "R-D-64: form only"
+},
+{
+"reg": "MR-0982",
+"status": "PARTIAL",
+"text": "[Partial] Carrier Preset Groups manager",
+"note": "R-D-62: 7e-161: preset group form – name required (spaces collapsed), ≤ 100, unique; code upper case ^[A-Z0-9][A-Z0-9_-]{0,19}$; 11 colour swatches (other → default #17a2b8); description ≤ 255; active"
+}
+]
+},
+{
+"controller": "Card_categories",
+"functions": 5,
+"lines": 1,
+"status": {
+"BUILT": 1
+},
+"open": []
+},
+{
+"controller": "Card_providers",
+"functions": 10,
+"lines": 1,
+"status": {
+"BUILT": 1
+},
+"open": []
+},
+{
+"controller": "Card_types",
+"functions": 5,
+"lines": 1,
+"status": {
+"BUILT": 1
+},
+"open": []
+},
+{
+"controller": "Cat_account_roles",
+"functions": 5,
+"lines": 2,
+"status": {
+"BUILT": 2
+},
+"open": []
+},
+{
+"controller": "Cat_account_type",
+"functions": 5,
+"lines": 2,
+"status": {
+"BUILT": 2
+},
+"open": []
+},
+{
+"controller": "Cat_banks",
+"functions": 10,
+"lines": 1,
+"status": {
+"BUILT": 1
+},
+"open": []
+},
+{
+"controller": "Cat_brands",
+"functions": 5,
+"lines": 5,
+"status": {
+"BUILT": 2,
+"NOT_APPLICABLE": 3
+},
+"open": []
+},
+{
+"controller": "Cat_company_house",
+"functions": 9,
+"lines": 11,
+"status": {
+"BUILT": 6,
+"FORM_ONLY": 1,
+"NOT_APPLICABLE": 4
+},
+"open": [
+{
+"reg": "MR-1122",
+"status": "FORM_ONLY",
+"text": "[Partial] Company list shows the directors and links to Taxation",
+"note": "R-F_SETUP-37: list only"
+}
+]
+},
+{
+"controller": "Cat_country",
+"functions": 0,
+"lines": 4,
+"status": {
+"BUILT": 3,
+"FORM_ONLY": 1
+},
+"open": [
+{
+"reg": "MR-1125",
+"status": "FORM_ONLY",
+"text": "[Partial] Country rules and pinned order",
+"note": "R-F_SETUP-40: form only; pin order rule not built"
+}
+]
+},
+{
+"controller": "Cat_currency",
+"functions": 5,
+"lines": 1,
+"status": {
+"BUILT": 1
+},
+"open": []
+},
+{
+"controller": "Cat_doc_type",
+"functions": 0,
+"lines": 1,
+"status": {
+"BUILT": 1
+},
+"open": []
+},
+{
+"controller": "Cat_incoterm",
+"functions": 5,
+"lines": 1,
+"status": {
+"BUILT": 1
+},
+"open": []
+},
+{
+"controller": "Cat_ipburgers",
+"functions": 5,
+"lines": 1,
+"status": {
+"BUILT": 1
+},
+"open": []
+},
+{
+"controller": "Cat_marketplaces",
+"functions": 16,
+"lines": 5,
+"status": {
+"BUILT": 5
+},
+"open": []
+},
+{
+"controller": "Cat_mobile_network",
+"functions": 0,
+"lines": 1,
+"status": {
+"BUILT": 1
+},
+"open": []
+},
+{
+"controller": "Cat_module",
+"functions": 0,
+"lines": 2,
+"status": {
+"BUILT": 1,
+"PARTIAL": 1
+},
+"open": [
+{
+"reg": "MR-1129",
+"status": "PARTIAL",
+"text": "[Partial] Module / parameter framework",
+"note": "R-F_SETUP-44: settings global / company + choices per shop with history; module / parameter framework as forms only"
+}
+]
+},
+{
+"controller": "Cat_module_entity",
+"functions": 0,
+"lines": 1,
+"status": {
+"BUILT": 1
+},
+"open": []
+},
+{
+"controller": "Cat_module_param",
+"functions": 0,
+"lines": 2,
+"status": {
+"BUILT": 1,
+"PARTIAL": 1
+},
+"open": [
+{
+"reg": "MR-1129",
+"status": "PARTIAL",
+"text": "[Partial] Module / parameter framework",
+"note": "R-F_SETUP-44: settings global / company + choices per shop with history; module / parameter framework as forms only"
+}
+]
+},
+{
+"controller": "Cat_module_params_lov",
+"functions": 0,
+"lines": 2,
+"status": {
+"BUILT": 1,
+"PARTIAL": 1
+},
+"open": [
+{
+"reg": "MR-1129",
+"status": "PARTIAL",
+"text": "[Partial] Module / parameter framework",
+"note": "R-F_SETUP-44: settings global / company + choices per shop with history; module / parameter framework as forms only"
+}
+]
+},
+{
+"controller": "Cat_module_type",
+"functions": 0,
+"lines": 1,
+"status": {
+"BUILT": 1
+},
+"open": []
+},
+{
+"controller": "Cat_payment_terms",
+"functions": 5,
+"lines": 1,
+"status": {
+"BUILT": 1
+},
+"open": []
+},
+{
+"controller": "Cat_paypal_question",
+"functions": 5,
+"lines": 1,
+"status": {
+"BUILT": 1
+},
+"open": []
+},
+{
+"controller": "Cat_pc",
+"functions": 5,
+"lines": 1,
+"status": {
+"BUILT": 1
+},
+"open": []
+},
+{
+"controller": "Cat_photo_ids",
+"functions": 5,
+"lines": 2,
+"status": {
+"BUILT": 2
+},
+"open": []
+},
+{
+"controller": "Cat_ports",
+"functions": 5,
+"lines": 4,
+"status": {
+"BUILT": 2,
+"PARTIAL": 1,
+"FORM_ONLY": 1
+},
+"open": [
+{
+"reg": "MR-0314",
+"status": "PARTIAL",
+"text": "T_src_shipment (6 functions) comes back as: Shipments. Fix: fk_id_supplier holds supplier (form) or forwarder (historical); overd…. Improved: Separate forwarder FK; status machine; Standard",
+"note": "shipments with lines; forwarder as a party partly"
+},
+{
+"reg": "MR-1130",
+"status": "FORM_ONLY",
+"text": "[Partial] Sourcing catalogs draw their options from LOV groups",
+"note": "R-F_SETUP-45: forms only"
+}
+]
+},
+{
+"controller": "Cat_product_condition",
+"functions": 0,
+"lines": 3,
+"status": {
+"BUILT": 3
+},
+"open": []
+},
+{
+"controller": "Cat_product_trends",
+"functions": 0,
+"lines": 2,
+"status": {
+"BUILT": 1,
+"FORM_ONLY": 1
+},
+"open": [
+{
+"reg": "MR-0935",
+"status": "FORM_ONLY",
+"text": "[Partial] Product type and trend need an ISO code.",
+"note": "R-D-70: forms only"
+}
+]
+},
+{
+"controller": "Cat_product_type",
+"functions": 0,
+"lines": 2,
+"status": {
+"BUILT": 1,
+"FORM_ONLY": 1
+},
+"open": [
+{
+"reg": "MR-0935",
+"status": "FORM_ONLY",
+"text": "[Partial] Product type and trend need an ISO code.",
+"note": "R-D-70: forms only"
+}
+]
+},
+{
+"controller": "Cat_references",
+"functions": 10,
+"lines": 3,
+"status": {
+"BUILT": 1,
+"PARTIAL": 2
+},
+"open": [
+{
+"reg": "MR-1404",
+"status": "PARTIAL",
+"text": "Architecture decision (final) A9: Masters: t_account = party (people and companies, with roles); t_product_vendors = product; new t_product_listings = listing per shop; cat_inventory_locations = locations; cat_references",
+"note": "party and product masters as in the old tool"
+},
+{
+"reg": "MR-1419",
+"status": "PARTIAL",
+"text": "One master for Lists: cat_references / reference_items (big cat_* masters stay as masters, but get \"+ Add new\") (old ones: cat_src_lov migrated)",
+"note": "lists with + Add"
+}
+]
+},
+{
+"controller": "Cat_social_media",
+"functions": 10,
+"lines": 1,
+"status": {
+"BUILT": 1
+},
+"open": []
+},
+{
+"controller": "Cat_src_lov",
+"functions": 5,
+"lines": 8,
+"status": {
+"BUILT": 6,
+"PARTIAL": 2
+},
+"open": [
+{
+"reg": "MR-1406",
+"status": "PARTIAL",
+"text": "One master for People / parties: t_account + t_account_in_types (roles) + t_party_profile (old ones: Merged with sys_merge_map; old tables become read-only views, then retired (Phase 9))",
+"note": "one people list, duplicates merged with a map"
+},
+{
+"reg": "MR-1419",
+"status": "PARTIAL",
+"text": "One master for Lists: cat_references / reference_items (big cat_* masters stay as masters, but get \"+ Add new\") (old ones: cat_src_lov migrated)",
+"note": "lists with + Add"
+}
+]
+},
+{
+"controller": "Cat_src_products",
+"functions": 5,
+"lines": 3,
+"status": {
+"FORM_ONLY": 1,
+"BUILT": 2
+},
+"open": [
+{
+"reg": "MR-0287",
+"status": "FORM_ONLY",
+"text": "Cat_src_products (6 functions) comes back as: Sourcing product catalogue. Fix: Separate from t_product_vendors; never linked (fk_id_product unset). Improved: Retire; use product master",
+"note": "form"
+}
+]
+},
+{
+"controller": "Cat_subscription_items",
+"functions": 10,
+"lines": 3,
+"status": {
+"BUILT": 2,
+"NOT_APPLICABLE": 1
+},
+"open": []
+},
+{
+"controller": "Cat_tags",
+"functions": 5,
+"lines": 2,
+"status": {
+"BUILT": 2
+},
+"open": []
+},
+{
+"controller": "Cat_warehouses",
+"functions": 5,
+"lines": 3,
+"status": {
+"BUILT": 3
+},
+"open": []
+},
+{
+"controller": "Dashboard1",
+"functions": 4,
+"lines": 7,
+"status": {
+"NOT_APPLICABLE": 1,
+"BUILT": 6
+},
+"open": []
+},
+{
+"controller": "Dashboard2",
+"functions": 0,
+"lines": 1,
+"status": {
+"NOT_APPLICABLE": 1
+},
+"open": []
+},
+{
+"controller": "Dashboard3",
+"functions": 0,
+"lines": 1,
+"status": {
+"NOT_APPLICABLE": 1
+},
+"open": []
+},
+{
+"controller": "Drp_inventory-001",
+"functions": 11,
+"lines": 1,
+"status": {
+"NOT_APPLICABLE": 1
+},
+"open": []
+},
+{
+"controller": "Drp_inventory",
+"functions": 12,
+"lines": 11,
+"status": {
+"NOT_APPLICABLE": 1,
+"BUILT": 9,
+"PARTIAL": 1
+},
+"open": [
+{
+"reg": "MR-0987",
+"status": "PARTIAL",
+"text": "[Partial] Dropship CSV upload – mapping checks",
+"note": "R-D-75: 22 fields in 5 groups, guess score as written, money never from address-type headers, buyer name never from store / seller / product columns, each column once, saved mapping per company + plat"
+}
+]
+},
+{
+"controller": "Ebay",
+"functions": 1,
+"lines": 34,
+"status": {
+"PARTIAL": 6,
+"BUILT": 27,
+"NOT_APPLICABLE": 1
+},
+"open": [
+{
+"reg": "MR-0074",
+"status": "PARTIAL",
+"text": "Marketplace APIs (Amazon → eBay → OnBuy → Etsy → TikTok → Shopify → Wise) through the Import Center",
+"note": "API adapters for eBay, Amazon, TikTok, OnBuy, Temu written to the published contracts – none run with real keys; Etsy / Shopify / Wise not built"
+},
+{
+"reg": "MR-0123",
+"status": "PARTIAL",
+"text": "Sales & Marketplaces (21 / 218): sales list + columns, edit / refund / carrier per sale, sale log, bulk delete, reminders (VA), reports (monthly / detailed / annual + downloads), eBay / Amazon / TikTok imports + custom e",
+"note": "sales list + columns, edit / refund / carrier per sale, sale log, delete with Undo, bulk delete with preview, reminders, cases, annual + detailed reports, month confirm, account health view, daily ord"
+},
+{
+"reg": "MR-0350",
+"status": "PARTIAL",
+"text": "Integration contract IC-0h: Test every module on two profiles (eBay + TikTok)",
+"note": "money files tested on TikTok, Amazon, eBay data; not every module on two profiles"
+},
+{
+"reg": "MR-1258",
+"status": "PARTIAL",
+"text": "One main importer with a breakdown: which folder, which marketplace, where it goes, what to match with, which module, which function (dropshipping, payment, everywhere). Example: an eBay file has 30 columns; 8–10 are nee",
+"note": "formats found from the file itself; one importer with a breakdown per folder / module not built"
+},
+{
+"reg": "MR-1413",
+"status": "PARTIAL",
+"text": "One master for Sales: t_sales (+ t_sale_charges) (old ones: Moved with a compare report; old ones become views)",
+"note": "one sales list; charges from money files in their own tables"
+},
+{
+"reg": "MR-1414",
+"status": "PARTIAL",
+"text": "One master for Imports: imp_batches, imp_mappings, imp_report_types (old ones: Old importers become report types)",
+"note": "import batches recorded; mappings / report types not as one engine"
+}
+]
+},
+{
+"controller": "Ebay_audit",
+"functions": 0,
+"lines": 13,
+"status": {
+"BUILT": 13
+},
+"open": []
+},
+{
+"controller": "Enterprise",
+"functions": 1,
+"lines": 3,
+"status": {
+"BUILT": 3
+},
+"open": []
+},
+{
+"controller": "External_contact",
+"functions": 5,
+"lines": 10,
+"status": {
+"BUILT": 9,
+"NOT_APPLICABLE": 1
+},
+"open": []
+},
+{
+"controller": "Finance_cron",
+"functions": 4,
+"lines": 2,
+"status": {
+"BUILT": 2
+},
+"open": []
+},
+{
+"controller": "Finance_migrate",
+"functions": 4,
+"lines": 2,
+"status": {
+"NOT_APPLICABLE": 2
+},
+"open": []
+},
+{
+"controller": "Finance_partners",
+"functions": 0,
+"lines": 21,
+"status": {
+"BUILT": 19,
+"NOT_APPLICABLE": 2
+},
+"open": []
+},
+{
+"controller": "Inventory_setup",
+"functions": 4,
+"lines": 6,
+"status": {
+"FORM_ONLY": 3,
+"BUILT": 2,
+"NOT_APPLICABLE": 1
+},
+"open": [
+{
+"reg": "MR-0219",
+"status": "FORM_ONLY",
+"text": "Inventory_setup (6 functions) comes back as: Location types, locations, adjustment and price reasons + stock alerts + manual…. Fix: No rights; catalogs are global (no fk_id_ent); t_product_locations.qt…. Improved: Standa",
+"note": "setup lists as forms; bin generator + SKU homes built"
+},
+{
+"reg": "MR-0887",
+"status": "FORM_ONLY",
+"text": "[Missing] Inventory Setup page with 4 catalogs: location types, locations (type + parent), adjustment reasons, price change reasons.",
+"note": "R-D-45: setup lists as forms; own-descendant parent check not built"
+},
+{
+"reg": "MR-0978",
+"status": "FORM_ONLY",
+"text": "[Partial] Inventory Setup catalogs",
+"note": "R-D-45: setup lists as forms; own-descendant parent check not built"
+}
+]
+},
+{
+"controller": "Login",
+"functions": 1,
+"lines": 21,
+"status": {
+"BUILT": 16,
+"PARTIAL": 3,
+"FORM_ONLY": 1,
+"NOT_APPLICABLE": 1
+},
+"open": [
+{
+"reg": "MR-0062",
+"status": "PARTIAL",
+"text": "Supplier link (no login): PO confirm, production photo, ship date; artwork / carton marks download",
+"note": "R-B_SOURCING-64: supplier link without login for a PO: right src.share_link, purposes PO_CONFIRM / PRODUCTION_PHOTO / SHIP_DATE / ARTWORK_DOWNLOAD, long random value shown once and only its SHA-256 ke"
+},
+{
+"reg": "MR-0089",
+"status": "PARTIAL",
+"text": "Every page usable at 390 px; short links open the record after WhatsApp-code login",
+"note": "screens checked on a phone width; short links with WhatsApp-code login not built"
+},
+{
+"reg": "MR-0981",
+"status": "FORM_ONLY",
+"text": "[Partial] Local vendor (inventory vendor) card with portal login and security questions",
+"note": "R-D-71: form only"
+},
+{
+"reg": "MR-1406",
+"status": "PARTIAL",
+"text": "One master for People / parties: t_account + t_account_in_types (roles) + t_party_profile (old ones: Merged with sys_merge_map; old tables become read-only views, then retired (Phase 9))",
+"note": "one people list, duplicates merged with a map"
+}
+]
+},
+{
+"controller": "Menu_builder",
+"functions": 3,
+"lines": 4,
+"status": {
+"BUILT": 2,
+"NOT_APPLICABLE": 2
+},
+"open": []
+},
+{
+"controller": "Modal",
+"functions": 1,
+"lines": 7,
+"status": {
+"NOT_APPLICABLE": 2,
+"BUILT": 5
+},
+"open": []
+},
+{
+"controller": "My",
+"functions": 1,
+"lines": 12,
+"status": {
+"BUILT": 12
+},
+"open": []
+},
+{
+"controller": "T",
+"functions": 0,
+"lines": 9,
+"status": {
+"BUILT": 7,
+"NOT_APPLICABLE": 2
+},
+"open": []
+},
+{
+"controller": "T_account",
+"functions": 102,
+"lines": 42,
+"status": {
+"BUILT": 33,
+"FORM_ONLY": 2,
+"PARTIAL": 3,
+"NOT_APPLICABLE": 4
+},
+"open": [
+{
+"reg": "MR-0302",
+"status": "FORM_ONLY",
+"text": "T_src_investor (6 functions) comes back as: Investor master. Fix: Third partner identity (vs t_account, fin_partner_users); code from C…. Improved: One Partner entity shared with Finance",
+"note": "form"
+},
+{
+"reg": "MR-0377",
+"status": "FORM_ONLY",
+"text": "Masters + quick views (product, supplier, shop, company, cycle, old entry, direct, t_account only person master, location, document)",
+"note": "R-F_SETUP-50: form only"
+},
+{
+"reg": "MR-1404",
+"status": "PARTIAL",
+"text": "Architecture decision (final) A9: Masters: t_account = party (people and companies, with roles); t_product_vendors = product; new t_product_listings = listing per shop; cat_inventory_locations = locations; cat_references",
+"note": "party and product masters as in the old tool"
+},
+{
+"reg": "MR-1406",
+"status": "PARTIAL",
+"text": "One master for People / parties: t_account + t_account_in_types (roles) + t_party_profile (old ones: Merged with sys_merge_map; old tables become read-only views, then retired (Phase 9))",
+"note": "one people list, duplicates merged with a map"
+},
+{
+"reg": "MR-1407",
+"status": "PARTIAL",
+"text": "One master for Suppliers: t_account role SUPPLIER + t_party_profile (old ones: Same)",
+"note": "supplier master (own form), not yet folded into the party list"
+}
+]
+},
+{
+"controller": "T_account_address",
+"functions": 0,
+"lines": 1,
+"status": {
+"BUILT": 1
+},
+"open": []
+},
+{
+"controller": "T_account_addresses_entity",
+"functions": 0,
+"lines": 1,
+"status": {
+"BUILT": 1
+},
+"open": []
+},
+{
+"controller": "T_account_doc",
+"functions": 0,
+"lines": 2,
+"status": {
+"BUILT": 2
+},
+"open": []
+},
+{
+"controller": "T_account_email",
+"functions": 0,
+"lines": 1,
+"status": {
+"BUILT": 1
+},
+"open": []
+},
+{
+"controller": "T_account_in_type",
+"functions": 0,
+"lines": 2,
+"status": {
+"BUILT": 2
+},
+"open": []
+},
+{
+"controller": "T_account_mobile",
+"functions": 0,
+"lines": 4,
+"status": {
+"BUILT": 4
+},
+"open": []
+},
+{
+"controller": "T_amazon_orders",
+"functions": 0,
+"lines": 4,
+"status": {
+"FORM_ONLY": 1,
+"BUILT": 2,
+"PARTIAL": 1
+},
+"open": [
+{
+"reg": "MR-0232",
+"status": "FORM_ONLY",
+"text": "T_amazon_orders (2 functions) comes back as: Amazon Business order CSV → raw table. Fix: Push to sales commented out; raw only; positional columns. Improved: Amazon orders through Import Center mapping",
+"note": "import not built"
+},
+{
+"reg": "MR-1413",
+"status": "PARTIAL",
+"text": "One master for Sales: t_sales (+ t_sale_charges) (old ones: Moved with a compare report; old ones become views)",
+"note": "one sales list; charges from money files in their own tables"
+}
+]
+},
+{
+"controller": "T_audit_main",
+"functions": 0,
+"lines": 4,
+"status": {
+"BUILT": 4
+},
+"open": []
+},
+{
+"controller": "T_branch",
+"functions": 0,
+"lines": 4,
+"status": {
+"BUILT": 3,
+"NOT_APPLICABLE": 1
+},
+"open": []
+},
+{
+"controller": "T_branch_param",
+"functions": 0,
+"lines": 1,
+"status": {
+"BUILT": 1
+},
+"open": []
+},
+{
+"controller": "T_branch_reminders",
+"functions": 0,
+"lines": 3,
+"status": {
+"BUILT": 3
+},
+"open": []
+},
+{
+"controller": "T_buy",
+"functions": 0,
+"lines": 3,
+"status": {
+"FORM_ONLY": 1,
+"PARTIAL": 1,
+"BUILT": 1
+},
+"open": [
+{
+"reg": "MR-0235",
+"status": "FORM_ONLY",
+"text": "T_buy (3 functions) comes back as: Gen 1 vendor BUY CSV import (+ AliExpress). Fix: BUG: same non-blocking rights check; hard delete. Improved: Purchase-report import into Import Center (reconciliation)",
+"note": "Gen-1 import not built (old rows imported as history)"
+},
+{
+"reg": "MR-0662",
+"status": "PARTIAL",
+"text": "[Missing] Supplier purchase (BUY) file import for a shop-month",
+"note": "R-A_SALES-56: supplier orders (BUY) file per month: file name shop_BUY_<supplier code> checked (\"Valid Vendor Code should be at proper place\"), generic positional layout and AliExpress layout (kept pe"
+}
+]
+},
+{
+"controller": "T_carrier_packages",
+"functions": 0,
+"lines": 3,
+"status": {
+"BUILT": 3
+},
+"open": []
+},
+{
+"controller": "T_carrier_pkg_svc",
+"functions": 0,
+"lines": 3,
+"status": {
+"BUILT": 3
+},
+"open": []
+},
+{
+"controller": "T_carrier_services",
+"functions": 0,
+"lines": 3,
+"status": {
+"BUILT": 3
+},
+"open": []
+},
+{
+"controller": "T_carriers",
+"functions": 0,
+"lines": 4,
+"status": {
+"BUILT": 3,
+"NOT_APPLICABLE": 1
+},
+"open": []
+},
+{
+"controller": "T_ent_param",
+"functions": 0,
+"lines": 2,
+"status": {
+"BUILT": 2
+},
+"open": []
+},
+{
+"controller": "T_enterprise",
+"functions": 0,
+"lines": 8,
+"status": {
+"BUILT": 2,
+"NOT_APPLICABLE": 6
+},
+"open": []
+},
+{
+"controller": "T_inv_portal",
+"functions": 0,
+"lines": 5,
+"status": {
+"BUILT": 5
+},
+"open": []
+},
+{
+"controller": "T_inv_settings",
+"functions": 0,
+"lines": 4,
+"status": {
+"BUILT": 4
+},
+"open": []
+},
+{
+"controller": "T_invoices",
+"functions": 0,
+"lines": 14,
+"status": {
+"BUILT": 13,
+"FORM_ONLY": 1
+},
+"open": [
+{
+"reg": "MR-0339",
+"status": "FORM_ONLY",
+"text": "T_invoices (33 functions) comes back as: Old invoicing: calc, settle, generate, payments, credit notes. Fix: inv_is_admin() matches substring ADMN; parallel to Finance (double fi…. Improved: Freeze read-only; invoices ge",
+"note": "old invoicing not built"
+}
+]
+},
+{
+"controller": "T_mobile_device",
+"functions": 0,
+"lines": 2,
+"status": {
+"BUILT": 2
+},
+"open": []
+},
+{
+"controller": "T_packings",
+"functions": 0,
+"lines": 3,
+"status": {
+"BUILT": 3
+},
+"open": []
+},
+{
+"controller": "T_product_vendor",
+"functions": 27,
+"lines": 51,
+"status": {
+"PARTIAL": 5,
+"BUILT": 41,
+"FORM_ONLY": 3,
+"NOT_APPLICABLE": 2
+},
+"open": [
+{
+"reg": "MR-0220",
+"status": "PARTIAL",
+"text": "T_product_vendor (42 functions) comes back as: Product master, variations, purchases, stock, price periods, marketplace fields. Fix: BUG: edit rights check commented out (L489); .php image upload accept…. Improved: One P",
+"note": "stock, purchases (quick buy), price periods built; product master tabs, variations, duplicate not built"
+},
+{
+"reg": "MR-0882",
+"status": "PARTIAL",
+"text": "[Partial] Product \"Logistics / Supplier\" tab: record purchases (batches) and optionally add them to stock.",
+"note": "R-D-42: purchase booked with lot and payment (Quick buy); the product Logistics tab form not built"
+},
+{
+"reg": "MR-0897",
+"status": "PARTIAL",
+"text": "[Partial] Log History popup (field changes) and the price-period history table.",
+"note": "R-D-16: history tab per record (field old -> new); labels instead of ids partly"
+},
+{
+"reg": "MR-0940",
+"status": "FORM_ONLY",
+"text": "[Partial] Supplier-tab and cost fields on the product.",
+"note": "R-D-11: supplier / cost fields on the form; landing price inherit rule partly (lot cost)"
+},
+{
+"reg": "MR-0942",
+"status": "FORM_ONLY",
+"text": "[Partial] Marketplace Fields tab: fields loaded per marketplace; on Edit each marketplace tab saves on its own.",
+"note": "R-D-15: form only"
+},
+{
+"reg": "MR-0962",
+"status": "FORM_ONLY",
+"text": "[Partial] Marketplace-specific fields tab",
+"note": "R-D-15: form only"
+},
+{
+"reg": "MR-0963",
+"status": "PARTIAL",
+"text": "[Partial] Purchases / invoices booked on the product",
+"note": "R-D-42: purchase booked with lot and payment (Quick buy); the product Logistics tab form not built"
+},
+{
+"reg": "MR-0989",
+"status": "PARTIAL",
+"text": "[Partial] Product form structure and safety confirms",
+"note": "R-D-14: product record with Stock and Prices buttons; the 11 tabs / deep links not built"
+}
+]
+},
+{
+"controller": "T_product_vendor_v001",
+"functions": 25,
+"lines": 2,
+"status": {
+"NOT_APPLICABLE": 1,
+"BUILT": 1
+},
+"open": []
+},
+{
+"controller": "T_products_branch",
+"functions": 0,
+"lines": 3,
+"status": {
+"FORM_ONLY": 1,
+"BUILT": 2
+},
+"open": [
+{
+"reg": "MR-0222",
+"status": "FORM_ONLY",
+"text": "T_products_branch (4 functions) comes back as: CRUD legacy per-shop product (sku_ebay, ASIN). Fix: Legacy, only CRUD remains; no rights. Improved: Retire; its ASIN/item-id idea becomes the Listing entity",
+"note": "legacy form"
+}
+]
+},
+{
+"controller": "T_products_main",
+"functions": 0,
+"lines": 2,
+"status": {
+"FORM_ONLY": 1,
+"PARTIAL": 1
+},
+"open": [
+{
+"reg": "MR-0223",
+"status": "FORM_ONLY",
+"text": "T_products_main (4 functions) comes back as: CRUD legacy abstract product. Fix: Legacy; fk_id_product_main never set by forms; no rights. Improved: Retire; single master t_product_vendors",
+"note": "legacy form"
+},
+{
+"reg": "MR-1408",
+"status": "PARTIAL",
+"text": "One master for Products: t_product_vendors (+ sourcing columns) (old ones: t_src_products merged; legacy and backups exported, then dropped)",
+"note": "one product master used by stock and buying"
+}
+]
+},
+{
+"controller": "T_products_shop_not_listed",
+"functions": 2,
+"lines": 10,
+"status": {
+"BUILT": 8,
+"FORM_ONLY": 1,
+"NOT_APPLICABLE": 1
+},
+"open": [
+{
+"reg": "MR-0976",
+"status": "FORM_ONLY",
+"text": "[Partial] Responsible user on a product (Role → User cascade)",
+"note": "R-D-12: form only"
+}
+]
+},
+{
+"controller": "T_products_shop_not_listed_summary",
+"functions": 2,
+"lines": 4,
+"status": {
+"BUILT": 3,
+"NOT_APPLICABLE": 1
+},
+"open": []
+},
+{
+"controller": "T_sale",
+"functions": 0,
+"lines": 6,
+"status": {
+"BUILT": 5,
+"PARTIAL": 1
+},
+"open": [
+{
+"reg": "MR-1413",
+"status": "PARTIAL",
+"text": "One master for Sales: t_sales (+ t_sale_charges) (old ones: Moved with a compare report; old ones become views)",
+"note": "one sales list; charges from money files in their own tables"
+}
+]
+},
+{
+"controller": "T_sale_buy_main",
+"functions": 0,
+"lines": 5,
+"status": {
+"BUILT": 4,
+"PARTIAL": 1
+},
+"open": [
+{
+"reg": "MR-0712",
+"status": "PARTIAL",
+"text": "[Partial] ETSY audit month (Gen 1)",
+"note": "R-A_SALES-58: month header: shop + month + year + supplier, Fee (Sale), Expenses, Expenses detail; default month by menu flag (current / previous / two months back); flags Sale loaded and Summary gene"
+}
+]
+},
+{
+"controller": "T_sale_order",
+"functions": 6,
+"lines": 19,
+"status": {
+"PARTIAL": 1,
+"BUILT": 17,
+"NOT_APPLICABLE": 1
+},
+"open": [
+{
+"reg": "MR-0243",
+"status": "PARTIAL",
+"text": "T_sale_order (23 functions) comes back as: Gen 2 listing, manual add/edit, refund, bulk delete, reports. Fix: BUG: no auth on bulkDeleteSale, refundSale, updateSale; SQL injection…. Improved: Freeze as read-only history;",
+"note": "sales listing, edit, refund, delete line / month with Undo, annual + detailed reports built; manual order entry is the New order form; bulk delete with preview / approval not built"
+}
+]
+},
+{
+"controller": "T_sale_order_reminders",
+"functions": 0,
+"lines": 4,
+"status": {
+"BUILT": 4
+},
+"open": []
+},
+{
+"controller": "T_sales-001",
+"functions": 17,
+"lines": 1,
+"status": {
+"NOT_APPLICABLE": 1
+},
+"open": []
+},
+{
+"controller": "T_sales",
+"functions": 20,
+"lines": 30,
+"status": {
+"PARTIAL": 2,
+"BUILT": 26,
+"NOT_APPLICABLE": 2
+},
+"open": [
+{
+"reg": "MR-0068",
+"status": "PARTIAL",
+"text": "Six sales tables → one (t_sales + charges) with compare report",
+"note": "six old sales tables -> one list as history lines; charges table / compare per rule partly"
+},
+{
+"reg": "MR-1413",
+"status": "PARTIAL",
+"text": "One master for Sales: t_sales (+ t_sale_charges) (old ones: Moved with a compare report; old ones become views)",
+"note": "one sales list; charges from money files in their own tables"
+}
+]
+},
+{
+"controller": "T_shop_feedback",
+"functions": 9,
+"lines": 5,
+"status": {
+"BUILT": 5
+},
+"open": []
+},
+{
+"controller": "T_src_allocation",
+"functions": 5,
+"lines": 2,
+"status": {
+"PARTIAL": 1,
+"BUILT": 1
+},
+"open": [
+{
+"reg": "MR-0288",
+"status": "PARTIAL",
+"text": "T_src_allocation (6 functions) comes back as: Destination allocation per PO/product. Fix: Record-only, moves no qty; same CRUD defects. Improved: Allocation drives stock plan; Standard",
+"note": "R-F_SETUP-47: allocations: incoming per location = planned - received of shipped POs by shipment ETA (PO total only when no allocation), after a GRN one proposed transfer per allocation to another loc"
+}
+]
+},
+{
+"controller": "T_src_carton",
+"functions": 5,
+"lines": 3,
+"status": {
+"FORM_ONLY": 1,
+"BUILT": 2
+},
+"open": [
+{
+"reg": "MR-0289",
+"status": "FORM_ONLY",
+"text": "T_src_carton (6 functions) comes back as: Packing/carton calc. Fix: No rights/ent; hard delete. Improved: Standard; reuse for product dims",
+"note": "carton calculation not built"
+}
+]
+},
+{
+"controller": "T_src_customs",
+"functions": 5,
+"lines": 2,
+"status": {
+"BUILT": 1,
+"PARTIAL": 1
+},
+"open": [
+{
+"reg": "MR-0807",
+"status": "PARTIAL",
+"text": "[Partial] Live money formulas on step forms",
+"note": "R-B_SOURCING-33: live formulas of the step forms, recomputed on the server on every save that touches their inputs (a posted value is replaced): GRN shortage = expected − received, damage % = damaged "
+}
+]
+},
+{
+"controller": "T_src_cycle",
+"functions": 25,
+"lines": 25,
+"status": {
+"PARTIAL": 1,
+"NOT_APPLICABLE": 1,
+"BUILT": 23
+},
+"open": [
+{
+"reg": "MR-0291",
+"status": "PARTIAL",
+"text": "T_src_cycle (28 functions) comes back as: Sourcing cycle workspace (21 tabs), cycle products, PO docs, shipment↔PO links,…. Fix: No rights, no fk_id_ent on reads; code SC-ddmmyy-NNN from COUNT; dele…. Improved: Cycle = a",
+"note": "cycle workspace with steps; 21 tabs, PO docs, shipment links partly"
+}
+]
+},
+{
+"controller": "T_src_cycle_01",
+"functions": 22,
+"lines": 1,
+"status": {
+"NOT_APPLICABLE": 1
+},
+"open": []
+},
+{
+"controller": "T_src_dashboard",
+"functions": 2,
+"lines": 20,
+"status": {
+"BUILT": 20
+},
+"open": []
+},
+{
+"controller": "T_src_direct",
+"functions": 0,
+"lines": 4,
+"status": {
+"BUILT": 4
+},
+"open": []
+},
+{
+"controller": "T_src_document",
+"functions": 5,
+"lines": 1,
+"status": {
+"BUILT": 1
+},
+"open": []
+},
+{
+"controller": "T_src_forwarder",
+"functions": 5,
+"lines": 1,
+"status": {
+"FORM_ONLY": 1
+},
+"open": [
+{
+"reg": "MR-0295",
+"status": "FORM_ONLY",
+"text": "T_src_forwarder (6 functions) comes back as: Forwarder list. Fix: BUG: table does not exist. Improved: Forwarder = Supplier entity with type",
+"note": "form"
+}
+]
+},
+{
+"controller": "T_src_freight",
+"functions": 5,
+"lines": 3,
+"status": {
+"BUILT": 2,
+"PARTIAL": 1
+},
+"open": [
+{
+"reg": "MR-0807",
+"status": "PARTIAL",
+"text": "[Partial] Live money formulas on step forms",
+"note": "R-B_SOURCING-33: live formulas of the step forms, recomputed on the server on every save that touches their inputs (a posted value is replaced): GRN shortage = expected − received, damage % = damaged "
+}
+]
+},
+{
+"controller": "T_src_grn",
+"functions": 5,
+"lines": 2,
+"status": {
+"BUILT": 2
+},
+"open": []
+},
+{
+"controller": "T_src_historical",
+"functions": 0,
+"lines": 23,
+"status": {
+"BUILT": 23
+},
+"open": []
+},
+{
+"controller": "T_src_historical_01",
+"functions": 0,
+"lines": 1,
+"status": {
+"NOT_APPLICABLE": 1
+},
+"open": []
+},
+{
+"controller": "T_src_inventory",
+"functions": 5,
+"lines": 3,
+"status": {
+"BUILT": 2,
+"PARTIAL": 1
+},
+"open": [
+{
+"reg": "MR-0807",
+"status": "PARTIAL",
+"text": "[Partial] Live money formulas on step forms",
+"note": "R-B_SOURCING-33: live formulas of the step forms, recomputed on the server on every save that touches their inputs (a posted value is replaced): GRN shortage = expected − received, damage % = damaged "
+}
+]
+},
+{
+"controller": "T_src_investment",
+"functions": 5,
+"lines": 1,
+"status": {
+"FORM_ONLY": 1
+},
+"open": [
+{
+"reg": "MR-0301",
+"status": "FORM_ONLY",
+"text": "T_src_investment (6 functions) comes back as: Capital in per cycle/PO. Fix: Prefix INV- clash; migrated once by Finance_legacy, later rows lost. Improved: Investment = ledger entry in Finance",
+"note": "form"
+}
+]
+},
+{
+"controller": "T_src_investor",
+"functions": 5,
+"lines": 1,
+"status": {
+"FORM_ONLY": 1
+},
+"open": [
+{
+"reg": "MR-0302",
+"status": "FORM_ONLY",
+"text": "T_src_investor (6 functions) comes back as: Investor master. Fix: Third partner identity (vs t_account, fin_partner_users); code from C…. Improved: One Partner entity shared with Finance",
+"note": "form"
+}
+]
+},
+{
+"controller": "T_src_landed_cost",
+"functions": 6,
+"lines": 4,
+"status": {
+"BUILT": 3,
+"PARTIAL": 1
+},
+"open": [
+{
+"reg": "MR-0807",
+"status": "PARTIAL",
+"text": "[Partial] Live money formulas on step forms",
+"note": "R-B_SOURCING-33: live formulas of the step forms, recomputed on the server on every save that touches their inputs (a posted value is replaced): GRN shortage = expected − received, damage % = damaged "
+}
+]
+},
+{
+"controller": "T_src_ownership",
+"functions": 5,
+"lines": 2,
+"status": {
+"BUILT": 2
+},
+"open": []
+},
+{
+"controller": "T_src_payment",
+"functions": 5,
+"lines": 3,
+"status": {
+"PARTIAL": 2,
+"BUILT": 1
+},
+"open": [
+{
+"reg": "MR-0305",
+"status": "PARTIAL",
+"text": "T_src_payment (6 functions) comes back as: Supplier payments. Fix: No approval; hard delete re-syncs but no history; no ent filter. Improved: Payment with approval, event PaymentPosted, ledger link",
+"note": "supplier payments with approval over a limit; reversal partly"
+},
+{
+"reg": "MR-0807",
+"status": "PARTIAL",
+"text": "[Partial] Live money formulas on step forms",
+"note": "R-B_SOURCING-33: live formulas of the step forms, recomputed on the server on every save that touches their inputs (a posted value is replaced): GRN shortage = expected − received, damage % = damaged "
+}
+]
+},
+{
+"controller": "T_src_payment_term",
+"functions": 5,
+"lines": 1,
+"status": {
+"BUILT": 1
+},
+"open": []
+},
+{
+"controller": "T_src_platform_alloc",
+"functions": 5,
+"lines": 2,
+"status": {
+"BUILT": 2
+},
+"open": []
+},
+{
+"controller": "T_src_po",
+"functions": 5,
+"lines": 7,
+"status": {
+"BUILT": 6,
+"PARTIAL": 1
+},
+"open": [
+{
+"reg": "MR-0807",
+"status": "PARTIAL",
+"text": "[Partial] Live money formulas on step forms",
+"note": "R-B_SOURCING-33: live formulas of the step forms, recomputed on the server on every save that touches their inputs (a posted value is replaced): GRN shortage = expected − received, damage % = damaged "
+}
+]
+},
+{
+"controller": "T_src_po_line",
+"functions": 5,
+"lines": 3,
+"status": {
+"BUILT": 2,
+"PARTIAL": 1
+},
+"open": [
+{
+"reg": "MR-0807",
+"status": "PARTIAL",
+"text": "[Partial] Live money formulas on step forms",
+"note": "R-B_SOURCING-33: live formulas of the step forms, recomputed on the server on every save that touches their inputs (a posted value is replaced): GRN shortage = expected − received, damage % = damaged "
+}
+]
+},
+{
+"controller": "T_src_production",
+"functions": 5,
+"lines": 2,
+"status": {
+"BUILT": 2
+},
+"open": []
+},
+{
+"controller": "T_src_qc",
+"functions": 5,
+"lines": 2,
+"status": {
+"BUILT": 2
+},
+"open": []
+},
+{
+"controller": "T_src_reports",
+"functions": 0,
+"lines": 16,
+"status": {
+"BUILT": 15,
+"NOT_APPLICABLE": 1
+},
+"open": []
+},
+{
+"controller": "T_src_rfq",
+"functions": 5,
+"lines": 1,
+"status": {
+"BUILT": 1
+},
+"open": []
+},
+{
+"controller": "T_src_sample",
+"functions": 5,
+"lines": 1,
+"status": {
+"BUILT": 1
+},
+"open": []
+},
+{
+"controller": "T_src_shipment",
+"functions": 5,
+"lines": 3,
+"status": {
+"PARTIAL": 1,
+"BUILT": 2
+},
+"open": [
+{
+"reg": "MR-0314",
+"status": "PARTIAL",
+"text": "T_src_shipment (6 functions) comes back as: Shipments. Fix: fk_id_supplier holds supplier (form) or forwarder (historical); overd…. Improved: Separate forwarder FK; status machine; Standard",
+"note": "shipments with lines; forwarder as a party partly"
+}
+]
+},
+{
+"controller": "T_src_supplier",
+"functions": 5,
+"lines": 1,
+"status": {
+"PARTIAL": 1
+},
+"open": [
+{
+"reg": "MR-0315",
+"status": "PARTIAL",
+"text": "T_src_supplier (6 functions) comes back as: Supplier list. Fix: BUG: table does not exist, page breaks; suppliers are really t_accoun…. Improved: Supplier entity (one notion)",
+"note": "supplier list works"
+}
+]
+},
+{
+"controller": "T_src_transfer",
+"functions": 5,
+"lines": 3,
+"status": {
+"FORM_ONLY": 1,
+"BUILT": 2
+},
+"open": [
+{
+"reg": "MR-0316",
+"status": "FORM_ONLY",
+"text": "T_src_transfer (6 functions) comes back as: Warehouse transfers. Fix: Record-only; no stock balance per warehouse. Improved: Transfer = two ledger movements",
+"note": "form; stock transfer built in Stock"
+}
+]
+},
+{
+"controller": "T_tasks",
+"functions": 0,
+"lines": 32,
+"status": {
+"BUILT": 29,
+"NOT_APPLICABLE": 2,
+"PARTIAL": 1
+},
+"open": [
+{
+"reg": "MR-1240",
+"status": "PARTIAL",
+"text": "[Partial] Team & Settings: workload vs limit, SLA per category, absence cover, delegated approval and recurring tasks.",
+"note": "R-G_CORE-23: categories = SLA table (task_category form, Partner only): name required, unique (\"Refused: a category with that name already exists.\"), ≤ 100; default owner = an active login or empty = "
+}
+]
+},
+{
+"controller": "T_taxation",
+"functions": 0,
+"lines": 3,
+"status": {
+"BUILT": 2,
+"FORM_ONLY": 1
+},
+"open": [
+{
+"reg": "MR-0211",
+"status": "FORM_ONLY",
+"text": "T_taxation (22 functions) comes back as: Corporation-tax worksheet per company. Fix: No rights check; tax_rates global (no fk_id_ent); entries manual only. Improved: Rights; ent-scoped rates; feed from Finance",
+"note": "worksheet calculation not built"
+}
+]
+},
+{
+"controller": "T_tiktok_sale",
+"functions": 12,
+"lines": 6,
+"status": {
+"BUILT": 5,
+"PARTIAL": 1
+},
+"open": [
+{
+"reg": "MR-1413",
+"status": "PARTIAL",
+"text": "One master for Sales: t_sales (+ t_sale_charges) (old ones: Moved with a compare report; old ones become views)",
+"note": "one sales list; charges from money files in their own tables"
+}
+]
+},
+{
+"controller": "T_user",
+"functions": 0,
+"lines": 5,
+"status": {
+"BUILT": 2,
+"NOT_APPLICABLE": 3
+},
+"open": []
+},
+{
+"controller": "T_vendor",
+"functions": 0,
+"lines": 2,
+"status": {
+"BUILT": 1,
+"NOT_APPLICABLE": 1
+},
+"open": []
+},
+{
+"controller": "T_vendors_local",
+"functions": 5,
+"lines": 2,
+"status": {
+"FORM_ONLY": 2
+},
+"open": [
+{
+"reg": "MR-0227",
+"status": "FORM_ONLY",
+"text": "T_vendors_local (6 functions) comes back as: AJAX CRUD supplier card cat_vendors. Fix: vendor_password, vendor_bank_details plain and sent in DataTables JSO…. Improved: Merge into Supplier entity; credentials in vault",
+"note": "form; secrets go to the vault"
+},
+{
+"reg": "MR-0981",
+"status": "FORM_ONLY",
+"text": "[Partial] Local vendor (inventory vendor) card with portal login and security questions",
+"note": "R-D-71: form only"
+}
+]
+},
+{
+"controller": "Tm_cron",
+"functions": 4,
+"lines": 2,
+"status": {
+"BUILT": 2
+},
+"open": []
+},
+{
+"controller": "Tm_whatsapp",
+"functions": 1,
+"lines": 2,
+"status": {
+"BUILT": 2
+},
+"open": []
+}
+]
+}

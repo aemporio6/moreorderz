@@ -36,7 +36,7 @@ class AccessCards
         'selling' => ['Products & selling', '/^(orders\.|products\.|print\.|report:(sales_\w+|price_log)$)/', 'orders.SEE', ['Products & Selling']],
         'money' => ['Money', '/^(money\.|finance\.|close\.|tax\.|report:(cash|vat|ledger|expenses|close)$)/', 'money.SEE', ['Money']],
         'partners' => ['Partners & investors', '/^(partners\.|report:partners$)/', 'partners.SEE', ['Partners']],
-        'work' => ['Tasks & team', '/^(work\.|people\.|report:(tasks_week|team_engagements|users)$)/', 'work.TASK_DASH', ['Tasks', 'Team & Documents']],
+        'work' => ['Team tasks & people (own tasks are always open)', '/^(work\.|people\.|report:(tasks_week|team_engagements|users)$)/', 'work.TASK_DASH', ['Tasks', 'Team & Documents']],
         'setup' => ['Setup', '/^(admin\.|setup\.|connect\.|company\.|import\.|app\.|report:menu$)/', 'admin.audit', ['Setup']],
     ];
     private const VIEW = '/(\.SEE$|^report:|^work\.TASK_DASH$|^work\.tasks_may$|^admin\.audit$)/';
@@ -64,7 +64,7 @@ class AccessCards
     {
         if (($u->role_code ?? '') === 'OWNER' && empty($u->custom_role)) return [];
         $out = [];
-        foreach (self::AREAS as $k => [$label, , $main]) if (Perm::known($main) && ! Perm::has($u, $main))
+        foreach (self::AREAS as $k => [$label, , $main]) if ($k !== 'work' && Perm::known($main) && ! Perm::has($u, $main))
             $out[] = ['area' => $k, 'label' => $label, 'right' => $main, 'asked' => DB::table('mo_access_requests')->where(['user_id' => $u->id, 'perm_code' => $main, 'status' => 'OPEN'])->exists()];
         return $out;
     }

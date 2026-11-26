@@ -39,6 +39,7 @@ class MoNightly extends Command
             \App\Services\MoneyService::staleTasks((int) $ent);
             \App\Services\CloseService::openTasks((int) $ent);
             \App\Services\SkuHomes::tasks((int) $ent);
+            \App\Services\ProductCerts::sweep((int) $ent);      // MR-0139 certificate expiry tasks
             \App\Services\ThreePlTariff::missingTasks((int) $ent);
             \App\Services\NotListed::closeDone((int) $ent);      // LST_CREATE closes when the listing exists (R-D-58)      // PRD_FEE_MISSING (R-D-23)
             $icc = \App\Services\Features::on('ICC', (int) $ent) ? \App\Services\Icc::recalcAll((int) $ent) : ['run' => 0]; if ($icc['run']) $this->line("ICC: {$icc['run']} product(s) – order now {$icc['RED']}, this week {$icc['YELLOW']}, covered {$icc['GREEN']}");      /* 07_ICC §6 (MR-0031) */

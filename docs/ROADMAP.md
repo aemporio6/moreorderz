@@ -4,7 +4,7 @@ The single list of everything: what is done, what is being built, what comes nex
 It lives in the code (docs/ROADMAP.md) and opens in the tool under Home › Plan & progress. Every batch updates it before it is deployed.
 Nothing the owner asked for may be dropped from this list. A line only leaves "Next" or "Discussed" by moving to "Done", with its date.
 
-Updated: 27 Nov 2026, 01:55 (Pakistan time)
+Updated: 27 Nov 2026, 02:45 (Pakistan time)
 
 ## The owner's standing rules (every screen, every batch is checked against these)
 1. **Everything is connected.** Stock ↔ inventory ↔ partners ↔ buying ↔ sourcing ↔ selling ↔ money. Nothing is a screen on its own: every figure comes from the one ledger and setup behind it, and every action writes there. If something is not connected, it is not finished.
@@ -45,12 +45,30 @@ Updated: 27 Nov 2026, 01:55 (Pakistan time)
 2. **Task management** – ✅ checked 27-11: every old task came in (2 tasks, 11 categories, 3 templates, 20 shop reminders, 629 order reminders; 2,319 tasks made by rules). The screens were complete but hidden under Team & Work, so **Tasks** is now its own menu group: My tasks, Board, Weekly, Templates, Absence calendar. Still to do: MY TOOL's tasks come over once the MY TOOL link key is pasted.
 3. **Documents: "File a document" from anywhere** – ✅ 27-11: a "File a document" button on every record, PO, cycle and product page (and in each record's Documents). Drop a file, screenshot or link: it is read, its kind is guessed and that record is offered first with the reason; one press puts it there. Filed documents now also show in the PO and cycle document lists (before, they showed only on the record).
 4. **Access card by area** – ✅ 27-11: every person's card (Setup › Roles and rights › Access cards) has 7 areas – Buying, Inventory & warehouse, Products & selling, Money, Partners, Tasks & team, Setup – each Edit / View only / Hidden, with "changed from the role" shown. A person who cannot open an area sees it on Home with **Ask the Owner** (one press; the Owner gets the request and answers it under Requests). Owner-only rights never move.
-5. Guide me: steps for more screens.
+5. **Guide me: steps for more screens** – ✅ 27-11 (first round): Inventory / FBA check (unlinked FBA SKUs, lines differing from Amazon), Shop quantity check (shows more / less, no quantities yet → load listings), Import anything and Home (files waiting), Each partner / Investor links (director shares not 100 %), Roles and rights (access requests waiting). Every line has its Fix button. More screens follow as they are built.
 6. Register lines still PARTIAL (98) or FORM ONLY (39).
 7. Reports: "every figure can be clicked down to its record, file and row" (MR-1285).
 8. Label designer for our own labels: product, carton, FNSKU, pallet (MR-0134).
 9. ICC: WhatsApp digest (MR-0060); an ICC step inside Create of a product (MR-1324).
 10. Decision engine: tests for REBALANCE_FBA and CAPITAL_CALL with real-shaped data.
+
+## Old tool – still open (owner 27-11 01:30: "look inside my old MoreOrderz, put what is left in the checklist, finish it")
+The whole list is on one screen: **Home › Old tool check** – every old screen (138 controllers of the old code) with its register lines, and every old table with how much of its data came over. 79 lines in 48 old screens are still open (the rest are built or not needed). They are built in this order:
+1. Corporation-tax worksheet per company (old T_taxation, 22 functions) – MR-0211.
+2. Carton / packing calculation (old T_src_carton) – MR-0289.
+3. Product page as in the old tool: Supplier / Logistics tab with purchases, Marketplace fields tab per marketplace, change history with names – MR-0220, 0882, 0897, 0940, 0942, 0962, 0963, 0989.
+4. Supplier BUY file import per shop-month and Amazon Business order file (old T_buy, T_amazon_orders) – MR-0235, 0662, 0232 (check what Supplier order history already covers).
+5. Carrier presets inside a group: pin, default, order, history – MR-0930, 0982.
+6. Masters still as forms only: investor, investment, forwarder, local vendor card, product type / trend ISO code, country pin order, company list with directors – MR-0301, 0302, 0295, 0227, 0981, 0935, 1125, 1122.
+7. Inventory setup: a location cannot be its own parent's child – MR-0887, 0978, 0219.
+8. Live money formulas on every sourcing step form – MR-0807; shipments with forwarder as a party – MR-0314; supplier payment reversal – MR-0305.
+9. One-master work (people, suppliers, lists, sales, imports) – MR-1404, 1406, 1407, 1413, 1414, 1419; module / parameter framework – MR-1129.
+10. Tasks: workload vs limit, SLA per category, absence cover, delegated approval, recurring – MR-1240.
+11. Data: every old table counted against what came over (shows on Old tool check after the count on the server). Owner 27-11 01:34: every setup list of the old tool – brands, banks, companies, countries, currencies, ports and all the others – must come over completely; whatever is missing is brought to its place here.
+12. Owner 27-11 01:34: **Create** – every new thing of every module (inventory and the rest) appears in Create by itself; check that nothing is missing.
+13. Owner 27-11 01:34: **Universal search** – everything in the tool can be found: one word or three, with or without # or -, any spelling of a number or code, every record, screen, document and setting; nothing is missed.
+14. Owner 27-11 01:34: everything connected – nothing is made on its own, apart from the rest.
+✅ 27-11: product certificates now get a task 60 days before they end (MR-0139, was form only).
 
 ## Waiting for the owner
 - Labels: which eBay shop the 25 Nov orders belong to.
@@ -69,6 +87,8 @@ Updated: 27 Nov 2026, 01:55 (Pakistan time)
 - Security: no secrets, no real data in the public repo; nothing is typed into password boxes for the owner.
 
 ## Done (newest first)
+- 27-11: Old tool check (Home): old screens and old data against the new tool; certificate expiry tasks.
+- 27-11: Guide me on the new screens. Access card: "Team tasks & people" never blocks a person's own tasks.
 - 27-11: Access card by area (Edit / View only / Hidden) + "Ask the Owner" on Home.
 - 27-11: Shop quantity check (inventory step d finished).
 - 27-11: Tasks got its own menu group. "File a document" on every record page; filed documents show in the PO / cycle document lists too.

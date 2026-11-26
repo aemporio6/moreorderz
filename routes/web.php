@@ -669,6 +669,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('tracking-due/{shop}/export', [OrdersController::class, 'trackingDueExport'])->whereNumber('shop');
         Route::post('tracking-layouts', [OrdersController::class, 'saveTrackingLayout']);
         Route::get('import-history', [AdminController::class, 'importHistory']);
+        Route::get('old-tool-check', [AdminController::class, 'oldToolCheck']);      // owner 27-11 01:30
         Route::get('legacy-compare', [AdminController::class, 'legacyCompare']);
         Route::get('merges', [AdminController::class, 'merges']);
         Route::post('merges', [AdminController::class, 'mergeDo']);

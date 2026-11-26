@@ -501,7 +501,8 @@
       if (r === '#/partner-view') return await pagePartnerView();
       if (r === '#/roadmap') return await pageRoadmap();      // owner 26-11 23:23
       if (r.startsWith('#/fba-check')) return await pageFbaCheck();      // inventory (d)
-      if (r.startsWith('#/shop-stock-check')) return await pageShopCheck();      // inventory (d) each shop's quantity
+      if (r.startsWith('#/shop-stock-check')) return await pageShopCheck();
+      if (r.startsWith('#/old-tool-check')) return await pageOldCheck();      // owner 27-11 01:30      // inventory (d) each shop's quantity
       if (r.startsWith('#/inventory/')) return await pageInventoryStory(+r.split('/')[2].split('?')[0]);      // owner 26-11 23:14
       if (r === '#/inventory' || r.startsWith('#/inventory?')) { const u = new URLSearchParams(r.split('?')[1] || ''); if (u.get('owner')) { INV.investor = u.get('owner'); INV.page = 1; } return await pageInventory(); }
       if (r.startsWith('#/decisions')) return await pageDecisions(new URLSearchParams(r.split('?')[1] || '').get('code') || '');      // MR-1443 … 1450
@@ -2166,6 +2167,19 @@
 
 
   /* Inventory (d): Amazon's last FBA report against the stock ledger, SKU by SKU – book the difference (found / lost) or move it in from a warehouse */
+  async function pageOldCheck() {
+    busy(true); let d; try { d = await api('old-tool-check'); } finally { busy(false); }
+    const n = v => (+v || 0).toLocaleString('en-GB'), st = { NOT_YET: ['Not here yet', 'err'], PART: ['Part came', 'warn'], CAME: ['Came over', 'ok'], RETIRED: ['Old copy – not needed', ''], NOT_NEEDED: ['Tool settings – the new tool has its own', ''] };
+    const vs = { PARTIAL: 'warn', FORM_ONLY: 'warn', MISSING: 'err' };
+    $('#main').innerHTML = `<div class="page-head"><div><div class="crumb"><a href="#/roadmap">Plan & progress</a> ›</div><h1>Old tool check</h1><div class="sub">Everything of the old MoreOrderz, side by side with the new tool: each old screen (controller) with what is still open, and each old table with how much of its data came over. Nothing is lost: each open line is in the plan and is built one by one.</div></div></div>
+      <div class="kpis inv-kpis"><div class="card kpi"><div class="bar"></div><div class="lbl">Old screens checked</div><div class="val">${n(d.controllers)}</div></div><div class="card kpi ${d.screens_open ? 'warn' : ''}"><div class="bar"></div><div class="lbl">Screen lines still open</div><div class="val">${n(d.screens_open)}</div></div>
+        <div class="card kpi ${d.data_open ? 'warn' : ''}"><div class="bar"></div><div class="lbl">Old tables still to bring</div><div class="val">${d.counted_at ? n(d.data_open) : '–'}</div><div class="foot">${d.counted_at ? 'counted ' + esc(d.counted_at.slice(0, 16)) : 'not counted yet'}</div></div></div>
+      <div class="card"><div class="card-h"><h3>Data – each old table with rows</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Old table</th><th class="num">Old rows</th><th class="num">Came over</th><th>State</th><th>Note</th></tr></thead><tbody>
+        ${d.tables.length ? d.tables.map(t => `<tr><td>${esc(t.table)}</td><td class="num">${n(t.old)}</td><td class="num">${n(t.got)}</td><td><span class="chip ${st[t.state][1]} plain">${st[t.state][0]}</span></td><td class="small">${esc(t.note || '')}${t.dry_only ? ' <span class="muted">(only a trial run so far)</span>' : ''}</td></tr>`).join('') : '<tr><td colspan="5" class="muted">The old database is not counted yet (the developer runs the count on the server).</td></tr>'}</tbody></table></div></div>
+      <div class="card"><div class="card-h"><h3>Screens – each old controller</h3><span class="small muted">open lines first</span></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Old screen</th><th class="num">Functions</th><th class="num">Register lines</th><th>Built</th><th>Still open</th></tr></thead><tbody>
+        ${d.screens.map(c => `<tr><td>${esc(c.controller)}</td><td class="num">${n(c.functions)}</td><td class="num">${n(c.lines)}</td><td class="small">${n(c.status.BUILT || 0)} built${c.status.NOT_APPLICABLE ? ' · ' + c.status.NOT_APPLICABLE + ' not needed' : ''}</td>
+          <td class="small">${c.open.length ? c.open.map(o => `<div><span class="chip ${vs[o.status] || ''} plain">${esc(o.status.replace('_', ' ').toLowerCase())}</span> <b>${esc(o.reg)}</b> ${esc(o.text)}${o.note ? ` <span class="muted">– ${esc(o.note)}</span>` : ''}</div>`).join('') : '<span class="muted">nothing open</span>'}</td></tr>`).join('')}</tbody></table></div></div>`;
+  }
   async function pageShopCheck() {
     const q = new URLSearchParams((location.hash.split('?')[1]) || ''); busy(true); let d; try { d = await api('inventory/shop-check?' + q); } finally { busy(false); }
     const n = v => (+v || 0).toLocaleString('en-GB'), t = d.totals, set = (k, v) => { v ? q.set(k, v) : q.delete(k); go('#/shop-stock-check' + (q.toString() ? '?' + q : '')); };
@@ -6165,25 +6179,49 @@
 
   // ---------- + Create: everything that can be created, grouped by department; new modules appear by themselves ----------
   let lastCreateQ = '';
+  // Owner 27-11 01:36: Create is the one place to make anything. Its list comes from the root (every registry form + every "make something" screen of the menu, by itself);
+  // inside it: search with suggestions, used lately first, ← Back / ↶ Undo / ↷ Redo of what you typed and chose, ⟳ Refresh, and from a form you can switch to another one without leaving.
+  const CRH = { hist: [], pos: -1 }; let crRecent = []; try { crRecent = JSON.parse(localStorage.getItem('mo_cr_recent') || '[]') || []; } catch (e) {}
+  function crList() { const seen = new Set(); return (S.boot.create || []).filter(c => { const k = c.dept + '|' + c.title.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }); }
+  function crUse(c) { crRecent = [c.key, ...crRecent.filter(k => k !== c.key)].slice(0, 8); try { localStorage.setItem('mo_cr_recent', JSON.stringify(crRecent)); } catch (e) {} }
+  async function crOpen(c, preset = {}) { crUse(c); if (c.screen) return go(c.screen); openForm(c.key, null, { fromCreate: true, preset }); }
   function openCreate(q = '') {
-    const seen = new Set(), list = S.boot.create.filter(c => { const k = c.dept + '|' + c.title.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }), depts = [...new Set(list.map(c => c.dept))];      /* two forms with the same name in one area: shown once (the first – the quick one) */
+    let list = crList(); const depts = () => [...new Set(list.map(c => c.dept))];
     const { ov, close } = modal('Create', `Everything you can create, from anywhere – ${list.length} entries. Each one opens its form and is saved in its own module.`,
       `<div class="cr-chain" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px"><span class="small muted">1. What</span><span class="faint">→</span>
         <label class="small muted">2. For company <select class="input sm" id="crCo">${(S.boot.companies || []).map(c => `<option value="${c.id}" ${+c.id === +S.boot.ent ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label><span class="faint">→</span>
         <label class="small muted">3. Brand <select class="input sm" id="crBr"><option value="">(none / choose in the form)</option></select></label></div>
-      <input class="q crq" placeholder="Type what you want to create… (e.g. research, printer, sample, expense, carrier)" autofocus><div class="cr-grid" id="crGrid"></div>`,
-      `<span class="left">Tip: press <span class="kbd">N</span> on any screen.</span>`);
-    const draw = () => { const t = $('.crq', ov).value.trim().toLowerCase();
-      $('#crGrid', ov).innerHTML = depts.map(d => { const its = list.filter(c => c.dept === d && (!t || c.title.toLowerCase().includes(t) || c.key.includes(t))); if (!its.length) return '';
-        return `<div class="cr-dept"><h4>${esc(d)} <span class="faint" style="font-weight:400">${its.length}</span></h4>${its.map(c => `<div class="cr-item" data-k="${esc(c.key)}">${ic('plus')}${esc(c.title)}${c.quick ? '<span class="q">quick</span>' : ''}</div>`).join('')}</div>`; }).join('') || `<div class="empty">Nothing matches “${esc(t)}”.</div>`; };
-    $('.crq', ov).value = q; draw(); $('.crq', ov).oninput = draw; setTimeout(() => $('.crq', ov).focus(), 30);
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px"><button type="button" class="btn sm" data-cr="back" title="Back to what you looked at before">← Back</button><button type="button" class="btn sm" data-cr="undo" title="Undo">↶</button><button type="button" class="btn sm" data-cr="redo" title="Redo">↷</button>
+        <input class="q crq" style="flex:1" placeholder="Type what you want to create… (e.g. research, printer, sample, expense, carrier, PO, stock move)" autofocus data-ap-skip><button type="button" class="btn sm" data-cr="clear" title="Empty the search">✕</button><button type="button" class="btn sm" data-cr="refresh" title="Load the list again">⟳ Refresh</button></div>
+      <div id="crSug" class="small" style="margin-bottom:8px"></div><div class="cr-grid" id="crGrid"></div>`,
+      `<span class="left">Tip: press <span class="kbd">N</span> on any screen · <span class="kbd">Enter</span> opens the first match.</span>`);
+    const inp = $('.crq', ov), words = t => t.split(/\s+/).filter(Boolean);
+    const match = (c, t) => { const h = (c.title + ' ' + c.key + ' ' + c.dept + ' ' + (c.screen || '')).toLowerCase().replace(/[#_\-]/g, ' '); return words(t.replace(/[#_\-]/g, ' ')).every(w => h.includes(w)); };
+    const item = c => `<div class="cr-item" data-k="${esc(c.key)}">${ic(c.screen ? 'ext' : 'plus')}${esc(c.title)}${c.quick ? '<span class="q">quick</span>' : ''}${c.screen ? '<span class="q">screen</span>' : ''}</div>`;
+    const draw = () => { const t = inp.value.trim().toLowerCase(), hit = list.filter(c => !t || match(c, t));
+      const rec = crRecent.map(k => list.find(c => c.key === k)).filter(Boolean).filter(c => !t || match(c, t));
+      $('#crSug', ov).innerHTML = rec.length ? `<span class="muted">Used lately:</span> ${rec.map(c => `<a href="#" data-crk="${esc(c.key)}" style="margin-right:10px">${esc(c.title)}</a>`).join('')}` : '';
+      $('#crGrid', ov).innerHTML = depts().map(d => { const its = hit.filter(c => c.dept === d); return its.length ? `<div class="cr-dept"><h4>${esc(d)} <span class="faint" style="font-weight:400">${its.length}</span></h4>${its.map(item).join('')}</div>` : ''; }).join('')
+        || `<div class="empty">Nothing matches “${esc(t)}”. Try one word – or <a href="#" id="crFind">search the whole tool for it</a>.</div>`;
+      const f = $('#crFind', ov); if (f) f.onclick = e => { e.preventDefault(); close(); openPalette(inp.value); }; };
+    const push = v => { if (CRH.hist[CRH.pos] === v) return; CRH.hist = CRH.hist.slice(0, CRH.pos + 1); CRH.hist.push(v); CRH.pos = CRH.hist.length - 1; };
+    const setQ = v => { inp.value = v; draw(); };
+    let tm; inp.value = q; push(q); draw(); inp.oninput = () => { draw(); clearTimeout(tm); tm = setTimeout(() => push(inp.value), 500); }; setTimeout(() => inp.focus(), 30);
+    inp.onkeydown = e => { if (e.key === 'Enter') { const first = $('.cr-item', ov); if (first) first.click(); } };
+    $$('[data-cr]', ov).forEach(b => b.onclick = async () => { const a = b.dataset.cr;
+      if (a === 'back' || a === 'undo') { if (CRH.pos > 0) { CRH.pos--; setQ(CRH.hist[CRH.pos]); } else if (a === 'back') close(); }
+      else if (a === 'redo') { if (CRH.pos < CRH.hist.length - 1) { CRH.pos++; setQ(CRH.hist[CRH.pos]); } }
+      else if (a === 'clear') { push(''); setQ(''); inp.focus(); }
+      else if (a === 'refresh') { try { S.boot = await api('boot'); list = crList(); draw(); toast('Create list loaded again – ' + list.length + ' entries'); } catch (e) { toast(e.message, 'err'); } } });
     /* MR-1259 the Create chain: what → company → brand. The company switches the working company (as the selector at the top); the brand fills every brand field of the form that reads the brand list */
     api('options/t_src_cycles/brand').then(o => { const sel = $('#crBr', ov); if (sel) sel.innerHTML += (o.options || []).map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join(''); }).catch(() => {});
-    $('#crGrid', ov).onclick = async e => { const it = e.target.closest('.cr-item'); if (!it) return; lastCreateQ = $('.crq', ov).value;
+    const pick = async key => { const c = list.find(x => x.key === key); if (!c) return; lastCreateQ = inp.value; push(inp.value);
       const co = +($('#crCo', ov) || {}).value || 0, br = ($('#crBr', ov) || {}).value || ''; close();
-      if (co && co !== +S.boot.ent) { try { await api('company', { method: 'POST', body: { ent: co } }); S.boot = await api('boot'); drawTop(); drawSide(); toast('Now working in ' + ((S.boot.companies || []).find(c => +c.id === co) || {}).name); } catch (x) { return toast(x.message, 'err'); } }
-      const preset = {}; if (br) { try { const d = await api('form/' + it.dataset.k); (d.fields || (d.sections || []).flatMap(x => x.fields) || []).filter(f => String(f.source || '') === 'table:cat_brands').forEach(f => { preset[f.name] = br; if (f.col) preset[f.col] = br; }); } catch (x) {} }
-      openForm(it.dataset.k, null, { fromCreate: true, preset }); };
+      if (co && co !== +S.boot.ent) { try { await api('company', { method: 'POST', body: { ent: co } }); S.boot = await api('boot'); drawTop(); drawSide(); toast('Now working in ' + ((S.boot.companies || []).find(x => +x.id === co) || {}).name); } catch (e) { toast(e.message, 'err'); } }
+      const preset = {}; if (br && !c.screen) { try { const d = await api('form/' + c.key); (d.fields || (d.sections || []).flatMap(x => x.fields) || []).filter(f => String(f.source || '') === 'table:cat_brands').forEach(f => { preset[f.name] = br; if (f.col) preset[f.col] = br; }); } catch (e) {} }
+      crOpen(c, preset); };
+    $('#crGrid', ov).onclick = e => { const it = e.target.closest('.cr-item'); if (it) pick(it.dataset.k); };
+    $('#crSug', ov).onclick = e => { const a = e.target.closest('[data-crk]'); if (a) { e.preventDefault(); pick(a.dataset.crk); } };
   }
   MO.openCreate = openCreate;
 
@@ -6347,7 +6385,7 @@
     if (key === 't_account' && !id) { $('.fhost', ov).insertAdjacentHTML('afterbegin', '<div class="seg" style="margin-bottom:8px"><button type="button" class="on">Managed Account</button><button type="button" id="fToE">External Contact</button></div>');      // R-C-3 swap forms, typed values carried
       $('#fToE', ov).onclick = () => { const c = Object.assign({}, opt.carry || {}, { title: val.title, first_name: val.first_name, middle_name: val.middle_name, sur_name: val.sur_name }); close(); ecNew(opt.onSaved, c); }; }
     const bar = document.createElement('div'); bar.className = 'mo-assist';
-    bar.innerHTML = (opt.fromCreate ? `<button type="button" class="btn sm" data-a="back" title="Back to the Create list (keeps your search)">← Back</button>` : '') +
+    bar.innerHTML = (opt.fromCreate ? `<button type="button" class="btn sm" data-a="back" title="Back to the Create list (keeps your search)">← Back</button><select class="input sm" data-a-switch title="Switch to another form without going back" data-ap-skip style="max-width:190px"><option value="">Switch to…</option>${crList().map(c => `<option value="${esc(c.key)}" ${c.key === key ? 'disabled' : ''}>${esc(c.dept + ' › ' + c.title)}</option>`).join('')}</select>` : '') +
       `<button type="button" class="btn sm" data-a="undo" title="Undo the last change">↶ Undo</button><button type="button" class="btn sm" data-a="redo" title="Redo">↷ Redo</button>` +
       (id ? '' : `<button type="button" class="btn sm" data-a="last" title="Fill the form with the values of the last saved one">⟲ Fill from last</button>`) + `<button type="button" class="btn sm ghost" data-a="clear" title="Empty all fields (can be undone)">Clear</button><button type="button" class="btn sm ghost" data-a="help" title="Show the help line of every field">? Help</button>`;
     $('.modal-h', ov).insertBefore(bar, $('.x', ov));
@@ -6539,6 +6577,7 @@
       const cl = t.closest('[data-ddclr]'); if (cl) { e.preventDefault(); e.stopPropagation(); const n = cl.closest('[data-dd]').dataset.dd, f = flds.find(q => q.name === n); change(n, ''); redrawField(f); afterPick(f); return; }
       const b = t.closest('[data-add]'); if (b) addNew(flds.find(q => q.name === b.dataset.add), ''); });
     $('.fhost', ov).addEventListener('click', e => { const g = e.target.closest('[data-goto]'); if (g) { e.preventDefault(); gotoField(g.dataset.goto); } const s = e.target.closest('[data-go]'); if (s) { const sec = $(`[data-sec="${s.dataset.go}"]`, ov); sec && sec.scrollIntoView({ block: 'start', behavior: 'smooth' }); } });
+    const sw = bar.querySelector('[data-a-switch]'); if (sw) sw.onchange = () => { const c = crList().find(x => x.key === sw.value); if (!c) return; close(); crOpen(c); };
     bar.onclick = e => { const a = (e.target.closest('[data-a]') || {}).dataset; if (!a) return;
       if (a.a === 'back') { close(); return openCreate(lastCreateQ); }
       if (a.a === 'help') { helpMode = !helpMode; $$('[data-help]', ov).forEach(h => { h.style.display = helpMode ? 'block' : 'none'; }); return; }

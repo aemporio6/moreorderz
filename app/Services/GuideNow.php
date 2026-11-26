@@ -74,6 +74,31 @@ class GuideNow
             try { $n = (int) DB::table('fin_bank_transactions')->where('company_id', $ent)->where('match_status', 'UNMATCHED')->count();
                 if ($n) $add('warn', "$n bank line(s) not matched to a sale, bill or payment.", 'Match each line (the tool suggests the match) so the books agree with the bank.', 'Match them', '#/money'); } catch (\Throwable $e) {}
         }
+        // the screens built 26/27-11 (Next #5): what is open on each, with its fix
+        try {
+            if (preg_match('~^#/(inventory|fba-check|home)?$~', $base) || str_starts_with($base, '#/inventory') || $base === '#/fba-check') {
+                if (DB::table('cat_inventory_locations')->where('fk_id_ent', $ent)->where('kind', 'FBA')->exists()) {      // read only – the FBA places are made by the FBA check itself
+                    $f = ReadCache::remember('guide:fba:' . $ent . ':' . $u->id, 300, fn () => FbaLedger::recon($ent, null, Perm::shops($u)));
+                    if ($f['totals']['unknown']) $add('err', $f['totals']['unknown'] . ' FBA SKU(s) / ASIN(s) are not linked to a product – their units are not counted.', 'Link each one once: type its SKU or name in FBA check and click the product.', 'FBA check', '#/fba-check');
+                    if ($f['to_check']) $add('warn', $f['to_check'] . ' FBA line(s) differ from Amazon\'s last report.', 'Tick them in FBA check and press Book – as found / lost stock, or as units sent from a warehouse.', 'FBA check', '#/fba-check');
+                }
+            }
+            if (in_array($base, ['#/inventory', '#/shop-stock-check', '#/listings-import'], true) && Perm::has($u, 'stock.SEE')) {
+                $t = ReadCache::remember('guide:shopq:' . $ent . ':' . $u->id, 300, fn () => ShopStockCheck::rows($ent, $u)['totals']);
+                if ($t['OVERSELL']) $add('err', $t['OVERSELL'] . ' listing(s) show more than we can send – orders above it cannot be sent.', 'Download that shop\'s quantity file and upload it on the marketplace.', 'Shop quantity check', '#/shop-stock-check?state=OVERSELL');
+                if ($t['SHORT']) $add('warn', $t['SHORT'] . ' listing(s) show less than we have – sales are lost.', 'Upload the shop\'s quantity file.', 'Shop quantity check', '#/shop-stock-check?state=SHORT');
+                if ($t['NOT_REPORTED'] && ! $t['OVERSELL'] && ! $t['SHORT'] && ! $t['MATCH']) $add('todo', 'No shop has sent its quantities yet (' . $t['NOT_REPORTED'] . ' listings).', 'Load each shop\'s active listings file once (with its Available quantity column); then the check shows what is wrong.', 'Load listings', '#/listings-import');
+            }
+            if (in_array($base, ['#/import', '#/home', '#/'], true) && ($n = (int) DB::table('mo_intake')->where('fk_id_ent', $ent)->where('status', 'NEW')->count()))
+                $add('todo', "$n file(s) in Import anything wait to be placed.", 'Each shows where it belongs; press Do it.', 'Import anything', '#/import');
+            if (str_starts_with($base, '#/partner-view') || $base === '#/investor-map') {
+                $bad = DB::table('t_party_directors')->whereIn('fk_id_party', DB::table('t_product_investors')->whereNotNull('fk_id_party')->select('fk_id_party'))->whereNotNull('share_pct')
+                    ->groupBy('fk_id_party')->havingRaw('ABS(SUM(share_pct) - 100) > 0.01')->pluck('fk_id_party')->count();
+                if ($bad) $add('warn', "$bad partner compan" . ($bad > 1 ? 'ies' : 'y') . "'s director shares do not add up to 100 %.", 'Open the company and correct its directors\' %; each partner\'s share is split by them.', 'Investor links', '#/investor-map');
+            }
+            if ($base === '#/permissions' && Perm::has($u, 'admin.permissions') && ($n = (int) DB::table('mo_access_requests')->where('status', 'OPEN')->count()))
+                $add('todo', "$n access request(s) wait for your answer.", 'Each person asked from Home; grant (with an end date if you like) or refuse.', 'Requests', '#/permissions');
+        } catch (\Throwable $e) {}
         // my tasks: late first
         try {
             $t = TaskLists::tiles($u);

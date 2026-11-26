@@ -351,6 +351,9 @@ class AdminController extends Controller
         return \App\Services\SalesLegacy::compare((int) \App\Services\Context::ent(), $f);
     }
 
+    /** Owner 27-11 01:30: what of the old tool is still left – screens (register) and data (import + live count). */
+    public function oldToolCheck(Request $r) { \App\Services\Perm::need($r->user(), 'admin.importHistory'); return \App\Services\OldToolCheck::page(); }
+
     public function importHistory(Request $r)
     {
         \App\Services\Perm::need($r->user(), 'admin.importHistory');
