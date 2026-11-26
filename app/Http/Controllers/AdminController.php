@@ -41,9 +41,25 @@ class AdminController extends Controller
     public function users(Request $r)
     {
         \App\Services\Perm::need($r->user(), 'admin.users');
-        return ['users' => DB::table('t_users as u')->leftJoin('t_enterprise as e', 'e.id', '=', 'u.fk_id_ent')->orderBy('u.id')
-            ->get(['u.id', 'u.login_id', 'u.display_name', DB::raw('COALESCE(u.custom_role, u.role_code) as role_code'), 'u.fk_id_ent', 'e.ent_name as company', 'u.f_active', 'u.last_login_at', DB::raw('u.totp_secret IS NOT NULL as two_step'), DB::raw('u.password_hash IS NOT NULL as has_password')]),
+        $users = DB::table('t_users as u')->leftJoin('t_enterprise as e', 'e.id', '=', 'u.fk_id_ent')->leftJoin('t_account as a', 'a.id', '=', 'u.fk_id_account')->orderBy('u.id')
+            ->get(['u.id', 'u.login_id', 'u.display_name', DB::raw('COALESCE(u.custom_role, u.role_code) as role_code'), 'u.fk_id_ent', 'e.ent_name as company', 'u.f_active', 'u.last_login_at', DB::raw('u.totp_secret IS NOT NULL as two_step'), DB::raw('u.password_hash IS NOT NULL as has_password'),
+                'u.fk_id_account', DB::raw("NULLIF(TRIM(CONCAT_WS(' – ', NULLIF(a.account_code, ''), NULLIF(TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)), ''))), '') as person")]);
+        /* R-C-45 scope column: the marketplaces of the shops where the person is owner or seller (any shop status) or has an assignment that is open today */
+        $acc = $users->pluck('fk_id_account')->filter()->unique()->all() ?: [0]; $scope = [];
+        $add = function ($rows) use (&$scope) { foreach ($rows as $x) if ($x->mp !== null && $x->mp !== '') $scope[(int) $x->acc][$x->mp] = true; };
+        foreach (['fk_id_owner', 'fk_id_seller'] as $c) $add(DB::table('t_branches as b')->join('cat_marketplaces as m', 'm.id', '=', 'b.fk_id_marketplace')->whereIn("b.$c", $acc)->orderBy('b.id')->get(["b.$c as acc", 'm.marketplace_short as mp']));
+        $add(DB::table('t_account_branches as ab')->join('t_branches as b', 'b.id', '=', 'ab.fk_id_branch')->join('cat_marketplaces as m', 'm.id', '=', 'b.fk_id_marketplace')->whereIn('ab.fk_id_account', $acc)->where('ab.f_active', 1)
+            ->where(fn ($w) => $w->whereNull('ab.d_to')->orWhere('ab.d_to', '>=', date('Y-m-d')))->orderBy('ab.id')->get(['ab.fk_id_account as acc', 'm.marketplace_short as mp']));
+        foreach ($users as $u) $u->scope = implode(', ', array_keys($scope[(int) $u->fk_id_account] ?? []));
+        return ['users' => $users,
             'roles' => array_keys(array_filter(\App\Services\Perm::roles(), fn ($x) => $x['active'])), 'companies' => DB::table('t_enterprise')->where('f_active', 1)->get(['id', 'ent_name as name'])];
+    }
+
+    /** R-C-45 action "Reset password": a one-time link goes to the person's own e-mail (and WhatsApp) on record – the administrator never sees a password or the link. */
+    public function userReset(Request $r, int $id)
+    {
+        \App\Services\Perm::need($r->user(), 'admin.users');
+        try { return \App\Services\PasswordReset::byAdmin($id, $r->user(), $r->ip()); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
     }
 
     /** R-G_CORE-69: change the role of ticked users – preview first (apply = 0), then apply (one bulk job with Undo). */

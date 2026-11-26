@@ -125,6 +125,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('permissions/view-as', [AdminController::class, 'permViewAs']);
         Route::post('users/{id?}', [AdminController::class, 'saveUser'])->whereNumber('id');
         Route::post('users/bulk-role', [AdminController::class, 'usersBulkRole']);
+        Route::post('users/{id}/reset-password', [AdminController::class, 'userReset'])->whereNumber('id');      // R-C-45
         Route::post('users/{id}/two-step-off', [AdminController::class, 'twoStepOff'])->whereNumber('id');
         Route::post('me/password', [AdminController::class, 'password']);
         Route::get('me/two-step', [AdminController::class, 'twoStepSetup']);
@@ -228,6 +229,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('products/view', [StockController::class, 'productsView']);
         Route::get('products/export/{format}', [StockController::class, 'productsExport'])->where('format', 'csv|xlsx|pdf');
         Route::get('stock/product/{id}', [StockController::class, 'product'])->whereNumber('id');
+        Route::match(['get', 'post'], 'stock/old-location-qty', [StockController::class, 'oldLocationQty']);      // R-D-44 (GET = dry run)
+        Route::post('stock/product/{id}/location-note', [StockController::class, 'productLocationNote'])->whereNumber('id');      // R-D-44
         Route::get('stock/ledger', [StockController::class, 'ledger']);
         Route::get('stock/lots', [StockController::class, 'lots']);
         Route::post('stock/lots/{id}/cost', [StockController::class, 'lotCost'])->whereNumber('id');

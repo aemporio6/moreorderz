@@ -16,6 +16,22 @@ class PasswordReset
 
     public static function minutes(?int $ent): int { return max(5, (int) (Choices::get('RESET_LINK_MINUTES', $ent) ?: 30)); }
 
+    /** R-C-45 / R-C-44 "Reset password" by an administrator: the same one-time link, sent to the person's own e-mail on record. Nothing secret is returned. */
+    public static function byAdmin(int $userId, object $admin, ?string $ip, ?string &$token = null): array
+    {
+        $u = DB::table('t_users')->where('id', $userId)->first() ?? throw new \InvalidArgumentException('User not found.');
+        if (! (int) $u->f_active) throw new \InvalidArgumentException('This person cannot sign in – switch "Can sign in" on first.');
+        if ($u->role_code === 'OWNER' && ($admin->role_code ?? '') !== 'OWNER') throw new \InvalidArgumentException('Only the Owner resets the Owner\'s password.');
+        $emails = array_values(array_filter(array_merge($u->fk_id_account ? DB::table('t_account_emails')->where('fk_id_account', $u->fk_id_account)->where('f_active', 1)->pluck('email')->all() : [], filter_var($u->login_id, FILTER_VALIDATE_EMAIL) ? [$u->login_id] : [])));
+        if (! $emails) throw new \InvalidArgumentException('This person has no e-mail on record – add one to the person first.');
+        $before = (int) DB::table('sys_password_resets')->where('user_id', $u->id)->max('id');
+        self::request((string) $u->login_id, (string) $emails[0], $ip, $token);
+        if ((int) DB::table('sys_password_resets')->where('user_id', $u->id)->max('id') === $before) throw new \InvalidArgumentException('The link could not be made – try again.');
+        Audit::log('t_users', (int) $u->id, 'RESET_REQUEST', ['result' => 'link sent by an administrator', 'by' => (int) $admin->id], null, (int) ($u->fk_id_ent ?? 0));
+        $m = $emails[0]; $at = strpos($m, '@'); $shown = substr($m, 0, 1) . '•••' . ($at !== false ? substr($m, $at) : '');
+        return ['message' => 'A link to choose a new password was sent to ' . $shown . '. It works once, for ' . self::minutes((int) ($u->fk_id_ent ?? 0) ?: null) . ' minutes.'];
+    }
+
     /** Step 1. Returns the same answer in every case; $token is filled only for a match (tests / the mailer). */
     public static function request(string $login, string $email, ?string $ip, ?string &$token = null): string
     {

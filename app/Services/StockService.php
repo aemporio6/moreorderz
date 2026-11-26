@@ -376,7 +376,65 @@ class StockService
             ->where('l.fk_id_product', $productId)->where('b.qty', '<>', 0)->orderBy('l.received_date')->orderBy('l.id')->orderBy('c.location_name')
             ->get(['c.location_name as location', 'c.kind', 'l.id as lot_id', 'l.lot_code', 'l.received_date', 'l.unit_cost_gbp', 'l.visibility', 'l.landed_status', 'b.qty', 'l.po_id', 'l.fk_id_cycle', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as owner")])
             ->map(function ($r) { $r->type = ProductsList::lotType($r); return $r; });      // R-D-25 chip on the lot
-        return ['units' => self::balance($productId), 'available' => self::available($productId), 'rows' => $by];
+        return ['units' => self::balance($productId), 'available' => self::available($productId), 'rows' => $by] + self::productLocations($productId);
+    }
+
+    /**
+     * R-D-44 locations of a product: units per location from the ledger (never typed), the label "Parent › Location (Type)" with the full path,
+     * the bin / shelf note of each row, the badge "Placed N of stock M" and a warning when stock sits on an inactive location.
+     */
+    public static function productLocations(int $productId): array
+    {
+        $rows = DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->where('l.fk_id_product', $productId)->whereNotNull('b.fk_id_location')->groupBy('b.fk_id_location')->havingRaw('SUM(b.qty) <> 0')->selectRaw('b.fk_id_location as id, SUM(b.qty) as qty')->get();
+        $notes = DB::table('t_product_locations')->where('fk_id_product', $productId)->pluck('notes', 'fk_id_location'); $out = []; $placed = 0; $bad = [];
+        foreach ($rows as $r) { $lab = self::locationLabel((int) $r->id); $q = (float) $r->qty; $placed += $q; if (! $lab['active']) $bad[] = $lab['label'];
+            $out[] = ['id' => (int) $r->id, 'label' => $lab['label'], 'qty' => $q + 0, 'note' => (string) ($notes[$r->id] ?? ''), 'inactive' => ! $lab['active']]; }
+        usort($out, fn ($a, $b) => strcmp($a['label'], $b['label'])); $stock = self::balance($productId);
+        return ['locations' => $out, 'placed_text' => 'Placed ' . ($placed + 0) . ' of stock ' . ($stock + 0), 'location_warning' => $bad ? 'Stock sits on a location that is switched off: ' . implode(', ', $bad) . ' – move it or switch the location on.' : null];
+    }
+
+    /**
+     * R-D-44 the old typed quantities (t_product_locations.qty) become placements only where they reconcile: the typed total of a product equals its ledger stock
+     * and those units still sit in the unassigned place → they are moved to the typed locations (a transfer, no value change) and the typed qty is cleared.
+     * Every other product goes to the review list with the reason; nothing is guessed. $apply = false is a dry run and writes nothing.
+     */
+    public static function oldLocationQty(int $ent, bool $apply, object $u): array
+    {
+        if ($apply && ($u->role_code ?? '') !== 'OWNER') throw new \InvalidArgumentException('Only the Owner places the old quantities.');
+        $un = (int) DB::table('cat_inventory_locations')->where('fk_id_ent', $ent)->where('kind', 'UNASSIGNED')->orderBy('id')->value('id'); $ok = []; $review = [];      /* read only – a dry run creates nothing */
+        $typed = DB::table('t_product_locations as t')->join('t_product_vendors as p', 'p.id', '=', 't.fk_id_product')->where('p.fk_id_ent', $ent)->where('t.qty', '>', 0)->orderBy('t.fk_id_product')->get(['t.id', 't.fk_id_product', 't.fk_id_location', 't.qty', 'p.SKU_VENDOR'])->groupBy('fk_id_product');
+        foreach ($typed as $pid => $rows) {
+            $sum = (float) $rows->sum('qty'); $stock = (float) self::balance((int) $pid); $atUn = $un ? (float) self::balance((int) $pid, $un) : 0.0; $sku = $rows[0]->SKU_VENDOR;
+            $why = abs($sum - $stock) > 0.0001 ? 'typed ' . ($sum + 0) . ', stock ' . ($stock + 0) : (abs($atUn - $sum) > 0.0001 ? 'the units are already placed elsewhere' : ($rows->contains(fn ($r) => (int) $r->fk_id_location === $un || ! DB::table('cat_inventory_locations')->where('id', $r->fk_id_location)->where('f_active', 1)->exists()) ? 'a typed location is switched off or unknown' : null));
+            if ($why) { $review[] = ['product' => (int) $pid, 'sku' => $sku, 'reason' => $why]; continue; }
+            $ok[] = ['product' => (int) $pid, 'sku' => $sku, 'units' => $sum + 0, 'rows' => $rows->map(fn ($r) => ['id' => (int) $r->id, 'location' => (int) $r->fk_id_location, 'qty' => (float) $r->qty])->all()];
+        }
+        $out = ['applied' => false, 'ready' => count($ok), 'review' => $review, 'message' => count($ok) . ' product(s) reconcile and can be placed; ' . count($review) . ' need a look.'];
+        if (! $apply || ! $ok) return $out;
+        DB::transaction(function () use ($ok, $ent, $un) { foreach ($ok as $o) foreach ($o['rows'] as $r) { self::transfer($ent, $o['product'], (int) $r['qty'], $un, $r['location'], 'Old typed location quantity'); DB::table('t_product_locations')->where('id', $r['id'])->update(['qty' => 0, 'updated_at' => now()]); } });
+        return ['applied' => true, 'message' => count($ok) . ' product(s) placed on their old locations; ' . count($review) . ' left for review.'] + $out;
+    }
+
+    /** "Warehouse 1 › Shelf 2 (Shelf)": the full path of active parents, then the type name. */
+    public static function locationLabel(int $id): array
+    {
+        $c = DB::table('cat_inventory_locations')->where('id', $id)->first(); if (! $c) return ['label' => "Location $id", 'active' => false];
+        $path = [(string) $c->location_name]; $p = (int) ($c->fk_id_parent ?? 0); $seen = [$id => 1];
+        while ($p && ! isset($seen[$p]) && ($x = DB::table('cat_inventory_locations')->where('id', $p)->first())) { $seen[$p] = 1; if ((int) $x->f_active) array_unshift($path, (string) $x->location_name); $p = (int) ($x->fk_id_parent ?? 0); }
+        $type = $c->fk_id_location_type ? (string) DB::table('cat_location_types')->where('id', $c->fk_id_location_type)->value('type_name') : ''; if ($type === '') $type = ucfirst(strtolower(str_replace('_', ' ', (string) $c->kind)));
+        return ['label' => implode(' › ', $path) . ($type !== '' ? " ($type)" : ''), 'active' => (bool) $c->f_active];
+    }
+
+    /** The bin / shelf note of a product at a location (the units are never typed here). */
+    public static function locationNote(int $productId, int $locationId, string $note, object $u): array
+    {
+        Perm::need($u, 'stock.CHANGE'); $ent = (int) Context::ent();
+        if (! DB::table('t_product_vendors')->where('id', $productId)->where('fk_id_ent', $ent)->exists() || ! DB::table('cat_inventory_locations')->where('id', $locationId)->where('fk_id_ent', $ent)->exists()) throw new \InvalidArgumentException('Product or location not found.');
+        $note = mb_substr(trim($note), 0, 255); $old = DB::table('t_product_locations')->where('fk_id_product', $productId)->where('fk_id_location', $locationId)->first();
+        if ($old) DB::table('t_product_locations')->where('id', $old->id)->update(['notes' => $note, 'updated_at' => now()]);
+        else DB::table('t_product_locations')->insert(RecordService::fillNotNull('t_product_locations', ['fk_id_product' => $productId, 'fk_id_location' => $locationId, 'qty' => 0, 'notes' => $note, 'created_by' => $u->id, 'created_at' => now()]));
+        Audit::log('t_product_locations', (int) ($old->id ?? DB::getPdo()->lastInsertId()), $old ? 'UPDATE' : 'INSERT', ['notes' => [$old->notes ?? null, $note]], null, $ent);
+        return ['message' => 'Note saved.'];
     }
 
     /** Nightly self-check: the cached stock number equals the ledger; no balance is negative. Opens / closes STK_LEDGER_MISMATCH. */

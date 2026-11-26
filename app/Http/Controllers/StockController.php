@@ -48,7 +48,7 @@ class StockController extends Controller
     public function products(Request $r)
     {
         \App\Services\Perm::need($r->user(), 'stock.SEE');
-        $f = $r->only(['q', 'status', 'mp', 'set', 'page', 'per', 'type']); $v = \App\Services\ProductsList::view($r->user());
+        $f = $r->only(array_merge(['q', 'status', 'mp', 'set', 'page', 'per', 'type'], \App\Services\ProductsList::FILTERS)); $v = \App\Services\ProductsList::view($r->user());
         if (! $r->has('per')) $f += ['per' => $v['per'], 'set' => $v['set'], 'status' => $v['status'], 'mp' => $v['mp'] ?? null, 'q' => $v['q'] ?? '', 'type' => $v['type'] ?? ''];      // the person's default view
         return \App\Services\ProductsList::page((int) Context::ent(), $f, $r->user());
     }
@@ -230,6 +230,9 @@ class StockController extends Controller
         if (! \App\Services\Perm::has($r->user(), 'stock.MONEY')) foreach ($d['rows'] as $row) unset($row->unit_cost_gbp);
         return $d;
     }
+
+    public function oldLocationQty(Request $r) { $this->can($r, 'stock.SEE'); return $this->wh(fn () => StockService::oldLocationQty((int) Context::ent(), $r->isMethod('post'), $r->user())); }
+    public function productLocationNote(Request $r, int $id) { return $this->wh(fn () => StockService::locationNote($id, (int) $r->input('location'), (string) $r->input('note'), $r->user())); }
 
     public function ledger(Request $r)
     {

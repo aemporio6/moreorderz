@@ -722,3 +722,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-207: word list cut back to the owner's wish (only Vendor → Supplier, Enterprise / Entity → Company, Branch → Shop). Paused on the owner's message; new leaner way of working recorded in AUDIT_STATE. 861 tests.
 - 7e-208: 4 rules PARTIAL → BUILT (R-F_SETUP-46, R-G_CORE-104, R-G_CORE-74, R-D-66). 862 tests, serial 307 s, browser check clean (SAME). BUILT 1064 / PARTIAL 214 / FORM ONLY 103 / MISSING 52.
 - 7e-209: 4 rules PARTIAL → BUILT (R-D-65, R-D-94, R-G_CORE-82, R-G_CORE-108). 862 tests, serial 344 s, browser check clean (SAME).
+- 7e-210: R-D-36, R-D-44, R-C-45 PARTIAL → BUILT; error pages (R-G_CORE-121) built, command-line text open. 867 tests, suite once (312 s), browser check clean (SAME). BUILT 1073 / PARTIAL 205 / FORM ONLY 103 / MISSING 52.

@@ -326,6 +326,7 @@ class Perm
     public static function need(?object $u, string $code): void
     {
         $code = self::code($code); if (self::has($u, $code)) return;
+        ErrorPages::denied(request(), self::label($code));      /* R-G_CORE-121: a refusal is in the audit log */
         abort(response()->json(['message' => 'Your role cannot do this here: "' . self::label($code) . '". Ask the Owner if you need it.', 'perm' => $code, 'why' => self::explain($u, $code), 'can_request' => true], 403));
     }
 

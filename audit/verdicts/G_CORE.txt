@@ -114,7 +114,7 @@
 114|P|function fit|loaded media checked at print; "switch media on the Work screen" not built
 115|B|function testPage|test page + calibration per printer x media, required before live jobs
 116|B|function replace|routes most-specific-wins, backup printer, replace printer in one step
-121|P|health|plain sentence to the user, detail in the log; 403 / 404 / 500 pages with E-id not built
+121|P|class ErrorPages|one error page for 403 (names the right, audit row DENIED), 404 (search + Home, also for an unknown address inside the app) and 500 ("logged as E-id"; message, file and SQL only in sys_error_log; API calls get the same short text); open: the command-line version does not print the short text + id yet
 122|P|class OldImport|old logs copied as history tables; one time line on the record not built
 123|N||documentation index
 124|B|function boot|+ Create catalogue generated from the registry forms

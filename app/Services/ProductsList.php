@@ -110,8 +110,46 @@ class ProductsList
         if ($st === 'active') $q->where('p.f_active', 1); elseif ($st === 'inactive') $q->where('p.f_active', 0)->where('p.row_state', 'ACTIVE');
         elseif ($st === 'hidden') $q->where('p.row_state', 'HIDDEN'); elseif ($st === 'deleted') $q->where('p.row_state', 'DELETED'); else $q->where('p.row_state', '<>', 'DELETED');      // R-D-9: "Hidden products" saved view; the recycle bin
         if (in_array($ty = strtoupper((string) ($f['type'] ?? '')), self::OWNER_TYPES, true)) self::typeFilter($q, $ty, ! empty($f['mp']) ? (int) $f['mp'] : null);      // R-D-25 filter by the chip
-        if (($t = trim((string) ($f['q'] ?? ''))) !== '') { $like = '%' . addcslashes($t, '%_\\') . '%'; $q->where(fn ($w) => $w->where('p.product_name_vendor', 'like', $like)->orWhere('p.SKU_VENDOR', 'like', $like)->orWhere('p.ean', 'like', $like)->orWhere('p.id', ctype_digit(ltrim($t, 'MP-')) ? (int) ltrim($t, 'MP-') : -1)); }
+        /* R-D-36 search: name / SKU / UPC / EAN, any letter case; "MP-123" (or "mp-123") finds the product with id 123 */
+        if (($t = trim((string) ($f['q'] ?? ''))) !== '') { $like = '%' . addcslashes($t, '%_\\') . '%'; $mpId = preg_match('/^mp-?(\d+)$/i', $t, $m) ? (int) $m[1] : -1;
+            $q->where(fn ($w) => $w->where('p.product_name_vendor', 'like', $like)->orWhere('p.SKU_VENDOR', 'like', $like)->orWhere('p.ean', 'like', $like)->orWhere('p.upc', 'like', $like)->orWhere('p.id', $mpId)); }
+        self::filters($q, $f, $ent);
         return $q;
+    }
+
+    public const FILTERS = ['company', 'category', 'brand', 'carrier', 'investor', 'logistic', 'supplier', 'trend', 'country', 'ean', 'asin', 'mode', 'tag', 'oos'];
+
+    /** R-D-36 the filter bar (each is an AND; the same EXISTS rules everywhere the list is used: page, export, search). */
+    public static function filters($q, array $f, int $ent): void
+    {
+        $n = fn (string $k) => (int) ($f[$k] ?? 0); $mp = $n('mp');
+        if ($n('category')) $q->where('p.fk_id_product_type', $n('category'));
+        if ($n('brand')) $q->where('p.fk_id_brand', $n('brand'));
+        if ($n('trend')) $q->where('p.fk_id_product_trend', $n('trend'));
+        if ($n('country')) $q->where('p.fk_id_country_make', $n('country'));
+        if ($n('supplier')) $q->where('p.fk_id_vendor_inventory', $n('supplier'));
+        if (($e = trim((string) ($f['ean'] ?? ''))) !== '') $q->where('p.ean', $e);      /* exact */
+        if (($a = trim((string) ($f['asin'] ?? ''))) !== '') $q->where(fn ($w) => $w->where('p.upc', $a)->orWhereExists(fn ($x) => $x->from('t_product_listings as la')->whereColumn('la.fk_id_product', 'p.id')->where('la.asin', $a)));      /* exact; the old tool kept the ASIN in UPC */
+        if ($n('carrier')) { $c = $n('carrier'); $q->where(fn ($w) => $w->whereExists(fn ($x) => $x->from('t_product_marketplace_shipping as ms')->join('t_carrier_pkg_svc as cp', 'cp.id', '=', 'ms.fk_id_car_pkg_svc')->whereColumn('ms.fk_id_product', 'p.id')->where('cp.fk_id_carrier', $c))
+            ->orWhereExists(fn ($x) => $x->from('t_carrier_pkg_svc as cp2')->whereColumn('cp2.id', 'p.fk_id_car_pkg_svc')->where('cp2.fk_id_carrier', $c))); }      /* used on any marketplace shipping row (or the product's own) */
+        if ($n('investor')) { $i = $n('investor'); $q->whereExists(fn ($x) => $x->from('t_product_investors as pi2')->whereColumn('pi2.fk_id_product', 'p.id')->where(fn ($w) => $w->where('pi2.fk_id_account', $i)->orWhere('pi2.fk_id_party', $i))); }
+        if ($n('logistic')) { $l = $n('logistic'); $q->whereExists(fn ($x) => $x->from('t_src_po_lines as pl')->join('t_src_po as po', 'po.id', '=', 'pl.fk_id_po')->whereColumn('pl.fk_id_product', 'p.id')->where('po.fk_id_supplier', $l)->where('pl.f_active', 1)->whereNotIn('po.status', ['CANCELLED', 'DRAFT'])); }      /* an active purchase from that party */
+        if ($n('company')) { $co = $n('company'); $q->whereExists(fn ($x) => $x->from('t_product_visibility as cv')->join('t_branches as cb', fn ($j) => $j->on('cb.fk_id_marketplace', '=', 'cv.fk_id_marketplace')->where(fn ($w) => $w->whereColumn('cb.id', 'cv.fk_id_branch')->orWhere('cv.fk_id_branch', 0)))
+            ->whereColumn('cv.fk_id_product', 'p.id')->where('cb.fk_id_company', $co)->where('cb.f_active', 1)); }      /* company of a shop the product is visible in */
+        if (in_array($md = strtoupper((string) ($f['mode'] ?? '')), ['POOL', 'PRIVATE'], true)) $q->whereExists(fn ($x) => $x->from('t_product_visibility as mv')->whereColumn('mv.fk_id_product', 'p.id')->whereRaw('UPPER(mv.visibility_mode) = ?', [$md])->when($mp, fn ($w) => $w->where('mv.fk_id_marketplace', $mp)));      /* with a marketplace chip: that marketplace's mode; without: any */
+        if (in_array($tg = (int) ($f['tag'] ?? 0), [1, 2, 3], true)) $q->where("p.f_tag$tg", 1);
+        if (! empty($f['oos'])) $q->where(fn ($w) => $w->where('p.f_out_of_stock', 1)->orWhere('p.stock', '<=', 0));      /* out of stock = the flag, or nothing left */
+    }
+
+    /** The lists of the filter bar (names, never ids typed). */
+    public static function filterLists(int $ent): array
+    {
+        $own = fn ($q) => $q->where(fn ($w) => $w->where('fk_id_ent', $ent)->orWhereNull('fk_id_ent')->orWhere('fk_id_ent', 0)); $l = fn ($rows) => collect($rows)->map(fn ($r) => ['id' => (int) $r->id, 'name' => (string) $r->name])->filter(fn ($r) => $r['name'] !== '')->values()->all();
+        return ['category' => $l($own(DB::table('cat_product_type')->where('f_active', 1))->orderBy('product_type_name')->get(['id', 'product_type_name as name'])), 'brand' => $l($own(DB::table('cat_brands')->where('f_active', 1))->orderBy('brand_name')->get(['id', 'brand_name as name'])),
+            'trend' => $l($own(DB::table('cat_product_trends')->where('f_active', 1))->orderBy('product_trend_name')->get(['id', 'product_trend_name as name'])), 'country' => $l(DB::table('cat_country')->where('f_active', 1)->orderBy('country_name')->get(['id', 'country_name as name'])),
+            'carrier' => $l($own(DB::table('t_carriers')->where('f_active', 1))->orderBy('carrier_name')->get(['id', 'carrier_name as name'])), 'supplier' => $l(DB::table('t_src_suppliers')->where('fk_id_ent', $ent)->where('f_active', 1)->orderBy('supplier_name')->get(['id', 'supplier_name as name'])),
+            'company' => $l(DB::table('t_enterprise')->where('f_active', 1)->orderBy('ent_name')->get(['id', 'ent_name as name'])),
+            'investor' => $l(DB::table('t_product_investors as pi')->join('t_account as a', 'a.id', '=', 'pi.fk_id_account')->join('t_product_vendors as pp', 'pp.id', '=', 'pi.fk_id_product')->where('pp.fk_id_ent', $ent)->groupBy('a.id', 'a.first_name', 'a.sur_name', 'a.account_code')->orderBy('a.first_name')->get(['a.id', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as name")]))];
     }
 
     /** One page of the list. $f: q, status, mp, set, page, per. */
@@ -126,7 +164,7 @@ class ProductsList
         $money = $u && Perm::has($u, 'stock.prices');
         return ['rows' => $out, 'total' => $total, 'page' => $page, 'pages' => $pages, 'per' => $per, 'sizes' => self::SIZES, 'footer' => "Showing {$a}–{$b} of $total · Page $page of $pages",
             'pager' => range(max(1, $page - 3), min($pages, $page + 3)), 'marketplaces' => $mps, 'columns' => self::DEFAULT_COLS, 'pricing_columns' => self::PRICING_COLS, 'row_status' => self::ROW_STATUS, 'types' => self::TYPES, 'owner_types' => self::OWNER_TYPES,
-            'view' => self::view($u), 'money' => $money, 'pricing_needs_mp' => ($f['set'] ?? '') === 'pricing' && ! $mp];
+            'view' => self::view($u), 'filter_lists' => self::filterLists($ent), 'filters' => array_filter(array_intersect_key($f, array_flip(self::FILTERS)), fn ($v) => $v !== null && $v !== ''), 'money' => $money, 'pricing_needs_mp' => ($f['set'] ?? '') === 'pricing' && ! $mp];
     }
 
     /** Batch look-ups for the page's products only. */
