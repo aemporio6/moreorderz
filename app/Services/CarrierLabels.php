@@ -41,18 +41,29 @@ class CarrierLabels
     }
 
     /** What one label page tells us. $openOrders = order numbers of the shop that are still open (to find a printed order reference). */
+    /** Tracking shapes the tool knows when the carrier has no pattern of its own: Royal Mail (VU984173311GB), Evri / Parcel2Go (H00MTA0122700160). Printed with spaces or dashes on the label – read both ways. */
+    public const KNOWN_TRACKING = ['/\\b[A-Z]{2}\\d{9}GB\\b/', '/\\bH\\d{2}[A-Z]{3}\\d{10}\\b/'];
+
+    /** What one label page tells us. $openOrders = order numbers of the shop that are still open (to find a printed order reference). */
     public static function read(string $text, ?string $trackingPattern, array $serviceTexts, array $openOrders): array
     {
         $flat = preg_replace('/[ \t]+/', ' ', strtoupper($text));
-        $pattern = $trackingPattern ?: '/\b[A-Z]{2}\d{9}GB\b/';
-        if (@preg_match($pattern, '') === false) $pattern = '/' . str_replace('/', '\/', $pattern) . '/';
-        $track = preg_match($pattern, $flat, $m) ? str_replace(' ', '', $m[0]) : null;
+        $patterns = $trackingPattern ? [$trackingPattern] : self::KNOWN_TRACKING;
+        foreach ($patterns as &$pt) if (@preg_match($pt, '') === false) $pt = '/' . str_replace('/', '\/', $pt) . '/'; unset($pt);
+        // the same text with the gaps inside a printed number closed: "VU 9841 7331 1GB" → VU984173311GB, "H-00MT-A-012270016-0" → H00MTA0122700160 (column text on the same line is 2+ spaces away and stays apart)
+        $tight = implode("\n", array_map(fn ($l) => implode('  ', array_map(fn ($c) => preg_replace('/(?<=[A-Z0-9])[ -](?=[A-Z0-9])/', '', trim($c)), preg_split('/\s{2,}/', $l))), explode("\n", strtoupper($text))));
+        $tracks = [];
+        foreach ($patterns as $pt) foreach ([$flat, $tight] as $src) if (preg_match_all($pt, $src, $m)) foreach ($m[0] as $t) $tracks[str_replace([' ', '-'], '', $t)] = true;
+        $tracks = array_keys($tracks); $track = $tracks[0] ?? null;
         $service = null; foreach ($serviceTexts as $s) if ($s !== '' && str_contains($flat, strtoupper($s))) { $service = $s; break; }
-        // the delivery postcode: the last UK postcode on the label that is not the sender's (the sender comes first on most labels; the setting LABEL_SENDER_POSTCODE excludes it for sure)
-        preg_match_all(self::UK_POSTCODE, $flat, $pc, PREG_SET_ORDER); $post = null;
-        foreach ($pc as $x) { $full = $x[1] . ' ' . $x[2]; if ($full !== strtoupper((string) Settings::get('LABEL_SENDER_POSTCODE', Context::ent(), ''))) $post = $full; }
+        // every UK postcode on the label except the sender's (setting LABEL_SENDER_POSTCODE); the import tries each against the open orders, so a return address printed after the delivery address does not win
+        $sender = str_replace(' ', '', strtoupper((string) Settings::get('LABEL_SENDER_POSTCODE', Context::ent(), '')));
+        preg_match_all(self::UK_POSTCODE, $flat, $pc, PREG_SET_ORDER); $posts = [];
+        foreach ($pc as $x) { $full = $x[1] . ' ' . $x[2]; if ($x[1] . $x[2] !== $sender && ! in_array($full, $posts, true)) $posts[] = $full; }
         $order = null; foreach ($openOrders as $o) if (strlen((string) $o) >= 5 && str_contains($flat, strtoupper((string) $o))) { $order = (string) $o; break; }
-        return ['tracking' => $track, 'service' => $service, 'postcode' => $post, 'order' => $order];
+        preg_match_all('/\b([A-Z]\d{2,4}-[A-Z0-9+*.\-]{3,60})/', $flat, $sk); $skus = array_values(array_unique(array_map(fn ($x) => rtrim(preg_replace('/\*\d+$/', '', $x), '-.'), $sk[1])));
+        $posts = array_reverse($posts);      // the last one first (the sender usually comes first), then the others
+        return ['tracking' => $track, 'trackings' => $tracks, 'service' => $service, 'postcode' => $posts[0] ?? null, 'postcodes' => $posts, 'order' => $order, 'skus' => $skus];
     }
 
     private static function out(?string $postcode): ?string { return $postcode ? strtok($postcode, ' ') : null; }
@@ -75,8 +86,13 @@ class CarrierLabels
             return DB::transaction(function () use ($ent, $car, $shop, $pages, $services, $open, $days, $fileName, $sha) {
                 $batch = DB::table('fin_import_batches')->insertGetId(['report_type' => 'CARRIER_LABEL_PDF', 'company_id' => $ent, 'branch_id' => $shop->id, 'file_name' => mb_substr($fileName, 0, 200), 'file_hash' => substr($sha, 0, 40), 'rows_total' => count($pages), 'imported_by' => Context::userId(), 'imported_at' => now()]);
                 $res = ['batch' => $batch, 'pages' => count($pages), 'matched' => 0, 'set_aside' => 0, 'unmapped_service' => 0, 'by' => []]; $taken = [];
+                $reads = array_map(fn ($pg) => self::read(self::text($pg), $car->tracking_pattern, $services, $open), $pages);
+                if (count(array_filter($reads, fn ($x) => count($x['trackings']) > 1)) === count($reads)) throw new \InvalidArgumentException('This PDF lists several parcels on each page – it is a picking list, not the labels. Load the label PDF (one label per page); the tool prints its own picking list in Dispatch.');
+                // the sender's postcode is printed on every label of a batch: a postcode on 3+ pages and on most of them is never the delivery address
+                $freq = []; foreach ($reads as $x) foreach ($x['postcodes'] as $pcd) $freq[$pcd] = ($freq[$pcd] ?? 0) + 1;
+                $senderLike = array_keys(array_filter($freq, fn ($n) => count($reads) >= 3 && $n >= 3 && $n >= 0.6 * count($reads)));
                 foreach ($pages as $i => $page) {
-                    $r = self::read(self::text($page), $car->tracking_pattern, $services, $open);
+                    $r = $reads[$i]; $r['postcodes'] = array_values(array_diff($r['postcodes'], $senderLike)); $r['postcode'] = $r['postcodes'][0] ?? null;
                     $name = "labels/$ent/" . date('Y/m') . "/$batch-" . ($i + 1) . '.pdf'; Storage::disk('local')->put($name, file_get_contents($page));
                     $doc = DB::table('sys_documents')->insertGetId(RecordService::fillNotNull('sys_documents', ['fk_id_ent' => $ent, 'doc_no' => Numbering::next('DOC', $ent), 'title' => 'Carrier label', 'stored_name' => $name, 'orig_name' => mb_substr($fileName, 0, 150) . ' p' . ($i + 1), 'mime' => 'application/pdf', 'size_bytes' => filesize($page),
                         'sha256' => hash_file('sha256', $page), 'd_doc' => date('Y-m-d'), 'version' => 1, 'status' => 'ACTIVE', 'uploaded_by' => Context::userId(), 'created_at' => now(), 'tags' => 'label']));
@@ -85,13 +101,17 @@ class CarrierLabels
                     $sale = null; $by = null; $cands = [];
                     if ($r['order']) { $sale = $q()->where('order_no', $r['order'])->orderBy('id')->first(); $by = 'ORDER_REF'; }
                     if (! $sale && $r['tracking']) { $sale = $q()->where('tracking_no', $r['tracking'])->first(); $by = 'TRACKING'; }
-                    if (! $sale && $r['postcode']) {
+                    if (! $sale) foreach ($r['postcodes'] as $pcd) {      // each postcode on the label in turn – the one an open order has is the delivery address
                         $cands = $q()->where(fn ($w) => $w->whereNull('label_status')->orWhereIn('label_status', ['', 'NONE']))->where('d_order', '>=', date('Y-m-d', strtotime("-$days day")))
-                            ->whereRaw("UPPER(REPLACE(ship_to_postcode, ' ', '')) = ?", [str_replace(' ', '', $r['postcode'])])->get(['id', 'order_no', 'sku', 'd_order'])->unique('order_no')->values();
-                        if ($cands->count() === 1) { $sale = $q()->where('id', $cands[0]->id)->first(); $by = 'POSTCODE'; }
+                            ->whereRaw("UPPER(REPLACE(ship_to_postcode, ' ', '')) = ?", [str_replace(' ', '', $pcd)])->get(['id', 'order_no', 'sku', 'd_order'])->unique('order_no')->values();
+                        if ($cands->count() > 1 && $r['skus']) { $bySku = $cands->filter(fn ($c) => in_array(strtoupper((string) $c->sku), $r['skus'], true))->values(); if ($bySku->count() === 1) { $cands = $bySku; } }      // the SKU printed on the label settles two orders to one postcode
+                        if ($cands->count() === 1) { $sale = $q()->where('id', $cands[0]->id)->first(); $by = 'POSTCODE'; $r['postcode'] = $pcd; break; }
+                        if ($cands->count() > 1) { $r['postcode'] = $pcd; break; }
                     }
-                    $problem = null;
-                    if (! $r['tracking']) $problem = 'No tracking number found with the carrier\'s pattern.';
+                    if (count($r['trackings']) > 1) $problem0 = 'This page shows ' . count($r['trackings']) . ' tracking numbers – it looks like a list, not one label.';
+                    $problem = $problem0 ?? null; $problem0 = null;
+                    if ($problem) $sale = null;
+                    elseif (! $r['tracking']) $problem = 'No tracking number found with the carrier\'s pattern.';
                     elseif (! $r['service']) { $problem = 'Service text not found in the carrier\'s service map – add it (+ Add map).'; $res['unmapped_service']++; }
                     $row = ['fk_id_ent' => $ent, 'fk_id_batch' => $batch, 'fk_id_branch' => $shop->id, 'fk_id_carrier' => $car->id, 'page_no' => $i + 1, 'fk_id_document' => $doc, 'tracking_no' => $r['tracking'], 'service_text' => $r['service'], 'postcode_out' => self::out($r['postcode']), 'order_ref' => $r['order'], 'problem' => $problem, 'created_at' => now(), 'updated_at' => now()];
                     if ($sale && $r['tracking']) {

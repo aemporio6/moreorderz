@@ -30,11 +30,12 @@ class AdminController extends Controller
 
     public function home(Request $r)
     {
-        $u = $r->user();
+        $u = $r->user(); $t0 = microtime(true);
         $recent = DB::table('sys_search_index as s')->join('sys_audit_log as a', fn ($j) => $j->on('a.table_name', '=', 's.entity')->on('a.record_id', '=', 's.entity_id'))
             ->where('a.user_id', $u->id)->whereIn('a.action', ['INSERT', 'UPDATE'])->groupBy('s.url', 's.title', 's.subtitle')->orderByRaw('MAX(a.id) DESC')->limit(8)
             ->get(['s.url', 's.title', 's.subtitle']);
-        return ['cards' => HomeCards::for($u, (int) Context::ent()), 'recent' => $recent];
+        $tr = (int) round((microtime(true) - $t0) * 1000); $cards = HomeCards::for($u, (int) Context::ent());
+        return ['cards' => $cards, 'recent' => $recent] + ($r->query('timing') && $u->role_code === 'OWNER' ? ['timing' => ['recent' => $tr, 'cards' => HomeCards::$ms]] : []);      // owner 26-11 'slow': which card takes the time
     }
 
     /** R-G_CORE-103 the charts of a dashboard (reads only). */

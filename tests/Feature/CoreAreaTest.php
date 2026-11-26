@@ -296,4 +296,31 @@ class CoreAreaTest extends TestCase
         $this->assertSame(0, $this->post('/api/mytool-import', ['file' => $f(), 'apply' => 1])->json('imported'), 'a second run adds nothing');
         $m = $this->makeUser('MANAGER'); $this->actingAs($m); $this->post('/api/mytool-import', ['file' => $f()])->assertStatus(403);
     }
+
+    public function test_record_inspector_masks_secrets_and_nightly_schema_check(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id); Perm::flush();
+        $bk = $this->f('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'INSP-1', 'product_name_vendor' => 'Inspector test', 'f_active' => 1, 'e_product_type' => 'pool']);
+        $x = $this->getJson('/api/inspect/t_product_vendor/' . $bk)->assertOk()->json();
+        $cols = array_column($x['columns'], 'value', 'column'); $this->assertSame('INSP-1', $cols['SKU_VENDOR']);
+        foreach ($cols as $k => $v) if (preg_match('/pass/i', $k) && $v) $this->assertSame('••••••', $v, "$k masked");
+        $this->getJson('/api/inspect/no_such_form/1')->assertStatus(404);
+        $m = $this->makeUser('MANAGER'); $this->actingAs($m); $this->getJson('/api/inspect/t_product_vendor/' . $bk)->assertStatus(403);
+        $this->assertStringContainsString('SchemaCheck::missing()', file_get_contents(app_path('Console/Commands/MoNightly.php')));
+        $js = file_get_contents(public_path('app/app.js')); foreach (['camScan', 'BarcodeDetector', 'rRaw', 'MR-1540'] as $k) $this->assertStringContainsString($k, $js);
+    }
+
+    public function test_label_reader_royal_mail_spaced_evri_dashed_return_address_and_list(): void
+    {
+        Context::set(1, $this->owner->id);
+        $rm = "  Tracked\n  A99 A13\n                 XX 1234 5678 9GB\nJane Test\n1 Sample Street                     Return Address\nTesttown\nAB1 2CD                                M Sender\n                                       London\n                                       E1 1AA\nSKU: B268-TEST-OIL-118ml*1\n";
+        $r = \App\Services\CarrierLabels::read($rm, null, ['Tracked'], []);
+        $this->assertSame('XX123456789GB', $r['tracking'], 'Royal Mail prints the number in groups');
+        $this->assertSame(['E1 1AA', 'AB1 2CD'], $r['postcodes'], 'both postcodes kept – the import keeps the one an open order has');
+        $this->assertSame(['B268-TEST-OIL-118ML'], $r['skus']);
+        $ev = "P2G Smart Send SD\n Destination        COU-PNET\n 1 Test Road\n Testcity\n B1 1AA\n Reference 1    P2G100000001\n                     H-00AB-C-012345678-9\n";
+        $this->assertSame('H00ABC0123456789', \App\Services\CarrierLabels::read($ev, null, [], [])['tracking'], 'Evri / Parcel2Go prints the number with dashes');
+        $list = "P2G1  H00ABC0123456781   1 x [ K1-AAA ]\nP2G2  H00ABC0123456782   1 x [ K2-BBB ]\n";
+        $this->assertCount(2, \App\Services\CarrierLabels::read($list, null, [], [])['trackings'], 'a picking list shows several numbers on one page');
+    }
 }

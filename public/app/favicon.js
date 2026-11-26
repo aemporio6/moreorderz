@@ -1,4 +1,4 @@
-/* Owner 26-11: the MoreOrderz seal in the browser tab, its ring turning slowly (the same seal as the top-left logo).
+/* Owner 26-11 (18:49 a little bigger: the seal fills the whole tab icon and the mark inside is larger): the MoreOrderz seal in the browser tab, its ring turning slowly (the same seal as the top-left logo).
    Browsers do not play animated icons by themselves, so each frame is drawn on a small canvas and set as the tab icon. */
 (function () {
   const link = document.querySelector('link[rel="icon"]') || Object.assign(document.head.appendChild(document.createElement('link')), { rel: 'icon' });
@@ -8,10 +8,10 @@
   function frame() {
     const s = 64 / 100; x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, 64, 64); x.scale(s, s);
     const g = x.createLinearGradient(0, 0, 100, 100); g.addColorStop(0, '#11807B'); g.addColorStop(1, '#083F3D');
-    x.fillStyle = g; x.beginPath(); x.arc(50, 50, 48, 0, Math.PI * 2); x.fill();
-    x.strokeStyle = '#C2A06A'; x.lineWidth = 3; x.beginPath(); x.arc(50, 50, 44, 0, Math.PI * 2); x.stroke();
-    x.save(); x.translate(50, 50); x.rotate(a); x.strokeStyle = '#E9D9B8'; x.lineWidth = 5; x.setLineDash([10, 6]); x.beginPath(); x.arc(0, 0, 38, 0, Math.PI * 2); x.stroke(); x.restore();
-    x.save(); x.translate(27, 26); x.scale(.48, .48); x.fillStyle = '#fff'; x.fill(bars); x.restore();
+    x.fillStyle = g; x.beginPath(); x.arc(50, 50, 50, 0, Math.PI * 2); x.fill();
+    x.strokeStyle = '#C2A06A'; x.lineWidth = 3; x.beginPath(); x.arc(50, 50, 47, 0, Math.PI * 2); x.stroke();
+    x.save(); x.translate(50, 50); x.rotate(a); x.strokeStyle = '#E9D9B8'; x.lineWidth = 5; x.setLineDash([10, 6]); x.beginPath(); x.arc(0, 0, 42, 0, Math.PI * 2); x.stroke(); x.restore();
+    x.save(); x.translate(17, 17); x.scale(.68, .68); x.fillStyle = '#fff'; x.fill(bars); x.restore();
     try { link.type = 'image/png'; link.href = c.toDataURL('image/png'); } catch (e) {}
     a += Math.PI / 24;      // one turn in 48 frames ≈ 7 seconds
   }

@@ -47,6 +47,7 @@ class MoNightly extends Command
             \App\Services\SalesWatch::nightly((int) $ent);      // SAL_NO_COST, LST_STATUS, IMP_WAITING
             $this->line("Company $ent: stock mismatches {$r['mismatch']}, negative balances {$r['negative_balances']}, value = ledger: " . ($r['value_matches_ledger'] ? 'yes' : 'NO') . ", low stock tasks open {$low['open']}");
         }
+        if ($miss = \App\Services\SchemaCheck::missing()) \App\Services\EventBus::sysError(['schema', date('Y-m-d')], 'Database not up to date – ' . count($miss, COUNT_RECURSIVE) . ' item(s)', 'Run php artisan mo:install (migrations that did not run: see System › Health).');      /* MR-0941 nightly schema self-check */
         $subs = \App\Services\Subscriptions::nightly();
         $loans = \App\Services\FinanceExtras::loanTasks(); if ($loans) $this->line("Loan payments due: $loans new task(s)");
         foreach (\Illuminate\Support\Facades\DB::table('t_enterprise')->pluck('id') as $e) \App\Services\TaskLists::dataQuality((int) $e);      // R-G_CORE-38 data-quality rule tasks (one a day)

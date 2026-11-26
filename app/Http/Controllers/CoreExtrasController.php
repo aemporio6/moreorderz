@@ -81,4 +81,15 @@ class CoreExtrasController extends Controller
         try { return $r->boolean('apply') ? \App\Services\MyToolImport::import($this->ent(), $json, $r->user()) : \App\Services\MyToolImport::check($this->ent(), $json); }
         catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
     }
+
+    /** MR-0941 / R-D-18 record inspector (Owner): every stored column of a record as it is in the database – secrets masked by the vault, money hidden without the right. */
+    public function inspect(Request $r, string $key, int $id)
+    {
+        abort_unless(($r->user()->role_code ?? '') === 'OWNER', 403, 'Only the Owner opens the record inspector.');
+        $t = \App\Services\Registry::table($key); abort_unless($t, 404, 'Unknown form.');
+        $row = \Illuminate\Support\Facades\DB::table($t)->where(\App\Services\Registry::pk($t), $id)->first(); abort_unless($row, 404, 'Record not found.');
+        $row = \App\Services\Vault::maskRow($t, (array) $row);
+        foreach ($row as $k => $v) if (preg_match('/pass(word)?|secret|token|api_?key|pin\b|cvv/i', $k) && $v !== null && $v !== '') $row[$k] = '••••••';
+        return ['table' => $t, 'columns' => array_map(fn ($k, $v) => ['column' => $k, 'value' => is_string($v) && mb_strlen($v) > 500 ? mb_substr($v, 0, 500) . '…' : $v], array_keys($row), array_values($row))];
+    }
 }

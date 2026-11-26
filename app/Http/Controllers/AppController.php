@@ -28,7 +28,7 @@ class AppController extends Controller
         return [
             'user' => ['id' => $u->id, 'name' => $u->display_name ?: $u->login_id, 'role' => $va ? $va[0] : $role, 'role_name' => $va ? $va[1] : ($u->custom_role ?: $role)],
             'view_as' => $va ? $va[1] : null,
-            'ent' => Context::ent(), 'all_companies' => Context::all(), 'can_all' => \App\Services\AllCompanies::may($u), 'companies' => $companies, 'words' => \App\Services\SimpleWords::MAP /* owner 26-11: the one list of easy words */, 'menu' => self::menu($va ? $va[0] : $role), 'create' => self::createCatalogue($va ? $va[0] : $role),
+            'ent' => Context::ent(), 'all_companies' => Context::all(), 'can_all' => \App\Services\AllCompanies::may($u), 'companies' => $companies, 'words' => \App\Services\SimpleWords::MAP /* owner 26-11: the one list of easy words */, 'menu' => self::menu($va ? $va[0] : $role), 'menu_groups' => config('menu_help.groups'), 'create' => self::createCatalogue($va ? $va[0] : $role),
             'setup_open' => $role === 'OWNER' && \App\Services\SetupWizard::open((int) Context::ent()),
             'landing' => \App\Services\FinanceRoles::landing($u), 'partner_only' => \App\Services\FinanceRoles::locked($u),      // R-FIN-2 each role's first page; a partner account sees its own pages only
             'task_header' => \App\Services\TaskRoles::header($u),      // R-G_CORE-20
@@ -44,12 +44,12 @@ class AppController extends Controller
         $rows = DB::table('sidebar_modules')->where('e_status', 'ACTIVE')->orderBy('sort_order')->orderBy('id_module')->get();
         if (\App\Services\Choices::get('MENU_NAMES', Context::ent()) === 'SIMPLE') foreach ($rows as $m) $m->module_name = self::simpleName((string) $m->module_name);
         $secs = [];
-        foreach ($rows->whereNull('parent_id') as $s) $secs[$s->id_module] = ['id' => $s->id_module, 'name' => $s->module_name, 'icon' => $s->icon, 'items' => []];
+        foreach ($rows->whereNull('parent_id') as $s) $secs[$s->id_module] = ['id' => $s->id_module, 'name' => $s->module_name, 'about' => config('menu_help.sections.' . $s->module_name), 'icon' => $s->icon, 'items' => []];
         foreach ($rows->whereNotNull('parent_id') as $m) {
             if (! isset($secs[$m->parent_id]) || ! \App\Services\Perm::has(Auth::user(), 'menu:' . $m->module_key)) continue;
             $rt = self::route($m); $soon = str_starts_with($rt, '#/screen/');      // R-G_CORE-55: a screen not built yet = a muted "Soon" item, only the Owner sees it
             if ($soon && $role !== 'OWNER') continue;
-            $secs[$m->parent_id]['items'][] = ['id' => $m->id_module, 'no' => $m->screen_no, 'name' => $m->module_name, 'route' => $rt, 'soon' => $soon, 'forms' => array_values(array_filter(array_map(fn ($f) => trim(explode('(', $f)[0]), preg_split('/[;,\s]+/', (string) $m->forms, -1, PREG_SPLIT_NO_EMPTY)), fn ($k) => Registry::exists($k) && Registry::table($k)))];
+            $secs[$m->parent_id]['items'][] = ['id' => $m->id_module, 'no' => $m->screen_no, 'name' => $m->module_name, 'about' => config('menu_help.items.' . $m->module_key), 'route' => $rt, 'soon' => $soon, 'forms' => array_values(array_filter(array_map(fn ($f) => trim(explode('(', $f)[0]), preg_split('/[;,\s]+/', (string) $m->forms, -1, PREG_SPLIT_NO_EMPTY)), fn ($k) => Registry::exists($k) && Registry::table($k)))];
         }
         return array_values(array_filter($secs, fn ($s) => $s['items']));
     }

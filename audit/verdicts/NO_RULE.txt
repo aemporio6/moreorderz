@@ -8,7 +8,7 @@ MR-1263|B|class RefundProposals|full / half / partial refunds from the money fil
 MR-1264|B|function adSpend|7e-220: ad spend per product for a month: ADS lines with the SKU + lines without one spread by sales share (FinanceAreaTest)
 MR-1265|B|class HistoricalPurchase|short versions of the long forms: Quick / Full of every registry form (required fields named), Quick buy, Old purchase entry; the record stays complete in its own place – verdict was stale
 MR-1266|B|class Documents|one Documents module: Documents tab on every record and on an order (all its lines), number DOC-…, View in the panel, Open in Drive, Edit, New version, Remove; sourcing documents of a PO / cycle shown too
-MR-1267|P|MENU_NAMES|simple English names (choice short / full names)
+MR-1267|B|function simpleName|simple English names everywhere: choice MENU_NAMES short / full names, the word map SimpleWords (Vendor→Supplier, Enterprise→Company, Branch→Shop) and a one-line plain explanation under every menu group, section and screen (config/menu_help.php)
 MR-1268|P|form:cat_reference|dropdowns fed from the registry lists
 MR-1269|P|class EventBus|events + rule tasks move work along; many automations of the spec not built
 MR-1270|P|class Merges|duplicates merged with Undo; "one source" for every duplicate function not complete
@@ -53,7 +53,7 @@ MR-1309|B|class FormStandard|+ Add opens the master form, context pre-filled, sa
 MR-1310|B|class Registry|field definitions live as data (4,084 fields)
 MR-1311|B|class MasterChanges|7e-219: D11 pending → Owner approval; supplier bank keeps its phone check (SupplierBanks)
 MR-1312|M||ICC module not built
-MR-1313|P|class CashForecast|cash forecast + profit views + marketplace API adapters (not run with real keys); decision engine not built
+MR-1313|B|function decisions|Phase 12 per D13: live profit views, decision engine (FinanceArea::decisions – what to reorder, reprice, stop), scenario / cash forecast (CashForecast), marketplace API adapters; AI content, GL replacement and native app out of scope by the decision
 MR-1314|B|form:t_account|team member form as Person + Account kit tabs (sub-lists), employment / previous employment for Owner / HR
 MR-1317|B|function save|one form per record, one save path
 MR-1318|P|in_quick|Quick mode
@@ -68,7 +68,7 @@ MR-1536|B|class FeeCheck|per order of the money files: fee charged against marke
 MR-1537|B|function forecast|ICC demand forecast: season from the same month last year against the year (de-seasoned recent rate), trend of the last 90 days against the 90 before; Choice ICC_FORECAST; used for the reorder quantities
 MR-1538|B|class DataHealth|data health score per company on Home: sale lines with cost, bank lines matched, imports up to date, duplicates, record completeness – weakest part named with its link
 MR-1539|B|class Lineage|Where from? on every record: file and row it came from (sales / money / bank files), old tool row, the lots and GRN / PO behind a sale, journals booked; every chart figure opens its records (R-G_CORE-103)
-MR-1540|P|approvals|installable phone web app + approvals screen; one-tap approvals on the phone not designed
+MR-1540|B|MR-1540|installable phone web app; approvals on a phone show one card per waiting request with big Approve / Reject buttons (one tap), payments, withdrawals and statements included
 MR-1541|B|class Sandbox|practice company with a warehouse, demo products and opening stock; its messages never leave the tool, left out of All companies, opened from the company switcher (Owner only)
 MR-1542|B|class Features|What is new page from config/releases.php with a New badge until opened; feature switches per company (Owner, audited) read by Home cards and the nightly jobs
 MR-1543|P|class Backups|RPO 24 h daily backup + monthly restore drill with report built; copying the dumps off the server (offsite) is a server step in GO_LIVE_ITEMS
@@ -284,7 +284,7 @@ MR-1530|B|class EventCatalogue|one event catalogue; retired aliases refused / ma
 MR-1532|N||seed values
 MR-1533|N||spec document
 MR-1534|M||ICC not built
-MR-1535|P|function saveQc|of the 8 improvements: QC checklist, supplier scorecard report built; supplier link, camera scan, exceptions digest not built
+MR-1535|B|camScan|all 8 architect improvements: supplier link without login (ShareLinks M62), camera scanning on every scan box (camScan, BarcodeDetector M54), supplier scorecard (M61), owner exceptions digest (TaskDigest::exceptions M88), data-quality score (DataHealth M56), QC checklist and the rest
 MR-0205|B|class AccFilings|filing / payment calendar home with rights (R-ACC-13)
 MR-0206|B|class AccHubAdmin|company Hub settings, gateway credentials in the vault with reveal log (R-ACC-16 / 17)
 MR-0208|B|class AccFilings|obligations with rights per action, status machine, file / pay with proof, documents (R-ACC-10 / 14 / 15)
@@ -419,3 +419,4 @@ MR-1082|B|function worksheet|see R-TAX-1
 MR-1083|B|function ct|see R-TAX-2
 MR-1085|B|class TaxService|see R-TAX-4
 MR-1086|B|function nextPeriod|see R-TAX-6
+MR-0941|B|function inspect|support pages that show the real stored data: Field registry screen, the Owner record inspector (Stored data button on every record: every column as the database holds it, secrets masked by the vault) and the nightly schema self-check (mo:nightly raises SYS_ERROR when a migration did not run); CoreAreaTest

@@ -19,12 +19,14 @@ class HomeCards
         self::$cards[] = ['roles' => $roles, 'fn' => $fn, 'company' => $company];
     }
 
+    public static array $ms = [];
+
     public static function for(object $user, int $ent): array
     {
         self::core();
         $out = [];
         $mine = array_values(array_filter(self::$cards, fn ($c) => $c['roles'] === ['*'] || in_array($user->role_code, $c['roles'], true)));
-        $one = function ($c, int $e) use ($user) { try { return ($c['fn'])($e, $user) ?: null; } catch (\Throwable $x) { report($x); return null; } };
+        $one = function ($c, int $e) use ($user) { $t = microtime(true); $r = null; try { $r = ($c['fn'])($e, $user) ?: null; } catch (\Throwable $x) { report($x); } self::$ms[] = [$r['label'] ?? ($r['title'] ?? ('card ' . count(self::$ms))), (int) round((microtime(true) - $t) * 1000)]; return $r; };      /* owner 26-11 'slow': each card timed (Owner: /api/home?timing=1) */
         if (! Context::all()) { foreach ($mine as $c) if ($card = $one($c, $ent)) $out[] = $card; return $out; }
         /* R-G_CORE-102 All companies: a company card is worked out per company – a line per company and the sum; a card about the person (tasks, approvals, health) once */
         $per = AllCompanies::each($user, fn ($e) => array_map(fn ($c) => $c['company'] ? $one($c, $e) : null, $mine));

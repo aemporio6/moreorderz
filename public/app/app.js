@@ -1,6 +1,19 @@
 /* MoreOrderz – screen shell. Same components and class names as the approved clickable design; data comes from the server. */
 (function () {
   const MO = window.MO, ic = MO.ic;
+  /* MR-1535 camera scanning (M54): every scan box (a field whose hint starts with "Scan") gets a camera button on a phone or laptop with a camera.
+     The code read by the camera (barcode / QR, BarcodeDetector) is put in the box and Enter is pressed, the same as a hand scanner. */
+  const camScan = async inp => {
+    if (!('BarcodeDetector' in window) || !navigator.mediaDevices) { toast('This browser cannot read codes with the camera – use Chrome on the phone, or a scanner.', 'err'); return; }
+    let stream; try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }); } catch (e) { toast('The camera was not allowed.', 'err'); return; }
+    const ov = document.createElement('div'); ov.className = 'overlay'; ov.innerHTML = `<div class="modal"><div class="modal-h"><div><h2>Scan with the camera</h2><div class="small muted">Hold the barcode or QR code inside the frame.</div></div></div><div class="modal-b"><video playsinline muted style="width:100%;border-radius:10px;background:#000"></video></div><div class="modal-f"><button class="btn" data-cx>Cancel</button></div></div>`;
+    document.body.appendChild(ov); const v = ov.querySelector('video'); v.srcObject = stream; await v.play().catch(() => {});
+    let done = false; const stop = () => { done = true; stream.getTracks().forEach(t => t.stop()); ov.remove(); }; ov.querySelector('[data-cx]').onclick = stop;
+    const det = new BarcodeDetector(); const tick = async () => { if (done) return; try { const r = await det.detect(v); if (r.length) { stop(); inp.value = r[0].rawValue; inp.dispatchEvent(new Event('input', { bubbles: true })); inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); inp.focus(); return; } } catch (e) {} setTimeout(tick, 250); }; tick();
+  };
+  const camEnhance = () => document.querySelectorAll('input[placeholder^="Scan"]:not([data-cam])').forEach(i => { i.dataset.cam = 1; const b = document.createElement('button'); b.type = 'button'; b.className = 'btn sm'; b.title = 'Scan with the camera'; b.textContent = '📷'; b.style.marginLeft = '6px'; b.onclick = () => camScan(i); i.insertAdjacentElement('afterend', b); });
+  try { new MutationObserver(camEnhance).observe(document.body, { childList: true, subtree: true }); } catch (e) {}
+
   const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const csrf = $('meta[name=csrf-token]').content;
@@ -142,12 +155,12 @@
     const sec = p.current.section; if (sec && /[?&]step=/.test(route)) setTimeout(() => { const h = $$('#main h3').find(x => x.textContent.trim().startsWith(sec)); if (h) h.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, 300);
   }
   // the strip above a list: what this screen is, how to add, where else it is created
-  async function guideStrip(key) { const host = $('#lGuide'); if (!host) return; let g; try { g = await api('guide/list/' + key); } catch (e) { return; } if (!$('#lGuide')) return;
+  async function guideStrip(key) { if (!$('#lGuide')) return; let g; try { g = await api('guide/list/' + key); } catch (e) { return; } const host = $('#lGuide'); if (!host) return;      /* the list may have drawn again while the guide loaded – use the strip that is on the page now */
     let open = HELP; try { open = HELP || localStorage.getItem('mo_strip_' + key) === '1' || (localStorage.getItem('mo_strip_' + key) === null && !localStorage.getItem('mo_strip_seen')); localStorage.setItem('mo_strip_seen', '1'); } catch (e) {}
     const draw = () => { host.innerHTML = `<div class="card" style="margin-bottom:12px;border-left:3px solid var(--accent)"><div class="card-b" style="padding:10px 14px"><div style="display:flex;gap:10px;align-items:flex-start"><span class="muted">${ic('help')}</span><div style="flex:1;min-width:0"><b>${esc(g.what)}</b>
         ${open ? `<div style="margin-top:6px"><b>To add:</b> ${esc(g.add)}</div>${g.also.length ? `<div style="margin-top:4px"><b>Also created from:</b> + Add in ${esc(g.also.join(' · '))}${g.also_more ? ` and ${g.also_more} more forms` : ''}.</div>` : ''}${g.menu ? `<div style="margin-top:4px" class="small muted">In the menu: ${esc(g.menu)}</div>` : ''}<ul class="small muted" style="margin:6px 0 0 18px;padding:0">${g.tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}</div>
         <a href="#" class="small" id="lGuideT">${open ? 'Hide' : 'How this screen works'}</a></div></div></div>`;
-      $('#lGuideT').onclick = e => { e.preventDefault(); open = !open; try { localStorage.setItem('mo_strip_' + key, open ? '1' : '0'); } catch (x) {} draw(); }; };
+      const t = host.querySelector('#lGuideT'); if (t) t.onclick = e => { e.preventDefault(); open = !open; try { localStorage.setItem('mo_strip_' + key, open ? '1' : '0'); } catch (x) {} draw(); }; };
     draw(); const em = $('#lEmptyAct'); if (em) em.innerHTML = (g.can_add ? `<button class="btn primary" id="lEmptyNew">${ic('plus')} Add the first one</button>` : '') + (g.import ? ` <a class="btn" href="${esc(g.import)}">Import from a file</a>` : ''); if ($('#lEmptyNew')) $('#lEmptyNew').onclick = () => $('#lNew').click(); }
   // the card on a record: the next step, and what stops it with the button that fixes it
   async function guideCard(key, id) { const host = $('#rGuide'); if (!host) return; let g; try { g = await api(`guide/record/${key}/${id}`); } catch (e) { return; } if (!$('#rGuide')) return;
@@ -227,12 +240,65 @@
     const hit = items.find(i => i.route === r) || items.filter(i => base(i.route).length > 2 && base(r).startsWith(base(i.route)))
       .sort((a, b) => base(b.route).length - base(a.route).length || a.route.length - b.route.length)[0];      // longest path wins; same path → the item without extra filters
     return hit ? hit.id : null; }
+  /* Owner 26-11 (18:43 / 18:47): the menu as a few big groups, Seller Central style. Hover a group → a window opens beside it (▸); hover a section in it → the next window with its screens.
+     Every group, section and screen says in one line what it is. The windows close when the mouse leaves them; every screen is a real link, so right-click → Open in new tab works.
+     Phones keep the folding list (no hover on a phone). */
+  let FLY = null, FLYT = 0;
+  function menuGroups() {
+    const secs = S.boot.menu || [], used = new Set();
+    const G = (S.boot.menu_groups || []).map(g => ({ ...g, secs: g.sections.map(n => secs.find(s => s.name === n)).filter(Boolean) }));
+    G.forEach(g => g.secs.forEach(s => used.add(s.id)));
+    const rest = secs.filter(s => !used.has(s.id)); if (rest.length) G.push({ name: 'More', about: 'Other screens', icon: 'file', secs: rest });
+    return G.filter(g => g.secs.some(s => s.items.length));
+  }
+  function flyClose() { clearTimeout(FLYT); if (FLY) { FLY.remove(); FLY = null; } $$('#side .mn-g.on').forEach(x => x.classList.remove('on')); }
+  function flyLater() { clearTimeout(FLYT); FLYT = setTimeout(flyClose, 260); }
+  function flyKeep() { clearTimeout(FLYT); }
+  function flyPlace(panel, anchor, left) {
+    const r = anchor.getBoundingClientRect(), topMin = (parseInt(getComputedStyle(document.documentElement).getPropertyValue('--top')) || 56) + 6;
+    panel.style.left = left + 'px'; panel.style.top = '0px'; const h = panel.offsetHeight;
+    const top = Math.max(topMin, Math.min(r.top - 10, innerHeight - h - 10)); panel.style.top = top + 'px';
+    panel.style.setProperty('--ay', Math.max(14, Math.min(h - 14, r.top + r.height / 2 - top)) + 'px');
+  }
+  function itemLink(i, cur) {
+    return i.soon ? `<div class="mn-i soon" title="Planned – not built yet"><b>${esc(i.name)}</b><small>Coming soon</small></div>`
+      : `<a class="mn-i ${i.id === cur ? 'cur' : ''}" href="${esc(i.route)}" title="${esc(i.name)} – right-click to open in a new tab"><b>${esc(i.name)}</b>${i.about ? `<small>${esc(i.about)}</small>` : ''}</a>`;
+  }
+  function flyOpen(row, g) {
+    flyKeep(); if (FLY && FLY.dataset.g === row.dataset.g) return; flyClose();
+    row.classList.add('on'); const cur = currentItem(), one = g.secs.length === 1;
+    FLY = document.createElement('div'); FLY.className = 'mn-fly'; FLY.dataset.g = row.dataset.g;
+    FLY.innerHTML = `<div class="mn-p mn-p1"><div class="mn-ph"><b>${esc(g.name)}</b><small>${esc(g.about || '')}</small></div><div class="mn-pb ${one && g.secs[0].items.length > 12 ? 'two' : ''}">` +
+      (one ? g.secs[0].items.map(i => itemLink(i, cur)).join('')
+        : g.secs.map((s, k) => `<div class="mn-s ${s.items.some(i => i.id === cur) ? 'cur' : ''}" data-k="${k}" tabindex="0"><span><b>${esc(s.name)}</b><small>${esc(s.about || s.items.length + ' screens')}</small></span><span class="mn-n">${s.items.length}</span><span class="mn-tri">▸</span></div>`).join('')) + `</div></div>`;
+    document.body.appendChild(FLY); const p1 = FLY.firstChild; flyPlace(p1, row, row.getBoundingClientRect().right + 8);
+    FLY.onmouseenter = flyKeep; FLY.onmouseleave = flyLater; FLY.addEventListener('click', e => { if (e.target.closest('a.mn-i') && !e.ctrlKey && !e.metaKey && !e.shiftKey) flyClose(); });
+    const sub = el => { const s = g.secs[+el.dataset.k]; $$('.mn-s.on', FLY).forEach(x => x.classList.remove('on')); el.classList.add('on'); let p2 = $('.mn-p2', FLY); if (p2) p2.remove();
+      p2 = document.createElement('div'); p2.className = 'mn-p mn-p2'; p2.innerHTML = `<div class="mn-ph"><b>${esc(s.name)}</b><small>${esc(s.about || '')}</small></div><div class="mn-pb ${s.items.length > 12 ? 'two' : ''}">${s.items.map(i => itemLink(i, cur)).join('')}</div>`;
+      FLY.appendChild(p2); flyPlace(p2, el, p1.getBoundingClientRect().right + 8); };
+    $$('.mn-s', FLY).forEach(el => { el.onmouseenter = () => sub(el); el.onclick = () => sub(el); el.onkeydown = e => { if (e.key === 'Enter' || e.key === 'ArrowRight') { sub(el); const a = $('.mn-p2 a', FLY); if (a) a.focus(); } }; });
+    const first = $('.mn-s.cur', FLY) || null; if (first) sub(first);
+  }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && FLY) flyClose(); });
+  window.addEventListener('resize', () => { flyClose(); });
   function drawSide() {
+    if (!S.boot.menu_groups || innerWidth < 900) return drawSideFold();
+    const cur = currentItem(), G = menuGroups();
+    $('#side').classList.add('mn'); flyClose();
+    $('#side').innerHTML = `<div class="mn-label">Menu</div>` + G.map((g, k) => `<div class="mn-g ${g.secs.some(s => s.items.some(i => i.id === cur)) ? 'cur' : ''}" data-g="${k}" tabindex="0" role="button" aria-haspopup="true">
+        <span class="mn-ic">${ic(g.icon || 'file')}</span><span class="mn-t"><b>${esc(g.name)}</b><small>${esc(g.about || '')}</small></span><span class="mn-tri">▸</span></div>`).join('') +
+      `<div class="mn-foot small faint">Point at a group to open it · right-click a screen to open it in a new tab</div>`;
+    $$('#side .mn-g').forEach(row => { const g = G[+row.dataset.g];
+      row.onmouseenter = () => flyOpen(row, g); row.onmouseleave = flyLater; row.onclick = () => { if (FLY && FLY.dataset.g === row.dataset.g) flyClose(); else flyOpen(row, g); };
+      row.onkeydown = e => { if (e.key === 'Enter' || e.key === 'ArrowRight') { flyOpen(row, g); const f = $('.mn-s, a.mn-i', FLY); if (f) f.focus(); } }; });
+  }
+  function drawSideFold() {
+    $('#side').classList.remove('mn');
     const open = S.openSec, cur = currentItem();
     $('#side').innerHTML = `<div class="nav-label">Menu <span class="faint" style="text-transform:none;letter-spacing:0">· in the order of the work</span></div>` +
       S.boot.menu.map(s => `<div class="nav-sec ${open === s.id ? 'open' : ''}" data-sec="${s.id}"><div class="nav-head has">${ic(secIcon(s.name))}${esc(s.name)}<span class="faint small" style="margin-left:6px">${s.items.length}</span>${ic('chev', 'ico chev')}</div>
-        <div class="nav-items">${s.items.map(i => i.soon ? `<div class="nav-item lv1" title="Planned – not built yet"><span class="lbl" style="opacity:.55;cursor:default">${esc(i.name)} <span class="chip plain" style="font-size:10px">Soon</span></span></div>` : `<div class="nav-item lv1 ${i.id === cur ? 'active' : ''}"><a class="lbl" href="${esc(i.route)}">${esc(i.name)}</a></div>`).join('')}</div></div>`).join('');
-    $$('#side .nav-head').forEach(h => h.onclick = () => { const id = +h.parentNode.dataset.sec; S.openSec = S.openSec === id ? null : id; drawSide(); });
+        <div class="nav-items">${s.items.map(i => i.soon ? `<div class="nav-item lv1" title="Planned – not built yet"><span class="lbl" style="opacity:.55;cursor:default">${esc(i.name)} <span class="chip plain" style="font-size:10px">Soon</span></span></div>` : `<div class="nav-item lv1 ${i.id === cur ? 'active' : ''}"><a class="lbl" href="${esc(i.route)}">${esc(i.name)}${i.about ? `<small>${esc(i.about)}</small>` : ''}</a></div>`).join('')}</div></div>`).join('');
+    $$('#side .nav-head').forEach(h => h.onclick = () => { const id = +h.parentNode.dataset.sec; S.openSec = S.openSec === id ? null : id; drawSideFold(); });
   }
 
   // ---------- pages ----------
@@ -1618,12 +1684,14 @@
       : tab === 'tasks' ? `<div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>Task</th><th>Status</th><th>Priority</th><th>Due</th></tr></thead><tbody>${d.tasks.map(t => `<tr><td>${esc(t.title)}${t.rule_code ? ` <span class="small muted">${esc(t.rule_code)}</span>` : ''}</td><td><span class="chip ${chipFor(t.status)}">${esc(t.status === 'DONE' ? 'WAITING APPROVAL' : t.status)}</span> ${healthChip(t.health)}${t.score !== null ? ` <span class="chip" style="color:${t.band.fg};background:${t.band.bg}" title="Score, frozen at approval">${+t.score}</span>` : ''}${t.preview ? `<div class="small muted" title="If approved as Good today">${esc(t.preview.text)} = ${t.preview.score}</div>` : ''}</td><td>${esc(t.priority)}</td><td>${esc(t.due_at)}</td></tr>`).join('')}</tbody></table>${d.tasks.length ? '' : '<div class="empty">No tasks on this record.</div>'}</div></div>`
       : `<div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>When</th><th>Who</th><th>What</th><th>Change</th></tr></thead><tbody>${d.history.map(h => `<tr><td>${esc(h.at)}</td><td>${esc(h.by)}</td><td>${esc({ INSERT: 'Created', UPDATE: 'Changed', EXPORT: 'Exported' }[h.action] || h.action)}${h.legacy ? ' <span class="chip plain">from the old tool</span>' : ''}</td><td>${h.changes ? Object.entries(h.changes).map(([k, v]) => `<div><b>${esc(k)}</b>: ${esc(v[0] ?? '—')} → ${esc(v[1] ?? '—')}</div>`).join('') : ''}${h.reason ? `<div class="small muted">${esc(h.reason)}</div>` : ''}</td></tr>`).join('')}</tbody></table></div></div>`;
     $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/list/${key}">${esc(d.form_title)}</a> ›</div><h1>${esc(d.title)}</h1>${d.dq ? `<details class="small" style="margin-top:4px"><summary style="cursor:pointer;display:inline-block"><span class="chip ${d.dq.score >= 80 ? 'ok' : d.dq.score >= 60 ? 'plain' : 'err'}">${esc(d.dq.text)}</span></summary>${d.dq.missing.length ? '<div style="margin-top:4px">Not filled: ' + d.dq.missing.map(m => `<a href="#" data-dqf="${esc(m.field)}">${esc(m.label)}</a>`).join(', ') + '</div>' : ''}</details>` : ''}</div>
-      <div class="actions">${key === S.boot.product_form ? `<a class="btn" href="#/stock/product/${id}">Stock</a><a class="btn" href="#/prices/${id}">Prices</a><a class="btn" href="#/variations/${id}">Variations</a><button class="btn" id="rDup" title="Copy this product to a new SKU – stock is never copied">Duplicate</button>` : ''}${/^t_src_cartons/.test(key) ? `<button class="btn" id="rMarks" title="One shipping mark per carton: PO, SKU, carton n of N, weights, CBM">${ic('file')} Carton marks</button>` : ''}<button class="btn" id="rDel" title="Switch this record off. Refused when something still uses it. Can be undone.">Delete</button><button class="btn" id="rFrom" title="Where this record came from: file and row, old tool row, stock, journals">Where from?</button><button class="btn primary" id="rEdit">${ic('wand')} Edit</button></div></div>
+      <div class="actions">${key === S.boot.product_form ? `<a class="btn" href="#/stock/product/${id}">Stock</a><a class="btn" href="#/prices/${id}">Prices</a><a class="btn" href="#/variations/${id}">Variations</a><button class="btn" id="rDup" title="Copy this product to a new SKU – stock is never copied">Duplicate</button>` : ''}${/^t_src_cartons/.test(key) ? `<button class="btn" id="rMarks" title="One shipping mark per carton: PO, SKU, carton n of N, weights, CBM">${ic('file')} Carton marks</button>` : ''}<button class="btn" id="rDel" title="Switch this record off. Refused when something still uses it. Can be undone.">Delete</button><button class="btn" id="rFrom" title="Where this record came from: file and row, old tool row, stock, journals">Where from?</button>${S.boot.user.role === 'OWNER' ? '<button class="btn" id="rRaw" title="Every stored column of this record as it is in the database (secrets masked)">Stored data</button>' : ''}<button class="btn primary" id="rEdit">${ic('wand')} Edit</button></div></div>
       <div id="pHeader"></div><div id="rGuide"></div>
       <div class="seg" style="margin-bottom:14px">${tabs.map(([k, l]) => `<button type="button" class="${k === tab ? 'on' : ''}" data-tab="${k}">${esc(l)}</button>`).join('')}</div>${body}`;
     guideCard(key, id); if ((S.boot.person_forms || []).includes(key)) personHeader(id);
     if (tab === 'messages') msgLog($('#recMsg'), `rec-messages/${key}/${id}`, false);
     if (tab === 'docs') docsCard($('#recDocs'), key, id);      // MR-1266 / MR-1418
+    if ($('#rRaw')) $('#rRaw').onclick = async () => { let x; try { x = await api(`inspect/${key}/${id}`); } catch (e) { return toast(e.message, 'err'); }      // MR-0941
+      const m = modal('Stored data · ' + x.table, 'Every column of this record as the database holds it. Secrets stay masked.', `<div class="tbl-wrap"><table class="t small"><tbody>${x.columns.map(c => `<tr><td class="muted">${esc(c.column)}</td><td>${c.value === null ? '<span class="faint">NULL</span>' : esc(String(c.value))}</td></tr>`).join('')}</tbody></table></div>`, '<button class="btn" data-close>Close</button>'); $('[data-close]', m.ov).onclick = m.close; };
     if ($('#rFrom')) $('#rFrom').onclick = async () => { let x; try { x = await api(`lineage/${key}/${id}`); } catch (e) { return toast(e.message, 'err'); }      // MR-1539
       const m = modal('Where from?', 'The record, the file and row it came from, the stock it used and the journals it booked.', `<ol>${x.steps.map(s => `<li style="margin:6px 0"><b>${esc(s.what)}</b> – ${s.url ? `<a href="${esc(s.url)}">${esc(s.text)}</a>` : esc(s.text)}</li>`).join('')}</ol>`, '<button class="btn" data-close>Close</button>'); $('[data-close]', m.ov).onclick = m.close; };
     $('#rDel').onclick = () => bulkRun(key, 'DELETE', [id], null, null, () => pageRecord(key, id));
@@ -3529,6 +3597,9 @@
         <td>${esc([a.change.category, a.change.note, a.change.party].filter(Boolean).join(' · '))}${a.bank ? `<div class="small muted">${a.bank.beneficiary ? 'Beneficiary: ' + esc(a.bank.beneficiary) + ' · ' : ''}${a.bank.phone_checked ? 'Phone check: ' + esc(a.bank.note || 'recorded') : 'Waiting for the phone check of a second person'}</div>` : ''}${a.change.amount ? `<div class="small muted">${money(a.change.amount)} ${esc(a.change.currency || '')}</div>` : ''}</td><td class="num">${money(a.amount_gbp)}</td><td>${esc(a.by || '')}</td>
         <td>${mChip(a.status)}${a.status !== 'PENDING' ? `<div class="small muted">${esc(a.decided_by_name || '')}${a.reason ? ' · ' + esc(a.reason) : ''}</div>` : ''}</td>
         <td style="white-space:nowrap">${a.can_decide ? `<button class="btn sm primary" data-ok="${a.id}">Approve</button> <button class="btn sm" data-no="${a.id}">Reject</button>` : (a.bank && a.bank.can_phone ? `<button class="btn sm" data-phone="${a.bank.id}">Record phone check</button>` : (a.status === 'PENDING' ? `<span class="small muted">${a.bank && a.bank.phone_checked ? 'waits for the Owner' : 'needs another person'}</span>` : ''))}</td></tr>`).join('')}</tbody></table>${d.rows.length ? '' : `<div class="empty">${ic('check')}<div>Nothing is waiting for approval.</div></div>`}</div></div>`;
+    if (innerWidth < 700) {      /* MR-1540 one tap on the phone: a card per waiting request with big Approve / Reject buttons above the list */
+      const wait = d.rows.filter(a => a.can_decide); if (wait.length) $('#main .page-head').insertAdjacentHTML('afterend', `<div id="apCards">${wait.map(a => `<div class="card" style="padding:14px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:8px"><b>${esc(what[a.action_code] || a.action_code)}</b><b>${esc(d.base)} ${(+a.amount_gbp || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })}</b></div>
+        <div class="small muted" style="margin:6px 0">${esc([a.change.category, a.change.note, a.change.party].filter(Boolean).join(' · '))} · asked by ${esc(a.by || '')}</div><div style="display:flex;gap:8px"><button class="btn primary" style="flex:1;min-height:44px" data-ok="${a.id}">Approve</button><button class="btn" style="flex:1;min-height:44px" data-no="${a.id}">Reject</button></div></div>`).join('')}</div>`); }
     $$('#main [data-ok]').forEach(b => b.onclick = () => act(`approvals/${b.dataset.ok}`, { approve: true }, again));
     $$('#main [data-phone]').forEach(b => b.onclick = () => miniForm('Phone check with the supplier', 'Call the supplier on a number you already know (not one from the message that asked for the change) and confirm the bank details.', [{ name: 'note', label: 'Who you spoke to, on which number', required: true }], async v => { const r = await api(`supplier-banks/${b.dataset.phone}/phone-check`, { method: 'POST', body: { note: v.note } }); again(); return r; }, 'Record'));
     $$('#main [data-no]').forEach(b => b.onclick = () => miniForm('Reject this request', 'The person who asked sees your reason.', [{ name: 'reason', label: 'Reason', required: true }], async v => { const r = await api(`approvals/${b.dataset.no}`, { method: 'POST', body: { approve: false, reason: v.reason } }); again(); return r; }, 'Reject'));

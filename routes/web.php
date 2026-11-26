@@ -54,6 +54,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('shops/{id}/kit', [AppController::class, 'shopKit'])->whereNumber('id');      // R-C-30
         Route::get('people/external', [AppController::class, 'externalList']);      // R-C-19
         Route::post('mytool-import', [\App\Http\Controllers\CoreExtrasController::class, 'mytool']);      // owner 26-11 MY TOOL purchase history
+        Route::get('inspect/{key}/{id}', [\App\Http\Controllers\CoreExtrasController::class, 'inspect'])->whereNumber('id');      // MR-0941
         Route::get('lineage/{key}/{id}', [\App\Http\Controllers\CoreExtrasController::class, 'lineage'])->whereNumber('id');      // MR-1539
         Route::get('docs/{key}/{id}', [\App\Http\Controllers\CoreExtrasController::class, 'docs'])->whereNumber('id'); Route::post('docs/{key}/{id}', [\App\Http\Controllers\CoreExtrasController::class, 'docAdd'])->whereNumber('id');      // MR-1266 / MR-1418
         Route::post('doc/{doc}', [\App\Http\Controllers\CoreExtrasController::class, 'docEdit'])->whereNumber('doc'); Route::post('doc/{doc}/version', [\App\Http\Controllers\CoreExtrasController::class, 'docVersion'])->whereNumber('doc'); Route::post('doc/{doc}/remove', [\App\Http\Controllers\CoreExtrasController::class, 'docRemove'])->whereNumber('doc');

@@ -484,3 +484,42 @@ td.bad{color:var(--err);font-weight:600}
 /* app: row of number cards (was missing – cards stacked one per row) */
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
 @media (max-width:560px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Owner 26-11: the grouped menu with side windows (Seller Central style) – larger, bolder, soft, every line explains itself */
+#side.mn{padding:14px 10px 40px;background:linear-gradient(180deg,var(--surface) 0%,var(--surface-2) 100%)}
+.mn-label{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);padding:2px 12px 10px;font-weight:700}
+.mn-g{display:flex;align-items:center;gap:12px;padding:11px 12px;margin:3px 0;border-radius:14px;cursor:pointer;user-select:none;border:1px solid transparent;transition:background .15s,border-color .15s,box-shadow .15s,transform .15s;outline:none}
+.mn-g:hover,.mn-g.on,.mn-g:focus-visible{background:var(--surface);border-color:var(--accent-line);box-shadow:0 6px 18px -10px color-mix(in srgb,var(--accent) 45%,transparent)}
+.mn-g.on{transform:translateX(2px)}
+.mn-g.cur{background:var(--accent-soft);border-color:var(--accent-line)}
+.mn-ic{flex:0 0 38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;background:var(--accent-soft);color:var(--accent);transition:background .15s,color .15s}
+.mn-ic svg,.mn-ic .ico{width:19px;height:19px}
+.mn-g:hover .mn-ic,.mn-g.on .mn-ic,.mn-g.cur .mn-ic{background:var(--accent);color:#fff}
+.mn-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.mn-t b{font-size:15.5px;font-weight:750;color:var(--text);letter-spacing:-.005em;line-height:1.2}
+.mn-t small,.mn-ph small,.mn-s small,.mn-i small{font-size:12px;color:var(--muted);line-height:1.35;font-weight:500}
+.mn-t small{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.mn-tri{color:var(--faint);font-size:13px;transition:transform .15s,color .15s}
+.mn-g:hover .mn-tri,.mn-g.on .mn-tri,.mn-s:hover .mn-tri,.mn-s.on .mn-tri{color:var(--accent);transform:translateX(2px)}
+.mn-foot{padding:14px 12px 0;line-height:1.4}
+.mn-fly{position:fixed;inset:0;pointer-events:none;z-index:90}
+.mn-p{position:fixed;pointer-events:auto;width:320px;max-height:calc(100vh - var(--top) - 20px);overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 60px -20px rgba(8,40,40,.35),0 4px 14px -6px rgba(8,40,40,.18);animation:mnIn .14s ease-out}
+.mn-p::before{content:"";position:absolute;left:-7px;top:calc(var(--ay,24px) - 7px);width:12px;height:12px;background:var(--surface);border-left:1px solid var(--line);border-bottom:1px solid var(--line);transform:rotate(45deg)}
+.mn-p2{width:360px}
+.mn-pb.two{display:grid;grid-template-columns:1fr 1fr;gap:2px 6px}
+.mn-p:has(.mn-pb.two){width:600px}
+@keyframes mnIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+.mn-ph{display:flex;flex-direction:column;gap:3px;padding:16px 18px 12px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--surface);z-index:1}
+.mn-ph b{font-size:17px;font-weight:800;color:var(--text);letter-spacing:-.01em}
+.mn-pb{padding:8px}
+.mn-s,.mn-i{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:11px;cursor:pointer;color:var(--text);text-decoration:none;outline:none;transition:background .12s}
+.mn-s span:first-child{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.mn-i{flex-direction:column;align-items:flex-start;gap:2px}
+.mn-s b,.mn-i b{font-size:14.5px;font-weight:700;line-height:1.25}
+.mn-s:hover,.mn-s.on,.mn-s:focus-visible,.mn-i:hover,.mn-i:focus-visible{background:var(--accent-soft);text-decoration:none}
+.mn-i:hover b,.mn-s.on b{color:var(--accent-ink)}
+.mn-s.cur b,.mn-i.cur b{color:var(--accent)}
+.mn-i.cur{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
+.mn-i.soon{opacity:.5;cursor:default}
+.mn-n{font-size:11.5px;font-weight:700;padding:1px 8px;border-radius:10px;background:var(--surface-3);color:var(--muted)}
+.nav-item .lbl small{display:block;font-size:11.5px;color:var(--faint);font-weight:500}
