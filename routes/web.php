@@ -79,6 +79,12 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('fee-check', [\App\Http\Controllers\CoreExtrasController::class, 'feeCheck']); Route::get('fee-check/proof', [\App\Http\Controllers\CoreExtrasController::class, 'feeProof']);      // MR-1536
         Route::get('whats-new', [\App\Http\Controllers\CoreExtrasController::class, 'whatsNew']); Route::post('whats-new/flag', [\App\Http\Controllers\CoreExtrasController::class, 'featureSet']);      // MR-1542
         Route::get('return-abuse', [\App\Http\Controllers\CoreExtrasController::class, 'returnAbuse']); Route::get('return-abuse/check/{sale}', [\App\Http\Controllers\CoreExtrasController::class, 'returnAbuseCheck'])->whereNumber('sale');      // MR-1544
+        Route::get('roadmap', function (\Illuminate\Http\Request $r) {      // owner 26-11 23:23 the one list of everything: done / building / next / discussed
+            abort_unless(in_array($r->user()->role_code, ['OWNER', 'PARTNER', 'MANAGER'], true), 403, 'This page is for the Owner, partners and managers.');
+            $f = base_path('docs/ROADMAP.md'); return ['text' => is_file($f) ? (string) file_get_contents($f) : '', 'updated' => is_file($f) ? date('Y-m-d H:i', filemtime($f)) : null];
+        });
+        Route::get('inventory', [\App\Http\Controllers\InventoryController::class, 'index']);      // owner 26-11 23:14 the inventory screen
+        Route::get('inventory/{id}', [\App\Http\Controllers\InventoryController::class, 'story'])->whereNumber('id');
         Route::get('decisions', function (\Illuminate\Http\Request $r) {      // MR-1443 … 1450 decision engine (reads only)
             $u = $r->user(); if (! \App\Services\Perm::has($u, 'money.SEE') && ! \App\Services\Perm::has($u, 'buying.SEE')) return response()->json(['message' => 'You do not have the right to open this page – ask the Owner.'], 403);
             return \App\Services\Decisions::all((int) \App\Services\Context::ent(), $r->query('code') ?: null);

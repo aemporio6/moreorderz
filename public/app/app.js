@@ -496,6 +496,9 @@
       if (r === '#/putaway') return await pagePutaway();
       if (r === '#/inbound') return await pageInbound();
       if (r === '#/stock-alerts') return await pageStockAlerts();
+      if (r === '#/roadmap') return await pageRoadmap();      // owner 26-11 23:23
+      if (r.startsWith('#/inventory/')) return await pageInventoryStory(+r.split('/')[2].split('?')[0]);      // owner 26-11 23:14
+      if (r === '#/inventory' || r.startsWith('#/inventory?')) return await pageInventory();
       if (r.startsWith('#/decisions')) return await pageDecisions(new URLSearchParams(r.split('?')[1] || '').get('code') || '');      // MR-1443 … 1450
       if (r === '#/icc' || r.startsWith('#/icc?')) return await pageIcc(new URLSearchParams(r.split('?')[1] || '').get('status') || '');
       if (/^#\/icc\/\d+/.test(r)) return await pageIccOne(+r.split('/')[2].split('?')[0]);
@@ -2103,6 +2106,83 @@
   // ---------- ICC – Inventory Cycle Calculator (07_ICC, IC-18): every product worst first, one product with inputs, stages, pipeline, mode compare and cash line ----------
   const ICC_CHIP = { RED: 'err', YELLOW: 'warn', GREEN: 'ok', NONE: '' };
   const fmt = v => v == null ? '–' : (Number.isInteger(+v) ? (+v).toLocaleString('en-GB') : (+v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+
+
+  /* Owner 26-11 23:23: everything in one click – done, being built, next, discussed, waiting for the owner (docs/ROADMAP.md, updated with every batch) */
+  async function pageRoadmap() {
+    busy(true); let d; try { d = await api('roadmap'); } finally { busy(false); }
+    const inl = t => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`(.+?)`/g, '<code>$1</code>');
+    let html = '', list = null; const close = () => { if (list) { html += `</${list}>`; list = null; } };
+    d.text.split('\n').forEach(l => { let m;
+      if ((m = l.match(/^# (.*)/))) { close(); html += ''; }
+      else if ((m = l.match(/^## (.*)/))) { close(); html += `</div><div class="card rm-sec"><h2>${inl(m[1])}</h2>`; }
+      else if ((m = l.match(/^(\s*)- (.*)/))) { if (list !== 'ul') { close(); html += '<ul>'; list = 'ul'; } html += `<li class="${m[1].length ? 'rm-sub' : ''}">${inl(m[2])}</li>`; }
+      else if ((m = l.match(/^\d+\. (.*)/))) { if (list !== 'ol') { close(); html += '<ol>'; list = 'ol'; } html += `<li>${inl(m[1])}</li>`; }
+      else if (l.trim()) { close(); html += `<p>${inl(l)}</p>`; } else close(); });
+    close();
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Plan &amp; progress</h1><div class="sub">Everything in one place – what is done, what is being built, what comes next, what we discussed and what waits for you. Updated with every batch${d.updated ? ' · last ' + esc(d.updated) : ''}.</div></div></div><div class="rm"><div>${html}</div></div>`;
+  }
+
+  /* Owner 26-11 23:14 – the Inventory screen (approved design): one line per product with every state of its stock, who owns it, where it may be
+     sold, its listings, sales and cover; a product opens its whole story. Reads only – every change goes through the ledger screens. */
+  const INV = { q: '', shop: '', marketplace: '', mode: '', owner: '', state: '', sort: 'stock', page: 1, children: '', open: {} };
+  async function pageInventory() {
+    busy(true); let d; try { d = await api('inventory?' + new URLSearchParams(Object.entries(INV).filter(([k, v]) => v !== '' && k !== 'open'))); } finally { busy(false); }
+    if (d.summary) INV.sum = d.summary; const sm = INV.sum || {}, F = d.filters;
+    const n = v => (+v || 0).toLocaleString('en-GB'), opt = (list, val, first) => `<option value="">${first}</option>` + list.map(o => `<option value="${o.id}" ${String(o.id) === String(val) ? 'selected' : ''}>${esc(o.mp ? o.mp + ' · ' + o.name : o.name)}</option>`).join('');
+    const stockCell = (v, cls, tip) => `<td class="num ${v ? cls || '' : 'muted'}" title="${esc(tip)}">${v ? n(v) : '–'}</td>`;
+    const row = (x, child) => `<tr class="inv-r ${child ? 'inv-child' : ''}" data-inv="${x.id}">
+      <td class="inv-ph">${x.photo ? `<img src="${esc(x.photo)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="inv-noimg">${esc((x.sku || '?').slice(0, 2))}</span>`}</td>
+      <td class="inv-name">${x.parent && !child ? `<a href="#" class="inv-kids" data-kids="${x.id}">${INV.open[x.id] ? '▾' : '▸'} ${x.children} variation${x.children === 1 ? '' : 's'}</a><br>` : ''}<a href="#/inventory/${x.id}"><b>${esc(x.name || x.sku)}</b></a>
+        <div class="small muted">${esc(x.sku || '')}${x.asin.length ? ' · ASIN ' + esc(x.asin.slice(0, 2).join(', ')) : ''}</div></td>
+      ${stockCell(x.stock.available, 'inv-ok', 'Can be sold now (warehouse − reserved)')}${stockCell(x.stock.fba, '', x.fba.map(f => f.shop + ': ' + f.units).join(' · ') || 'Amazon FBA')}${stockCell(x.stock.transit + x.stock.fba_inbound, '', 'On the way to a warehouse or to FBA')}
+      ${stockCell(x.stock.inbound, '', 'Ordered / in production on open POs')}${stockCell(x.stock.reserved, '', 'Held for orders')}${stockCell(x.stock.damaged, 'inv-bad', 'Damaged / not sellable')}
+      <td>${x.owners.map(o => `<span class="chip plain inv-own" title="${esc(o.name)}: ${n(o.units)} units · ${money(o.value)}">${esc(o.name.split(' ')[0])} ${n(o.units)}</span>`).join(' ') || '<span class="muted">–</span>'}</td>
+      <td>${x.mode === 'private' ? '<span class="chip warn plain">Private</span>' : '<span class="chip ok plain">Pool</span>'}<div class="small muted">${esc((x.mode === 'private' ? x.private : x.pool).slice(0, 3).join(', '))}${(x.mode === 'private' ? x.private : x.pool).length > 3 ? '…' : ''}</div></td>
+      <td>${x.listings.count ? `<a href="#/list/listing?f[fk_id_product]=${x.id}">${x.listings.count} shop${x.listings.count > 1 ? 's' : ''}</a><div class="small muted">${x.listings.min != null ? money(x.listings.min) + (x.listings.max != x.listings.min ? '–' + money(x.listings.max) : '') : ''}</div>` : '<span class="muted">not listed</span>'}</td>
+      <td class="num">${x.sold30 ? n(x.sold30) : '–'}</td><td class="num ${x.cover_days !== null && x.cover_days < 21 ? 'inv-bad' : ''}">${x.cover_days === null ? '–' : x.cover_days + ' d'}</td>
+      <td class="num">${x.value ? money(x.value) : '–'}</td><td class="num ${x.age_days > 180 ? 'inv-bad' : ''}">${x.age_days === null ? '–' : x.age_days + ' d'}</td></tr>`;
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Inventory</h1><div class="sub">Every product, where its stock is, who owns it, where it may be sold and how fast it sells – straight from the stock ledger. Open a product for its whole story.</div></div></div>
+      <div class="kpis inv-kpis">${[['Units in stock', n(sm.units), ''], ['Value at cost', money(sm.value) + ' ' + esc(sm.base || ''), ''], ['Amazon FBA', n(sm.fba), ''], ['On the way', n(sm.transit), ''], ['Out of stock', n(sm.out) + ' of ' + n(sm.products), sm.out ? 'warn' : ''], ['To order (ICC)', n(sm.to_order), sm.to_order ? 'err' : ''], ['Aged > 180 days', money(sm.aged_value), sm.aged_value ? 'warn' : ''], ['Listings', n(sm.listings), '']].map(([l, v, t]) => `<div class="card kpi ${t}"><div class="bar"></div><div class="lbl">${l}</div><div class="val">${v}</div></div>`).join('')}</div>
+      <div class="card inv-bar"><input class="q" id="invQ" placeholder="Search SKU, name, ASIN, item id…" value="${esc(INV.q)}" data-ap-skip>
+        <select class="q" id="invShop" data-ap-skip>${opt(F.shops, INV.shop, 'All shops')}</select><select class="q" id="invMp" data-ap-skip>${opt(F.marketplaces, INV.marketplace, 'All marketplaces')}</select>
+        <select class="q" id="invMode" data-ap-skip><option value="">Pool + Private</option><option value="pool" ${INV.mode === 'pool' ? 'selected' : ''}>Pool</option><option value="private" ${INV.mode === 'private' ? 'selected' : ''}>Private</option></select>
+        <select class="q" id="invOwner" data-ap-skip><option value="">All owners</option><option value="company" ${INV.owner === 'company' ? 'selected' : ''}>Company</option>${F.owners.map(o => `<option value="${o.id}" ${String(o.id) === INV.owner ? 'selected' : ''}>${esc(o.name)}</option>`).join('')}</select>
+        <select class="q" id="invState" data-ap-skip>${[['', 'Any stock'], ['in', 'In stock'], ['out', 'Out of stock'], ['low', 'Low'], ['order', 'To order'], ['aged', 'Aged > 180 days']].map(([v, l]) => `<option value="${v}" ${INV.state === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        <select class="q" id="invSort" data-ap-skip>${[['stock', 'Most stock'], ['order', 'Order first'], ['sku', 'SKU'], ['name', 'Name']].map(([v, l]) => `<option value="${v}" ${INV.sort === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div class="card"><div class="tbl-wrap"><table class="t inv-t"><thead><tr><th></th><th>Product</th><th class="num" title="Can be sold now">Available</th><th class="num">FBA</th><th class="num">On the way</th><th class="num">Inbound</th><th class="num">Reserved</th><th class="num">Damaged</th><th>Owner</th><th>Pool / Private</th><th>Listings</th><th class="num">Sold 30 d</th><th class="num">Cover</th><th class="num">Value</th><th class="num">Age</th></tr></thead>
+        <tbody>${d.rows.length ? d.rows.map(x => row(x)).join('') : '<tr><td colspan="15" class="muted" style="padding:18px">No product matches.</td></tr>'}</tbody></table></div>
+        <div class="inv-pg small"><span>${n(d.total)} product${d.total === 1 ? '' : 's'} · page ${d.page} of ${Math.max(1, Math.ceil(d.total / d.per))}</span> ${d.page > 1 ? '<button class="btn sm" id="invPrev">‹ Previous</button>' : ''} ${d.page * d.per < d.total ? '<button class="btn sm" id="invNext">Next ›</button>' : ''}</div></div>`;
+    const set = (k, v) => { INV[k] = v; INV.page = 1; pageInventory(); };
+    let tm; $('#invQ').oninput = e => { clearTimeout(tm); tm = setTimeout(() => { INV.q = e.target.value.trim(); INV.page = 1; pageInventory().then(() => { const i = $('#invQ'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }); }, 350); };
+    [['#invShop', 'shop'], ['#invMp', 'marketplace'], ['#invMode', 'mode'], ['#invOwner', 'owner'], ['#invState', 'state'], ['#invSort', 'sort']].forEach(([sel, k]) => $(sel).onchange = e => set(k, e.target.value));
+    if ($('#invPrev')) $('#invPrev').onclick = () => { INV.page--; pageInventory(); }; if ($('#invNext')) $('#invNext').onclick = () => { INV.page++; pageInventory(); };
+    $$('#main [data-kids]').forEach(a => a.onclick = async e => { e.preventDefault(); const id = +a.dataset.kids, tr = a.closest('tr'); if (INV.open[id]) { delete INV.open[id]; $$(`#main tr[data-kof="${id}"]`).forEach(x => x.remove()); a.innerHTML = a.innerHTML.replace('▾', '▸'); return; }
+      INV.open[id] = 1; a.innerHTML = a.innerHTML.replace('▸', '▾'); try { const s2 = await api('inventory/' + id); const kids = s2.children.map(c => c.id); if (!kids.length) return;
+        const k = await api('inventory?' + new URLSearchParams({ children: 1, q: '' })); /* children lines come from the same fill */
+        const rows = (await Promise.all(kids.slice(0, 40).map(cid => api('inventory/' + cid).then(z => z.product).catch(() => null)))).filter(Boolean);
+        tr.insertAdjacentHTML('afterend', rows.map(c => row(c, true).replace('<tr ', `<tr data-kof="${id}" `)).join('')); } catch (er) { toast(er.message, 'err'); } });
+    $$('#main tr.inv-r').forEach(tr => tr.ondblclick = () => go('#/inventory/' + tr.dataset.inv));
+  }
+  async function pageInventoryStory(id) {
+    busy(true); let d; try { d = await api('inventory/' + id); } finally { busy(false); }
+    const x = d.product, n = v => (+v || 0).toLocaleString('en-GB');
+    const tile = (l, v, sub) => `<div class="card kpi"><div class="bar"></div><div class="lbl">${l}</div><div class="val">${v}</div>${sub ? `<div class="foot">${sub}</div>` : ''}</div>`;
+    $('#main').innerHTML = `<div class="page-head"><div><div class="crumb"><a href="#/inventory">Inventory</a> ›${d.parent ? ` <a href="#/inventory/${d.parent.id}">${esc(d.parent.sku)}</a> ›` : ''}</div><h1>${esc(x.name || x.sku)}</h1>
+        <div class="sub">${esc(x.sku)}${x.asin.length ? ' · ASIN ' + esc(x.asin.join(', ')) : ''} · ${x.mode === 'private' ? 'Private' : 'Pool'} · cost ${money(x.cost)}${x.price ? ' · price ' + money(x.price) : ''}</div></div>
+        <div class="actions"><a class="btn" href="#/stock/ledger?product=${id}">Stock ledger</a><a class="btn" href="#/icc/${id}">ICC</a><a class="btn primary" href="#/rec/${S.boot.product_form || 'product'}/${id}">Open the product</a></div></div>
+      <div class="inv-story-top">${x.photo ? `<img class="inv-big" src="${esc(x.photo)}" alt="" referrerpolicy="no-referrer">` : ''}<div class="kpis" style="flex:1">${tile('Available now', n(x.stock.available), 'warehouse ' + n(x.stock.warehouse) + ' − reserved ' + n(x.stock.reserved))}${tile('Amazon FBA', n(x.stock.fba), x.fba.map(f => esc(f.shop) + ' ' + n(f.units)).join(' · '))}${tile('On the way', n(x.stock.transit + x.stock.fba_inbound), 'inbound on POs ' + n(x.stock.inbound))}
+        ${tile('Value at cost', money(x.value), x.owners.map(o => esc(o.name) + ' ' + money(o.value)).join(' · '))}${tile('Sold 30 days', n(x.sold30), money(x.sales30) + (x.cover_days !== null ? ' · lasts ' + x.cover_days + ' days' : ''))}</div></div>
+      <div class="inv-grid"><div class="card"><div class="card-h"><h3>Where it is now</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Location</th><th>Kind</th><th>Lot</th><th>Owner</th><th>Pool / Private</th><th>Received</th><th class="num">Cost</th><th class="num">Units</th></tr></thead><tbody>
+        ${d.where.length ? d.where.map(w => `<tr><td>${esc(w.location)}</td><td>${esc(w.kind || '')}</td><td>${esc(w.lot || '')}</td><td>${esc(w.owner)}</td><td>${esc((w.mode || '').toLowerCase())}</td><td>${esc(w.received || '')}</td><td class="num">${money(w.cost)}</td><td class="num"><b>${n(w.qty)}</b></td></tr>`).join('') : '<tr><td colspan="8" class="muted">No stock in any warehouse.</td></tr>'}
+        ${x.fba.map(f => `<tr><td>Amazon FBA · ${esc(f.shop)}</td><td>FBA</td><td></td><td></td><td></td><td>${esc(f.date || '')}</td><td></td><td class="num"><b>${n(f.units)}</b>${f.inbound ? ` <span class="small muted">+${n(f.inbound)} inbound</span>` : ''}</td></tr>`).join('')}</tbody></table></div></div>
+      <div class="card"><div class="card-h"><h3>Where it may be sold</h3></div><div class="card-b">${x.mode === 'private' ? `<b>Private</b> – only: ${esc(x.private.join(', ') || 'no shop yet')}` : `<b>Pool</b> – every shop of: ${esc(x.pool.join(', ') || 'no marketplace yet')}`}</div>
+        <div class="tbl-wrap"><table class="t"><thead><tr><th>Shop</th><th>Marketplace</th><th>SKU / item</th><th class="num">Price</th><th class="num">Offered</th><th>Status</th></tr></thead><tbody>${d.listings.length ? d.listings.map(l => `<tr><td>${l.listing_url ? `<a href="${esc(l.listing_url)}" target="_blank" rel="noopener">${esc(l.shop_name)}</a>` : esc(l.shop_name)}</td><td>${esc(l.mp || '')}</td><td>${esc(l.marketplace_sku || '')}${l.asin ? ' · ' + esc(l.asin) : l.item_id ? ' · ' + esc(l.item_id) : ''}</td><td class="num">${l.price != null ? money(l.price) : '–'}</td><td class="num">${l.offered ?? '–'}</td><td>${esc(l.status || '')}</td></tr>`).join('') : '<tr><td colspan="6" class="muted">Not listed on any shop.</td></tr>'}</tbody></table></div></div></div>
+      ${d.children.length ? `<div class="card" style="margin-top:14px"><div class="card-h"><h3>Variations (${d.children.length})</h3></div><div class="tbl-wrap"><table class="t"><tbody>${d.children.map(c => `<tr><td><a href="#/inventory/${c.id}">${esc(c.sku)}</a></td><td>${esc(c.name || '')}</td><td class="num">${n(c.stock)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
+      <div class="card" style="margin-top:14px"><div class="card-h"><h3>Its story – every movement</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>When</th><th>What</th><th class="num">Units</th><th class="num">After</th><th>Location</th><th>Owner</th><th>From</th><th>By</th></tr></thead><tbody>
+        ${d.moves.length ? d.moves.map(m => `<tr><td>${esc(String(m.at).slice(0, 16))}</td><td>${esc(m.what || '')}${m.notes ? `<div class="small muted">${esc(m.notes)}</div>` : ''}</td><td class="num ${m.qty < 0 ? 'inv-bad' : 'inv-ok'}">${m.qty > 0 ? '+' : ''}${n(m.qty)}</td><td class="num">${m.after === null ? '' : n(m.after)}</td><td>${esc(m.location || '')}</td><td>${esc(m.owner || '')}</td><td>${esc(m.source || '')}</td><td>${esc(m.by || '')}</td></tr>`).join('') : '<tr><td colspan="8" class="muted">No movement yet.</td></tr>'}</tbody></table></div></div>`;
+  }
+
   /* MR-1443 … 1450 the decision engine: what to do next, the money each is worth, one click to the form that does it */
   async function pageDecisions(code) {
     busy(true); let d; try { d = await api('decisions' + (code ? '?code=' + code : '')); } finally { busy(false); }

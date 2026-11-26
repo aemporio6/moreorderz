@@ -463,4 +463,13 @@ class CoreAreaTest extends TestCase
         $o = $this->getJson('/api/options/icc/season')->assertOk()->json('options');
         $this->assertGreaterThanOrEqual(3, count($o), 'the values come back from the register'); $this->assertSame(0, \App\Services\Registry::fillList($code), 'only an empty list is filled');
     }
+
+    /** Owner 26-11 23:23: the one list of everything opens in the tool; only Owner / partner / manager. */
+    public function test_roadmap_page(): void
+    {
+        $this->actingAs($this->owner);
+        $t = $this->getJson('/api/roadmap')->assertOk()->json('text');
+        foreach (['## Now being built', '## Next', '## Waiting for the owner', '## Discussed', '## Done'] as $h) $this->assertStringContainsString($h, $t);
+        $this->actingAs($this->makeUser('VA'))->getJson('/api/roadmap')->assertStatus(403);
+    }
 }
