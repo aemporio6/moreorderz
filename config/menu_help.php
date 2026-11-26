@@ -3,9 +3,11 @@
 return [
     'groups' => [
         ['name' => 'Home', 'about' => 'Today\'s numbers and your work', 'icon' => 'home', 'sections' => ['Home']],
-        ['name' => 'Buy & Receive', 'about' => 'Suppliers, orders and stock in', 'icon' => 'buy', 'sections' => ['Research', 'Buying', 'Receiving & Warehouse']],
+        ['name' => 'Buy & Receive', 'about' => 'Suppliers, orders and goods coming in', 'icon' => 'buy', 'sections' => ['Research', 'Buying']],
+        ['name' => 'Inventory', 'about' => 'Every unit: where it is, whose it is, where it sells', 'icon' => 'stock', 'sections' => ['Inventory', 'Receiving & Warehouse']],
         ['name' => 'Products & Selling', 'about' => 'Listings, orders and dispatch', 'icon' => 'sell', 'sections' => ['Products & Listings', 'Selling', 'Dispatch', 'Returns & Customers']],
-        ['name' => 'Money', 'about' => 'Bank, profit and month close', 'icon' => 'money', 'sections' => ['Money', 'Month Close & Audit', 'Invoicing', 'Partners & Investors']],
+        ['name' => 'Money', 'about' => 'Bank, profit and month close', 'icon' => 'money', 'sections' => ['Money', 'Month Close & Audit', 'Invoicing']],
+        ['name' => 'Partners', 'about' => 'Each partner: share, stock, profit and money', 'icon' => 'partners', 'sections' => ['Partners & Investors']],
         ['name' => 'Team & Work', 'about' => 'People, tasks and approvals', 'icon' => 'work', 'sections' => ['People & Accounts', 'Work', 'Documents']],
         ['name' => 'Data & Reports', 'about' => 'Files, connections and reports', 'icon' => 'reports', 'sections' => ['Import Center', 'Reports']],
         ['name' => 'Setup', 'about' => 'Settings, printers and rights', 'icon' => 'setup', 'sections' => ['Setup']],
@@ -13,7 +15,7 @@ return [
     'sections' => [
         'Home' => 'The start page for each role', 'Research' => 'Ideas for new products and their numbers', 'Buying' => 'From quotation to landed cost, one cycle at a time',
         'Receiving & Warehouse' => 'Goods in, where they sit, what is on hand', 'Products & Listings' => 'Every product and where it is listed', 'Selling' => 'Orders, refunds and shop health',
-        'Dispatch' => 'Pick, pack, label and hand over parcels', 'Returns & Customers' => 'Returns, cases and buyers', 'Money' => 'Bank, payouts, expenses, loans and cash',
+        'Dispatch' => 'Pick, pack, label and hand over parcels', 'Inventory' => 'The inventory screen, the FBA check and stock by partner', 'Returns & Customers' => 'Returns, cases and buyers', 'Money' => 'Bank, payouts, expenses, loans and cash',
         'Month Close & Audit' => 'Check and lock each shop month', 'Invoicing' => 'Invoices and settling each month', 'Partners & Investors' => 'Agreements, splits and statements',
         'People & Accounts' => 'Staff, companies, shops and their kits', 'Work' => 'Tasks, approvals and messages', 'Documents' => 'Files kept with records',
         'Import Center' => 'Load marketplace, bank and carrier files', 'Reports' => 'Every report, grouped', 'Setup' => 'How the tool is set up for your business',
@@ -74,7 +76,7 @@ return [
         'M_13_7_PLAYBOOKS' => 'Step-by-step guides for each job',
         'M_14_1_DOCUMENTS' => 'Every file kept with a record', 'M_14_2_DRIVE_FOLDERS' => 'Google Drive folders linked to the tool',
         'M_15_1_IMPORT_A_FILE' => 'Drop, paste or link anything – it is read and put in its place', 'M_15_2_IMPORT_HISTORY' => 'Every file loaded, and undo', 'M_15_3_WATCHED_DRIVE_FOLDERS' => 'Folders the tool reads by itself',
-        'M_15_4_MAPPINGS_REPORT_TYPES' => 'How each file\'s columns are read', 'M_15_5_API_CONNECTIONS' => 'Live links to marketplaces and carriers', 'M_15_MYTOOL_LINK' => 'Connect MY TOOL: key, permissions, what came in', 'M_1_ROADMAP' => 'Done, being built, next, discussed – everything in one list', 'M_5_INVENTORY' => 'Every product: where its stock is, whose it is, where it may be sold', 'M_16_DECISIONS' => 'What to do next, the money each is worth, one click to do it', 'M_14_SUPPLIER_INBOX' => 'Files suppliers sent with their upload link – filed by themselves',
+        'M_15_4_MAPPINGS_REPORT_TYPES' => 'How each file\'s columns are read', 'M_15_5_API_CONNECTIONS' => 'Live links to marketplaces and carriers', 'M_15_MYTOOL_LINK' => 'Connect MY TOOL: key, permissions, what came in', 'M_INV_FBA_CHECK' => 'Amazon FBA report against the ledger – book the difference', 'M_INV_EACH_PARTNER_STOCK' => 'Each partner\'s share of the stock', 'M_11_EACH_PARTNER' => 'Each partner: share, his stock, sales, profit, money both ways', 'M_1_ROADMAP' => 'Done, being built, next, discussed – everything in one list', 'M_5_INVENTORY' => 'Every product: where its stock is, whose it is, where it may be sold', 'M_16_DECISIONS' => 'What to do next, the money each is worth, one click to do it', 'M_14_SUPPLIER_INBOX' => 'Files suppliers sent with their upload link – filed by themselves',
         'M_16_1_ALL_REPORTS_GROUPED_' => 'Every report of the tool, by area',
         'M_17_1_FIRST_TIME_SETUP_WIZARD' => 'Set the tool up step by step', 'M_17_2_COMPANY_FINANCE_SETTINGS' => 'Currency, VAT and finance choices', 'M_17_3_MARKETPLACE_PROFILES' => 'How each marketplace is read',
         'M_17_4_CARRIER_PROFILES_PRESETS' => 'Carriers, services and label settings', 'M_17_5_BANK_STATEMENT_PROFILES' => 'How each bank file is read', 'M_17_6_PAYMENT_PROVIDER_PROFILES' => 'PayPal, Payoneer, Wise and others',

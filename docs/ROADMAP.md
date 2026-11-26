@@ -4,7 +4,7 @@ The single list of everything: what is done, what is being built, what comes nex
 It lives in the code (docs/ROADMAP.md) and opens in the tool under Home › Plan & progress. Every batch updates it before it is deployed.
 Nothing the owner asked for may be dropped from this list. A line only leaves "Next" or "Discussed" by moving to "Done", with its date.
 
-Updated: 26 Nov 2026, 23:45 (Pakistan time)
+Updated: 27 Nov 2026, 00:20 (Pakistan time)
 
 ## The owner's standing rules (every screen, every batch is checked against these)
 1. **Everything is connected.** Stock ↔ inventory ↔ partners ↔ buying ↔ sourcing ↔ selling ↔ money. Nothing is a screen on its own: every figure comes from the one ledger and setup behind it, and every action writes there. If something is not connected, it is not finished.
@@ -29,7 +29,13 @@ Updated: 26 Nov 2026, 23:45 (Pakistan time)
   - (f) ✅ Who sees what: a person limited to shops sees only those shops' products – on Inventory, the product story, the stock list, the stock ledger, lots and a product's stock page (Inventory sharing already did this). Still to do: a partner sees his own lots and shares, which comes with the partner work below.
 
 ## Next (in this order)
-1. **Partner / finance for each partner**, as in the old tool. Found 26-11 23:55: on live there are 0 partner agreements, 0 capital entries and 0 withdrawals, and every stock lot shows "Company". The old tool's product ↔ investor links (t_product_investors, 85 lines) were kept only as history. Its partner settings must be read from the old database and turned into agreements, lot owners and opening balances. For every partner:
+1. **Partner / finance for each partner** – ✅ first part built 27-11: Partners & Investors › **Each partner**. Per partner:
+   - share (agreement %, or by product: 1 ÷ investors on the product – the old tool's rule)
+   - his stock: on hand, FBA, on the way, coming, value at raw price and at cost (Owner only)
+   - sold in 30 days, settled months (revenue, profit, his share), invoices and payments, partner ledger
+   - "His stock in Inventory" opens Inventory filtered to his products
+   - a partner login sees only his own account
+   Still to do: bring the old investor links from the old tool into live where they are missing. The new screens then fill by themselves. Earlier finding: Found 26-11 23:55: on live there are 0 partner agreements, 0 capital entries and 0 withdrawals, and every stock lot shows "Company". The old tool's product ↔ investor links (t_product_investors, 85 lines) were kept only as history. Its partner settings must be read from the old database and turned into agreements, lot owners and opening balances. For every partner:
    - share %
    - profit and loss
    - payments both ways (what he gave and what he took)
@@ -62,6 +68,7 @@ Updated: 26 Nov 2026, 23:45 (Pakistan time)
 - Security: no secrets, no real data in the public repo; nothing is typed into password boxes for the owner.
 
 ## Done (newest first)
+- 27-11: Menu – Inventory and Partners are now their own groups (owner 00:09). Inventory: Inventory · FBA check · Stock by partner · Receiving & Warehouse. Partners: Each partner + the partner screens. Each partner page built.
 - 26-11: Inventory screen + product story; old shop lines → listings (3,310).
 - 26-11: Empty central lists fill themselves (live had 127 empty lists, now 47 – the rest are lists of records not made yet). Every screen got Back / + New / Still needed / Quick-Full.
 - 26-11: Import anything – one importer for files, folders, links, pasted tables and screenshots. PDFs and pictures are read in the browser (OCR in English and Chinese). It understands the kind, supplier, PO, products, amount and date. Fixed: uploads were being sent as empty data.

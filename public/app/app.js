@@ -496,10 +496,12 @@
       if (r === '#/putaway') return await pagePutaway();
       if (r === '#/inbound') return await pageInbound();
       if (r === '#/stock-alerts') return await pageStockAlerts();
+      if (r.startsWith('#/partner-view/')) return await pagePartnerOne(+r.split('/')[2]);      // owner 26-11 23:19
+      if (r === '#/partner-view') return await pagePartnerView();
       if (r === '#/roadmap') return await pageRoadmap();      // owner 26-11 23:23
       if (r.startsWith('#/fba-check')) return await pageFbaCheck();      // inventory (d)
       if (r.startsWith('#/inventory/')) return await pageInventoryStory(+r.split('/')[2].split('?')[0]);      // owner 26-11 23:14
-      if (r === '#/inventory' || r.startsWith('#/inventory?')) return await pageInventory();
+      if (r === '#/inventory' || r.startsWith('#/inventory?')) { const u = new URLSearchParams(r.split('?')[1] || ''); if (u.get('owner')) { INV.investor = u.get('owner'); INV.page = 1; } return await pageInventory(); }
       if (r.startsWith('#/decisions')) return await pageDecisions(new URLSearchParams(r.split('?')[1] || '').get('code') || '');      // MR-1443 … 1450
       if (r === '#/icc' || r.startsWith('#/icc?')) return await pageIcc(new URLSearchParams(r.split('?')[1] || '').get('status') || '');
       if (/^#\/icc\/\d+/.test(r)) return await pageIccOne(+r.split('/')[2].split('?')[0]);
@@ -2109,6 +2111,38 @@
   const fmt = v => v == null ? '–' : (Number.isInteger(+v) ? (+v).toLocaleString('en-GB') : (+v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 
 
+
+  /* Owner 26-11 23:19 – each partner's whole account, as in the old tool, connected to inventory, sales, settled months, invoices and the partner ledger */
+  async function pagePartnerView() {
+    busy(true); let d; try { d = await api('partner-view'); } finally { busy(false); }
+    if (d.own && d.rows.length === 1) return go('#/partner-view/' + d.rows[0].account);
+    const n = v => (+v || 0).toLocaleString('en-GB', { maximumFractionDigits: 1 });
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Each partner</h1><div class="sub">Every partner and investor: his share, his stock (on hand, FBA, on the way, coming), what was sold, his profit, and money both ways. Amounts in ${esc(d.base)}. Open a partner for the whole account.</div></div></div>
+      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>Partner</th><th>Share</th><th class="num">Products</th><th class="num">Units (his share)</th><th class="num">FBA</th><th class="num">On the way</th><th class="num">Coming</th><th class="num">Stock value</th>${d.rows.some(r => 'stock_cost' in r) ? '<th class="num">At cost</th>' : ''}<th class="num">Sold 30 d</th><th class="num">Profit (settled)</th><th class="num">His share</th><th class="num">Owed</th><th class="num">Capital</th><th class="num">Withdrawn</th></tr></thead><tbody>
+      ${d.rows.length ? d.rows.map(r => `<tr><td><a href="#/partner-view/${r.account}"><b>${esc(r.name)}</b></a></td><td>${r.agreements.length ? r.agreements.map(a => `<span class="chip plain">${esc(a.scope.toLowerCase())} ${a.pct}%</span>`).join(' ') : r.products ? '<span class="small muted">by product (1 ÷ investors)</span>' : '–'}</td>
+        <td class="num">${n(r.products)}</td><td class="num">${n(r.units)}</td><td class="num">${n(r.fba)}</td><td class="num">${n(r.on_the_way)}</td><td class="num">${n(r.inbound)}</td><td class="num">${money(r.stock_value)}</td>${'stock_cost' in r ? `<td class="num">${money(r.stock_cost)}</td>` : ''}
+        <td class="num">${n(r.sold30)}</td><td class="num">${money(r.profit)}</td><td class="num"><b>${money(r.share)}</b></td><td class="num ${r.owed > 0 ? 'inv-bad' : ''}">${money(r.owed)}</td><td class="num">${money(r.capital)}</td><td class="num">${money(r.withdrawn)}</td></tr>`).join('') : '<tr><td colspan="15" class="muted">No partner or investor yet – link products to investors (Products › Investors) or add an agreement.</td></tr>'}</tbody></table></div></div>`;
+  }
+  async function pagePartnerOne(acc) {
+    busy(true); let d; try { d = await api('partner-view/' + acc); } finally { busy(false); }
+    const s = d.summary, n = v => (+v || 0).toLocaleString('en-GB', { maximumFractionDigits: 1 });
+    const tile = (l, v, sub, t) => `<div class="card kpi ${t || ''}"><div class="bar"></div><div class="lbl">${l}</div><div class="val">${v}</div>${sub ? `<div class="foot">${sub}</div>` : ''}</div>`;
+    $('#main').innerHTML = `<div class="page-head"><div><div class="crumb"><a href="#/partner-view">Each partner</a> ›</div><h1>${esc(s.name)}</h1><div class="sub">${s.agreements.length ? 'Agreements: ' + s.agreements.map(a => esc(a.scope.toLowerCase()) + ' ' + a.pct + '%' + (a.capital ? ' · capital ' + money(a.capital) : '')).join(' · ') : 'Share by product: 1 ÷ the investors on each product (the old rule)'} · amounts in ${esc(d.base)}</div></div>
+        <div class="actions"><a class="btn" href="#/inventory?owner=${acc}">His stock in Inventory</a><a class="btn" href="#/partners/${acc}">Agreements &amp; statements</a></div></div>
+      <div class="kpis">${tile('His units', n(s.units), 'FBA ' + n(s.fba) + ' · on the way ' + n(s.on_the_way) + ' · coming ' + n(s.inbound))}${tile('Stock value', money(s.stock_value), 'at raw price' + ('stock_cost' in s ? ' · at cost ' + money(s.stock_cost) : ''))}
+        ${tile('Sold, 30 days', n(s.sold30), money(s.sales30) + ' sales (his share)')}${tile('Profit, settled months', money(s.profit), 'revenue ' + money(s.revenue) + ' · ' + n(s.units_sold) + ' units')}${tile('His share', money(s.share), 'capital recovered ' + money(s.capital_recovered), 'done')}
+        ${tile('Invoices', money(s.billed), 'paid ' + money(s.paid) + ' · owed ' + money(s.owed), s.owed > 0 ? 'warn' : '')}${tile('Capital in', money(s.capital), 'withdrawn ' + money(s.withdrawn) + (s.balance != null ? ' · balance ' + money(s.balance) : ''))}</div>
+      <div class="card" style="margin-top:14px"><div class="card-h"><h3>His products and their stock (${d.products.length})</h3></div><div class="tbl-wrap"><table class="t inv-t"><thead><tr><th></th><th>Product</th><th class="num">His share</th><th class="num">Available</th><th class="num">FBA</th><th class="num">On the way</th><th class="num">Coming</th><th>Listings</th><th class="num">Sold 30 d</th><th class="num">Cover</th></tr></thead><tbody>
+        ${d.products.length ? d.products.map(x => `<tr><td class="inv-ph">${x.photo ? `<img src="${esc(x.photo)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="inv-noimg">${esc((x.sku || '?').slice(0, 2))}</span>`}</td><td class="inv-name"><a href="#/inventory/${x.id}"><b>${esc(x.name || x.sku)}</b></a><div class="small muted">${esc(x.sku || '')}</div></td>
+          <td class="num">${Math.round(x.share * 100)}%</td><td class="num">${n(x.stock.available)}</td><td class="num">${n(x.stock.fba)}</td><td class="num">${n(x.stock.transit + x.stock.fba_inbound)}</td><td class="num">${n(x.stock.inbound)}</td><td>${x.listings.count ? x.listings.count + ' shop' + (x.listings.count > 1 ? 's' : '') : '<span class="muted">not listed</span>'}</td><td class="num">${n(x.sold30)}</td><td class="num">${x.cover_days === null ? '–' : x.cover_days + ' d'}</td></tr>`).join('') : '<tr><td colspan="10" class="muted">No product is linked to this partner.</td></tr>'}</tbody></table></div></div>
+      <div class="inv-grid" style="margin-top:14px"><div class="card"><div class="card-h"><h3>Settled months</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Month</th><th>Shop</th><th class="num">Units</th><th class="num">Revenue</th><th class="num">Profit</th><th class="num">Weight</th><th class="num">His share</th><th>Status</th></tr></thead><tbody>
+        ${d.periods.length ? d.periods.map(p => `<tr><td>${esc(String(p.d_from).slice(0, 7))}</td><td>${esc(p.shop_name || '')}</td><td class="num">${n(p.units)}</td><td class="num">${money(p.revenue)}</td><td class="num">${money(p.profit_before_split)}</td><td class="num">${(+p.weight_pct || 0).toFixed(1)}%</td><td class="num"><b>${money(p.share_amount)}</b></td><td>${esc((p.status || '').toLowerCase())}</td></tr>`).join('') : '<tr><td colspan="8" class="muted">No settled month yet.</td></tr>'}</tbody></table></div></div>
+      <div class="card"><div class="card-h"><h3>Invoices &amp; statements · payments</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>No</th><th>Date</th><th class="num">Total</th><th class="num">Paid</th><th>Status</th></tr></thead><tbody>
+        ${d.documents.length ? d.documents.map(x => `<tr><td><a href="#/invoices">${esc(x.invoice_no)}</a></td><td>${esc(x.d_invoice || '')}</td><td class="num">${money(x.total)}</td><td class="num">${money(x.amount_paid)}</td><td>${esc((x.status || '').toLowerCase().replace('_', ' '))}</td></tr>`).join('') : '<tr><td colspan="5" class="muted">No invoice yet.</td></tr>'}
+        ${d.payments.map(y => `<tr class="small"><td>↳ ${esc(y.invoice_no)}</td><td>${esc(y.d_payment || '')}</td><td class="num">${money(y.amount)}</td><td colspan="2">${esc(y.method || '')} ${esc(y.reference || '')}</td></tr>`).join('')}</tbody></table></div></div></div>
+      ${d.ledger.length ? `<div class="card" style="margin-top:14px"><div class="card-h"><h3>Partner ledger (capital, profit, withdrawals)</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Date</th><th>Type</th><th class="num">Amount</th><th>Reference</th><th>Note</th></tr></thead><tbody>${d.ledger.map(l => `<tr><td>${esc(l.entry_date)}</td><td>${esc((l.type || '').toLowerCase().replace('_', ' '))}</td><td class="num">${money(l.amount)}</td><td>${esc(l.reference_no || '')}</td><td>${esc(l.note || '')}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
+  }
+
   /* Owner 26-11 23:23: everything in one click – done, being built, next, discussed, waiting for the owner (docs/ROADMAP.md, updated with every batch) */
   async function pageRoadmap() {
     busy(true); let d; try { d = await api('roadmap'); } finally { busy(false); }
@@ -2149,7 +2183,7 @@
 
   /* Owner 26-11 23:14 – the Inventory screen (approved design): one line per product with every state of its stock, who owns it, where it may be
      sold, its listings, sales and cover; a product opens its whole story. Reads only – every change goes through the ledger screens. */
-  const INV = { q: '', shop: '', marketplace: '', mode: '', owner: '', state: '', sort: 'stock', page: 1, children: '', open: {} };
+  const INV = { q: '', shop: '', marketplace: '', mode: '', owner: '', investor: '', state: '', sort: 'stock', page: 1, children: '', open: {} };
   async function pageInventory() {
     busy(true); let d; try { d = await api('inventory?' + new URLSearchParams(Object.entries(INV).filter(([k, v]) => v !== '' && k !== 'open'))); } finally { busy(false); }
     if (d.summary) INV.sum = d.summary; const sm = INV.sum || {}, F = d.filters;
@@ -2168,6 +2202,7 @@
       <td class="num">${x.value ? money(x.value) : '–'}</td><td class="num ${x.age_days > 180 ? 'inv-bad' : ''}">${x.age_days === null ? '–' : x.age_days + ' d'}</td></tr>`;
     $('#main').innerHTML = `<div class="page-head"><div><h1>Inventory</h1><div class="sub">Every product, where its stock is, who owns it, where it may be sold and how fast it sells – straight from the stock ledger. Open a product for its whole story.</div></div><div class="actions"><a class="btn" href="#/fba-check">FBA check</a><a class="btn" href="#/stock/ledger">Stock ledger</a><a class="btn" href="#/list/fba_shipment">Send to FBA</a></div></div>
       <div class="kpis inv-kpis">${[['Units in stock', n(sm.units), ''], ['Value at cost', money(sm.value) + ' ' + esc(sm.base || ''), ''], ['Amazon FBA', n(sm.fba), ''], ['On the way', n(sm.transit), ''], ['Out of stock', n(sm.out) + ' of ' + n(sm.products), sm.out ? 'warn' : ''], ['To order (ICC)', n(sm.to_order), sm.to_order ? 'err' : ''], ['Aged > 180 days', money(sm.aged_value), sm.aged_value ? 'warn' : ''], ['Listings', n(sm.listings), '']].map(([l, v, t]) => `<div class="card kpi ${t}"><div class="bar"></div><div class="lbl">${l}</div><div class="val">${v}</div></div>`).join('')}</div>
+      ${INV.investor ? `<div class="pf-need">Only the products of partner #${esc(INV.investor)} · <a href="#" id="invClr">show all products</a></div>` : ''}
       <div class="card inv-bar"><input class="q" id="invQ" placeholder="Search SKU, name, ASIN, item id…" value="${esc(INV.q)}" data-ap-skip>
         <select class="q" id="invShop" data-ap-skip>${opt(F.shops, INV.shop, 'All shops')}</select><select class="q" id="invMp" data-ap-skip>${opt(F.marketplaces, INV.marketplace, 'All marketplaces')}</select>
         <select class="q" id="invMode" data-ap-skip><option value="">Pool + Private</option><option value="pool" ${INV.mode === 'pool' ? 'selected' : ''}>Pool</option><option value="private" ${INV.mode === 'private' ? 'selected' : ''}>Private</option></select>
@@ -2178,6 +2213,7 @@
         <tbody>${d.rows.length ? d.rows.map(x => row(x)).join('') : '<tr><td colspan="15" class="muted" style="padding:18px">No product matches.</td></tr>'}</tbody></table></div>
         <div class="inv-pg small"><span>${n(d.total)} product${d.total === 1 ? '' : 's'} · page ${d.page} of ${Math.max(1, Math.ceil(d.total / d.per))}</span> ${d.page > 1 ? '<button class="btn sm" id="invPrev">‹ Previous</button>' : ''} ${d.page * d.per < d.total ? '<button class="btn sm" id="invNext">Next ›</button>' : ''}</div></div>`;
     const set = (k, v) => { INV[k] = v; INV.page = 1; pageInventory(); };
+    if ($('#invClr')) $('#invClr').onclick = e => { e.preventDefault(); INV.investor = ''; go('#/inventory'); };
     let tm; $('#invQ').oninput = e => { clearTimeout(tm); tm = setTimeout(() => { INV.q = e.target.value.trim(); INV.page = 1; pageInventory().then(() => { const i = $('#invQ'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }); }, 350); };
     [['#invShop', 'shop'], ['#invMp', 'marketplace'], ['#invMode', 'mode'], ['#invOwner', 'owner'], ['#invState', 'state'], ['#invSort', 'sort']].forEach(([sel, k]) => $(sel).onchange = e => set(k, e.target.value));
     if ($('#invPrev')) $('#invPrev').onclick = () => { INV.page--; pageInventory(); }; if ($('#invNext')) $('#invNext').onclick = () => { INV.page++; pageInventory(); };

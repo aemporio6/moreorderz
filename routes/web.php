@@ -84,6 +84,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
             $f = base_path('docs/ROADMAP.md'); return ['text' => is_file($f) ? (string) file_get_contents($f) : '', 'updated' => is_file($f) ? date('Y-m-d H:i', filemtime($f)) : null];
         });
         Route::get('inventory', [\App\Http\Controllers\InventoryController::class, 'index']);      // owner 26-11 23:14 the inventory screen
+        Route::get('partner-view', [\App\Http\Controllers\PartnerViewController::class, 'index']);      // owner 26-11 23:19 each partner's whole account
+        Route::get('partner-view/{acc}', [\App\Http\Controllers\PartnerViewController::class, 'show'])->whereNumber('acc');
         Route::get('inventory/fba', [\App\Http\Controllers\InventoryController::class, 'fbaRecon']);      // inventory (d) FBA report vs ledger
         Route::post('inventory/fba/link', [\App\Http\Controllers\InventoryController::class, 'fbaLink']);
         Route::post('inventory/fba', [\App\Http\Controllers\InventoryController::class, 'fbaBook']);

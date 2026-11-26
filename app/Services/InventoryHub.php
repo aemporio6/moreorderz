@@ -39,6 +39,7 @@ class InventoryHub
         if (! empty($f['marketplace'])) $q->whereIn('p.id', DB::table('t_product_visibility')->where('fk_id_marketplace', (int) $f['marketplace'])->select('fk_id_product'));
         if (in_array($f['mode'] ?? '', ['pool', 'private'], true)) $q->where('p.e_product_type', $f['mode']);
         if (! empty($f['owner'])) $q->whereIn('p.id', DB::table('fin_lots as l')->join('fin_lot_balances as b', 'b.fk_id_lot', '=', 'l.id')->where('b.qty', '>', 0)->where('l.fk_id_owner', $f['owner'] === 'company' ? null : (int) $f['owner'])->select('l.fk_id_product'));
+        if (! empty($f['investor'])) $q->whereIn('p.id', array_keys(InvestorPortal::products($ent, (int) $f['investor'])) ?: [0]);      // a partner's products (Each partner › his stock)
         $state = (string) ($f['state'] ?? '');
         if ($state === 'in') $q->where('p.stock', '>', 0); elseif ($state === 'out') $q->where('p.stock', '<=', 0); elseif ($state === 'low') $q->where('p.stock', '>', 0)->whereColumn('p.stock', '<=', 'p.min_level')->where('p.min_level', '>', 0);
         elseif ($state === 'order') $q->whereIn('p.icc_status', ['RED', 'YELLOW']);

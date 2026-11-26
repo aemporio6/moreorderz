@@ -44,7 +44,8 @@ class HttpTest extends TestCase
         $names = array_column($b['menu'], 'name');
         $this->assertSame(['Home', 'Research', 'Buying'], array_slice($names, 0, 3));
         $this->assertSame('Setup', end($names));
-        $this->assertCount(18, $b['menu'], '17 work sections + Invoicing (R-G_CORE-86)');
+        $this->assertCount(19, $b['menu'], '17 work sections + Invoicing (R-G_CORE-86) + Inventory (owner 27-11 00:09)');
+        $this->assertSame('Inventory', $names[3], 'Inventory comes right after Buying');
         $this->assertGreaterThanOrEqual(140, count($b['create']));
         $this->assertContains('src_research', array_column($b['create'], 'key'));
     }

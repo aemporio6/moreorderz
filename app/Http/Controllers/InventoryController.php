@@ -10,7 +10,7 @@ use Illuminate\Http\Request;
 /** Owner 26-11 23:14: the Inventory screen and a product's story (reads only). */
 class InventoryController extends Controller
 {
-    public function index(Request $r) { Perm::need($r->user(), 'stock.SEE'); return InventoryHub::page((int) Context::ent(), $r->user(), $r->only(['q', 'shop', 'marketplace', 'mode', 'owner', 'state', 'children', 'sort', 'page'])); }
+    public function index(Request $r) { Perm::need($r->user(), 'stock.SEE'); return InventoryHub::page((int) Context::ent(), $r->user(), $r->only(['q', 'shop', 'marketplace', 'mode', 'owner', 'investor', 'state', 'children', 'sort', 'page'])); }
 
     private function run(callable $fn) { try { return $fn(); } catch (\InvalidArgumentException|\RuntimeException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
 
