@@ -79,7 +79,7 @@
 92|F|form:label_regulation_profile|form only
 93|F|form:product_image|form only
 94|B|InventorySharing|Stock > Inventory sharing: listing per shop x SKU, visibility (R-D-20 Pool / Private for that marketplace x shop + shown / hidden), price, quantity offered after the profile buffer, last push + result, dropship supplier profile of a DROPSHIP line, filters shop / SKU / out of sync, bulk show / hide / set price / push now with rights, menu row; InventorySharingTest
-95|F|form:t_inv_settings|form only
+95|B|investor settings bank list|7e-220: the bank picker of investor / split settings lists only bank accounts of this company's invoice parties, needs the invoicing-admin right (exact role codes; else 403 + RIGHTS_DENIED), shows ****1234 only (FinanceAreaTest rd95)
 96|F|form:threepl_profile|form only
 97|F|form:dropship_supplier_profile|form only
 98|F|form:t_carriers|form only; carrier profile fields used by the label import partly

@@ -47,6 +47,6 @@
 48|P|class OldImport|import with dry run, report, field compare; the per-company switch / rollback screen not built
 49|N||old dashboards / copy controllers do not exist in the new tool
 50|F|form:t_enterprise|form only
-51|F|form:acc_company_settings|option lists from the registry
+51|B|HTML left-overs|option lists repaired with the old defaults (VAT Q, stagger 1, pay M, split modes SHARE, seller level 1–3, tax treatment ALLOW / DISALLOW / NA); the registry loader refuses HTML left-overs
 52|P|class OldImport|old export imported: 200,117 rows accounted, 0 failed; some tables as history only (not in the books)
 16|B|'see_money' => 'buying.MONEY'|One see_money right (Perm alias of buying.MONEY), checked on the server: dashboard/cards/reports/PO page drop the money keys (value, cost, buy_value, pay_due_base…) without it; payments/investors/invoicing cards, outstanding report, PO PDF and summary PDF give 403; landed cost entry needs it too. Defaults OWNER/MANAGER/FINANCE/ACCOUNTANT/PARTNER/SOURCING on (owner answer 21 Nov: sourcing sees amounts, never our bank accounts – the bank list goes only to the paying roles), VA/STOCK/CS off; Owner switches it per role. Migration 000090 gives investor accounts the PARTNER role. SeeMoneyTest walks every key.

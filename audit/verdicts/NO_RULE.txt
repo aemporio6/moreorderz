@@ -5,14 +5,14 @@ MR-1260|B|class Finder|one search for every module: no exact spelling (stems, so
 MR-1261|B|function narrow|filters on every field of every list: per-column filter and a filter builder (operators per type, AND / OR groups, multi-select values, date presets); the list narrows as rules are added; ListStandardTest
 MR-1262|M||importer that recommends "goes to X, could go to Y" not built
 MR-1263|B|class RefundProposals|full / half / partial refunds from the money files shown on the order with the amount (R-A_SALES-86)
-MR-1264|M||ad spend per product not built
+MR-1264|B|function adSpend|7e-220: ad spend per product for a month: ADS lines with the SKU + lines without one spread by sales share (FinanceAreaTest)
 MR-1265|B|class HistoricalPurchase|short versions of the long forms: Quick / Full of every registry form (required fields named), Quick buy, Old purchase entry; the record stays complete in its own place – verdict was stale
 MR-1266|F|form:document|document forms; one Documents module per order with View / Open in Drive not built
 MR-1267|P|MENU_NAMES|simple English names (choice short / full names)
 MR-1268|P|form:cat_reference|dropdowns fed from the registry lists
 MR-1269|P|class EventBus|events + rule tasks move work along; many automations of the spec not built
 MR-1270|P|class Merges|duplicates merged with Undo; "one source" for every duplicate function not complete
-MR-1271|P|class WaterfallService|profit per VA, owner, handler, investor, partner; per-account end audit (its stock, its money) not built
+MR-1271|B|function accountAudit|7e-220: the end audit of any account: as seller / owner, VA, supplier, partner; its stock and its money in the books (person page card)
 MR-1272|P|stock/pool|pool view per owner; cover a shortage from the pool not built
 MR-1273|N||guiding principle, not a function
 MR-1274|P|function boot|clean screens; open-in-new-tab menu, Refresh / Home buttons like Seller Central not built
@@ -112,9 +112,9 @@ MR-0069|P|orders/import|file -> detect -> check -> apply; Drive watch folders an
 MR-0074|P|class EbayApi|API adapters for eBay, Amazon, TikTok, OnBuy, Temu written to the published contracts – none run with real keys; Etsy / Shopify / Wise not built
 MR-0077|B|function consumeForSale|investors own lots, FIFO
 MR-0078|B|class CashForecast|committed cash + 13-week forecast, 90-day free-cash chart with the alert limit, alert FA1 free cash below the limit (task + WhatsApp)
-MR-0079|P|class ProfitService|profit per confirmed line / product / shop; "live provisional per sale line" not built
-MR-0080|M||decision engine not built
-MR-0081|M||scenario forecast ("if I place these POs") not built
+MR-0079|B|function lineProfit|7e-220: live profit per sale line (revenue, cost, fees from the settlement lines, postage, refunds, ad spend share) PROVISIONAL with what is missing, FINAL and frozen when the month is locked; refreshed nightly (FinanceAreaTest)
+MR-0080|B|function decisions|7e-220: decisions with £ impact and a one-click action: reorder, dead stock, unmatched bank lines, late supplier payments, free cash under the limit – biggest money first (FinanceAreaTest)
+MR-0081|B|function scenario|7e-220: "if I place these POs": amounts in / out on dates → the bank week by week now and with them, the lowest week, saved scenarios (FinanceAreaTest)
 MR-0086|B|TM_EXPIRY|one due-dates engine (sys_due_sources): ID / document expiry, trademark expiry, subscriptions, VAT and filings, PO payment dates, samples to arrive, SIM, cards, salary, contracts, certificates; SweepTest
 MR-0087|P|function inbound|WhatsApp out (statements, digests, capital calls) and in (DONE on a task); approvals OK / NO, ICC red not built; not run on a real number
 MR-0088|B|EXCEPTIONS_DIGEST_ROLES|Owner exceptions-only daily digest N16 (R-G_CORE-45)
@@ -128,7 +128,7 @@ MR-0098|N||spec document
 MR-0099|B|cycle_products|several products per cycle: products grid with add / update / delete, brand, supplier, target qty (R-B_SOURCING-42)
 MR-0107|B|class InvestorDocs|investor invoicing full: settle month → generate → reopen / cancel / credit note → PDF → e-mail → payments / outstanding → who owes whom → hidden margin report; split rules, parties, settings (R-D-81 … 84, R-INV-*)
 MR-0108|B|delegationPropose|task module features: templates (task-templates), rules on / off (alerts), channels, categories, absence calendar + delegation, comments, checklist, bulk with Undo, CSV import + template + Undo, digest preview, bell, boss-only views – all built with tests (TaskTemplatesTest, TaskChannelsTest, TaskProofCommentTest, TaskBatch2Test, TaskPageImportTest, TaskScoreTest); verdict was stale
-MR-0110|F|form:tax_period|taxation forms only
+MR-0110|B|function pageTax|7e-220: taxation kept and standardised: periods, entries, line items, rates as forms + worksheet, CT, size test and deadlines
 MR-0111|B|class AccHubAdmin|Accountancy Hub: obligations with documents, deadline engine, settings, team with reveal rights, close before a date (R-ACC-1 … 22)
 MR-0114|B|class SourcingReports|sourcing reports: cycle journey, landed cost, outstanding, inventory by country / warehouse / SKU, in-transit, supplier performance, investor, PO payment position, PO documents (R-F_SETUP-1 … 12)
 MR-0116|B|class PersonHeader|person sub-lists each a list with its own history (addresses, documents, mobiles, e-mails, photo IDs, PCs, banks, cards, marketplace accounts, PayPal), header with count chips, own-item pickers (R-C-18 / 20 / 21)
@@ -137,9 +137,9 @@ MR-0121|P|class BuyingService|buying chain idea -> PO -> pay -> ship -> GRN -> l
 MR-0122|P|class StockService|stock, lots, prices, counts built; product master tabs, variations, duplicate, alerts page not built
 MR-0123|P|class SaleLines|sales list + columns, edit / refund / carrier per sale, sale log, delete with Undo, bulk delete with preview, reminders, cases, annual + detailed reports, month confirm, account health view, daily order entry (fulfilment queue with the carrier file) built; custom export templates not built
 MR-0124|B|class PersonRules|7e-219: person master with its sub-lists (addresses, documents, photo IDs, mobiles, e-mails, banks, cards, marketplace / PayPal / IP / PC / subscriptions / social / company links), roles, vault, and the shared person rules on every tab
-MR-0125|P|class MoneyService|bank, expenses, approvals, money files, close, partners built; alerts, old invoicing not built
+MR-0125|B|class FinanceArea|7e-220: Finance & Partners: dashboard + finance home, bank, products × period, reconcile, ledger, accountant view, periods, partners, alerts, imports + mapping, settings, taxation
 MR-0126|B|delegationPropose|my / all / team views, templates + items, rules on / off, channels, categories, absence + delegation, comments, checklist, bulk, CSV import + template, bell, digest preview, record search / link – built (see MR-0108); verdict was stale
-MR-0127|F|form:acc_obligation|forms only
+MR-0127|B|class TaxService|Accountancy Hub (calendar, obligations, documents, deadline engine, setup, reveal) + taxation worksheet, CT and deadlines from the Hub
 MR-0128|P|class DsOrders|DS orders per shop (list, item page, delete), upload with check + save, platforms with + New, uploads + error rows, undo, masking of address / phone / raw row, match + link / unlink built. Missing: the inventory-sharing screen (R-D-94) and item edit by hand
 MR-0129|F|form:cat_country|all catalogue lists as registry forms
 MR-0130|B|class PasswordReset|login / logout, hashed passwords, 2-step, lock-out, sessions, CSRF, rights on every request, and forgot password (one-time link to the e-mail on record, same answer in every case, link works once) – verdict was stale; SecurityStepsTest
@@ -258,7 +258,7 @@ MR-1464|M||ICC stages not built
 MR-1483|N||seed wording
 MR-1485|N||spec document
 MR-1503|B|function noCost|night job: one task SAL_NO_COST per shop + month while own-stock lines have no cost, closed by itself; tested
-MR-1504|P|FIN_APPROVE|approval task raised
+MR-1504|B|FIN_APPROVE|maker-checker requests raise FIN_APPROVE (payment, withdrawal, stock adjustment, expense, master changes …), closed on the decision
 MR-1505|B|SYS_API_SYNC|raised when a connection's keys are refused, closes when it works
 MR-1506|B|DQ_ITEM_NOTE|raised by DataQuality::run for sale lines with an item note and no vendor (7e-202); closes when fixed
 MR-1507|B|DQ_PARENT_INACTIVE|raised by DataQuality::run per active child of an inactive parent (7e-202); closes when fixed
@@ -404,7 +404,7 @@ MR-0331|B|class SourcingReports|every sourcing report rebuilt, investor report f
 MR-0333|B|class DsUpload|supplier order-line upload with mapping, list, masking (R-D-73 … 86)
 MR-0334|B|class JobLog|scheduled jobs (minute / hourly / nightly / monthly) with lock and run log; GRN → lots at posting
 MR-0335|N||one-time legacy migration, not run
-MR-0336|P|class MoneyService|bank, matching, money files, close, partners, ledger; alerts, onboarding, old periods model not built
+MR-0336|B|class FinanceArea|7e-220: imports, bank matching, periods, ledger, withdrawals, statements, alerts, onboarding (PartnerOnboarding), opening wizard
 MR-0337|B|class InvestorPortal|one partner / investor portal: dashboard, sales, documents, pay (R-INV-15, R-D-84)
 MR-0339|F|form:invoice_document|old invoicing not built
 MR-0340|B|class TaskTemplates|task management: my / all / team / board, approve flow, evidence, templates, CSV import
@@ -415,3 +415,7 @@ MR-0390|B|class LotOwners|rules R-B_SOURCING-56 … 63 all built
 MR-0395|B|class EventCatalogue|rules R-G_CORE-94 … 98 all built
 MR-1479|B|PROBATION_END|7e-219: probation end → due item 14 days before (sys_due_sources PROBATION_END), one active employment row per person (PeopleSecurityTest c52)
 MR-1484|N||migration note (the import lists rows it cannot place in its report)
+MR-1082|B|function worksheet|see R-TAX-1
+MR-1083|B|function ct|see R-TAX-2
+MR-1085|B|class TaxService|see R-TAX-4
+MR-1086|B|function nextPeriod|see R-TAX-6

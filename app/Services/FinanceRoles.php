@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\DB;
 class FinanceRoles
 {
     public const WHITELIST = ['api/boot', 'api/me', 'api/me/*', 'api/nav', 'api/bell', 'api/bell/*', 'api/prefs/*', 'api/home', 'api/my-account', 'api/my-account/*', 'api/statements/*/pdf', 'api/statements/*/answer',
-        'api/capital-calls', 'api/capital-calls/answer/*', 'api/portal/*', 'api/my-invoices', 'api/my-invoices/*', 'api/find/opened', 'logout'];
+        'api/capital-calls', 'api/capital-calls/answer/*', 'api/statement-questions', 'api/portal/*', 'api/my-invoices', 'api/my-invoices/*', 'api/find/opened', 'logout'];
 
     public static function partnerOf(object $u): ?int { return ($p = DB::table('fin_partner_users')->where('user_id', $u->id)->value('investor_id')) ? (int) $p : null; }
 
