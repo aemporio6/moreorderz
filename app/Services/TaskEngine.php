@@ -34,6 +34,7 @@ class TaskEngine
             $follows = $open; $open = null;
         }
         [$owner, $note, $step] = TaskOwner::resolve($rule, (int) $ent, $opt);      // owner order (R-G_CORE-94)
+        if (! $owner && $ruleCode !== 'SYS_ERROR') EventBus::sysError(['no_owner', $ruleCode], "No task owner found for $ruleCode", "A $ruleCode task was opened but nobody could own it (no role holder and no Owner login).", (int) $ent);      // MR-1508
         $data = [
             'fk_id_ent' => $ent, 'title' => mb_substr($title, 0, 255), 'description' => trim(($opt['description'] ?? '') . ($note ? "\n(Given to the Owner: $note.)" : '')) ?: null,
             'category_id' => $rule->category_id ?: 1, 'owner_user_id' => $owner,

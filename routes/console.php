@@ -14,3 +14,5 @@ Schedule::command('mo:finance-nightly')->dailyAt('00:30')->withoutOverlapping();
 Schedule::command('mo:finance-monthly')->monthlyOn(1, '08:00')->withoutOverlapping();      // R-FIN-32 / 50: partner monthly summaries
 Schedule::command('mo:src-alerts')->everyFifteenMinutes()->withoutOverlapping();
 Schedule::command('mo:dispatch-watch')->everyFifteenMinutes()->withoutOverlapping();
+Schedule::command('mo:backup')->dailyAt('03:15')->withoutOverlapping();      // MR-0095 daily backup, 14 daily + 12 monthly kept
+Schedule::command('mo:backup --drill')->monthlyOn(2, '04:00')->withoutOverlapping();      // MR-0095 monthly restore drill

@@ -15,7 +15,7 @@ MR-1270|P|class Merges|duplicates merged with Undo; "one source" for every dupli
 MR-1271|B|function accountAudit|7e-220: the end audit of any account: as seller / owner, VA, supplier, partner; its stock and its money in the books (person page card)
 MR-1272|P|stock/pool|pool view per owner; cover a shortage from the pool not built
 MR-1273|N||guiding principle, not a function
-MR-1274|P|function boot|clean screens; open-in-new-tab menu, Refresh / Home buttons like Seller Central not built
+MR-1274|B|btnNewTab|Home, Back, Forward, Refresh (keeps filters), Open in a new tab, favourites, recent pages, full screen in the top bar; menu items are links (Ctrl + click = new tab)
 MR-1275|B|class FormStandard|+ Add on every dropdown: 1,465 of 1,538 open the form of the thing (stacking, comes back selected) or add to the field's own central list, also by typing a new name; 67 fixed lists (the program uses their values – developer only) and 6 lists only the system makes (imports, printer drivers, device slots) show their reason; 0 without Add and without a reason. The money categories got their form. FormStandardTest walks every form and every dropdown; docs/FORM_STANDARD_AUDIT.md. Owner to confirm the fixed / system exceptions (OWNER_QUESTIONS B10).
 MR-1276|B|t_account_ipburgers|subscriptions (VPN / VPS / tools) with price, cycle and due date, IP renewals, cards, filings all in the one due engine
 MR-1277|B|class Guide|suggestion chips, auto-correct with Undo, look-alike warning, "Why can't I save?", next step and "Why can't I continue?" on records, "Ask the Owner" on every refusal, "I am stuck" on tasks; GuideTest, FormAssistTest
@@ -66,12 +66,12 @@ MR-1324|M||ICC not built
 MR-1325|N||working rule
 MR-1536|M||fee engine (expected vs actual fees) not built
 MR-1537|M||demand forecast not built
-MR-1538|M||data health score not built
+MR-1538|B|class DataHealth|data health score per company on Home: sale lines with cost, bank lines matched, imports up to date, duplicates, record completeness – weakest part named with its link
 MR-1539|M||lineage everywhere not built
 MR-1540|P|approvals|installable phone web app + approvals screen; one-tap approvals on the phone not designed
 MR-1541|M||sandbox / training mode not built
 MR-1542|M||release notes + feature flags not built
-MR-1543|M||disaster recovery plan not built
+MR-1543|P|class Backups|RPO 24 h daily backup + monthly restore drill with report built; copying the dumps off the server (offsite) is a server step in GO_LIVE_ITEMS
 MR-1544|M||buyer / return-abuse records not built
 MR-1545|M||compliance calendar not built
 MR-1546|N||optional later
@@ -96,7 +96,7 @@ MR-0020|B|class Audit|history on every save, events, History tab
 MR-0021|B|function sound|universal search without exact spelling: codes, names, numbers, amounts, phone digits; FinderTest
 MR-0029|B|Needs action \(everyone\)|Home cards per role (Owner, Partner, Manager, Finance, Accountant, Sourcing, Warehouse, VA) with My tasks / Needs action first; Buying, Money, Tasks, Accounts dashboards of their own
 MR-0030|B|class SalesCard|buying dashboard shows the cards of the other modules from the same figures: sales, invoicing / profit, investors, team activity, inventory health, payments, glance (R-F_SETUP-20 … 34)
-MR-0031|M||ICC not built
+MR-0031|B|class Icc|07_ICC engine: inputs from sales / stock / open POs with assumed list, owner worked example as test, #/icc board + #/icc/<id>, nightly recalc, STK_REORDER task, Home card, chart slice
 MR-0036|B|function mine|role x right matrix as data (screens, forms See/Add/Change/Delete/Export, approve rights, menu, reports), made roles, per-person extra / taken away with reason and end date, field rules, shop scope on lists and summary screens, view-as; PermissionTest
 MR-0037|B|people.personal_data|7e-219: personal data (ID numbers, documents, salary, staff bank numbers, employment) visible_to OWNER_HR = Owner + right people.personal_data (give it to an HR role); hidden fields are not in answers / lists and not changed on save; staff bank numbers row by row (PeopleSecurityTest d7)
 MR-0038|B|class MasterChanges|7e-219: maker-checker from sys_approval_rules: supplier bank (own engine with phone check), lot ownership (record form + Stock screen), price floor (listing min_price), company settings (t_enterprise), approval limits, expense rules – a non-approver's risky values wait in sys_approvals MASTER_CHANGE, written with history on the Owner's yes (PeopleSecurityTest d11)
@@ -120,8 +120,8 @@ MR-0087|P|function inbound|WhatsApp out (statements, digests, capital calls) and
 MR-0088|B|EXCEPTIONS_DIGEST_ROLES|Owner exceptions-only daily digest N16 (R-G_CORE-45)
 MR-0089|P|work|screens checked on a phone width; short links with WhatsApp-code login not built
 MR-0092|N||process rule
-MR-0094|P|health|System health: failed events + retry, connection state; cron-ran / backup status not built
-MR-0095|M||backup + restore drill not built (server step)
+MR-0094|B|function status|System health: failed events + retry, every scheduled job with last run and late flag (cron ran), backup + restore drill status, SYS_ERROR alerts
+MR-0095|B|class Backups|mo:backup daily (14 daily + 12 monthly kept) and mo:backup --drill monthly (dump read end to end, tables compared), run lines on System health; offsite copy = GO_LIVE_ITEMS
 MR-0096|N||spec document
 MR-0097|N||process rule
 MR-0098|N||spec document
@@ -152,7 +152,7 @@ MR-0147|B|REFUSED_DONE|WhatsApp task commands OK / ACK, START, DONE (= waiting a
 MR-0148|P|class Messenger|two outboxes (WhatsApp, e-mail) with the queue rules
 MR-0151|B|class DueEngine|due sources SIM recharge, card expiry, card bill, contract renewal, salary date
 MR-0152|N||old database clean-up
-MR-0156|P|function defaultValue|no "today" default forced on birth dates (registry defaults)
+MR-0156|B|class RegistryLint|the registry loader refuses a today default on birth / lived-from / submitted / start dates (R-C-38)
 MR-0160|N||spec document
 MR-0204|B|function closeHandover|receive -> putaway -> intake -> reserve -> pick -> pack -> handover -> return -> Month confirm tested with exact figures
 MR-0349|B|class PrintService|printer profile
@@ -262,7 +262,7 @@ MR-1504|B|FIN_APPROVE|maker-checker requests raise FIN_APPROVE (payment, withdra
 MR-1505|B|SYS_API_SYNC|raised when a connection's keys are refused, closes when it works
 MR-1506|B|DQ_ITEM_NOTE|raised by DataQuality::run for sale lines with an item note and no vendor (7e-202); closes when fixed
 MR-1507|B|DQ_PARENT_INACTIVE|raised by DataQuality::run per active child of an inactive parent (7e-202); closes when fixed
-MR-1508|P|SYS_ERROR|raised for a dashboard card, the cycle overview and a missing PDF maker; open: nightly step, worker listener, registry load, unknown event, no task owner
+MR-1508|B|function sysError|SYS_ERROR raised for: dashboard card, cycle overview, PDF maker, failed scheduled job (nightly step), listener failing 5 times, unknown event refused, no task owner, registry load refused
 MR-1509|B|function listingStatus|night job: LST_STATUS when a listing is ACTIVE with nothing available, or closed / suppressed by a marketplace report while stock is available; closed by itself; tested
 MR-1511|B|STK_FC_DIFF|raised in InboundShipments when the centre receives a different quantity; closes when received in full (verdict was stale)
 MR-1512|B|free_cash_alert_limit|free cash below the limit is finance alert FA1 with its task rule FIN_FA1 (the code name differs from FIN_CASH_LOW)

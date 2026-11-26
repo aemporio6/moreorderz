@@ -32,6 +32,7 @@ class EventBus
         }
         if (! self::$known) self::$known = DB::table('sys_event_types')->pluck('f_active', 'event_code')->all();
         if (! array_key_exists($eventCode, self::$known)) {
+            self::sysError(['unknown_event', $eventCode], "Unknown event $eventCode refused", "Something raised the event $eventCode, which is not in the event catalogue (sys_event_types).", (int) ($ent ?? Context::ent() ?? 0));      // MR-1508
             throw new \InvalidArgumentException("Event $eventCode is not in the event catalogue (sys_event_types).");
         }
         $ent ??= Context::ent() ?? 0;
@@ -60,6 +61,7 @@ class EventBus
         } catch (\Throwable $ex) {
             Log::error("Event {$e->event_code} #$eventId failed: " . $ex->getMessage());
             DB::table('sys_events')->where('id', $eventId)->update(['status' => 'FAILED', 'last_error' => mb_substr($ex->getMessage(), 0, 500), 'available_at' => now()->addMinutes(5)]);
+            if ($e->attempts + 1 >= 5) self::sysError(['listener', $e->event_code], "Event {$e->event_code} keeps failing (5 tries)", $ex->getMessage(), (int) $e->fk_id_ent);      // MR-1508 worker listener
             return false;
         }
     }
@@ -71,6 +73,12 @@ class EventBus
         $n = 0;
         foreach ($ids as $id) $n += self::process($id) ? 1 : 0;
         return $n;
+    }
+
+    /** MR-1508 one SYS_ERROR task per problem (dedupe); never throws – an alert must not break the work it reports on. */
+    public static function sysError(array $key, string $title, string $detail, int $ent = 0): void
+    {
+        try { TaskEngine::open('SYS_ERROR', $key, mb_substr($title, 0, 200), ['ent' => $ent, 'description' => mb_substr($detail, 0, 1000)]); } catch (\Throwable $x) { Log::error('SYS_ERROR alert failed: ' . $x->getMessage()); }
     }
 
     public static function reset(): void

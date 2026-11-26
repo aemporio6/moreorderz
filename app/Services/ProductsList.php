@@ -145,7 +145,7 @@ class ProductsList
             ->whereColumn('cv.fk_id_product', 'p.id')->where('cb.fk_id_company', $co)->where('cb.f_active', 1)); }      /* company of a shop the product is visible in */
         if (in_array($md = strtoupper((string) ($f['mode'] ?? '')), ['POOL', 'PRIVATE'], true)) $q->whereExists(fn ($x) => $x->from('t_product_visibility as mv')->whereColumn('mv.fk_id_product', 'p.id')->whereRaw('UPPER(mv.visibility_mode) = ?', [$md])->when($mp, fn ($w) => $w->where('mv.fk_id_marketplace', $mp)));      /* with a marketplace chip: that marketplace's mode; without: any */
         if ($tg = (int) ($f['tag'] ?? 0)) $q->where(fn ($w) => $w->whereRaw('FIND_IN_SET(?, p.tag_ids)', [$tg])->orWhere('p.f_tag1', $tg)->orWhere('p.f_tag2', $tg)->orWhere('p.f_tag3', $tg));      // R-D-13 filter by tag (the Tags field, old Tag 1–3 too)
-        if (in_array($ic = strtoupper((string) ($f['icc'] ?? '')), ['RED', 'YELLOW', 'OK'], true)) $q->where('p.icc_status', $ic)->whereNotNull('p.icc_run_at');      /* R-G_CORE-103 the ICC chart's slice */
+        if (in_array($ic = strtoupper((string) ($f['icc'] ?? '')), ['RED', 'YELLOW', 'OK'], true)) $q->where('p.icc_status', $ic === 'OK' ? 'GREEN' : $ic)->whereNotNull('p.icc_run_at');      /* R-G_CORE-103 the ICC chart's slice */
         if (! empty($f['oos'])) $q->where(fn ($w) => $w->where('p.f_out_of_stock', 1)->orWhere('p.stock', '<=', 0));      /* out of stock = the flag, or nothing left */
     }
 

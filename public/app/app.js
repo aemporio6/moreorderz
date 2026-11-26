@@ -185,12 +185,14 @@
       <select class="tb-sel hide-m" id="selEnt" title="Company">${b.companies.map(c => `<option value="${c.id}" ${c.id == b.ent && !b.all_companies ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}${b.can_all && b.companies.length > 1 ? `<option value="all" ${b.all_companies ? 'selected' : ''}>All companies (added up)</option>` : ''}</select>
       <div class="searchbox" id="sbox">${ic('search')}<input id="q" placeholder="Search everything – SKU, order, PO, person, task…" autocomplete="off"><span class="kbd">/</span></div>
       <button class="tb-btn primary" id="btnCreate" title="Create (N)">${ic('plus')}<span class="hide-m">Create</span></button>
+      <a class="tb-btn icon" id="btnHome" href="#/" title="Home">${ic('home')}</a>
       <button class="tb-btn icon hide-m" id="btnBack" title="Back">${ic('chev')}</button>
       <button class="tb-btn icon hide-m" id="btnFwd" title="Forward">${ic('chev')}</button>
       <button class="tb-btn icon hide-m" id="btnRecent" title="Recent pages and favourites">${ic('panel')}</button>
       <button class="tb-btn icon hide-m" id="btnFav" title="Make this page a favourite">${ic('star')}</button>
       <button class="tb-btn icon ${HELP ? 'primary' : ''}" id="btnHelp" title="Help: show the guidance of every screen (press ? for the keyboard shortcuts)">${ic('help')}</button>
       <button class="tb-btn icon" id="btnRefresh" title="Refresh data (keeps filters)">${ic('refresh')}</button>
+      <button class="tb-btn icon hide-m" id="btnNewTab" title="Open this page in a new tab (Ctrl + click on any menu item does the same)">⧉</button>
       <button class="tb-btn icon hide-m" id="btnFull" title="Full screen">⛶</button>
       <button class="tb-btn icon bell" id="btnBell" title="My tasks">${ic('bell')}<span class="dot" id="bellDot" style="display:${b.tasks_open ? 'flex' : 'none'}">${b.tasks_open}</span></button>
       <div class="user" id="btnUser" title="My account: password, 2-step sign-in, sign out"><div class="avatar">${esc(ini)}</div><div class="hide-m"><div style="font-weight:600;font-size:13px">${esc(b.user.name)}</div><div class="small muted">${esc(b.user.role)}</div></div></div>`;
@@ -205,6 +207,7 @@
     $('#brand').onclick = () => go('#/home');
     $('#btnCreate').onclick = () => openCreate();
     $('#btnRefresh').onclick = () => render();
+    if ($('#btnNewTab')) $('#btnNewTab').onclick = () => { try { window.open(location.href, '_blank', 'noopener'); } catch (e) {} };      // MR-1274 Seller-Central style: Home, Refresh, open in a new tab
     $('#btnBack').onclick = () => { if (S.hist.length) { S.fwd.push(S.route); go(S.hist.pop(), false); } };
     $('#btnFwd').onclick = () => { if (S.fwd.length) { S.hist.push(S.route); go(S.fwd.pop(), false); } };
     $('#btnHelp').onclick = () => { HELP = !HELP; drawTop(); render(); toast(HELP ? 'Help is on: every screen shows its guidance. Press ? for the shortcuts.' : 'Help is off'); };
@@ -258,6 +261,8 @@
       if (r === '#/putaway') return await pagePutaway();
       if (r === '#/inbound') return await pageInbound();
       if (r === '#/stock-alerts') return await pageStockAlerts();
+      if (r === '#/icc' || r.startsWith('#/icc?')) return await pageIcc(new URLSearchParams(r.split('?')[1] || '').get('status') || '');
+      if (/^#\/icc\/\d+/.test(r)) return await pageIccOne(+r.split('/')[2].split('?')[0]);
       if (r === '#/settings/sourcing') return await pageSourcingSettings();
       if (r === '#/settings/finance') return await pageFinanceSettings();
       if (r === '#/gen1' || r.startsWith('#/gen1?')) return await pageGen1List();
@@ -1789,6 +1794,49 @@
     $$('[data-ss]').forEach(b => b.onclick = async () => { const tr = b.closest('tr'), k = b.dataset.ss; $('[data-se]', tr).textContent = '';
       try { const r = await api('settings/sourcing', { method: 'POST', body: { key: k, value: $(`[data-sv="${k}"]`, tr).value } }); toast(r.message); if (r.message !== 'No change.') pageSourcingSettings(); }
       catch (e) { $('[data-se]', tr).textContent = e.errors ? Object.values(e.errors).flat().join(' · ') : e.message; } });
+  }
+  // ---------- ICC – Inventory Cycle Calculator (07_ICC, IC-18): every product worst first, one product with inputs, stages, pipeline, mode compare and cash line ----------
+  const ICC_CHIP = { RED: 'err', YELLOW: 'warn', GREEN: 'ok', NONE: '' };
+  const fmt = v => v == null ? '–' : (Number.isInteger(+v) ? (+v).toLocaleString('en-GB') : (+v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  async function pageIcc(status) {
+    busy(true); let d; try { d = await api('icc' + (status ? '?status=' + status : '')); } finally { busy(false); }
+    const c = d.counts, tile = (k, n, l, cls) => `<a class="btn ${status === k ? 'primary' : 'ghost'}" href="#/icc${k ? '?status=' + k : ''}"><b>${n}</b>&nbsp;${l}</a>`;
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Inventory cycle (ICC)</h1><div class="sub">How much to order, when we run out and when to order again – from the sales of the last 90 days, the stock that can be sold and the open POs (ordered · in production · in transit). Worked out every night; open a product to change its inputs.</div></div></div>
+      <div class="card" style="padding:14px 16px"><div style="display:flex;gap:8px;flex-wrap:wrap">${tile('', c.order_now + c.this_week + c.covered + c.no_sales, 'all')}${tile('RED', c.order_now, 'order now')}${tile('YELLOW', c.this_week, 'order this week')}${tile('GREEN', c.covered, 'covered')}${tile('NONE', c.no_sales, 'no sales')}</div>
+      <div class="sub" style="margin-top:8px">Cash needed for the orders due (goods only): <b>${esc(d.currency)} ${fmt(d.cash_needed)}</b></div></div>
+      <div class="card" style="padding:14px 16px"><div class="tbl-wrap"><table class="t"><thead><tr><th>SKU</th><th>Product</th><th>Status</th><th>Order by</th><th>Runs out</th><th class="num">Cover days</th><th class="num">Order qty</th><th class="num">Cycle days</th><th>Best mode</th><th class="num">Lost profit if late</th></tr></thead><tbody>
+      ${d.rows.length ? d.rows.map(r => `<tr><td><a href="#/icc/${r.id}"><b>${esc(r.sku || '#' + r.id)}</b></a></td><td>${esc(r.name || '')}</td><td><span class="chip ${ICC_CHIP[r.status] || ''}">${esc(r.label)}</span>${r.late_days ? ` <span class="sub">${r.late_days} days late</span>` : ''}</td><td>${esc(r.order_by || '–')}</td><td>${esc(r.stock_out || '–')}</td><td class="num">${r.cover_days ?? '–'}</td><td class="num">${fmt(r.order_qty || 0)}</td><td class="num">${r.cycle_days ?? '–'}</td><td>${esc(r.best_mode || '–')}</td><td class="num">${r.lost_profit ? fmt(r.lost_profit) : '–'}</td></tr>`).join('')
+        : `<tr><td colspan="10" class="sub">No product has been worked out yet. Products with sales in the last 90 days, stock or saved ICC inputs are worked out every night; open a product from Products and choose "ICC" to start one now.</td></tr>`}</tbody></table></div></div>`;
+  }
+  async function pageIccOne(id, mode) {
+    busy(true); let d; try { d = await api('icc/' + id + (mode ? '?mode=' + mode : '')); } finally { busy(false); }
+    const i = d.inputs, r = d.result, s = d.saved || {}, num = (k, l, v, ph) => `<label class="fld"><span>${l}</span><input type="number" min="0" step="any" data-ii="${k}" value="${v ?? ''}" placeholder="${esc(String(ph ?? ''))}"></label>`;
+    $('#main').innerHTML = `<div class="page-head"><div><h1>ICC · ${esc(i.sku || '#' + id)}</h1><div class="sub">${esc(i.name || '')} · demand from ${esc(i.monthly_source)}</div></div><div><a class="btn ghost" href="#/icc">All products</a></div></div>
+      <div class="card" style="padding:14px 16px"><div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center"><span class="chip ${ICC_CHIP[r.status] || ''}" style="font-size:1.05em">${esc({ RED: 'Order now', YELLOW: 'Order this week', GREEN: 'Covered', NONE: 'No sales' }[r.status])}</span>
+        <span>Order <b>${fmt(r.order_qty)}</b> units (${r.cartons} cartons, ${r.cbm} CBM)</span><span>Order by <b>${esc(r.order_by || '–')}</b></span><span>Runs out <b>${esc(r.stock_out || '–')}</b> (stock only ${esc(r.stock_out_stock_only || '–')})</span><span>Arrives if ordered today <b>${esc(r.arrival)}</b></span>
+        ${r.late_days ? `<span class="chip err">${r.late_days} days late · lost profit ${fmt(r.lost_profit)}</span>` : ''}</div>
+        ${r.pipeline_text ? `<div class="sub" style="margin-top:6px">${esc(r.pipeline_text)}</div>` : ''}${r.holiday_add ? `<div class="sub">Production window over ${esc(r.holiday_name)}: +${r.holiday_add} days.</div>` : ''}
+        ${r.assumed.length ? `<div class="sub" style="margin-top:6px">Assumed: ${r.assumed.map(esc).join(' · ')}</div>` : ''}</div>
+      <div class="grid2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px">
+        <div class="card" style="padding:14px 16px"><h3>Stock and pipeline</h3><table class="t"><tbody><tr><td>Sales per month</td><td class="num">${fmt(r.monthly_used)} (daily ${r.daily} with season ×${i.season})</td></tr><tr><td>Available (sellable − reserved)</td><td class="num">${fmt(r.avail)}</td></tr><tr><td>Ordered</td><td class="num">${fmt(r.ordered)}</td></tr><tr><td>In production</td><td class="num">${fmt(r.production)}</td></tr><tr><td>In transit</td><td class="num">${fmt(r.transit)}</td></tr><tr><td>Cover</td><td class="num">${r.cover_days ?? '–'} days</td></tr><tr><td>Reorder point</td><td class="num">${fmt(r.reorder_point)} (safety ${fmt(r.safety_units)})</td></tr></tbody></table>
+          ${d.open_pos.length ? `<div class="sub">Open POs: ${d.open_pos.map(p => esc(p.po_code || '#' + p.id) + ' ' + esc(p.status || '')).join(' · ')}</div>` : ''}</div>
+        <div class="card" style="padding:14px 16px"><h3>Time circle · ${r.cycle_days} days</h3><table class="t"><tbody>${Object.entries(r.stages).filter(([, v]) => v).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${v}</td></tr>`).join('')}</tbody></table></div>
+        <div class="card" style="padding:14px 16px"><h3>Mode compare</h3><div class="tbl-wrap"><table class="t"><thead><tr><th>Mode</th><th class="num">Cycle</th><th class="num">Late days</th><th class="num">Freight</th><th class="num">Lost profit</th><th class="num">Total</th></tr></thead><tbody>${r.compare.map(m => `<tr><td><a href="javascript:void 0" data-im="${m.mode}">${esc(m.mode)}</a>${m.best ? ' <span class="chip ok">best</span>' : ''}</td><td class="num">${m.cycle_days}</td><td class="num">${m.late_days}</td><td class="num">${fmt(m.freight)}</td><td class="num">${fmt(m.lost_profit)}</td><td class="num"><b>${fmt(m.total)}</b></td></tr>`).join('')}</tbody></table></div><div class="sub">Click a mode to see the result with it (not saved).</div></div>
+        <div class="card" style="padding:14px 16px"><h3>Cash line</h3><table class="t"><tbody>${r.cash.map(c => `<tr><td>${esc(c.when)}</td><td>${esc(c.what)}</td><td class="num">${esc(i.currency)} ${fmt(c.amount)}</td></tr>`).join('') || '<tr><td class="sub">Nothing to order.</td></tr>'}</tbody></table><div class="sub">Freight ${fmt(r.freight)} · landed ${fmt(r.landed_unit)} per unit · chargeable ${fmt(r.chargeable_kg)} kg</div></div>
+      </div>
+      ${d.can_change ? `<div class="card" style="padding:14px 16px"><h3>Inputs</h3><div class="sub">Empty = worked out by the system (shown as the placeholder). Saving works the product out again and updates its chip and its reorder task.</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-top:8px">
+        ${num('monthly_sales', 'Sales per month', s.monthly_sales, i.monthly)}${num('season_factor', 'Season factor', s.season_factor, i.season)}${num('growth_pct', 'Growth per month %', s.growth_pct, 0)}${num('safety_days', 'Safety stock days', s.safety_days, i.safety_days)}
+        <label class="fld"><span>Mode</span><select data-ii="ship_mode"><option value="">(${esc(i.mode)})</option>${d.modes.map(m => `<option ${s.ship_mode === m ? 'selected' : ''}>${m}</option>`).join('')}</select></label>
+        ${num('d_order', 'Order processing days', s.d_order, i.d.order)}${num('d_prod', 'Production days', s.d_prod, i.d.production)}${num('d_to_fwd', 'Factory → forwarder days', s.d_to_fwd, i.d.to_forwarder)}${num('d_fwd', 'Forwarder handling days', s.d_fwd, i.d.forwarder)}${num('d_transit', 'Transit days', s.d_transit, i.d.transit)}${num('d_clear', 'Clearance + delivery days', s.d_clear, i.d.clearance)}
+        ${num('units_per_carton', 'Units per carton', s.units_per_carton, i.units_per_carton)}${num('carton_l_cm', 'Carton L cm', s.carton_l_cm, i.carton[0])}${num('carton_w_cm', 'Carton W cm', s.carton_w_cm, i.carton[1])}${num('carton_h_cm', 'Carton H cm', s.carton_h_cm, i.carton[2])}${num('carton_kg', 'Carton gross kg', s.carton_kg, i.carton_kg)}
+        ${num('unit_cost', 'Unit cost', s.unit_cost, i.unit_cost)}${num('moq', 'MOQ', s.moq, i.moq)}${num('deposit_pct', 'Deposit %', s.deposit_pct, i.deposit_pct)}${num('margin_unit', 'Net margin per unit', s.margin_unit, i.margin)}</div>
+        <div style="margin-top:8px"><button class="btn primary" id="iccSave">Save and work out</button> <span class="err" id="iccErr"></span></div></div>` : ''}`;
+    $$('[data-im]').forEach(a => a.addEventListener('click', () => pageIccOne(id, a.dataset.im)));
+    const sv = $('#iccSave'); if (sv) sv.addEventListener('click', async () => {
+      const inputs = {}; $$('[data-ii]').forEach(x => { inputs[x.dataset.ii] = x.value; });
+      try { const x = await api('icc/' + id, { method: 'POST', body: { inputs } }); toast('Saved · ' + ({ RED: 'Order now', YELLOW: 'Order this week', GREEN: 'Covered', NONE: 'No sales' }[x.status])); pageIccOne(id); }
+      catch (e) { $('#iccErr').textContent = e.errors ? Object.values(e.errors).flat().join(' · ') : e.message; } });
   }
   // ---------- stock alerts (R-D-46): out of stock / near min level, counted qty update, buy buttons ----------
   async function pageStockAlerts() {

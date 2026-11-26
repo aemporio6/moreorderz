@@ -19,6 +19,7 @@ class JobLog
         'PULL' => ['Marketplace pulls + Drive folders (mo:pull)', 60], 'FIN_HOURLY' => ['Finance hourly (mo:finance-hourly)', 60],
         'FIN_NIGHTLY' => ['Finance nightly (mo:finance-nightly)', 1440], 'NIGHTLY' => ['Nightly jobs (mo:nightly)', 1440], 'ACC_REMINDERS' => ['Filing reminders (Tax & filings, with mo:nightly)', 1440], 'TEMP_CLEANUP' => ['Temporary files clean-up (mo:cleanup-temp)', 1440],
         'FIN_MONTHLY' => ['Finance monthly (mo:finance-monthly)', 44640],
+        'BACKUP' => ['Database backup (mo:backup)', 1440], 'BACKUP_DRILL' => ['Restore drill (mo:backup --drill)', 44640],
     ];
 
     /** Every planned job with its last run and whether it is late. */
@@ -63,6 +64,7 @@ class JobLog
         } catch (\Throwable $e) {
             DB::table('sys_job_runs')->where('id', $id)->update(['finished_at' => now(), 'run_status' => 'FAILED', 'error_text' => mb_substr($e->getMessage(), 0, 1000)]);
             report($e);
+            EventBus::sysError(['job', $code], 'Scheduled job failed: ' . (self::PLAN[$code][0] ?? $code), $e->getMessage(), (int) ($ent ?? 0));      // MR-1508 nightly step
             return ['id' => $id, 'status' => 'FAILED', 'error' => $e->getMessage()];
         }
     }

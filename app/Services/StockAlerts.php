@@ -48,7 +48,7 @@ class StockAlerts
     {
         return ['rows' => self::rows($ent), 'reasons' => DB::table('cat_adjustment_reasons')->where('f_active', 1)->orderBy('reason_name')->pluck('reason_name')->all(), 'note' => self::NOTE,
             'locations' => DB::table('cat_inventory_locations')->where('fk_id_ent', $ent)->where('f_active', 1)->whereIn('kind', ['WAREHOUSE', 'BIN', 'SHELF'])->orderBy('location_name')->get(['id', 'location_name as name']),
-            'icc' => (int) DB::table('tasks')->where('rule_code', 'like', 'ICC%')->whereNotIn('status', ['DONE', 'APPROVED', 'CANCELLED'])->count(), 'approval_qty' => (int) Settings::get('ADJUST_APPROVAL_QTY', $ent, 50)];
+            'icc' => (int) DB::table('tasks')->where('rule_code', 'STK_REORDER')->whereNotIn('status', ['DONE', 'APPROVED', 'CANCELLED'])->count(), 'approval_qty' => (int) Settings::get('ADJUST_APPROVAL_QTY', $ent, 50)];
     }
 
     /** One Update: the counted qty at a location. $bigOk = the user may post a big change himself. */

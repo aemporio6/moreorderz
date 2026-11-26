@@ -60,10 +60,10 @@ class Charts
     /** ICC status split of the products (RED / YELLOW / OK). */
     public static function icc(int $ent, object $u): array
     {
-        $rows = DB::table('t_product_vendors')->where('fk_id_ent', $ent)->where('f_active', 1)->whereNotNull('icc_run_at')->whereIn('icc_status', ['RED', 'YELLOW', 'OK'])->groupBy('icc_status')->selectRaw('icc_status s, COUNT(*) n')->pluck('n', 's');
+        $rows = DB::table('t_product_vendors')->where('fk_id_ent', $ent)->where('f_active', 1)->whereNotNull('icc_run_at')->whereIn('icc_status', ['RED', 'YELLOW', 'GREEN'])->groupBy('icc_status')->selectRaw('icc_status s, COUNT(*) n')->pluck('n', 's');
         $order = ['RED', 'YELLOW', 'OK'];
         return ['key' => 'icc', 'title' => 'Stock cover (ICC) of the products', 'unit' => 'products', 'type' => 'donut', 'labels' => $order,
-            'series' => [['name' => 'Products', 'values' => array_map(fn ($s) => (int) ($rows[$s] ?? 0), $order), 'links' => array_map(fn ($s) => '#/products?icc=' . $s, $order)]], 'line' => null,
+            'series' => [['name' => 'Products', 'values' => array_map(fn ($s) => (int) ($rows[$s === 'OK' ? 'GREEN' : $s] ?? 0), $order), 'links' => array_map(fn ($s) => '#/icc?status=' . ($s === 'OK' ? 'GREEN' : $s), $order)]], 'line' => null,
             'empty' => 'The stock cover (ICC) has not been worked out yet for any product.', 'note' => 'RED = runs out before new stock can arrive; YELLOW = close; OK = enough.'];
     }
 

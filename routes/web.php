@@ -53,6 +53,9 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('parties', [AppController::class, 'parties']);      // R-C-1
         Route::get('shops/{id}/kit', [AppController::class, 'shopKit'])->whereNumber('id');      // R-C-30
         Route::get('people/external', [AppController::class, 'externalList']);      // R-C-19
+        Route::get('icc', [\App\Http\Controllers\IccController::class, 'board']);      // MR-0031 07_ICC
+        Route::get('icc/{id}', [\App\Http\Controllers\IccController::class, 'show'])->whereNumber('id');
+        Route::post('icc/{id}', [\App\Http\Controllers\IccController::class, 'save'])->whereNumber('id');
         Route::get('people/{id}/audit', [\App\Http\Controllers\FinanceAreaController::class, 'accountAudit'])->whereNumber('id');      // MR-1271
         Route::get('money/bank-cash', [\App\Http\Controllers\FinanceAreaController::class, 'bankCash']);      // R-FIN-64
         Route::get('money/home', [\App\Http\Controllers\FinanceAreaController::class, 'home']);      // R-FIN-65

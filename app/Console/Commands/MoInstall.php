@@ -59,7 +59,7 @@ class MoInstall extends Command
             ];
         }
         fclose($fh);
-        if ($bad = \App\Services\RegistryLint::errors($raw)) throw new \RuntimeException('Registry not loaded – ' . count($bad) . ' field(s) to fix: ' . implode('; ', array_slice($bad, 0, 20)));      // R-C-38
+        if ($bad = \App\Services\RegistryLint::errors($raw)) { try { if (\Illuminate\Support\Facades\Schema::hasTable('tasks')) \App\Services\EventBus::sysError(['registry_load'], 'Field registry not loaded – ' . count($bad) . ' field(s) to fix', implode('; ', array_slice($bad, 0, 20))); } catch (\Throwable $x) {} throw new \RuntimeException('Registry not loaded – ' . count($bad) . ' field(s) to fix: ' . implode('; ', array_slice($bad, 0, 20))); }      // R-C-38
         DB::transaction(function () use ($rows, $form) {
             DB::table('sys_registry')->when($form !== null, fn ($q) => $q->where('form_key', $form))->delete();
             foreach (array_chunk($rows, 300) as $chunk) DB::table('sys_registry')->insert($chunk);
