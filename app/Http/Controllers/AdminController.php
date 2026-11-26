@@ -397,6 +397,15 @@ class AdminController extends Controller
         ];
     }
 
+    /** Owner 26-11: each person chooses the name shown at the top (instead of the e-mail). */
+    public function myName(Request $r)
+    {
+        $d = $r->validate(['name' => 'required|string|min:2|max:120']); $u = $r->user(); $old = $u->display_name;
+        $u->display_name = trim(preg_replace('/\s+/', ' ', $d['name'])); $u->save();
+        \App\Services\Audit::log('t_users', $u->id, 'UPDATE', ['display_name' => [$old, $u->display_name]], null, (int) \App\Services\Context::ent());
+        return ['message' => 'Name saved', 'name' => $u->display_name];
+    }
+
     public function merges(Request $r)
     {
         \App\Services\Perm::need($r->user(), 'admin.merges');

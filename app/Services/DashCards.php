@@ -21,7 +21,7 @@ class DashCards
     {
         try {
             if (app()->runningUnitTests() && in_array($card, self::$break, true)) throw new \RuntimeException("SQLSTATE[42S22]: Column not found (test break of $card)");
-            return ['card' => $card, 'label' => $label, 'ok' => true, 'data' => $fn()];
+            return ['card' => $card, 'label' => $label, 'ok' => true, 'data' => ReadCache::remember("dash:$ent:$card", 300, $fn)];      // live 26-11 'slow': kept until the next save (max 5 minutes)
         } catch (\Throwable $e) {
             report($e);
             $day = date('Y-m-d'); $fp = sha1("dash|$card|" . get_class($e) . "|$day");

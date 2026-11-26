@@ -58,7 +58,8 @@ class Merges
             $ids = [min((int) $h->source_id, (int) $h->master_id), max((int) $h->source_id, (int) $h->master_id)]; $key = implode(',', $ids); $groups[$key] ??= ['ids' => $ids, 'why' => []]; $groups[$key]['why'][] = 'saved although it looked like this person'; }
         $dismissed = DB::table('sys_merge_map')->where('entity', self::ent($e)[4])->where('status', 'REJECTED')->get(['source_id', 'master_id'])->map(fn ($x) => min($x->source_id, $x->master_id) . '-' . max($x->source_id, $x->master_id))->flip();
         $out = [];
-        foreach ($groups as $g) {
+        $groups = array_filter($groups, fn ($g) => ! (count($g['ids']) === 2 && isset($dismissed[min($g['ids']) . '-' . max($g['ids'])])));
+        foreach (array_slice($groups, 0, 60, true) as $g) {      // live 26-11 'slow': the first 60 groups with their link counts (each count reads many tables); merge them and the next ones appear
             $rows = DB::table($table)->whereIn('id', $g['ids'])->get();
             if (count($g['ids']) === 2 && isset($dismissed[min($g['ids']) . '-' . max($g['ids'])])) continue;
             $out[] = ['why' => implode(', ', array_unique($g['why'])), 'records' => $rows->map(fn ($r) => ['id' => $r->id, 'label' => self::label($e, $r), 'code' => $r->account_code ?? $r->supplier_code ?? $r->SKU_VENDOR ?? null, 'links' => self::countLinks($e, (int) $r->id)])->sortByDesc('links')->values()];   // the record with most links is ticked to keep

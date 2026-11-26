@@ -262,7 +262,7 @@
   }
   function itemLink(i, cur) {
     return i.soon ? `<div class="mn-i soon" title="Planned – not built yet"><b>${esc(i.name)}</b><small>Coming soon</small></div>`
-      : `<a class="mn-i ${i.id === cur ? 'cur' : ''}" href="${esc(i.route)}" title="${esc(i.name)} – right-click to open in a new tab"><b>${esc(i.name)}</b>${i.about ? `<small>${esc(i.about)}</small>` : ''}</a>`;
+      : `<a class="mn-i ${i.id === cur ? 'cur' : ''} ${(i.subs || []).length > 1 ? 'has' : ''}" href="${esc(i.route)}" data-iid="${i.id}" title="${esc(i.name)} – right-click to open in a new tab"><span><b>${esc(i.name)}</b>${i.about ? `<small>${esc(i.about)}</small>` : ''}</span>${(i.subs || []).length > 1 ? '<span class="mn-tri">▸</span>' : ''}</a>`;
   }
   function flyOpen(row, g) {
     flyKeep(); if (FLY && FLY.dataset.g === row.dataset.g) return; flyClose();
@@ -273,13 +273,22 @@
         : g.secs.map((s, k) => `<div class="mn-s ${s.items.some(i => i.id === cur) ? 'cur' : ''}" data-k="${k}" tabindex="0"><span><b>${esc(s.name)}</b><small>${esc(s.about || s.items.length + ' screens')}</small></span><span class="mn-n">${s.items.length}</span><span class="mn-tri">▸</span></div>`).join('')) + `</div></div>`;
     document.body.appendChild(FLY); const p1 = FLY.firstChild; flyPlace(p1, row, row.getBoundingClientRect().right + 8);
     FLY.onmouseenter = flyKeep; FLY.onmouseleave = flyLater; FLY.addEventListener('click', e => { if (e.target.closest('a.mn-i') && !e.ctrlKey && !e.metaKey && !e.shiftKey) flyClose(); });
-    const sub = el => { const s = g.secs[+el.dataset.k]; $$('.mn-s.on', FLY).forEach(x => x.classList.remove('on')); el.classList.add('on'); let p2 = $('.mn-p2', FLY); if (p2) p2.remove();
-      p2 = document.createElement('div'); p2.className = 'mn-p mn-p2'; p2.innerHTML = `<div class="mn-ph"><b>${esc(s.name)}</b><small>${esc(s.about || '')}</small></div><div class="mn-pb ${s.items.length > 12 ? 'two' : ''}">${s.items.map(i => itemLink(i, cur)).join('')}</div>`;
+    const sub = el => { const s = g.secs[+el.dataset.k]; $$('.mn-s.on', FLY).forEach(x => x.classList.remove('on')); el.classList.add('on'); let p2 = $('.mn-p2', FLY); if (p2) p2.remove(); const p3x = $('.mn-p3', FLY); if (p3x) p3x.remove();
+      p2 = document.createElement('div'); p2.className = 'mn-p mn-p2'; p2.innerHTML = `<div class="mn-ph"><b>${esc(s.name)}</b><small>${esc(s.about || '')}</small></div><div class="mn-pb">${s.items.map(i => itemLink(i, cur)).join('')}</div>`;
       FLY.appendChild(p2); flyPlace(p2, el, p1.getBoundingClientRect().right + 8); };
     $$('.mn-s', FLY).forEach(el => { el.onmouseenter = () => sub(el); el.onclick = () => sub(el); el.onkeydown = e => { if (e.key === 'Enter' || e.key === 'ArrowRight') { sub(el); const a = $('.mn-p2 a', FLY); if (a) a.focus(); } }; });
     const first = $('.mn-s.cur', FLY) || null; if (first) sub(first);
+    /* the next window of a screen that has several lists (▸): hover the screen → its lists beside it; the window closes when the mouse leaves */
+    const items = g.secs.flatMap(s => s.items);
+    FLY.addEventListener('mouseover', e => { const a = e.target.closest('a.mn-i'); if (!a || !FLY.contains(a) || a.closest('.mn-p3')) return; const panel = a.closest('.mn-p'), it = items.find(x => String(x.id) === a.dataset.iid);
+      const old = $('.mn-p3', FLY); if (old && old.dataset.iid === a.dataset.iid) return; if (old) old.remove(); $$('a.mn-i.on', FLY).forEach(x => x.classList.remove('on'));
+      if (!it || (it.subs || []).length < 2) return; a.classList.add('on');
+      const p3 = document.createElement('div'); p3.className = 'mn-p mn-p3'; p3.dataset.iid = a.dataset.iid;
+      p3.innerHTML = `<div class="mn-ph"><b>${esc(it.name)}</b><small>${esc(it.about || 'The lists of this screen')}</small></div><div class="mn-pb"><a class="mn-i" href="${esc(it.route)}"><span><b>Open ${esc(it.name)}</b><small>The main screen</small></span></a>${it.subs.map(x => `<a class="mn-i" href="${esc(x.route)}"><span><b>${esc(x.name)}</b><small>List · right-click to open in a new tab</small></span></a>`).join('')}</div>`;
+      FLY.appendChild(p3); flyPlace(p3, a, Math.min(panel.getBoundingClientRect().right + 8, innerWidth - 310)); });
   }
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && FLY) flyClose(); });
+  document.addEventListener('mousedown', e => { if (FLY && !e.target.closest('.mn-fly, #side .mn-g')) flyClose(); });
   window.addEventListener('resize', () => { flyClose(); });
   function drawSide() {
     if (!S.boot.menu_groups || innerWidth < 900) return drawSideFold();
@@ -289,7 +298,7 @@
         <span class="mn-ic">${ic(g.icon || 'file')}</span><span class="mn-t"><b>${esc(g.name)}</b><small>${esc(g.about || '')}</small></span><span class="mn-tri">▸</span></div>`).join('') +
       `<div class="mn-foot small faint">Point at a group to open it · right-click a screen to open it in a new tab</div>`;
     $$('#side .mn-g').forEach(row => { const g = G[+row.dataset.g];
-      row.onmouseenter = () => flyOpen(row, g); row.onmouseleave = flyLater; row.onclick = () => { if (FLY && FLY.dataset.g === row.dataset.g) flyClose(); else flyOpen(row, g); };
+      row.onmouseenter = () => flyOpen(row, g); row.onmouseleave = flyLater; row.onclick = () => flyOpen(row, g);      /* a click keeps the window open (hover already opened it); it closes when the mouse leaves or with Esc */
       row.onkeydown = e => { if (e.key === 'Enter' || e.key === 'ArrowRight') { flyOpen(row, g); const f = $('.mn-s, a.mn-i', FLY); if (f) f.focus(); } }; });
   }
   function drawSideFold() {
@@ -2559,7 +2568,10 @@
       const m = modal('MY TOOL data – check (nothing saved yet)', 'Each MY TOOL purchase becomes an old purchase with its lines, payments and freight. Nothing is received: stock comes from the opening stock, so no unit counts twice.',
         `<table class="t"><tbody><tr><td>Purchases</td><td class="num"><b>${c.purchases}</b> (${c.freight_only} of them freight only)</td></tr><tr><td>Lines</td><td class="num">${c.lines}</td></tr><tr><td>Payments</td><td class="num">${c.payments}</td></tr>
         <tr><td>Paid</td><td class="num">${Object.entries(c.paid).map(([k, v]) => esc(k) + ' ' + (+v).toLocaleString('en-GB', { minimumFractionDigits: 2 })).join(' · ')}</td></tr><tr><td>Already in (skipped)</td><td class="num">${c.already_in}</td></tr><tr><td>Not purchases (loans …, left out)</td><td class="num">${c.not_purchases}</td></tr></tbody></table>
-        ${c.new_suppliers.length ? `<div class="small" style="margin-top:8px">New suppliers / forwarders that will be made: ${c.new_suppliers.map(esc).join(', ')}</div>` : ''}`, '<button class="btn" data-close>Cancel</button><button class="btn primary" id="mtGo">Import</button>');
+        ${c.new_suppliers.length ? `<div class="small" style="margin-top:8px">New suppliers / forwarders that will be made: ${c.new_suppliers.map(esc).join(', ')}</div>` : ''}
+        <h3 style="margin:14px 0 6px">Old MoreOrderz orders</h3><div class="small muted" style="margin-bottom:6px">An order that is in both is kept from MY TOOL (the original); the old MoreOrderz copy is removed. Old orders that MY TOOL does not have stay as they are (${c.old_kept}).</div>
+        ${(c.old_same || []).length ? `<div class="tbl-wrap" style="max-height:260px"><table class="t small"><thead><tr><th>Old MoreOrderz (removed)</th><th>Date</th><th class="num">Total</th><th>Kept from MY TOOL</th><th>Why the same</th></tr></thead><tbody>${c.old_same.map(x => `<tr><td>${esc(x.old_code)}<div class="faint">${esc(x.old_ref || '')}</div></td><td>${esc(x.old_date || '')}</td><td class="num">${(+x.old_total).toLocaleString('en-GB', { minimumFractionDigits: 2 })}</td><td><b>${esc(x.mytool)}</b></td><td>${esc(x.why)}</td></tr>`).join('')}</tbody></table></div>` : '<div class="muted small">No old order is the same as a MY TOOL order.</div>'}
+        ${(c.old_blocked || []).length ? `<div class="small" style="margin-top:6px;color:var(--warn)">Kept although they look the same (goods already received – look by hand): ${c.old_blocked.map(x => esc(x.old_code + ' ↔ ' + x.mytool)).join(', ')}</div>` : ''}`, '<button class="btn" data-close>Cancel</button><button class="btn primary" id="mtGo">Import' + ((c.old_same || []).length ? ` and remove ${c.old_same.length} old cop${c.old_same.length === 1 ? 'y' : 'ies'}` : '') + '</button>');
       $('[data-close]', m.ov).onclick = m.close;
       $('#mtGo', m.ov).onclick = async () => { const f2 = new FormData(); f2.append('file', f); f2.append('apply', 1); try { busy(true); const j = await api('mytool-import', { method: 'POST', body: f2 }); m.close(); toast(j.message); showLog([j.message, ...j.failed, ...j.log]); } catch (x) { toast(x.message, 'err'); } finally { busy(false); } }; }; }
   }
@@ -3890,9 +3902,11 @@
   // ---------- my account: password, 2-step sign-in, sign out ----------
   async function pageMe() {
     $('#main').innerHTML = `<div class="page-head"><div><h1>My account</h1><div class="sub">${esc(S.boot.user.name)} · ${esc(S.boot.user.role)}</div></div><div class="actions"><button class="btn" id="mOut">Sign out</button></div></div>
+      <div class="card" style="margin-bottom:12px"><div class="card-h"><h3>My name</h3></div><div class="card-b"><p class="muted" style="margin-top:0">The name shown at the top of every screen, on tasks and in the history (instead of the e-mail).</p><div style="display:flex;gap:8px;flex-wrap:wrap"><input class="input" id="mName" maxlength="120" style="max-width:320px" value="${esc(S.boot.user.name)}"><button class="btn primary" id="mNameS">Save name</button></div></div></div>
       <div class="card"><div class="card-h"><h3>Password</h3></div><div class="card-b"><button class="btn" id="mPw">Change password</button></div></div>
       <div class="card" style="margin-top:12px"><div class="card-h"><h3>2-step sign-in</h3></div><div class="card-b"><p class="muted" style="margin-top:0">After the password, the tool asks for a 6-digit code from an authenticator app on your phone. A stolen password alone is then not enough.</p><div id="m2"></div></div></div>`;
     $('#mOut').onclick = () => $('#logoutForm').submit();
+    $('#mNameS').onclick = async () => { try { await api('me/name', { method: 'POST', body: { name: $('#mName').value } }); S.boot = await api('boot'); drawTop(); toast('Name saved'); pageMe(); } catch (e) { toast(e.message, 'err'); } };      // owner 26-11: the name at the top is chosen, not the e-mail
     $('#mPw').onclick = () => miniForm('Change password', '', [{ name: 'current', label: 'Current password', type: 'password', required: true }, { name: 'new', label: 'New password', type: 'password', required: true, help: 'At least 10 characters.' }], v => api('me/password', { method: 'POST', body: v }));
     const s = await api('me/two-step');
     $('#m2').innerHTML = s.on ? `<span class="chip done">On</span> <button class="btn sm" id="m2off" style="margin-left:10px">Switch off</button>`

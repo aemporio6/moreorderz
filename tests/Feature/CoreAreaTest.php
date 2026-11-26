@@ -335,4 +335,39 @@ class CoreAreaTest extends TestCase
         $t = \App\Services\TaskLists::tiles($this->owner); $m = \App\Services\TaskLists::mine($this->owner)['tiles'];
         $this->assertSame($m, $t, 'the Home card counts the same as My tasks');
     }
+
+    public function test_my_name_shown_at_the_top(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id);
+        $this->postJson('/api/me/name', ['name' => '  Mo   Sheikh '])->assertOk();
+        $this->assertSame('Mo Sheikh', $this->getJson('/api/boot')->json('user.name'));
+        $this->postJson('/api/me/name', ['name' => ''])->assertStatus(422);
+    }
+
+    public function test_mytool_replaces_the_same_old_moreorderz_order_and_keeps_the_others(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id); Perm::flush();
+        $old1 = $this->f('t_src_cycles', ['fk_id_ent' => 1, 'cycle_code' => 'OLD-SAME', 'order_ref' => 'WAP-UK-JW20240301001', 'cycle_type' => 'HISTORICAL', 'sourcing_date' => '2024-03-01', 'f_active' => 1]);
+        $po1 = $this->f('t_src_po', ['fk_id_ent' => 1, 'fk_id_cycle' => $old1, 'po_code' => 'OLDPO-1', 'po_date' => '2024-03-01', 'po_total' => 500, 'f_active' => 1]);
+        $this->f('t_src_po_lines', ['fk_id_ent' => 1, 'fk_id_po' => $po1, 'fk_id_cycle' => $old1, 'qty_ordered' => 10, 'f_active' => 1]);
+        $old2 = $this->f('t_src_cycles', ['fk_id_ent' => 1, 'cycle_code' => 'OLD-SAMEDAY', 'order_ref' => 'X-1', 'cycle_type' => 'HISTORICAL', 'sourcing_date' => '2024-05-02', 'f_active' => 1]);
+        $this->f('t_src_po', ['fk_id_ent' => 1, 'fk_id_cycle' => $old2, 'po_code' => 'OLDPO-2', 'po_date' => '2024-05-02', 'po_total' => 199, 'f_active' => 1]);
+        $old3 = $this->f('t_src_cycles', ['fk_id_ent' => 1, 'cycle_code' => 'OLD-ONLY', 'order_ref' => 'WAP-UK-JW20240909009', 'cycle_type' => 'HISTORICAL', 'sourcing_date' => '2024-09-09', 'f_active' => 1]);
+        $json = json_encode(['format' => 'mytool', 'data' => [
+            'parties' => ['SUP-951' => ['code' => 'SUP-951', 'type' => 'supplier', 'name' => 'Test Same Supplier']],
+            'purchases' => ['PO-MT-51' => ['no' => 'PO-MT-51', 'date' => '2024-03-01', 'party' => 'SUP-951', 'cur' => 'USD', 'piNo' => 'WAP-UK-JW20240301001 / WAP-UK-JW20240301002', 'lines' => [['sku' => 'S-1', 'p' => 'Same', 'q' => 10, 'u' => 50, 'a' => 500]], 'extras' => []],
+                'PO-MT-52' => ['no' => 'PO-MT-52', 'date' => '2024-05-03', 'party' => 'SUP-951', 'cur' => 'USD', 'lines' => [['sku' => 'S-2', 'p' => 'Day', 'q' => 2, 'u' => 100, 'a' => 200]], 'extras' => []]],
+            'shipments' => [], 'payments' => ['P51' => ['no' => 'P51', 'date' => '2024-03-01', 'type' => 'full', 'cur' => 'USD', 'amount' => 500, 'fxRate' => 0.79, 'direction' => 'out', 'allocations' => [['ref' => 'PO-MT-51', 'amount' => 500]]],
+                'P52' => ['no' => 'P52', 'date' => '2024-05-03', 'type' => 'full', 'cur' => 'USD', 'amount' => 200, 'fxRate' => 0.8, 'direction' => 'out', 'allocations' => [['ref' => 'PO-MT-52', 'amount' => 200]]]]]]);
+        $c = \App\Services\MyToolImport::check(1, $json);
+        $this->assertSame(['PO-MT-51', 'PO-MT-52'], array_column($c['old_same'], 'mytool'), 'by the supplier order number, and by day ±2 + total ±2 %');
+        $this->assertSame(2, DB::table('t_src_cycles')->whereIn('id', [$old1, $old2])->count(), 'the check removes nothing');
+        $r = \App\Services\MyToolImport::import(1, $json, $this->owner);
+        $this->assertSame(2, $r['removed_old']); $this->assertSame(2, $r['imported'], json_encode($r['failed']));
+        $this->assertSame(0, DB::table('t_src_cycles')->whereIn('id', [$old1, $old2])->count()); $this->assertSame(0, DB::table('t_src_po')->where('id', $po1)->count()); $this->assertSame(0, DB::table('t_src_po_lines')->where('fk_id_po', $po1)->count());
+        $this->assertSame(1, DB::table('t_src_cycles')->where('id', $old3)->count(), 'an old order MY TOOL does not have stays');
+        $this->assertSame(1, DB::table('t_src_cycles')->where('order_ref', 'PO-MT-51')->count(), 'the MY TOOL copy is kept');
+        $this->assertNotEmpty(glob(storage_path('app/mytool-replaced-*.json')), 'a copy of the removed rows is kept');
+        foreach (glob(storage_path('app/mytool-replaced-*.json')) as $f) @unlink($f);
+    }
 }

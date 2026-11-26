@@ -43,13 +43,15 @@ class AppController extends Controller
     {
         $rows = DB::table('sidebar_modules')->where('e_status', 'ACTIVE')->orderBy('sort_order')->orderBy('id_module')->get();
         if (\App\Services\Choices::get('MENU_NAMES', Context::ent()) === 'SIMPLE') foreach ($rows as $m) $m->module_name = self::simpleName((string) $m->module_name);
-        $secs = [];
+        $secs = []; $titles = DB::table('sys_forms')->pluck('title', 'form_key');
         foreach ($rows->whereNull('parent_id') as $s) $secs[$s->id_module] = ['id' => $s->id_module, 'name' => $s->module_name, 'about' => config('menu_help.sections.' . $s->module_name), 'icon' => $s->icon, 'items' => []];
         foreach ($rows->whereNotNull('parent_id') as $m) {
             if (! isset($secs[$m->parent_id]) || ! \App\Services\Perm::has(Auth::user(), 'menu:' . $m->module_key)) continue;
             $rt = self::route($m); $soon = str_starts_with($rt, '#/screen/');      // R-G_CORE-55: a screen not built yet = a muted "Soon" item, only the Owner sees it
             if ($soon && $role !== 'OWNER') continue;
-            $secs[$m->parent_id]['items'][] = ['id' => $m->id_module, 'no' => $m->screen_no, 'name' => $m->module_name, 'about' => config('menu_help.items.' . $m->module_key), 'route' => $rt, 'soon' => $soon, 'forms' => array_values(array_filter(array_map(fn ($f) => trim(explode('(', $f)[0]), preg_split('/[;,\s]+/', (string) $m->forms, -1, PREG_SPLIT_NO_EMPTY)), fn ($k) => Registry::exists($k) && Registry::table($k)))];
+            $fk = array_values(array_filter(array_map(fn ($f) => trim(explode('(', $f)[0]), preg_split('/[;,\s]+/', (string) $m->forms, -1, PREG_SPLIT_NO_EMPTY)), fn ($k) => Registry::exists($k) && Registry::table($k)));
+            $subs = count($fk) > 1 ? array_values(array_map(fn ($k) => ['name' => (string) ($titles[$k] ?? ((Registry::fields($k)[0]['form_title'] ?? '') ?: ucfirst(str_replace('_', ' ', preg_replace('/^t_/', '', $k))))), 'route' => '#/list/' . $k], array_filter($fk, fn ($k) => \App\Services\Perm::has(Auth::user(), "form:$k:VIEW")))) : [];      // owner 26-11: a screen with several lists opens the next window (▸) with them
+            $secs[$m->parent_id]['items'][] = ['subs' => $subs, 'id' => $m->id_module, 'no' => $m->screen_no, 'name' => $m->module_name, 'about' => config('menu_help.items.' . $m->module_key), 'route' => $rt, 'soon' => $soon, 'forms' => array_values(array_filter(array_map(fn ($f) => trim(explode('(', $f)[0]), preg_split('/[;,\s]+/', (string) $m->forms, -1, PREG_SPLIT_NO_EMPTY)), fn ($k) => Registry::exists($k) && Registry::table($k)))];
         }
         return array_values(array_filter($secs, fn ($s) => $s['items']));
     }

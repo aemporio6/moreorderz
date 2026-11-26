@@ -28,10 +28,28 @@ class Registry
     }
 
     /** All fields of one form, in section / field order. */
+    private static ?array $all = null;
+
     public static function fields(string $formKey): array
     {
+        if (! app()->runningUnitTests()) { $all = self::all(); if ($all !== null) return $all[$formKey] ?? []; }
         return Cache::store('array')->rememberForever("reg:$formKey", fn () => DB::table('sys_registry')
             ->where('form_key', $formKey)->orderBy('section_no')->orderBy('field_no')->orderBy('id')->get()->map(fn ($r) => (array) $r)->all());
+    }
+
+    /** Live 26-11 'slow': the whole registry read once (one query) and kept in the file cache until it changes – a list screen asked the registry of every form (500+ queries). */
+    private static function all(): ?array
+    {
+        if (self::$all !== null) return self::$all;
+        try {
+            $v = (string) ((array) (DB::select('CHECKSUM TABLE sys_registry')[0] ?? []))['Checksum'] ?? '';      // changes with any edit of any field row
+            $c = Cache::store('file')->get('reg:all');
+            if (! is_array($c) || ($c['v'] ?? null) !== $v) {
+                $data = []; foreach (DB::table('sys_registry')->orderBy('form_key')->orderBy('section_no')->orderBy('field_no')->orderBy('id')->get() as $r) $data[$r->form_key][] = (array) $r;
+                $c = ['v' => $v, 'data' => $data]; Cache::store('file')->put('reg:all', $c, 86400);
+            }
+            return self::$all = $c['data'];
+        } catch (\Throwable $e) { report($e); return null; }
     }
 
     public static function exists(string $formKey): bool
@@ -226,6 +244,7 @@ class Registry
 
     public static function forget(): void
     {
+        self::$all = null; try { Cache::store('file')->forget('reg:all'); } catch (\Throwable $e) {}
         Cache::store('array')->flush();
         self::$colCache = [];
     }

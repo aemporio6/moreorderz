@@ -159,6 +159,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('users/{id}/reset-password', [AdminController::class, 'userReset'])->whereNumber('id');      // R-C-45
         Route::post('users/{id}/two-step-off', [AdminController::class, 'twoStepOff'])->whereNumber('id');
         Route::post('me/password', [AdminController::class, 'password']);
+        Route::post('me/name', [AdminController::class, 'myName']);      // owner 26-11
         Route::get('me/two-step', [AdminController::class, 'twoStepSetup']);
         Route::post('me/two-step', [AdminController::class, 'twoStepEnable']);
         Route::post('me/two-step-off', [AdminController::class, 'twoStepOff']);

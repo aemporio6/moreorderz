@@ -25,9 +25,12 @@ class MyToolImport
     private static function str($v): string { $v = trim((string) $v); return in_array($v, ['None', 'null'], true) ? '' : $v; }
 
     /** [order_ref => entry] in the shape HistoricalPurchase::entry takes (supplier filled in by import()). */
+    /** [MY TOOL no => [refs, date, total]] of the last entries() call – the supplier order numbers used to find the same order in the old MoreOrderz data. */
+    public static array $refs = [];
+
     public static function entries(array $d): array
     {
-        $parties = $d['parties'] ?? []; $ships = $d['shipments'] ?? []; $out = [];
+        $parties = $d['parties'] ?? []; $ships = $d['shipments'] ?? []; $out = []; $matchRefs = [];
         $cos = []; foreach (($d['setup']['main']['companies'] ?? []) as $c) $cos[$c['id']] = $c['name'] ?? '';
         $pays = [];      // payments per purchase: allocations to a PO, else forRef
         foreach ($d['payments'] ?? [] as $p) {
@@ -54,6 +57,8 @@ class MyToolImport
                 foreach ($pays[$sh['no']] ?? [] as $fp) $freight[] = ['cost' => round($fp['amount'] / $n, 2), 'currency' => $fp['currency']];
             }
             $party = $parties[$po['party'] ?? ''] ?? null;
+            preg_match_all('/[A-Z]{2,}[A-Z0-9-]*\d{6,}/', strtoupper(self::str($po['piNo'] ?? '') . ' / ' . self::str($po['yourRef'] ?? '')), $rm);
+            $matchRefs[$no] = ['refs' => array_values(array_unique($rm[0])), 'date' => self::str($po['date'] ?? ''), 'total' => round(array_sum(array_map(fn ($l) => self::num($l['a'] ?? 0), $po['lines'] ?? [])), 2)];
             $out[$no] = ['source' => 'MYTOOL', 'supplier_code' => (string) ($po['party'] ?? ''), 'supplier_name' => $party['name'] ?? (string) ($po['party'] ?? ''), 'order_date' => self::str($po['date'] ?? ''), 'order_ref' => $no,
                 'order_ref_note' => self::str($po['oldRef'] ?? '') ?: (self::str($po['piNo'] ?? '') ?: null), 'currency' => self::cur(self::str($po['cur'] ?? '')), 'rate' => null, 'owner_name' => $cos[$po['account'] ?? ''] ?? '', 'brand' => null,
                 'notes' => trim('MY TOOL ' . $no . ($po['status'] ?? '' ? ' · ' . $po['status'] : '') . (self::str($po['folder'] ?? '') && self::str($po['folder']) !== 'https://drive.google.com/' ? ' · ' . self::str($po['folder']) : '')),
@@ -72,6 +77,7 @@ class MyToolImport
                 'shipping' => ['shipped_date' => null, 'arrived_date' => null, 'mode' => null, 'forwarder' => null, 'tracking' => null, 'freight' => [], 'duty' => 0, 'other' => 0],      // the dates / mode stay in the notes: a cost-only PO has no goods to ship
                 'received' => ['date' => null, 'warehouse' => null]];
         }
+        self::$refs = $matchRefs;
         return $out;
     }
 
@@ -98,6 +104,54 @@ class MyToolImport
         return $n;
     }
 
+    /**
+     * Owner 26-11 19:21: an order that is in BOTH the old MoreOrderz sourcing data and MY TOOL is kept from MY TOOL (the original);
+     * the old MoreOrderz copy is removed. Old orders that MY TOOL does not have stay as they are.
+     * Same order = a supplier order number in common (WAP-UK-JW…), else the same day (±2) with the same total (±2 %).
+     * An old cycle that already has goods received (GRN / lots) is never removed – it is listed to look at by hand.
+     * @return array{replace: list<array>, keep: int, blocked: list<array>}
+     */
+    public static function oldMatches(int $ent, array $entries): array
+    {
+        $mine = array_keys($entries); $refs = self::$refs; $byRef = [];
+        foreach ($refs as $no => $r) foreach ($r['refs'] as $x) $byRef[$x][] = $no;
+        $old = DB::table('t_src_cycles')->where('fk_id_ent', $ent)->where('f_active', 1)->whereNotIn('order_ref', $mine ?: ['-'])->where(fn ($w) => $w->whereNull('notes')->orWhere('notes', 'not like', 'MY TOOL %'))->get(['id', 'cycle_code', 'order_ref', 'sourcing_date', 'product_name']);
+        $out = ['replace' => [], 'keep' => 0, 'blocked' => []]; $taken = [];
+        foreach ($old as $c) {
+            $pos = DB::table('t_src_po')->where('fk_id_cycle', $c->id)->get(['id', 'po_total', 'po_date']);
+            $total = round((float) $pos->sum('po_total'), 2); $date = substr((string) ($pos->pluck('po_date')->filter()->first() ?: $c->sourcing_date), 0, 10);
+            preg_match_all('/[A-Z]{2,}[A-Z0-9-]*\d{6,}/', strtoupper((string) $c->order_ref), $m); $hit = null; $why = '';
+            foreach ($m[0] as $x) if (! empty($byRef[$x])) { $hit = $byRef[$x][0]; $why = "same supplier order $x"; break; }
+            if (! $hit && $total > 0 && $date) foreach ($refs as $no => $r) {
+                if (isset($taken[$no]) || ! $r['date'] || $r['total'] <= 0) continue;
+                if (abs(strtotime($r['date']) - strtotime($date)) <= 2 * 86400 && abs($r['total'] - $total) <= 0.02 * max($r['total'], $total)) { $hit = $no; $why = "same day and total ($date, " . number_format($total, 2) . ')'; break; }
+            }
+            if (! $hit) { $out['keep']++; continue; }
+            $row = ['old_cycle' => (int) $c->id, 'old_code' => $c->cycle_code, 'old_ref' => $c->order_ref, 'old_date' => $date, 'old_total' => $total, 'mytool' => $hit, 'why' => $why];
+            $poIds = $pos->pluck('id')->all();
+            if (DB::table('t_src_grn')->where('fk_id_cycle', $c->id)->exists() || ($poIds && DB::table('fin_lots')->whereIn('po_id', $poIds)->exists())) { $out['blocked'][] = $row + ['reason' => 'goods already received on it – look at it by hand']; continue; }
+            $taken[$hit] = true; $out['replace'][] = $row;
+        }
+        return $out;
+    }
+
+    /** Remove the old MoreOrderz copies (cycle + every row of its POs and steps). A copy of every removed row is kept in storage/app/mytool-replaced-<time>.json. */
+    private static function removeOld(int $ent, array $replace): int
+    {
+        if (! $replace) return 0;
+        $ids = array_column($replace, 'old_cycle'); $poIds = DB::table('t_src_po')->whereIn('fk_id_cycle', $ids)->pluck('id')->all(); $backup = []; $n = 0;
+        $tables = collect(DB::select("SELECT TABLE_NAME t, COLUMN_NAME c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND COLUMN_NAME IN ('fk_id_cycle', 'fk_id_po') AND TABLE_NAME LIKE 't\\_src\\_%'"))->groupBy('t');
+        foreach ($tables as $t => $cols) {
+            if ($t === 't_src_cycles') continue;
+            $q = DB::table($t)->where(function ($w) use ($cols, $ids, $poIds) { foreach ($cols as $c) $w->orWhereIn($c->c, $c->c === 'fk_id_po' ? ($poIds ?: [0]) : $ids); });
+            $rows = (clone $q)->get(); if (! $rows->count()) continue; $backup[$t] = $rows->all(); $n += $q->delete();
+        }
+        $backup['t_src_cycles'] = DB::table('t_src_cycles')->whereIn('id', $ids)->get()->all(); $n += DB::table('t_src_cycles')->whereIn('id', $ids)->delete();
+        @mkdir(storage_path('app'), 0775, true); file_put_contents(storage_path('app/mytool-replaced-' . date('Ymd-His') . '.json'), json_encode(['pairs' => $replace, 'rows' => $backup]));
+        Audit::log('t_src_cycles', null, 'DELETE', ['OLD_REPLACED_BY_MYTOOL' => [count($ids) . ' cycles', null]], 'Owner 26-11: same order in MY TOOL – the MY TOOL copy is kept', $ent);
+        return count($ids);
+    }
+
     /** Dry run: purchases, lines, payments, money per currency, masters that would be made, purchases already in. Writes nothing. */
     public static function check(int $ent, string $json): array
     {
@@ -107,7 +161,8 @@ class MyToolImport
             if (! DB::table('t_src_suppliers')->where('fk_id_ent', $ent)->where('supplier_code', 'MT-' . $x['supplier_code'])->exists() && ! SrcNames::supplier($ent, $x['supplier_name'])) $newSup[$x['supplier_name']] = 1;
             if (DB::table('t_src_cycles')->where('fk_id_ent', $ent)->where('order_ref', $x['order_ref'])->where('cycle_type', 'HISTORICAL')->exists()) $dups++;
         }
-        return ['purchases' => count($e), 'lines' => array_sum(array_map(fn ($x) => count($x['lines']), $e)), 'payments' => array_sum(array_map(fn ($x) => count($x['payments']), $e)), 'paid' => $money,
+        $om = self::oldMatches($ent, $e);
+        return ['old_same' => $om['replace'], 'old_kept' => $om['keep'], 'old_blocked' => $om['blocked'], 'purchases' => count($e), 'lines' => array_sum(array_map(fn ($x) => count($x['lines']), $e)), 'payments' => array_sum(array_map(fn ($x) => count($x['payments']), $e)), 'paid' => $money,
             'with_freight' => count(array_filter($e, fn ($x) => $x['shipping']['freight'])), 'freight_only' => count(array_filter($e, fn ($x) => ($x['supplier_type'] ?? '') === 'FORWARDER')),
             'not_purchases' => count(array_filter($d['payments'] ?? [], fn ($p) => collect($p['allocations'] ?? [])->contains(fn ($a) => empty($a['ref'])))), 'new_suppliers' => array_keys($newSup), 'already_in' => $dups, 'saved_by_mytool' => count($d['purchases'] ?? [])];
     }
@@ -127,15 +182,22 @@ class MyToolImport
             }
         }
         $rates = self::rates($d, $log);
-        foreach (self::entries($d) as $ref => $e) {
-            if (DB::table('t_src_cycles')->where('fk_id_ent', $ent)->where('order_ref', $ref)->where('cycle_type', 'HISTORICAL')->exists()) { $skip++; continue; }
+        $entries = self::entries($d); $om = self::oldMatches($ent, $entries); $removed = 0; $same = collect($om['replace'])->groupBy('mytool');
+        foreach ($om['blocked'] as $x) $log[] = "KEPT old MoreOrderz {$x['old_code']} although MY TOOL {$x['mytool']} looks the same – {$x['reason']}";
+        $swap = function (string $ref) use ($ent, $same, &$removed, &$log) {      // only after the MY TOOL copy is saved: then its old MoreOrderz copy goes
+            $rows = $same->get($ref, collect())->all(); if (! $rows) return;
+            $removed += self::removeOld($ent, $rows);
+            foreach ($rows as $x) $log[] = "REMOVED old MoreOrderz {$x['old_code']} ({$x['old_ref']}) – the same order is MY TOOL {$x['mytool']} ({$x['why']})";
+        };
+        foreach ($entries as $ref => $e) {
+            if (DB::table('t_src_cycles')->where('fk_id_ent', $ent)->where('order_ref', $ref)->where('cycle_type', 'HISTORICAL')->exists()) { $skip++; $swap((string) $ref); continue; }
             $sup = DB::table('t_src_suppliers')->where('fk_id_ent', $ent)->where('supplier_code', 'MT-' . $e['supplier_code'])->value('id') ?: (SrcNames::supplier($ent, $e['supplier_name'])->id ?? null);
             if (! $sup) { $fail[] = "$ref: supplier {$e['supplier_name']} not found"; continue; }
             $owner = $e['owner_name'] !== '' ? SrcNames::owner($ent, $e['owner_name'], $log) : null;      // the buying company of MY TOOL by name; not found → left empty with a WARN (pick it on the cycle)
-            try { $r = HistoricalPurchase::entry($ent, ['supplier' => (int) $sup] + ($owner ? ['owner' => $owner] : []) + $e, $u); $done++; foreach ((array) ($r['log'] ?? []) as $x) if (str_starts_with((string) $x, 'NEW')) $log[] = "$ref: $x"; }
+            try { $r = HistoricalPurchase::entry($ent, ['supplier' => (int) $sup] + ($owner ? ['owner' => $owner] : []) + $e, $u); $done++; $swap((string) $ref); foreach ((array) ($r['log'] ?? []) as $x) if (str_starts_with((string) $x, 'NEW')) $log[] = "$ref: $x"; }
             catch (\Throwable $x) { $fail[] = "$ref: " . $x->getMessage(); }
         }
         Audit::log('t_src_cycles', null, 'INSERT', ['MYTOOL_IMPORT' => [null, "$done purchases"]], 'MY TOOL purchase history imported', $ent);
-        return ['imported' => $done, 'already_in' => $skip, 'failed' => $fail, 'log' => $log, 'message' => "$done MY TOOL purchase(s) imported as old purchases, $skip already there" . ($fail ? ', ' . count($fail) . ' not imported (see the list)' : '') . '.'];
+        return ['removed_old' => $removed, 'imported' => $done, 'already_in' => $skip, 'failed' => $fail, 'log' => $log, 'message' => "$done MY TOOL purchase(s) imported as old purchases, $skip already there, $removed old MoreOrderz cop" . ($removed === 1 ? 'y' : 'ies') . " of the same orders removed" . ($fail ? ', ' . count($fail) . ' not imported (see the list)' : '') . '.'];
     }
 }

@@ -523,3 +523,8 @@ td.bad{color:var(--err);font-weight:600}
 .mn-i.soon{opacity:.5;cursor:default}
 .mn-n{font-size:11.5px;font-weight:700;padding:1px 8px;border-radius:10px;background:var(--surface-3);color:var(--muted)}
 .nav-item .lbl small{display:block;font-size:11.5px;color:var(--faint);font-weight:500}
+.mn-i{flex-direction:row;align-items:center}
+.mn-i>span:first-child{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.mn-i.on{background:var(--accent-soft)}
+.mn-i.has:hover .mn-tri,.mn-i.on .mn-tri{color:var(--accent);transform:translateX(2px)}
+.mn-p3{width:300px}
