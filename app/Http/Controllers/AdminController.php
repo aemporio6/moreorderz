@@ -500,6 +500,21 @@ class AdminController extends Controller
         return $this->guard(function () use ($d, $r) { P::setUser((int) $d['user_id'], $d['code'], $d['effect'] ?? null, (string) ($d['reason'] ?? ''), $d['until'] ?? null, (int) $r->user()->id); return ['ok' => true]; });
     }
 
+    /** Owner 26-11 21:31 – access cards (MY TOOL style): one card per person. */
+    public function accessCards(Request $r)
+    {
+        P::need($r->user(), 'admin.permissions');
+        return \App\Services\AccessCards::cards((int) \App\Services\Context::ent());
+    }
+
+    public function accessSave(Request $r, int $id)
+    {
+        P::need($r->user(), 'admin.permissions');
+        $d = $r->validate(['role' => 'nullable|string|max:40', 'until' => 'nullable|date', 'approve_limit' => 'nullable|numeric|min:0|max:100000000', 'reset' => 'nullable|boolean', 'ticks' => 'nullable|array', 'ticks.*' => 'boolean']);
+        foreach (['until', 'approve_limit'] as $k) if ($r->has($k)) $d[$k] = $r->input($k);
+        return $this->guard(fn () => ['ok' => true, 'card' => \App\Services\AccessCards::save($id, $d, $r->user())]);
+    }
+
     public function permExtraRoles(Request $r)
     {
         P::need($r->user(), 'admin.permissions');

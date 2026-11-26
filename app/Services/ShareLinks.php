@@ -62,7 +62,7 @@ class ShareLinks
     {
         if (! preg_match('/^[a-f0-9]{64}$/', $token)) return null;
         $l = DB::table('sys_share_links')->where('link_hash', hash('sha256', $token))->first();
-        return $l && ! $l->revoked_at && $l->expires_at >= now() && $l->entity_type === 'PO' ? $l : null;
+        return $l && ! $l->revoked_at && $l->expires_at >= now() && ($l->entity_type === 'PO' || ($l->entity_type === 'SUPPLIER' && $l->purpose === SupplierUploads::PURPOSE)) ? $l : null;
     }
 
     private static function used(object $l, string $what, array $detail, ?string $ip): void
@@ -106,6 +106,7 @@ class ShareLinks
     /** One action of the link's own purpose. Anything else is refused. */
     public static function act(object $l, string $action, array $in, ?string $ip, array $files = []): array
     {
+        if ($l->entity_type !== 'PO') throw new \InvalidArgumentException('This link is not for that.');
         $po = DB::table('t_src_po')->where('id', $l->entity_id)->first() ?? throw new \InvalidArgumentException(self::EXPIRED);
         $ent = (int) $po->fk_id_ent; $no = $po->po_number ?: $po->po_code; $owner = (int) ($po->requested_by ?: $po->created_by) ?: null;
         $allowed = ['PO_CONFIRM' => ['accept', 'change'], 'PRODUCTION_PHOTO' => ['photos'], 'SHIP_DATE' => ['date'], 'ARTWORK_DOWNLOAD' => []][$l->purpose] ?? [];

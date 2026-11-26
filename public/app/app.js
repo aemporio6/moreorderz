@@ -350,6 +350,7 @@
       if (r.startsWith('#/variations/')) return await pageVariations(+r.split('/')[2]);
       if (r.startsWith('#/fee-check')) { const u = new URLSearchParams(r.split('?')[1] || ''); return await pageFeeCheck(u.get('ym') || '', u.get('shop') || ''); }
       if (r === '#/mytool-link') return await pageMyToolLink();
+      if (r.startsWith('#/supplier-inbox')) return await pageSupplierInbox();      // owner 26-11 21:31
       if (r === '#/whats-new') return await pageWhatsNew();
       if (r === '#/return-abuse') return await pageReturnAbuse();
       if (r.startsWith('#/deadlines')) return await pageDeadlines(new URLSearchParams(r.split('?')[1] || '').get('ym') || '');
@@ -3805,12 +3806,12 @@
 
 
   // ---------- roles and rights (permission engine) ----------
-  const PM = { tab: 'roles', q: '', group: '', role: '', only: '', forms: '' };
+  const PM = { tab: 'cards', q: '', group: '', role: '', only: '', forms: '' };
   async function pagePermissions() {
     busy(true); let d; try { d = await api('permissions' + (PM.forms ? '?forms=1' : '')); } finally { busy(false); }
     const groups = [...new Set(d.rights.map(x => x.group))], roleOf = k => d.roles.find(r => r.code === k);
     const shown = d.roles.filter(r => r.active && (!PM.role || r.code === PM.role));
-    const tabs = [['roles', 'Roles and rights'], ['people', 'People'], ['fields', 'Fields'], ['requests', `Requests${d.requests.filter(q => q.status === 'OPEN').length ? ' · ' + d.requests.filter(q => q.status === 'OPEN').length : ''}`], ['viewas', 'View as'], ['migration', 'Old rights check']];
+    const tabs = [['cards', 'Access cards'], ['roles', 'Roles and rights'], ['people', 'People'], ['fields', 'Fields'], ['requests', `Requests${d.requests.filter(q => q.status === 'OPEN').length ? ' · ' + d.requests.filter(q => q.status === 'OPEN').length : ''}`], ['viewas', 'View as'], ['migration', 'Old rights check']];
     const opt = (list, val, first) => (first ? `<option value="">${first}</option>` : '') + list.map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(val) ? 'selected' : ''}>${esc(l)}</option>`).join('');
     let body = '';
     if (PM.tab === 'roles') {
@@ -3859,6 +3860,25 @@
         ${m.unmapped.length ? `<p class="small">Old pages with no form here (not moved): ${m.unmapped.map(esc).join(', ')}</p>` : ''}
         ${m.differences && S.boot.user.role === 'OWNER' ? '<button class="btn primary" id="pmApply">Apply – write the differences into the rights</button>' : ''}</div></div>`;
     }
+    let ac = null;
+    if (PM.tab === 'cards') {      // owner 26-11 21:31 – MY TOOL style access cards, easier
+      ac = await api('access-cards');
+      const stOf = t => t.state === 'on' ? '✓' : t.state === 'part' ? '◐' : '';
+      body = `<div class="small muted" style="margin:0 0 12px">One card per person. Pick a role – the ticks fill by themselves. Change a tick for one person only; a <span class="chip warn plain">changed</span> tick differs from the role; a half tick = some of it. The Owner can always do everything.</div>
+        <div class="ac-grid">${ac.cards.map(c => { const can = c.ticks.filter(t => t.state === 'on').map(t => t.label.toLowerCase()), cannot = c.ticks.filter(t => t.state === 'off').map(t => t.label.toLowerCase());
+          return `<div class="card ac-card" data-ac="${c.id}"><div class="card-b">
+          <div class="ac-head"><div class="ac-av">${esc((c.name || '?').trim().slice(0, 1).toUpperCase())}</div><div style="min-width:0"><div class="ac-name">${esc(c.name)}</div><div class="small muted">${esc(c.login)}${c.last_login ? ' · last in ' + esc(String(c.last_login).slice(0, 10)) : ' · never signed in'}</div></div>
+            ${c.owner ? '<span class="chip ok plain" style="margin-left:auto">Owner – everything</span>' : `<select class="q ac-role" style="margin-left:auto">${ac.roles.filter(r => r.code !== 'OWNER').map(r => `<option value="${esc(r.code)}" ${r.code === c.role ? 'selected' : ''}>${esc(r.label)}</option>`).join('')}</select>`}</div>
+          ${c.suggest ? `<div class="ac-tip">${ic('info')} ${esc(c.suggest)}</div>` : ''}
+          ${c.requests ? `<div class="ac-tip warn">${c.requests} request${c.requests > 1 ? 's' : ''} waiting – <a href="#/permissions" data-pt-go="requests">answer</a></div>` : ''}
+          ${c.owner ? '' : `<div class="ac-ticks">${c.ticks.map(t => `<label class="ac-tick ${t.changed ? 'ch' : ''}" title="${t.changed ? 'Changed for this person – the role has: ' + (t.role === 'on' ? 'yes' : t.role === 'part' ? 'some' : 'no') : 'From the role'}"><input type="checkbox" data-tk="${t.key}" ${t.state === 'part' ? 'data-part="1"' : ''} ${t.state === 'on' ? 'checked' : ''} ${c.owner ? 'disabled' : ''}><span>${esc(t.label)}${t.state === 'part' ? ' <span class="muted small">(some)</span>' : ''}</span>${t.changed ? '<span class="chip warn plain">changed</span>' : ''}</label>`).join('')}</div>`}
+          ${c.owner ? '' : `<div class="ac-row"><label>Approve up to £ <input class="q ac-lim" type="number" min="0" step="50" value="${c.approve_limit ?? ''}" placeholder="role's limit"></label>
+            <label>Access until <input class="q ac-until" type="date" value="${esc(c.until || '')}"></label>${c.expired ? '<span class="chip err plain">ended – looks only</span>' : ''}</div>
+          <div class="small muted" style="margin-top:6px">Shops: ${c.shops === null ? 'all' : c.shops.length ? esc(c.shops.join(', ')) : 'none'} · <a href="#/permissions" data-pt-go="people">change</a></div>`}
+          <div class="ac-says"><b>${esc(c.name.split(' ')[0])}</b> can: ${c.owner ? 'everything, always – an Owner can never be locked out' : can.length ? esc(can.join(', ')) : 'nothing yet'}.${cannot.length && !c.owner ? ` <br>Cannot: ${esc(cannot.join(', '))}.` : ''}${c.until && !c.owner ? ` <br>Until ${esc(c.until)}, then only looks.` : ''}</div>
+          ${c.owner || !c.ticks.some(t => t.changed) ? '' : '<button class="btn small ac-reset" type="button">Back to the role\'s ticks</button>'}
+          </div></div>`; }).join('')}</div>`;
+    }
     if (PM.tab === 'viewas') {
       body = `<div class="card"><div class="card-b"><p style="margin-top:0">See the tool exactly as a role sees it – menu, screens and buttons. While you view as another role <b>nothing can be changed</b>, so it is safe to click around.</p>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select class="q" id="pvR">${opt(d.roles.filter(r => r.active && r.code !== 'OWNER').map(r => [r.code, r.label]), d.view_as ? d.view_as[1] : '')}</select><button class="btn primary" id="pvGo">View as this role</button>${d.view_as ? `<button class="btn" id="pvBack">Back to myself</button>` : ''}</div></div></div>`;
@@ -3868,6 +3888,16 @@
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${tabs.map(([k, l]) => `<button class="btn ${PM.tab === k ? 'primary' : ''}" data-pt="${k}">${esc(l)}</button>`).join('')}</div>${body}`;
     const re = () => pagePermissions(), post = (path, b, msg) => act('permissions/' + path, b, re, msg || 'Saved');
     $$('#main [data-pt]').forEach(b => b.onclick = () => { PM.tab = b.dataset.pt; re(); });
+    $$('#main [data-pt-go]').forEach(a => a.onclick = e => { e.preventDefault(); PM.tab = a.dataset.ptGo; re(); });
+    if (PM.tab === 'cards') $$('#main [data-ac]').forEach(card => {
+      const id = card.dataset.ac, save = (b, msg) => act('access-cards/' + id, b, re, msg || 'Saved');
+      const rs = card.querySelector('.ac-role'); if (rs) rs.onchange = () => save({ role: rs.value }, 'Role changed – the ticks now come from it');
+      card.querySelectorAll('[data-tk]').forEach(x => { if (x.dataset.part) x.indeterminate = true; });
+      card.querySelectorAll('[data-tk]').forEach(x => x.onchange = () => save({ ticks: { [x.dataset.tk]: x.checked } }));
+      const lim = card.querySelector('.ac-lim'); if (lim) lim.onchange = () => save({ approve_limit: lim.value === '' ? null : lim.value });
+      const un = card.querySelector('.ac-until'); if (un) un.onchange = () => save({ until: un.value || null });
+      const rb = card.querySelector('.ac-reset'); if (rb) rb.onclick = () => save({ reset: true }, 'Back to the role');
+    });
     if (PM.tab === 'roles') {
       let tm; $('#pmQ').oninput = e => { PM.q = e.target.value; clearTimeout(tm); tm = setTimeout(() => { re().then(() => { const i = $('#pmQ'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }); }, 350); };
       $('#pmG').onchange = e => { PM.group = e.target.value; re(); }; $('#pmR').onchange = e => { PM.role = e.target.value; re(); }; $('#pmO').onchange = e => { PM.only = e.target.checked ? 1 : ''; re(); }; $('#pmF').onchange = e => { PM.forms = e.target.checked ? 1 : ''; re(); };
@@ -3929,6 +3959,40 @@
 
   // ---------- my account: password, 2-step sign-in, sign out ----------
   /* Owner 26-11 20:08: MY TOOL connects directly – key, master switch, permission per kind and direction, the review inbox, the history */
+  /* Owner 26-11 21:31 (from MY TOOL supplier_link + docbrain): files suppliers send with their upload link, filed by themselves */
+  let SI_ALL = false;
+  async function pageSupplierInbox() {
+    let d; try { busy(true); d = await api('supplier-inbox' + (SI_ALL ? '?all=1' : '')); } finally { busy(false); }
+    const open = d.items.filter(x => x.open).length;
+    const row = x => `<tr data-si="${x.id}"><td><a href="/api/supplier-inbox/${x.id}/file" target="_blank" rel="noopener">${esc(x.name)}</a><div class="small muted">${esc(String(x.at || '').slice(0, 16))}${x.note ? ' · ' + esc(x.note) : ''}</div></td>
+      <td>${x.supplier_id ? `<a href="#/rec/suppliers/${x.supplier_id}">${esc(x.supplier || '#' + x.supplier_id)}</a>` : '–'}</td>
+      <td><select class="q si-kind">${d.kinds.map(k => `<option ${k === x.kind ? 'selected' : ''}>${esc(k)}</option>`).join('')}</select></td>
+      <td><select class="q si-po"><option value="">${x.po_id ? '' : 'Not found – choose'}</option>${(d.pos[x.supplier_id] || []).map(p => `<option value="${p.id}" ${p.id === x.po_id ? 'selected' : ''}>${esc(p.no)}</option>`).join('')}</select>${x.po_id ? ` <a class="small" href="#/po/${x.po_id}">open</a>` : ''}${x.guess ? `<div class="small" style="margin-top:4px">Looks like <b>${esc(((d.pos[x.supplier_id] || []).find(p => p.id === x.guess.po_id) || {}).no || '#' + x.guess.po_id)}</b> – ${esc(x.guess.why)}. <a href="#" class="si-take" data-po="${x.guess.po_id}">Use it</a></div>` : ''}${x.same ? '<div class="small" style="color:var(--warn,#B7791F)">A file with the same name came before – maybe a copy.</div>' : ''}</td>
+      <td>${x.open ? '<button class="btn small primary si-done" type="button">Done</button>' : '<span class="chip ok plain">filed</span>'}</td></tr>`;
+    $('#main').innerHTML = `<div class="page-head"><div><h1>From suppliers</h1><div class="sub">Files your suppliers sent with their upload link. Each one is filed by itself – the kind from its name and text, the PO when its number is in it. Check, change if needed, press <b>Done</b>.</div></div>
+      <div class="actions"><label class="chk small"><input type="checkbox" id="siAll" ${SI_ALL ? 'checked' : ''}> Show filed too</label></div></div>
+      <div class="card"><div class="card-h"><b>${open ? open + ' new file' + (open > 1 ? 's' : '') : 'Nothing new'}</b></div>
+      ${d.items.length ? `<div class="tbl-wrap"><table class="t"><thead><tr><th>File</th><th>Supplier</th><th>Kind</th><th>Purchase order</th><th></th></tr></thead><tbody>${d.items.map(row).join('')}</tbody></table></div>` : '<div class="card-b muted">No files yet. Make an upload link below and send it to the supplier.</div>'}</div>
+      ${d.links ? `<div class="card" style="margin-top:16px"><div class="card-h"><b>Upload links</b> <span class="small muted">· the supplier can only send files – he sees nothing of yours · ${90} days · 30 files a day</span></div><div class="card-b">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select class="q" id="siSup" style="min-width:240px"><option value="">Choose the supplier…</option>${d.suppliers.map(s => `<option value="${s.id}">${esc(s.supplier_name)}</option>`).join('')}</select><button class="btn primary" id="siMake" type="button">Make upload link</button></div>
+        <div id="siMade"></div>
+        ${d.links.length ? `<div class="tbl-wrap" style="margin-top:12px"><table class="t"><thead><tr><th>Supplier</th><th>Made</th><th>Valid until</th><th>Used</th><th>State</th><th></th></tr></thead><tbody>${d.links.map(l => `<tr><td>${esc(l.supplier_name || '')}</td><td>${esc(String(l.created_at).slice(0, 10))} <span class="small muted">${esc(l.by || '')}</span></td><td>${esc(String(l.expires_at).slice(0, 10))}</td><td>${l.used_count}×</td><td>${esc(l.state)}</td><td>${l.state === 'Active' ? `<button class="btn small" data-sirv="${l.id}" type="button">Stop the link</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : ''}
+      </div></div>` : ''}`;
+    const post = async (id, body) => { try { busy(true); toast((await api('supplier-inbox/' + id, { method: 'POST', body })).message); pageSupplierInbox(); } catch (e) { toast(e.message, 'err'); } finally { busy(false); } };
+    $('#siAll').onchange = e => { SI_ALL = e.target.checked; pageSupplierInbox(); };
+    $$('#main [data-si]').forEach(tr => { const id = tr.dataset.si;
+      tr.querySelector('.si-kind').onchange = e => post(id, { kind: e.target.value });
+      tr.querySelector('.si-po').onchange = e => e.target.value && post(id, { po_id: +e.target.value });
+      const tk = tr.querySelector('.si-take'); if (tk) tk.onclick = e => { e.preventDefault(); post(id, { po_id: +tk.dataset.po }); };
+      const dn = tr.querySelector('.si-done'); if (dn) dn.onclick = () => post(id, { done: true }); });
+    $$('#main [data-sirv]').forEach(b => b.onclick = async () => { try { await api('share-links/' + b.dataset.sirv + '/revoke', { method: 'POST' }); toast('Link stopped – it no longer opens'); pageSupplierInbox(); } catch (e) { toast(e.message, 'err'); } });
+    const mk = $('#siMake'); if (mk) mk.onclick = async () => { const sid = $('#siSup').value; if (!sid) return toast('Choose the supplier first', 'err');
+      let x; try { busy(true); x = await api(`suppliers/${sid}/upload-link`, { method: 'POST' }); } catch (e) { return toast(e.message, 'err'); } finally { busy(false); }
+      $('#siMade').innerHTML = `<div class="ac-tip" style="margin-top:12px"><b>${esc(x.message)}</b><textarea class="q" id="siTxt" rows="5" style="width:100%;margin-top:8px;font:inherit;font-size:13.5px" readonly>${esc(x.text)}</textarea>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn primary" id="siCopy" type="button">Copy the message</button>${x.whatsapp ? `<a class="btn" href="${esc(x.whatsapp)}" target="_blank" rel="noopener">Send on WhatsApp</a>` : ''}${x.email ? `<a class="btn" href="mailto:${esc(x.email)}?subject=${encodeURIComponent('Documents upload link')}&body=${encodeURIComponent(x.text)}">Send by email</a>` : ''}</div></div>`;
+      $('#siCopy').onclick = () => navigator.clipboard.writeText(x.text).then(() => toast('Copied'), () => { $('#siTxt').select(); toast('Press Ctrl+C to copy'); }); };
+  }
+
   async function pageMyToolLink() {
     let d; try { busy(true); d = await api('mytool-link'); } finally { busy(false); }
     const opt = (k, v) => ['ALWAYS', 'ASK', 'NEVER'].map(o => `<option value="${o}" ${v === o ? 'selected' : ''}>${o === 'ALWAYS' ? 'Always' : o === 'ASK' ? 'Ask every time' : 'Never'}</option>`).join('');

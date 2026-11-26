@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Services\Context;
 use App\Services\ShareLinks;
+use App\Services\SupplierUploads;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -27,6 +28,7 @@ class ShareController extends Controller
     public function page(Request $r, string $token)
     {
         $l = ShareLinks::resolve($token); if (! $l) return $this->gone();
+        if ($l->entity_type === 'SUPPLIER') return $this->uploadPage($r, $l, $token);
         $v = ShareLinks::view($l); if (! empty($v['gone'])) return $this->gone();
         $done = (string) $r->session()->pull('share_msg', ''); $err = (string) $r->session()->pull('share_err', ''); $csrf = '<input type="hidden" name="_token" value="' . $this->e(csrf_token()) . '">'; $u = '/s/' . $token;
         $b = '<div class="card"><h1>' . $this->e($v['purpose_label']) . '</h1><div class="muted">' . $this->e($v['company']) . ' · Purchase order ' . $this->e($v['po']) . ($v['date'] ? ' · ' . $this->e($v['date']) : '') . ' · link valid until ' . $this->e($v['expires']) . '</div>'
@@ -52,14 +54,36 @@ class ShareController extends Controller
     public function act(Request $r, string $token, string $action)
     {
         $l = ShareLinks::resolve($token); if (! $l) return $this->gone();
+        if ($l->entity_type === 'SUPPLIER' || $action === 'upload') {
+            try { if ($l->entity_type !== 'SUPPLIER' || $action !== 'upload') throw new \InvalidArgumentException('This link is not for that.');
+                $x = SupplierUploads::upload($l, array_values(array_filter((array) $r->file('files', []))), $r->input('po'), $r->input('note'), $r->ip()); $r->session()->put('share_msg', $x['message']); }
+            catch (\InvalidArgumentException $e) { $r->session()->put('share_err', $e->getMessage()); }
+            return redirect('/s/' . $token);
+        }
         try { $x = ShareLinks::act($l, $action, $r->only(['note', 'date']), $r->ip(), array_values(array_filter((array) $r->file('photos', [])))); $r->session()->put('share_msg', $x['message']); }
         catch (\InvalidArgumentException $e) { $r->session()->put('share_err', $e->getMessage()); }
         return redirect('/s/' . $token);
     }
 
+    /** Owner 26-11 21:31 supplier upload link: send-only, in English and Chinese. */
+    private function uploadPage(Request $r, object $l, string $token)
+    {
+        $v = SupplierUploads::view($l); $u = '/s/' . $token; $csrf = '<input type="hidden" name="_token" value="' . $this->e(csrf_token()) . '">';
+        $done = (string) $r->session()->pull('share_msg', ''); $err = (string) $r->session()->pull('share_err', '');
+        $b = '<div class="card"><h1>Send your documents · 上传文件</h1><div class="muted">' . $this->e($v['company']) . ' · for ' . $this->e($v['supplier']) . ' · valid until 有效期至 ' . $this->e($v['expires']) . '</div>'
+            . ($done !== '' ? '<p class="ok">' . $this->e($done) . '</p>' : '') . ($err !== '' ? '<p style="color:#b42318">' . $this->e($err) . '</p>' : '') . '</div>'
+            . '<div class="card"><p class="muted" style="margin-top:0">PI, invoice, packing list, B/L, photos, test reports. PDF, photos, Excel, Word or CSV – up to ' . SupplierUploads::PER_SEND . ' files at a time, ' . SupplierUploads::MAX_MB . ' MB each. You can send ' . $v['left_today'] . ' more today.<br>形式发票、商业发票、装箱单、提单、照片、检测报告。每次最多 ' . SupplierUploads::PER_SEND . ' 个文件，每个最大 ' . SupplierUploads::MAX_MB . ' MB。</p>'
+            . '<form method="post" action="' . $u . '/upload" enctype="multipart/form-data">' . $csrf
+            . '<label class="muted" for="f">Files · 文件</label><input id="f" type="file" name="files[]" multiple required accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.xls,.csv,.doc,.docx,.txt">'
+            . '<p><label class="muted" for="po">PO number (if you know it) · 订单号（如有）</label><input id="po" name="po" maxlength="60"></p>'
+            . '<p><label class="muted" for="n">Note · 备注</label><textarea id="n" name="note" rows="2" maxlength="500"></textarea></p><p><button>Send · 发送</button></p></form></div>'
+            . '<p class="muted">You can only send files here – nothing else can be seen or changed. 此页面只能上传文件。</p>';
+        return $this->shell('Send your documents', $b);
+    }
+
     public function file(Request $r, string $token, int $id)
     {
-        $l = ShareLinks::resolve($token); if (! $l) return $this->gone();
+        $l = ShareLinks::resolve($token); if (! $l || $l->entity_type !== 'PO') return $this->gone();
         $f = ShareLinks::file($l, $id, $r->ip()); if (! $f) abort(404);
         if ($f['stored'] && Storage::disk('local')->exists($f['stored'])) return response(Storage::disk('local')->get($f['stored']), 200, ['Content-Type' => $f['mime'] ?: 'application/octet-stream', 'Content-Disposition' => 'attachment; filename="' . preg_replace('/[^A-Za-z0-9._-]+/', '_', (string) ($f['orig'] ?: $f['name'])) . '"', 'Cache-Control' => 'no-store']);
         if ($f['drive_url'] && preg_match('#^https://#', (string) $f['drive_url'])) return redirect()->away($f['drive_url']);
@@ -71,5 +95,17 @@ class ShareController extends Controller
     public function index(Request $r, int $po) { \App\Services\Perm::need($r->user(), 'buying.SEE'); $p = \Illuminate\Support\Facades\DB::table('t_src_po')->where('id', $po)->where('fk_id_ent', Context::ent())->first(['supplier_confirmed_at', 'supplier_change_note', 'supplier_ship_date']); return ['po' => $p ? ['confirmed_at' => $p->supplier_confirmed_at, 'change_asked' => $p->supplier_change_note, 'proposed_ship_date' => $p->supplier_ship_date] : null, 'rows' => ShareLinks::list((int) Context::ent(), $po), 'purposes' => ShareLinks::PURPOSES, 'can' => \App\Services\Perm::has($r->user(), 'buying.shareLink'), 'days' => ShareLinks::days((int) Context::ent())]; }
     public function create(Request $r, int $po) { return $this->run(fn () => ShareLinks::create((int) Context::ent(), $po, (string) $r->input('purpose'), $r->user())); }
     public function revoke(Request $r, int $id) { return $this->run(fn () => ShareLinks::revoke((int) Context::ent(), $id, $r->user())); }
+    public function supplierLink(Request $r, int $id) { return $this->run(fn () => SupplierUploads::create((int) Context::ent(), $id, $r->user())); }
+    public function supplierInbox(Request $r) { \App\Services\Perm::need($r->user(), 'buying.SEE'); $ent = (int) Context::ent();
+        $items = SupplierUploads::inbox($ent, (bool) $r->query('all')); $sids = array_values(array_unique(array_filter(array_column($items, 'supplier_id'))));
+        $pos = \Illuminate\Support\Facades\DB::table('t_src_po')->where('fk_id_ent', $ent)->whereIn('fk_id_supplier', $sids ?: [0])->orderByDesc('id')->limit(500)->get(['id', 'fk_id_supplier', 'po_code', 'po_number'])->groupBy('fk_id_supplier')
+            ->map(fn ($g) => $g->map(fn ($p) => ['id' => (int) $p->id, 'no' => $p->po_number ?: $p->po_code])->values())->all();
+        return ['items' => $items, 'pos' => $pos, 'kinds' => \App\Services\SupplierUploads::kinds(), 'links' => \App\Services\Perm::has($r->user(), 'buying.shareLink') ? SupplierUploads::links($ent) : [],
+            'suppliers' => \Illuminate\Support\Facades\DB::table('t_src_suppliers')->where('f_active', 1)->where(fn ($q) => $q->where('fk_id_ent', $ent)->orWhereNull('fk_id_ent')->orWhere('fk_id_ent', 0))->orderBy('supplier_name')->get(['id', 'supplier_name'])];
+    }
+    public function supplierDecide(Request $r, int $id) { return $this->run(fn () => SupplierUploads::decide((int) Context::ent(), $id, $r->only(['po_id', 'kind', 'done']), $r->user())); }
+    public function supplierFile(Request $r, int $id) { \App\Services\Perm::need($r->user(), 'buying.SEE'); $f = SupplierUploads::file((int) Context::ent(), $id); if (! $f) abort(404);
+        return response(Storage::disk('local')->get($f['path']), 200, ['Content-Type' => Storage::disk('local')->mimeType($f['path']) ?: 'application/octet-stream', 'Content-Disposition' => 'inline; filename="' . preg_replace('/[^A-Za-z0-9._-]+/', '_', $f['name']) . '"', 'Cache-Control' => 'no-store', 'X-Content-Type-Options' => 'nosniff']);
+    }
     public function acceptDate(Request $r, int $po) { return $this->run(fn () => ShareLinks::acceptDate((int) Context::ent(), $po, $r->user())); }
 }

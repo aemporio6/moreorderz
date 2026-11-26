@@ -69,6 +69,8 @@ class Approvals
     {
         $role = (string) ($u->role_code ?? '');
         if (in_array($role, ['OWNER', 'PARTNER'], true)) return null;
+        $own = $u->approve_limit ?? (isset($u->id) ? DB::table('t_users')->where('id', $u->id)->value('approve_limit') : null);      // access card: "approve up to £" for this one person
+        if ($own !== null) return (float) $own;
         $v = DB::table('sys_approval_limits')->where('role_code', $role)->whereIn('fk_id_ent', [0, $ent])->whereIn('action_code', [$action, '*'])
             ->orderByRaw('action_code = ? DESC', [$action])->orderByDesc('fk_id_ent')->value('max_amount_gbp');
         return $v === null ? null : (float) $v;

@@ -92,4 +92,47 @@ class ShareLinksTest extends TestCase
         $this->assertSame(['Revoked', 'Expired'], [$rows[$l['id']]['state'], $rows[$l4['id']]['state']]);
         $this->assertNull(ShareLinks::resolve('not-a-token'));
     }
+
+    /** Owner 26-11 21:31 (MY TOOL supplier_link): upload-only link per supplier; files filed by themselves; nothing of ours is shown. */
+    public function test_supplier_upload_link_files_itself_and_shows_nothing(): void
+    {
+        Storage::fake('local');
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id);
+        $sup = $this->f('t_src_suppliers', ['fk_id_ent' => 1, 'supplier_code' => 'S-UP', 'supplier_name' => 'Upload Supplier Co', 'contact_person' => 'Lily', 'phone_whatsapp' => '+86 138 1111 2222', 'f_active' => 1]);
+        $rival = $this->f('t_src_suppliers', ['fk_id_ent' => 1, 'supplier_code' => 'S-RV', 'supplier_name' => 'Rival Upload Ltd', 'f_active' => 1]);
+        $cycle = $this->f('t_src_cycles', ['fk_id_ent' => 1, 'cycle_code' => 'CYC-UP', 'product_name' => 'Lamp', 'status' => 'OPEN', 'f_active' => 1]);
+        $po = $this->f('t_src_po', ['fk_id_ent' => 1, 'po_code' => 'PO-UP-7781', 'po_number' => 'PO-UP-7781', 'po_date' => '2026-11-20', 'fk_id_cycle' => $cycle, 'fk_id_supplier' => $sup, 'po_total' => 4321.5, 'status' => 'CONFIRMED', 'f_active' => 1]);
+        $rpo = $this->f('t_src_po', ['fk_id_ent' => 1, 'po_code' => 'PO-RV-9001', 'po_number' => 'PO-RV-9001', 'po_date' => '2026-11-20', 'fk_id_cycle' => $cycle, 'fk_id_supplier' => $rival, 'po_total' => 999, 'status' => 'CONFIRMED', 'f_active' => 1]);
+        $va = $this->makeUser('VA'); $this->actingAs($va)->postJson("/api/suppliers/$sup/upload-link")->assertStatus(403); $this->actingAs($this->owner);
+        $l = $this->postJson("/api/suppliers/$sup/upload-link")->assertOk()->json();
+        $this->assertStringContainsString('您好', $l['text']); $this->assertStringContainsString('wa.me/8613811112222', (string) $l['whatsapp']);
+        $t = substr($l['url'], strrpos($l['url'], '/') + 1);
+        $this->assertFalse(DB::table('sys_share_links')->where('link_hash', $t)->exists(), 'only the hash is kept');
+        auth()->logout();
+        $page = $this->get("/s/$t")->assertOk()->getContent();
+        foreach (['4,321', '4321', 'Rival', 'PO-UP-7781', 'PO-RV-9001'] as $hidden) $this->assertStringNotContainsString($hidden, $page, "the upload page shows no $hidden");
+        $this->assertStringContainsString('上传文件', $page);
+        // the PO link actions cannot be used on an upload link, and a PO link cannot upload
+        $this->post("/s/$t/accept")->assertRedirect(); $this->assertNull(DB::table('t_src_po')->where('id', $po)->value('supplier_confirmed_at'));
+        $this->get("/s/$t/file/1")->assertStatus(410);
+        // a packing list naming his PO → filed to that PO; the rival's PO number is never matched; a .exe is refused
+        $this->post("/s/$t/upload", ['files' => [UploadedFile::fake()->create('run.exe', 5)]])->assertRedirect(); $this->assertSame(0, DB::table('t_src_documents')->where('uploaded_by', \App\Services\SupplierUploads::VIA)->count());
+        $this->post("/s/$t/upload", ['files' => [UploadedFile::fake()->create('Packing List PO-UP-7781.xlsx', 10), UploadedFile::fake()->create('PI for PO-RV-9001.pdf', 10, 'application/pdf'), UploadedFile::fake()->image('carton.jpg')], 'note' => 'first lot'])->assertRedirect();
+        $docs = DB::table('t_src_documents')->where('uploaded_by', \App\Services\SupplierUploads::VIA)->orderBy('id')->get();
+        $this->assertCount(3, $docs);
+        $this->assertSame(['Packing list', 'Proforma invoice (PI)', 'Product photos'], $docs->pluck('doc_category')->all());
+        $this->assertSame([$po, null, null], $docs->map(fn ($d) => $d->fk_id_po ? (int) $d->fk_id_po : null)->all(), 'only his own PO is matched');
+        // the inbox: attach, refuse another supplier's PO, done
+        $this->actingAs($this->owner);
+        $in = $this->getJson('/api/supplier-inbox')->assertOk()->json();
+        $this->assertCount(3, $in['items']); $this->assertSame('Upload Supplier Co', $in['items'][0]['supplier']);
+        $this->postJson('/api/supplier-inbox/' . $docs[1]->id, ['po_id' => $rpo])->assertStatus(422);
+        $this->postJson('/api/supplier-inbox/' . $docs[1]->id, ['po_id' => $po, 'kind' => 'Commercial invoice'])->assertOk();
+        $this->postJson('/api/supplier-inbox/' . $docs[1]->id, ['done' => true])->assertOk();
+        $this->assertCount(2, $this->getJson('/api/supplier-inbox')->json('items'));
+        $this->get('/api/supplier-inbox/' . $docs[0]->id . '/file')->assertOk();
+        // stop the link → it no longer opens
+        $this->postJson('/api/share-links/' . $l['id'] . '/revoke')->assertOk();
+        auth()->logout(); $this->get("/s/$t")->assertStatus(410);
+    }
 }

@@ -291,6 +291,7 @@ class Perm
         [$base, $key] = self::rolesOf($u);
         if (! $base) return false;
         if ($key === 'OWNER') return true;
+        if (! empty($u->access_until) && $u->access_until < date('Y-m-d') && ! preg_match('/(\.SEE$|^report:|^menu:|:VIEW$|^work\.TASK)/', $code)) return false;      // access card: after "access until" the person can only look
         if (! self::$viewAs || $u->role_code !== 'OWNER') {
             $mine = self::userRows((int) $u->id);
             if (isset($mine[$code])) return $mine[$code] === 'GRANTED';

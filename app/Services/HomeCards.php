@@ -82,6 +82,10 @@ class HomeCards
             $n = DB::table('sys_approvals')->where('status', 'PENDING')->count();
             return ['label' => 'Waiting for approval', 'value' => $n, 'foot' => 'money and stock changes above the limit', 'tone' => $n ? 'warn' : 'done', 'go' => '#/list/sys_approvals'];
         });
+        self::register(['OWNER', 'MANAGER', 'SOURCING', 'FINANCE'], function ($ent) {      // owner 26-11 21:31: files suppliers sent with their upload link
+            $n = DB::table('t_src_documents')->where('fk_id_ent', $ent)->where('uploaded_by', SupplierUploads::VIA)->where('notes', 'like', '%[inbox]%')->count();
+            return $n ? ['label' => 'From suppliers', 'value' => $n, 'foot' => 'new file' . ($n > 1 ? 's' : '') . ' to look at', 'tone' => 'warn', 'go' => '#/supplier-inbox'] : null;
+        });
         self::register(['OWNER'], function ($ent) {
             $n = DB::table('sys_events')->where('status', 'FAILED')->count();
             return ['label' => 'System health', 'value' => $n ? "$n failed" : 'OK', 'foot' => $n ? 'events waiting for a retry' : 'all events processed', 'tone' => $n ? 'err' : 'done', 'go' => '#/health'];

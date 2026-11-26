@@ -32,7 +32,7 @@ Route::post('/print-agent/{id}/done', [\App\Http\Controllers\PrintController::cl
 // R-B_SOURCING-64 supplier link without login: one record, one purpose; unknown / expired / revoked links answer 410
 Route::get('/s/{token}', [\App\Http\Controllers\ShareController::class, 'page'])->where('token', '[a-f0-9]{64}')->middleware('throttle:60,1');
 Route::get('/s/{token}/file/{id}', [\App\Http\Controllers\ShareController::class, 'file'])->where('token', '[a-f0-9]{64}')->whereNumber('id')->middleware('throttle:60,1');
-Route::post('/s/{token}/{action}', [\App\Http\Controllers\ShareController::class, 'act'])->where('token', '[a-f0-9]{64}')->whereIn('action', ['accept', 'change', 'photos', 'date'])->middleware('throttle:20,1');
+Route::post('/s/{token}/{action}', [\App\Http\Controllers\ShareController::class, 'act'])->where('token', '[a-f0-9]{64}')->whereIn('action', ['accept', 'change', 'photos', 'date', 'upload'])->middleware('throttle:20,1');
 Route::get('/wa/inbound', [ConnectController::class, 'waVerify']);
 // Owner 26-11 20:08: MY TOOL direct link (Bearer link key, no session, CORS) – MY TOOL docs/moreorderz-link.md
 Route::options('/api/mytool/{any}', [\App\Http\Controllers\MyToolLinkController::class, 'preflight'])->where('any', 'hello|receive|send')->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class]);
@@ -154,6 +154,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('permissions/user', [AdminController::class, 'permUser']);
         Route::post('permissions/scope', [AdminController::class, 'permScope']);
         Route::post('permissions/roles', [AdminController::class, 'permExtraRoles']);
+        Route::get('access-cards', [AdminController::class, 'accessCards']);
+        Route::post('access-cards/{id}', [AdminController::class, 'accessSave'])->whereNumber('id');
         Route::post('permissions/field', [AdminController::class, 'permField']);
         Route::post('permissions/request', [AdminController::class, 'permRequest']);
         Route::post('permissions/requests/{id}', [AdminController::class, 'permDecide'])->whereNumber('id');
@@ -703,6 +705,10 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('po/{po}/share-links', [\App\Http\Controllers\ShareController::class, 'index'])->whereNumber('po');      // R-B_SOURCING-64
         Route::post('po/{po}/share-links', [\App\Http\Controllers\ShareController::class, 'create'])->whereNumber('po');
         Route::post('po/{po}/ship-date/accept', [\App\Http\Controllers\ShareController::class, 'acceptDate'])->whereNumber('po');
+        Route::post('suppliers/{id}/upload-link', [\App\Http\Controllers\ShareController::class, 'supplierLink'])->whereNumber('id');      // owner 26-11 21:31 supplier upload link
+        Route::get('supplier-inbox', [\App\Http\Controllers\ShareController::class, 'supplierInbox']);
+        Route::post('supplier-inbox/{id}', [\App\Http\Controllers\ShareController::class, 'supplierDecide'])->whereNumber('id');
+        Route::get('supplier-inbox/{id}/file', [\App\Http\Controllers\ShareController::class, 'supplierFile'])->whereNumber('id');
         Route::post('share-links/{id}/revoke', [\App\Http\Controllers\ShareController::class, 'revoke'])->whereNumber('id');
         Route::post('src/brands/add', [\App\Http\Controllers\BuyingController::class, 'brandAdd']);      // R-B_SOURCING-12
         Route::get('cycles/csv/template', [\App\Http\Controllers\BuyingController::class, 'cycleCsvTemplate']);
