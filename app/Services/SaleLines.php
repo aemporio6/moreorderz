@@ -424,7 +424,7 @@ class SaleLines
         return ['bought' => ['local' => (bool) $s->bought_local, 'supplier' => $v ? trim(($v->iso_vendor ?? '') . ' ' . ($v->vendor_name ?? '')) : null, 'ref' => $s->bought_ref, 'hold_ref' => $s->bought_ref_hold, 'date' => $s->bought_date, 'qty' => $s->bought_qty, 'rate' => $s->bought_rate, 'total' => $s->bought_total, 'reason' => $s->bought_reason, 'note' => $s->ds_note],
             'named' => ['promoted' => (bool) $s->f_promoted, 'vat' => $s->vat_amount, 'marketplace_tax' => $s->mp_tax_amount, 'tax_status' => $s->tax_status, 'dispatched_on' => $s->d_dispatched, 'tracking' => $s->tracking_no,
                 'postage_charged' => DB::table('t_sale_charges')->where('fk_id_sale', $id)->where('kind', 'POSTAGE_CHARGED')->value('amount')],
-            'file_row' => is_array($raw) ? $raw : [], 'buyer_warning' => ReturnAbuse::warning((int) Context::ent(), $id)];      /* MR-1544 */
+            'file_row' => is_array($raw) ? $raw : [], 'buyer_warning' => ReturnAbuse::warning((int) Context::ent(), $id), 'doc_form' => RecordService::formOfTable('t_sales')];      /* MR-1544 */
     }
 
     public static function history(int $id): array

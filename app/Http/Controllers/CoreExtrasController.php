@@ -55,4 +55,21 @@ class CoreExtrasController extends Controller
     }
 
     public function sandbox(Request $r) { try { return \App\Services\Sandbox::create($r->user()); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }      // MR-1541
+
+    /** MR-1266 / MR-1418 documents of any record. */
+    private function docRight(Request $r, string $key, string $act): void { abort_unless(\App\Services\Registry::exists($key), 404, 'Unknown form.'); Perm::need($r->user(), "form:$key:$act"); }
+    private function docRun(callable $fn) { try { return $fn(); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
+    public function docs(Request $r, string $key, int $id) { $this->docRight($r, $key, 'VIEW'); return \App\Services\Documents::forRecord($this->ent(), $key, $id); }
+    public function docAdd(Request $r, string $key, int $id) { $this->docRight($r, $key, 'EDIT'); return $this->docRun(fn () => \App\Services\Documents::add($this->ent(), $key, $id, $r->all(), $r->user())); }
+    private function docItemRight(Request $r, int $doc): void
+    {
+        $keys = \Illuminate\Support\Facades\DB::table('sys_document_links')->where('fk_id_document', $doc)->pluck('entity')->all(); abort_unless($keys, 404, 'Document not found.');
+        foreach ($keys as $k) if (Perm::has($r->user(), "form:$k:EDIT")) return; abort(403, 'You may not change this document.');
+    }
+    public function docEdit(Request $r, int $doc) { $this->docItemRight($r, $doc); return $this->docRun(fn () => \App\Services\Documents::edit($this->ent(), $doc, $r->all())); }
+    public function docVersion(Request $r, int $doc) { $this->docItemRight($r, $doc); return $this->docRun(fn () => \App\Services\Documents::version($this->ent(), $doc, $r->all(), $r->user())); }
+    public function docRemove(Request $r, int $doc) { $this->docItemRight($r, $doc); return $this->docRun(fn () => \App\Services\Documents::remove($this->ent(), $doc)); }
+
+    /** MR-1539 where a record came from (file + row, old tool row, GRN / PO, journals). */
+    public function lineage(Request $r, string $key, int $id) { abort_unless(\App\Services\Registry::exists($key), 404, 'Unknown form.'); Perm::need($r->user(), "form:$key:VIEW"); return \App\Services\Lineage::of((string) \App\Services\Registry::table($key), $id, $this->ent()); }
 }

@@ -223,4 +223,48 @@ class CoreAreaTest extends TestCase
         $this->assertSame('IGNORED', DB::table('tm_messages')->where('id', $id)->value('status'), 'nothing leaves the tool');
         $m = $this->makeUser('MANAGER'); $this->actingAs($m); $this->postJson('/api/practice-company')->assertStatus(422);
     }
+
+    public function test_documents_module_on_any_record_and_order(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id); Perm::flush();
+        $key = \App\Services\RecordService::formOfTable('t_sales'); $this->assertNotNull($key);
+        $a = $this->f('t_sales', ['fk_id_ent' => 1, 'fk_id_branch' => 0, 'qty' => 1, 'order_no' => 'DOC-ORD', 'sku' => 'A', 'd_order' => now()->toDateString(), 'status' => 'Pending']);
+        $b = $this->f('t_sales', ['fk_id_ent' => 1, 'fk_id_branch' => 0, 'qty' => 1, 'order_no' => 'DOC-ORD', 'sku' => 'B', 'd_order' => now()->toDateString(), 'status' => 'Pending']);
+        $this->postJson("/api/docs/$key/$a", ['title' => 'Invoice 55', 'type' => 'Invoice', 'drive_url' => 'ftp://x'])->assertStatus(422);
+        $x = $this->postJson("/api/docs/$key/$a", ['title' => 'Invoice 55', 'type' => 'Invoice', 'drive_url' => 'https://drive.google.com/file/d/ABCDEFGHIJKLMN/view', 'ref_no' => 'INV-55', 'amount' => '12.50'])->assertOk()->json();
+        $this->assertStringStartsWith('DOC-', $x['doc_no']);
+        $d = $this->getJson("/api/docs/$key/$b")->assertOk()->json(); $this->assertSame('Order DOC-ORD', $d['title']);
+        $this->assertSame('Invoice 55', $d['rows'][0]['title'], 'a document of one line shows on every line of the order'); $this->assertSame('https://drive.google.com/file/d/ABCDEFGHIJKLMN/preview', $d['rows'][0]['preview']);
+        $this->postJson("/api/doc/{$x['id']}", ['title' => 'Invoice 55 (paid)'])->assertOk();
+        $v = $this->postJson("/api/doc/{$x['id']}/version", ['drive_url' => 'https://drive.google.com/file/d/ZZZZZZZZZZZZZZ/view'])->assertOk()->json();
+        $rows = $this->getJson("/api/docs/$key/$a")->json('rows'); $this->assertCount(1, $rows); $this->assertSame(2, (int) $rows[0]['version']); $this->assertSame('Invoice 55 (paid)', $rows[0]['title']);
+        $this->assertSame('REPLACED', DB::table('sys_documents')->where('id', $x['id'])->value('status'), 'the old version is kept');
+        $this->postJson("/api/doc/{$v['id']}/remove")->assertOk(); $this->assertSame([], $this->getJson("/api/docs/$key/$a")->json('rows'));
+        $this->assertNotNull($this->getJson("/api/sales/$a/details")->json('doc_form'));
+        $wh = $this->makeUser('WAREHOUSE'); $this->actingAs($wh); Perm::flush(); if (! Perm::has($wh, "form:$key:EDIT")) $this->postJson("/api/docs/$key/$a", ['title' => 'x', 'drive_url' => 'https://a.b'])->assertStatus(403);
+    }
+
+    public function test_lineage_file_row_stock_and_journal(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id); Perm::flush();
+        $imp = $this->f('t_sale_imports', ['fk_id_ent' => 1, 'file_name' => '101A_oct26.csv', 'imported_by' => $this->owner->id, 'imported_at' => now(), 'status' => 'Pending', 'period_month' => 10, 'period_year' => 2026]);
+        $sale = $this->f('t_sales', ['fk_id_ent' => 1, 'qty' => 1, 'order_no' => 'LIN-1', 'sku' => 'L1', 'd_order' => '2026-10-05', 'status' => 'Pending', 'fk_id_import' => $imp, 'batch_row_no' => 7, 'raw_csv' => json_encode(['Order' => 'LIN-1', 'SKU' => 'L1'])]);
+        $key = \App\Services\RecordService::formOfTable('t_sales');
+        $x = $this->getJson("/api/lineage/$key/$sale")->assertOk()->json('steps');
+        $this->assertSame(['Record', 'File', 'Row'], array_column($x, 'what')); $this->assertStringContainsString('101A_oct26.csv', $x[1]['text']); $this->assertStringContainsString('row 7', $x[2]['text']); $this->assertSame("#/sales?import=$imp", $x[1]['url']);
+        $wh = $this->f('cat_inventory_locations', ['location_name' => 'Lin WH', 'kind' => 'WAREHOUSE', 'fk_id_ent' => 1, 'f_sellable' => 1, 'f_active' => 1]);
+        $p = $this->f('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'LIN-P', 'product_name_vendor' => 'Lin', 'f_active' => 1, 'e_product_type' => 'pool']);
+        \App\Services\StockService::receive(1, [['product' => $p, 'qty' => 5, 'location' => $wh, 'unit_cost' => 2]], 'OPENING', null, ['lot_source' => 'OPENING']);
+        $lot = (int) DB::table('fin_lots')->where('company_id', 1)->where('sku', 'LIN-P')->value('id');
+        $this->assertContains('Opening', array_column(\App\Services\Lineage::of('fin_lots', $lot, 1)['steps'], 'what'));
+    }
+
+    public function test_security_self_check(): void
+    {
+        $r = \App\Services\SecurityCheck::run(1);
+        $this->assertSame(count($r['checks']), $r['total']); $this->assertTrue(collect($r['checks'])->firstWhere('check', 'No .env inside the web folder')['ok']);
+        $this->assertContains('Large tables have indexes on their link columns', array_column($r['checks'], 'check'));
+        $this->actingAs($this->owner); $this->assertArrayHasKey('security', $this->getJson('/api/health')->assertOk()->json());
+        $this->assertFileExists(base_path('tools/loadtest.mjs'));
+    }
 }

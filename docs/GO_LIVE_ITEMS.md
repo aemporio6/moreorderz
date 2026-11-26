@@ -11,7 +11,7 @@ missing is something only the live server, a real account or a real file can giv
 | MR-1543 (backup + drill code built 7e-221) | Offsite copy of the daily dumps (storage/app/backups) – RTO 4 h | copy the dumps off the hosting (e.g. Google Drive or a second host) once a day; the dumps hold real data, never into GitHub | owner + developer |
 | MR-1393, MR-1394, R-G_CORE-114 test | Thermal and A4 printers | print the test page on the real MUNBYN / KYOCERA printers once, then calibrate | owner (5 minutes) |
 | R-H-31 | Carrier label PDFs read and linked to their orders | 2–3 real label PDFs of each carrier | owner |
-| MR-1547 | Load and security test | the live server with real data volume | developer |
+| MR-1547 (self-check + script built 7e-223) | Load and security test | on the live server: `php artisan mo:security-check`, then `node tools/loadtest.mjs https://app.moreorderz.com <test-login session cookie> 20 60` outside busy hours after the old data is in; a penetration check by an outside person | developer |
 | Opening balances (R-G_CORE-87) | GRNs make lots only after the lock | after the old-data import the Owner locks Month close › Opening balances before the first GRN | owner |
 | SUP_BANK (R-B_SOURCING-57) | Supplier bank rows that came with the old data | set them PENDING or phone-check them before the first payment | owner |
 | R-C-6 (code built 7e-219) | Person tables move to utf8mb4 | the migration converts them on the live database – take the backup first, it rewrites those tables | developer |

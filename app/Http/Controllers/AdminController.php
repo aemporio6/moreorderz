@@ -211,6 +211,7 @@ class AdminController extends Controller
         return [
             'schema' => \App\Services\SchemaCheck::missing(),
             'backup' => \App\Services\Backups::status(),      // MR-0094 / MR-0095
+            'security' => \App\Services\SecurityCheck::run(),      // MR-1547
             'temp_cleanup' => \App\Services\TempCleanup::last(), 'task_worker' => \App\Services\TaskWorker::log() /* R-G_CORE-35 */, 'warnings' => array_merge((array) \App\Services\TaskWeekly::missed(), \App\Services\TaskTemplates::health(), \App\Services\EventCatalogue::check(), \App\Services\JobLog::late(), \App\Services\TaskRoles::health()), 'jobs' => \App\Services\JobLog::overview() /* R-G_CORE-110 */,      // + R-G_CORE-25 (d)      // R-G_CORE-44 "weekly report missed"
             'events' => DB::table('sys_events')->selectRaw('status, COUNT(*) n')->groupBy('status')->pluck('n', 'status'),
             'failed' => DB::table('sys_events')->where('status', 'FAILED')->orderByDesc('id')->limit(50)->get(['id', 'event_code', 'entity', 'entity_id', 'attempts', 'last_error', 'created_at']),

@@ -7,7 +7,7 @@ MR-1262|B|class Importer|Import a file: a dropped file is read (nothing saved) a
 MR-1263|B|class RefundProposals|full / half / partial refunds from the money files shown on the order with the amount (R-A_SALES-86)
 MR-1264|B|function adSpend|7e-220: ad spend per product for a month: ADS lines with the SKU + lines without one spread by sales share (FinanceAreaTest)
 MR-1265|B|class HistoricalPurchase|short versions of the long forms: Quick / Full of every registry form (required fields named), Quick buy, Old purchase entry; the record stays complete in its own place – verdict was stale
-MR-1266|F|form:document|document forms; one Documents module per order with View / Open in Drive not built
+MR-1266|B|class Documents|one Documents module: Documents tab on every record and on an order (all its lines), number DOC-…, View in the panel, Open in Drive, Edit, New version, Remove; sourcing documents of a PO / cycle shown too
 MR-1267|P|MENU_NAMES|simple English names (choice short / full names)
 MR-1268|P|form:cat_reference|dropdowns fed from the registry lists
 MR-1269|P|class EventBus|events + rule tasks move work along; many automations of the spec not built
@@ -67,7 +67,7 @@ MR-1325|N||working rule
 MR-1536|B|class FeeCheck|per order of the money files: fee charged against marketplace fee % + fixed (shop override), tolerance settings, overcharges listed, FEE_OVERCHARGE claim task per shop-month with a proof CSV, nightly
 MR-1537|B|function forecast|ICC demand forecast: season from the same month last year against the year (de-seasoned recent rate), trend of the last 90 days against the 90 before; Choice ICC_FORECAST; used for the reorder quantities
 MR-1538|B|class DataHealth|data health score per company on Home: sale lines with cost, bank lines matched, imports up to date, duplicates, record completeness – weakest part named with its link
-MR-1539|M||lineage everywhere not built
+MR-1539|B|class Lineage|Where from? on every record: file and row it came from (sales / money / bank files), old tool row, the lots and GRN / PO behind a sale, journals booked; every chart figure opens its records (R-G_CORE-103)
 MR-1540|P|approvals|installable phone web app + approvals screen; one-tap approvals on the phone not designed
 MR-1541|B|class Sandbox|practice company with a warehouse, demo products and opening stock; its messages never leave the tool, left out of All companies, opened from the company switcher (Owner only)
 MR-1542|B|class Features|What is new page from config/releases.php with a New badge until opened; feature switches per company (Owner, audited) read by Home cards and the nightly jobs
@@ -75,7 +75,7 @@ MR-1543|P|class Backups|RPO 24 h daily backup + monthly restore drill with repor
 MR-1544|B|class ReturnAbuse|buyers and addresses with repeated returns / claims in the window (settings), list with masking, RET_BUYER_ABUSE task each, warning on the order details
 MR-1545|B|class ComplianceCalendar|deadline calendar: filings (Tax & filings) + every due item (renewals, cards, subscriptions …) in one month, late chips, .ics download for Google Calendar / Outlook
 MR-1546|N||optional later
-MR-1547|M||load and security test not done
+MR-1547|P|class SecurityCheck|security + slow-query self-check (mo:security-check and System health: debug off, key, https, no .env / backups in the web folder, sign-in lock, missing indexes of large tables) and the load-test script tools/loadtest.mjs; the run on the live server with real data volume and a penetration check are in GO_LIVE_ITEMS
 MR-0001|P|class Merges|fresh build with one master per thing; merge with Undo; compare report of the import exists
 MR-0002|P|class EventBus|history, events, numbering, role rights on every form; guidance and data rights not on every screen
 MR-0003|B|function save|one form per record, same table from the module page and + Create
@@ -224,7 +224,7 @@ MR-1414|P|import-history|import batches recorded; mappings / report types not as
 MR-1415|B|class CloseService|month close per shop + month in aud_runs
 MR-1416|B|function saveSplit|split rules + agreements
 MR-1417|B|class InvestorDocs|investor invoices / statements generated from the settled month (one writer)
-MR-1418|F|form:document|documents forms; Drive folder links per record built
+MR-1418|B|class Documents|one master sys_documents + sys_document_links used by every record (versions kept as REPLACED, removed as DELETED); sourcing step documents rolled up through DocRollup
 MR-1419|P|form:cat_reference|lists with + Add
 MR-1420|P|class Messenger|one message service (two outbox tables)
 MR-1421|B|class PartnerAccount|My Partner Account + investor portal
