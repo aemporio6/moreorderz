@@ -80,4 +80,29 @@ class WorkflowContextTest extends TestCase
         // a record outside a cycle
         $this->postJson('/api/cycle/next', ['form' => 't_src_documents', 'id' => $this->f('t_src_documents', [])])->assertStatus(422);
     }
+    /** R-F_SETUP-46: a catalog form opened inside a cycle – Save & Next carries the new record to the next stage form (server-side context). */
+    public function test_f46_warehouse_added_from_the_allocation_tab_goes_on_to_shipments(): void
+    {
+        $this->actingAs($this->owner); [$cy, $s] = $this->cycle();
+        $po = $this->f('t_src_po', ['fk_id_cycle' => $cy, 'fk_id_supplier' => $s, 'po_number' => 'PO-F46-' . uniqid(), 'status' => 'CONFIRMED']);
+        $this->postJson('/api/cycle/next', ['form' => 't_src_po', 'id' => $po])->assertOk();      // the PO is in the cycle's context
+        $wh = $this->f('cat_inventory_locations', ['location_name' => 'New WH F46', 'kind' => 'WAREHOUSE', 'f_sellable' => 1]);
+        // the rule: add a warehouse from the Allocation tab with "Save & Next: Shipments" → Shipments add form opens with PO and the new warehouse pre-filled
+        $r = $this->postJson('/api/cycle/next', ['form' => 'warehouse', 'id' => $wh, 'cycle' => $cy, 'from' => 'allocation'])->assertOk()->json();
+        $this->assertSame(['t_src_shipments', 'Shipments'], [$r['next']['form'], $r['next']['label']]);
+        $this->assertSame([$cy, $po, $wh], [$r['preset']['fk_id_cycle'], $r['preset']['fk_id_po'], $r['preset']['fk_id_warehouse']]);
+        $ctx = json_decode((string) DB::table('sys_workflow_context')->where(['workflow' => 'SRC_CYCLE', 'entity_id' => $cy, 'user_id' => $this->owner->id])->value('context_json'), true);
+        $this->assertSame($wh, $ctx['catalog']['fk_id_warehouse'], 'the context is kept on the server'); $this->assertSame($po, $ctx['po']);
+        $this->postJson('/api/cycle/next', ['form' => 'warehouse', 'id' => 99999999, 'cycle' => $cy, 'from' => 'allocation'])->assertStatus(422)->assertJsonPath('message', 'The saved record was not found.');
+        $this->postJson('/api/cycle/next', ['form' => 't_src_rfq', 'id' => 1, 'cycle' => $cy, 'from' => 'allocation'])->assertStatus(422)->assertJsonPath('message', 'This form has no next step inside a cycle.');
+    }
+
+    /** Short links for messages: /my and /t/{id} – after sign-in the person lands where the link pointed. */
+    public function test_short_links_my_and_t(): void
+    {
+        $this->get('/t/41')->assertRedirect('/login'); $this->assertStringEndsWith('/t/41', (string) session('url.intended'));
+        $this->actingAs($this->owner); $this->get('/t/41')->assertRedirect('/#/task/41'); $this->get('/my')->assertRedirect('/#/tasks'); $this->get('/t/abc')->assertStatus(404);
+        $routes = []; foreach (\App\Http\Controllers\AppController::menu('OWNER') as $sec) foreach ($sec['items'] as $it) $routes[] = $it['route'];
+        foreach (['#/data-quality', '#/allocation-plan', '#/tasks/board', '#/inventory-sharing'] as $u) $this->assertContains($u, $routes, "the Owner's menu opens $u");
+    }
 }

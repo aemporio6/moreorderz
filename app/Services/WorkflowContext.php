@@ -172,6 +172,26 @@ class WorkflowContext
         return $q->orderByDesc('id')->limit(10)->get(['id', $lc . ' as label'])->map(fn ($r) => ['id' => (int) $r->id, 'label' => (string) ($r->label ?: '#' . $r->id)])->all();
     }
 
+    /** R-F_SETUP-46 catalog tables whose new record is carried into the next step form: table => column on the step tables. */
+    public const CATALOG = ['cat_inventory_locations' => 'fk_id_warehouse', 'cat_ports' => 'fk_id_port_loading', 'cat_incoterms' => 'fk_id_incoterm', 'cat_currencies' => 'fk_id_currency', 'cat_payment_terms' => 'fk_id_payment_term'];
+
+    /**
+     * R-F_SETUP-46 "Save & Next" from a catalog form opened inside a cycle (from the step $fromKey): the server takes the id of the record just saved,
+     * keeps it in the cycle's context of this user (server side) and answers the next step with the PO … and the new catalog record filled in.
+     */
+    public static function catalogNext(string $form, int $recordId, int $cycleId, string $fromKey, int $userId): array
+    {
+        $table = Registry::table($form) ?? $form; $col = self::CATALOG[$table] ?? throw new \InvalidArgumentException('This form has no next step inside a cycle.');
+        if (! DB::table($table)->where(Registry::pk($table), $recordId)->exists()) throw new \InvalidArgumentException('The saved record was not found.');
+        if (! DB::table('t_src_cycles')->where('id', $cycleId)->exists()) throw new \InvalidArgumentException('Cycle not found.');
+        $from = null; foreach (self::STEPS as $st) if ($st[0] === $fromKey) $from = $st; if (! $from) throw new \InvalidArgumentException('Unknown step.');
+        $ctx = self::get($cycleId, $userId); $ctx['catalog'][$col] = $recordId;
+        DB::table('sys_workflow_context')->updateOrInsert(['workflow' => 'SRC_CYCLE', 'entity_id' => $cycleId, 'user_id' => $userId], ['context_json' => json_encode($ctx), 'updated_at' => now()]);
+        $next = self::next($from[1], $cycleId); if (! $next) return ['next' => null, 'message' => 'This was the last step of the cycle.'];
+        $pre = self::prefill($next['form'], $cycleId, $ctx); $nt = Registry::table($next['form']) ?? $next['form']; if (Schema::hasColumn($nt, $col)) $pre[$col] = $recordId;
+        return ['next' => $next, 'preset' => $pre, 'locked' => [], 'context' => $ctx, 'existing' => [], 'existing_text' => null];
+    }
+
     /** "Save & Next": the next step, its preset (locked parents) and what already exists. */
     public static function saveNext(string $form, int $recordId, int $userId): array
     {

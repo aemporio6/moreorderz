@@ -38,6 +38,9 @@ Route::post('/wa/inbound', [ConnectController::class, 'waInbound'])->withoutMidd
 
 Route::middleware(['auth', SetContext::class])->group(function () {
     Route::get('/', [AppController::class, 'shell']);
+    // short links for messages (old tool: My, T): after sign-in the person lands on the task list / the task
+    Route::get('/my', fn () => redirect('/#/tasks'));
+    Route::get('/t/{id}', fn (int $id) => redirect('/#/task/' . $id))->whereNumber('id');
     Route::prefix('api')->group(function () {
         Route::get('boot', [AppController::class, 'boot']);
         Route::post('company', [AppController::class, 'company']);

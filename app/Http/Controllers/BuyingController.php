@@ -209,7 +209,8 @@ class BuyingController extends Controller
         if (! $money) abort(403, 'The cycle summary shows money – it needs the right to see buying money.');
         $x = \App\Services\CycleReports::summaryPdf((int) Context::ent(), $id); return response($x['body'], 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="' . $x['name'] . '"']); }); }
     /** R-B_SOURCING-18: after a step form's save – the next step's form, its preset (locked parents) and the records that already exist. */
-    public function cycleNext(Request $r) { $this->can($r, 'buying.SEE'); return $this->run(fn () => \App\Services\WorkflowContext::saveNext((string) $r->input('form'), (int) $r->input('id'), (int) \Illuminate\Support\Facades\Auth::id())); }
+    public function cycleNext(Request $r) { $this->can($r, 'buying.SEE'); return $this->run(fn () => $r->filled('cycle') && $r->filled('from') ? \App\Services\WorkflowContext::catalogNext((string) $r->input('form'), (int) $r->input('id'), (int) $r->input('cycle'), (string) $r->input('from'), (int) \Illuminate\Support\Facades\Auth::id())      /* R-F_SETUP-46 */
+            : \App\Services\WorkflowContext::saveNext((string) $r->input('form'), (int) $r->input('id'), (int) \Illuminate\Support\Facades\Auth::id())); }
     /** The carried context of a cycle for the user, and the preset of a step form opened inside it. */
     public function cycleContext(Request $r, int $id) { $this->can($r, 'buying.SEE'); $ctx = \App\Services\WorkflowContext::get($id, (int) \Illuminate\Support\Facades\Auth::id());
         $f = (string) $r->query('form'); return ['context' => $ctx, 'preset' => $f !== '' ? \App\Services\WorkflowContext::prefill($f, $id, $ctx) : null, 'step' => $f !== '' ? \App\Services\WorkflowContext::stepOf($f) : null, 'next' => $f !== '' ? \App\Services\WorkflowContext::next($f, $id) : null]; }

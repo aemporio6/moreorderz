@@ -260,26 +260,26 @@ MR-1485|N||spec document
 MR-1503|B|function noCost|night job: one task SAL_NO_COST per shop + month while own-stock lines have no cost, closed by itself; tested
 MR-1504|P|FIN_APPROVE|approval task raised
 MR-1505|B|SYS_API_SYNC|raised when a connection's keys are refused, closes when it works
-MR-1506|M||DQ_ITEM_NOTE not raised
-MR-1507|M||DQ_PARENT_INACTIVE not raised
-MR-1508|M||SYS_ERROR not raised
+MR-1506|B|DQ_ITEM_NOTE|raised by DataQuality::run for sale lines with an item note and no vendor (7e-202); closes when fixed
+MR-1507|B|DQ_PARENT_INACTIVE|raised by DataQuality::run per active child of an inactive parent (7e-202); closes when fixed
+MR-1508|P|SYS_ERROR|raised for a dashboard card, the cycle overview and a missing PDF maker; open: nightly step, worker listener, registry load, unknown event, no task owner
 MR-1509|B|function listingStatus|night job: LST_STATUS when a listing is ACTIVE with nothing available, or closed / suppressed by a marketplace report while stock is available; closed by itself; tested
-MR-1511|M||STK_FC_DIFF not raised
-MR-1512|M||FIN_CASH_LOW not raised (warning line on the forecast only)
+MR-1511|B|STK_FC_DIFF|raised in InboundShipments when the centre receives a different quantity; closes when received in full (verdict was stale)
+MR-1512|B|free_cash_alert_limit|free cash below the limit is finance alert FA1 with its task rule FIN_FA1 (the code name differs from FIN_CASH_LOW)
 MR-1513|P|ACC_SUBSCRIPTION_DUE|only the subscription due task
 MR-1514|B|SYS_WA_FAILING|raised after 3 failed tries
-MR-1515|M||old entry not built
+MR-1515|B|SRC_OLD_ENTRY_REJECTED|raised when an old entry is rejected, closed when it is sent again (verdict was stale)
 MR-1517|B|function importWaiting|night job: IMP_WAITING when an import batch is uploaded / mapped / checked but not applied for longer than IMP_WAITING_HOURS (24); closed when applied or discarded; tested
 MR-1518|N||spec note
 MR-1519|N||spec note
 MR-1521|N||migration role map (roles set by the Owner after import)
 MR-1522|N||migration role map
 MR-1524|P|HUB_TOTALS|hub totals check to the penny in the reader; tolerance setting not used
-MR-1525|M||IMP_WAITING_HOURS not used
+MR-1525|B|IMP_WAITING_HOURS|used by SalesWatch for import batches left waiting (verdict was stale)
 MR-1526|P|SYS_WA_FAILING|limit is 3 tries in code, not the setting
 MR-1527|P|FIN_BANK_STALE|bank overdue days setting (bank_overdue_days)
 MR-1528|P|function pay|money tolerance in code
-MR-1529|M||SRC_QC_PASS_GREEN not used
+MR-1529|B|SRC_QC_PASS_GREEN|setting used for the green pass rate of a quality check (verdict was stale)
 MR-1530|P|class EventBus|canonical event names used; alias check not built
 MR-1532|N||seed values
 MR-1533|N||spec document
@@ -291,7 +291,7 @@ MR-0208|F|form:acc_obligation|file / pay flow, documents not built
 MR-0209|F|form:acc_person_settings|form only
 MR-0210|F|form:acc_obligation_type|form only
 MR-0211|F|form:tax_period|worksheet calculation not built
-MR-0212|M||bulk product CSV upload not built
+MR-0212|B|OldBulkProducts|bulk product CSV with preview, confirm and undo: old 34-column layout (7e-201) and the parent + child import
 MR-0213|F|form:car_preset|preset groups logic not built
 MR-0214|B|form:cat_brands|standard form + list with role rights and history
 MR-0215|B|form:cat_product_condition|standard form + list with role rights and history
@@ -309,7 +309,7 @@ MR-0227|F|form:cat_vendors|form; secrets go to the vault
 MR-0228|F|form:csv_generator|tool not built
 MR-0229|P|class Marketplaces|marketplace master with ISO checks, CSV column mapping sets, questions + shop checklist built; product fields per marketplace (field builder) not built
 MR-0230|P|class OrderFiles|eBay orders report read into the one sales list
-MR-0231|M||eBay vs supplier purchase audit not built
+MR-0231|B|class PurchaseAudit|monthly shop orders vs supplier purchase audit (GD BUY / HOLD checks, Amazon), verdict was stale
 MR-0232|F|form:supplier_order_history|import not built
 MR-0233|F|form:t_audit_main|audit run not built
 MR-0234|B|class ShopReminders|shop-month reminders with rights and shop scope, Pending / Resolved, and monthly templates that open a task (the rule's "replace by Tasks")
@@ -371,7 +371,7 @@ MR-0294|F|form:t_src_documents|form; Drive folder links built
 MR-0295|F|form:t_src_forwarders|form
 MR-0296|F|form:t_src_freight_costs|form
 MR-0297|B|function postGrn|GRN with lines, posts to stock
-MR-0298|M||back-dated entry screen / CSV not built
+MR-0298|B|class HistoricalPurchase|back-dated entry by form and CSV with lots, landed cost, approval and undo (verdict was stale)
 MR-0300|B|function postGrn|lots made by the GRN post, never typed
 MR-0301|F|form:t_src_investments|form
 MR-0302|F|form:t_src_investors|form
@@ -393,8 +393,8 @@ MR-0318|B|function boot|company switch inside the session
 MR-0319|B|function attempt|login with hashed passwords, lock-out, 2-step
 MR-0320|F|form:menu_builder|form only; menu seeded and filtered by role
 MR-0321|N||old popup loader not carried
-MR-0322|M||short link /my not built
-MR-0323|M||short link /t/{id} not built
+MR-0322|B|/#/tasks|short link /my: after sign-in the person lands on the task list (Laravel intended URL)
+MR-0323|B|/#/task/|short link /t/{id}: after sign-in the person lands on that task
 MR-0324|B|form:t_branch|standard form + list with role rights and history
 MR-0325|B|form:t_branch_param|standard form + list with role rights and history
 MR-0326|B|form:t_ent_param|standard form + list with role rights and history

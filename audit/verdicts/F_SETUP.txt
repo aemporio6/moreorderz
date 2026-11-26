@@ -42,7 +42,7 @@
 43|P|class Merges|merge duplicates with Undo (people, suppliers, products); reference headings merge / where-used block not built
 44|P|class Choices|settings global / company + choices per shop with history; module / parameter framework as forms only
 45|F|form:cat_ports|forms only
-46|M||Save & next step from catalog forms not built
+46|P|catalogNext|Save & Next exists for every stage form (server-side context, server returns the id); added for catalog forms opened inside a cycle: the new record goes into the context and the next stage form opens with PO + the new record filled (warehouse from the cycle page → Shipments); open: only the warehouse has a button on the cycle page – ports, incoterms, currencies, payment terms are ready on the server but have no button
 47|P|AllocationPlan|allocations: incoming per location = planned - received of shipped POs by shipment ETA (PO total only when no allocation), after a GRN one proposed transfer per allocation to another location with task, confirm moves the stock, dismiss with reason, no ledger; screen Allocation plan; open: the ICC calculation does not read this incoming yet, the confirmed move is one step (not through transit)
 48|P|class OldImport|import with dry run, report, field compare; the per-company switch / rollback screen not built
 49|N||old dashboards / copy controllers do not exist in the new tool

@@ -70,6 +70,7 @@ class AppController extends Controller
     private static function route(object $m): string
     {
         $no = (string) $m->screen_no;
+        if ($no === '' && str_starts_with((string) $m->url, '#/')) return (string) $m->url;      /* a row added after the numbered screens carries its own address (Inventory sharing, Data quality, Allocation plan, Task board) */
         if (str_starts_with($no, '1.')) return '#/home';
         if ($no === '3.5') return '#/old-entry';      /* R-B_SOURCING-5 / 13 old purchases */
         if ($no === '10.4') return '#/purchase-audit';      /* R-A_SALES-60 … 64 audit runs */
