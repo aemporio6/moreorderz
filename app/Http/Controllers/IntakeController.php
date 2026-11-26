@@ -33,7 +33,7 @@ class IntakeController extends Controller
         return ['items' => $out, 'errors' => $err];
     }
 
-    public function decide(Request $r, int $id) { $this->may($r); return $this->run(fn () => Intake::decide($this->ent(), $id, $r->only(['action', 'entity', 'entity_id', 'category', 'screen']), $r->user())); }
+    public function decide(Request $r, int $id) { $this->may($r); return $this->run(fn () => Intake::decide($this->ent(), $id, $r->only(['action', 'entity', 'entity_id', 'category', 'screen', 'kind', 'marketplace']), $r->user())); }
 
     public function again(Request $r, int $id) { $this->may($r); abort_unless(DB::table('mo_intake')->where('id', $id)->where('fk_id_ent', $this->ent())->exists(), 404);
         if ($r->filled('text')) DB::table('mo_intake')->where('id', $id)->update(['text' => mb_substr((string) $r->input('text'), 0, 200000), 'read_by' => mb_substr((string) $r->input('reader', 'browser'), 0, 40)]);

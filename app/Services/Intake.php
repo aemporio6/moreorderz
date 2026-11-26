@@ -146,6 +146,15 @@ class Intake
             $props[] = ['action' => 'attach', 'entity' => (string) $r->ctx_entity, 'entity_id' => (int) $r->ctx_id, 'category' => $dk, 'title' => 'Put it on ' . $lbl . ' as ' . $dk, 'why' => 'you filed it from this record; its kind is guessed from ' . ($text !== '' ? 'what it says' : 'its name'), 'score' => 99];
             $facts['from'] = $lbl;
         }
+        // owner 27-11 02:31 the product vault: a product file (picture, artwork, label, A+, dieline …) goes to its place in its product's vault
+        $vk = ProductVault::guess((string) $r->name, $ext, $text); $ctxProd = ! empty($r->ctx_entity) && Registry::table((string) $r->ctx_entity) === 't_product_vendors' ? (int) $r->ctx_id : 0;
+        $vp = $ctxProd ?: (in_array($ext, array_merge(ProductVault::IMAGE, ProductVault::VECTOR, ['pdf', 'mp4', 'mov']), true) || $vk !== 'OTHER' ? ProductVault::productOf($ent, (string) $r->name, $vk === 'OTHER' ? '' : $text) : null);
+        if ($vp && ($ctxProd || $vk !== 'OTHER' || in_array($ext, ProductVault::IMAGE, true))) {
+            $sku = (string) DB::table('t_product_vendors')->where('id', $vp)->value('SKU_VENDOR'); $mp = $vk === 'LISTING' ? ProductVault::marketplaceOf((string) $r->name, $ent) : null;
+            $props[] = ['action' => 'vault', 'entity' => RecordService::formOfTable('t_product_vendors') ?: 't_product_vendor', 'entity_id' => $vp, 'kind' => $vk, 'marketplace' => $mp, 'category' => ProductVault::KINDS[$vk],
+                'title' => "Put it in the vault of {$sku} › " . ProductVault::KINDS[$vk], 'why' => ($ctxProd ? 'you filed it from this product' : 'its SKU is in the ' . (str_contains(mb_strtoupper((string) $r->name), mb_strtoupper($sku)) ? 'file name' : 'text')) . '; the place is read from its name and type', 'score' => $ctxProd ? 100 : 93];
+            $facts['vault'] = "$sku › " . ProductVault::KINDS[$vk];
+        }
         $props[] = ['action' => 'keep', 'title' => 'Keep it in Documents', 'why' => 'kept with the company, found by search', 'score' => 30];
         $props[] = ['action' => 'skip', 'title' => 'Set aside', 'why' => 'nothing is done; it stays listed under Set aside', 'score' => 1];
         usort($props, fn ($a, $b) => $b['score'] <=> $a['score']);
@@ -203,6 +212,7 @@ class Intake
         $act = (string) ($in['action'] ?? '');
         if ($act === 'skip') { DB::table('mo_intake')->where('id', $id)->update(['status' => 'SKIPPED', 'done_json' => json_encode(['action' => 'skip', 'by' => $u->id, 'at' => now()->toDateTimeString()]), 'updated_at' => now()]); return ['message' => 'Set aside.']; }
         if ($act === 'open') { DB::table('mo_intake')->where('id', $id)->update(['status' => 'DONE', 'done_json' => json_encode(['action' => 'open', 'screen' => (string) ($in['screen'] ?? ''), 'by' => $u->id, 'at' => now()->toDateTimeString()]), 'updated_at' => now()]); return ['message' => 'Handed to the screen.']; }
+        $vault = $act === 'vault'; if ($vault) $act = 'attach';      // the vault = attached to the product + its place in the vault
         if (! in_array($act, ['attach', 'keep'], true)) throw new \InvalidArgumentException('Choose what to do with it.');
         $entity = $act === 'keep' ? 'company' : (string) ($in['entity'] ?? ''); $eid = $act === 'keep' ? $ent : (int) ($in['entity_id'] ?? 0);
         if ($act === 'attach') { abort_unless(Registry::exists($entity) && $eid > 0, 422, 'Choose the record.'); Perm::need($u, "form:$entity:EDIT");
@@ -219,8 +229,10 @@ class Intake
         if (! DB::table('sys_document_links')->where(['fk_id_document' => $doc, 'entity' => $entity, 'entity_id' => $eid])->exists()) DB::table('sys_document_links')->insert(['fk_id_document' => $doc, 'entity' => mb_substr($entity, 0, 60), 'entity_id' => $eid]);
         DB::table('mo_intake')->where('id', $id)->update(['status' => 'DONE', 'fk_id_document' => $doc, 'done_json' => json_encode(['action' => $act, 'entity' => $entity, 'entity_id' => $eid, 'by' => $u->id, 'at' => now()->toDateTimeString()]), 'updated_at' => now()]);
         Audit::log('sys_documents', $doc, 'UPDATE', ['linked' => [null, "$entity #$eid"], 'from' => [null, 'intake #' . $id]], 'Import anything', $ent);
+        if ($vault) { abort_unless(Registry::table($entity) === 't_product_vendors', 422, 'The vault is a product\'s.'); ProductVault::put($ent, $eid, (int) $doc, (string) ($in['kind'] ?? ProductVault::guess((string) $r->name, (string) $r->ext)), ! empty($in['marketplace']) ? (int) $in['marketplace'] : null, $u);
+            DB::table('mo_intake')->where('id', $id)->update(['done_json' => json_encode(['action' => 'vault', 'entity' => $entity, 'entity_id' => $eid, 'kind' => $in['kind'] ?? null, 'by' => $u->id, 'at' => now()->toDateTimeString()])]); }
         if ($entity === 't_src_po' || $entity === RecordService::formOfTable('t_src_po')) EventBus::fire('DOC_ADDED', 't_src_po', $eid, ['via' => 'import anything', 'document' => $doc], $ent);
-        return ['message' => $act === 'keep' ? 'Kept in Documents.' : 'Put on the record – it shows in its Documents.', 'document' => $doc];
+        return ['message' => $vault ? 'Put in the product\'s vault.' : ($act === 'keep' ? 'Kept in Documents.' : 'Put on the record – it shows in its Documents.'), 'document' => $doc];
     }
 
     private static function docType(int $ent, string $name): int

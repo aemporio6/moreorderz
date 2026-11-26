@@ -2289,7 +2289,7 @@
         [{ name: 'lot', label: 'From lot', required: true, options: o.lots.map(l => [l.id, `${l.lot_code || 'lot ' + l.id} · ${l.owner} · ${l.qty_left} left · ${money(l.unit_cost_gbp)}`]) }, { name: 'to', label: 'New owner', required: true, options: [[0, 'Company'], ...o.owners.map(w => [w.id, w.name])] }, { name: 'qty', label: 'Units', type: 'number', required: true }],
         async v => { const r = await api(`inventory/${id}/owner`, { method: 'POST', body: v }); again(); return r; }, 'Change'); };
     $('#ivShop').onclick = () => openForm('listing', null, { preset: { fk_id_product: id, listing_title: x.name || '' }, onSaved: again });
-    $('#main').insertAdjacentHTML('beforeend', '<div class="card" id="ivPack" style="margin-top:12px"></div>'); packCard($('#ivPack'), id, again);
+    $('#main').insertAdjacentHTML('beforeend', '<div class="card" id="ivPack" style="margin-top:12px"></div><div class="card" id="ivVault" style="margin-top:12px"></div>'); packCard($('#ivPack'), id, again); vaultCard($('#ivVault'), id);
   }
   // Owner 27-11 02:31: packaging worked out – item, retail pack, master carton; the best carrier box; how many cartons for a quantity; what is missing, with Fill in
   async function packCard(box, id, again) {
@@ -2308,6 +2308,27 @@
     const edit = () => openForm(S.boot.product_form || 't_product_vendor', id, { onSaved: () => packCard(box, id, again) }); $('#pkEdit', box).onclick = edit; $$('[data-pkf]', box).forEach(a => a.onclick = e => { e.preventDefault(); edit(); });
     let tm; $('#pkQ', box).oninput = () => { clearTimeout(tm); tm = setTimeout(async () => { const q = +$('#pkQ', box).value; if (!q) return ($('#pkPlan', box).textContent = '');
       try { const x = await api('packaging/product/' + id + '?qty=' + q); const p = x.plan; $('#pkPlan', box).innerHTML = p.cartons ? `<b>${p.cartons} cartons</b> (${p.full} full${p.tail ? ' + 1 tail of ' + p.tail : ''}) · ${n(p.cbm, 3)} CBM · ${n(p.kg, 1)} kg` : 'Fill in the carton first.'; } catch (e) {} }, 300); };
+  }
+  // Owner 27-11 02:31 the product's vault: every file in its place; drop files on it – each goes to its place by itself (name, type, words); what is still missing
+  async function vaultCard(box, id) {
+    let v; try { v = await api('vault/' + id); } catch (e) { box.innerHTML = `<div class="card-b muted">${esc(e.message)}</div>`; return; }
+    const pf = S.boot.product_form || 't_product_vendor', opt = (k) => Object.entries(v.kinds).map(([c, l]) => `<option value="${c}" ${c === k ? 'selected' : ''}>${esc(l)}</option>`).join('');
+    const tile = f => `<div class="vt">${f.image ? `<a href="${esc(f.url)}" target="_blank" rel="noopener"><img src="${esc(f.url)}" alt="${esc(f.name)}" loading="lazy"></a>` : `<a href="${esc(f.url || '#')}" target="_blank" rel="noopener" class="vt-file">${esc((f.name || '').split('.').pop().toUpperCase() || 'FILE')}</a>`}
+      <div class="vt-n" title="${esc(f.name)}">${f.main ? '★ ' : ''}${esc(f.name)}${f.marketplace ? ` <span class="chip plain">${esc(f.marketplace)}</span>` : ''}</div>
+      ${f.id ? `<div class="vt-a"><select class="q" data-vk="${f.id}" data-ap-skip>${opt(f.kind_now || '')}</select>${v.marketplaces.length ? `<select class="q" data-vm="${f.id}" data-ap-skip><option value="">any marketplace</option>${v.marketplaces.map(m => `<option value="${m.id}" ${m.id === f.marketplace_id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select>` : ''}<button class="btn sm" data-vmain="${f.id}" title="Make it the first">★</button><button class="btn sm" data-vrem="${f.id}" title="Take out of the vault">✕</button></div>` : '<div class="small muted">kept on the product</div>'}</div>`;
+    v.places.forEach(p => p.files.forEach(f => { f.kind_now = p.kind; }));
+    box.innerHTML = `<div class="card-h"><h3>🗂️ Vault</h3><span class="small muted">${v.count} file(s) · images, listing images, A+, labels, artwork, dielines, certificates – each in its place</span><button class="btn sm primary" id="vAdd" style="margin-left:auto">${ic('plus')} Add files</button></div>
+      <div class="card-b vdrop" id="vDrop">${v.needed.length ? `<div class="ac-tip warn" style="margin-bottom:8px">${v.needed.map(n => esc(n.text)).join(' · ')}</div>` : ''}
+      ${v.places.filter(p => p.files.length).map(p => `<div class="vp"><div class="vp-h">${esc(p.label)} <span class="faint">${p.files.length}</span></div><div class="vp-g">${p.files.map(tile).join('')}</div></div>`).join('') || '<div class="muted">Nothing in the vault yet – drop the product\'s pictures, artwork, labels or A+ files here.</div>'}
+      <div class="small muted" style="margin-top:6px">Drop files here: each one is read and offered to its place (the SKU in the file name or the words in it decide; you press Do it).</div></div>`;
+    const add = () => fileDoc({ entity: pf, id }, () => vaultCard(box, id)); $('#vAdd', box).onclick = add;
+    const d = $('#vDrop', box); d.addEventListener('dragover', e => { e.preventDefault(); d.classList.add('over'); }); d.addEventListener('dragleave', () => d.classList.remove('over'));
+    d.addEventListener('drop', e => { e.preventDefault(); d.classList.remove('over'); const fs = [...(e.dataTransfer.files || [])]; if (!fs.length) return; fileDoc({ entity: pf, id }, () => vaultCard(box, id)); setTimeout(() => ixSend(fs), 80); });
+    const save = async (aid, body) => { try { toast((await api('vault/asset/' + aid, { method: 'POST', body })).message); } catch (e) { toast(e.message, 'err'); } vaultCard(box, id); };
+    $$('[data-vk]', box).forEach(x => x.onchange = () => save(x.dataset.vk, { kind: x.value }));
+    $$('[data-vm]', box).forEach(x => x.onchange = () => save(x.dataset.vm, { marketplace: x.value || null }));
+    $$('[data-vmain]', box).forEach(x => x.onclick = () => save(x.dataset.vmain, { main: 1 }));
+    $$('[data-vrem]', box).forEach(x => x.onclick = () => save(x.dataset.vrem, { remove: 1 }));
   }
   async function poPackCard(box, id) {
     let d; try { d = await api('packaging/po/' + id); } catch (e) { return; } if (!d.rows.length) return; const n = (v, k = 2) => (+v || 0).toLocaleString('en-GB', { maximumFractionDigits: k }), t = d.totals;
@@ -5131,7 +5152,7 @@
         <label class="ix-prop"><input type="radio" name="ixp${x.id}" value="other"><span><b>Another record…</b><small>search any PO, supplier, product, payment, shop…</small></span></label></div>
         <div class="ix-other" hidden><input class="q" placeholder="Type a PO number, supplier, SKU…" autocomplete="off"><div class="ix-found"></div></div>
         <div class="ix-act"><button class="btn primary" data-ixgo type="button">Do it</button>${x.preview ? '<a href="#" class="small" data-ixpv>What it says</a>' : ''}</div><pre class="ix-pv small" hidden>${esc(x.preview)}</pre>`
-        : x.done ? `<div class="small">${esc(x.done.action === 'open' ? 'handed to ' + (x.done.screen || 'its screen') : x.done.action === 'skip' ? 'set aside' : 'on ' + (x.done.entity || '') + ' #' + (x.done.entity_id || ''))}${x.document ? ` · <a href="/api/intake/${x.id}/file" target="_blank" rel="noopener">open the file</a>` : ''}</div>` : ''}
+        : x.done ? `<div class="small">${esc(x.done.action === 'open' ? 'handed to ' + (x.done.screen || 'its screen') : x.done.action === 'skip' ? 'set aside' : x.done.action === 'vault' ? 'in the vault of product #' + (x.done.entity_id || '') : 'on ' + (x.done.entity || '') + ' #' + (x.done.entity_id || ''))}${x.document ? ` · <a href="/api/intake/${x.id}/file" target="_blank" rel="noopener">open the file</a>` : ''}</div>` : ''}
       </div></div>`).join('') : `<div class="muted" style="padding:10px 4px">${IX.status === 'NEW' ? 'Nothing waiting. Drop or paste anything above.' : 'Nothing here.'}</div>`;
     $$('#ixList [data-ix]').forEach(card => { const id = +card.dataset.ix, x = d.items.find(y => y.id === id); if (!x || x.status !== 'NEW') return; let other = null;
       $$('.ix-prop input', card).forEach(r => r.onchange = () => { $$('.ix-prop', card).forEach(l => l.classList.toggle('on', l.contains(r) && r.checked)); $('.ix-other', card).hidden = r.value !== 'other'; if (r.value === 'other') $('.ix-other input', card).focus(); });
@@ -5144,7 +5165,7 @@
         const p = x.proposals[+v];
         if (p.action === 'open') { try { const res = await fetch('/api/intake/' + id + '/file', { credentials: 'same-origin' }); const blob = await res.blob(); S.handoff = new File([blob], x.name, { type: blob.type }); } catch (e) {} await ixDo(id, { action: 'open', screen: p.screen }, true); return go(p.screen); }
         if (p.action === 'form') return openForm(p.form, null, { preset: p.preset || {}, onSaved: r => ixDo(id, { action: 'attach', entity: p.entity_after || p.form, entity_id: r.id, category: x.facts.kind }) });
-        ixDo(id, { action: p.action, entity: p.entity, entity_id: p.entity_id, category: p.category }); }; });
+        ixDo(id, { action: p.action, entity: p.entity, entity_id: p.entity_id, category: p.category, kind: p.kind, marketplace: p.marketplace }); }; });
   }
   async function ixDo(id, body, quiet) { try { const r = await api('intake/' + id, { method: 'POST', body }); if (!quiet) toast(r.message); ixDraw(); if (IX.onDone) IX.onDone(r); } catch (e) { toast(e.message, 'err'); } }
   // Next #3 – "File a document" from anywhere: the same importer in a window, bound to the record the person is on (it is offered first, with its guessed kind)

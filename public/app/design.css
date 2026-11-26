@@ -757,3 +757,12 @@ label .ap-wrap{display:flex;width:100%}
 .pk-c{border:1px solid var(--line);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:2px;min-width:0}
 .pk-c small{color:var(--muted);font-size:11.5px}
 .pk-c b{font-size:14px}
+/* product vault (owner 27-11 02:31) */
+.vp{margin:0 0 12px}.vp-h{font-weight:600;font-size:13px;margin-bottom:6px}
+.vp-g{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.vt{border:1px solid var(--line);border-radius:10px;padding:6px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.vt img{width:100%;aspect-ratio:1/1;object-fit:contain;background:var(--surface-2,#f6f7f9);border-radius:6px}
+.vt-file{display:flex;align-items:center;justify-content:center;aspect-ratio:1/1;border-radius:6px;background:var(--surface-2,#f6f7f9);font-weight:700;color:var(--muted);text-decoration:none}
+.vt-n{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vt-a{display:flex;gap:4px;flex-wrap:wrap}.vt-a select{font-size:11px;padding:2px 4px;max-width:100%}
+.vdrop.over{outline:2px dashed var(--link);outline-offset:-6px}

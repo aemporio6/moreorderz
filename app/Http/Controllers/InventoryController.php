@@ -42,6 +42,10 @@ class InventoryController extends Controller
     }
 
     public function fbaRecon(Request $r) { Perm::need($r->user(), 'stock.SEE'); $s = Perm::shops($r->user()); return \App\Services\FbaLedger::recon((int) Context::ent(), $r->query('shop') ? (int) $r->query('shop') : null, $s); }
+    /** Owner 27-11 02:31: the product's vault. */
+    public function vault(Request $r, int $id) { Perm::need($r->user(), 'stock.SEE'); return $this->run(fn () => \App\Services\ProductVault::page((int) Context::ent(), $id)); }
+    public function vaultAsset(Request $r, int $id) { Perm::need($r->user(), 'form:' . (\App\Services\RecordService::formOfTable('t_product_vendors') ?: 't_product_vendor') . ':EDIT'); return $this->run(fn () => \App\Services\ProductVault::change((int) Context::ent(), $id, $r->only(['kind', 'marketplace', 'main', 'remove']), $r->user())); }
+
     /** Owner 27-11 02:31: packaging worked out – a product (with ?qty=) or a whole PO. */
     public function packaging(Request $r, int $id) { Perm::need($r->user(), 'stock.SEE'); return $this->run(fn () => \App\Services\Packaging::product($id, $r->query('qty') !== null ? (float) $r->query('qty') : null)); }
     public function packagingPo(Request $r, int $id) { abort_unless(Perm::has($r->user(), 'buying.SEE') || Perm::has($r->user(), 'stock.SEE'), 403); return $this->run(fn () => \App\Services\Packaging::po((int) Context::ent(), $id)); }
