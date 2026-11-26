@@ -747,3 +747,8 @@ label .ap-wrap{display:flex;width:100%}
 .fb-link{display:flex;flex-direction:column;gap:3px;min-width:240px}
 .fb-link .q{min-height:32px;padding:4px 8px;border:1px solid var(--line,#d9e1e5);border-radius:8px}
 .fb-found{display:flex;flex-direction:column;font-size:13px}
+/* access by area (Next #4) */
+.ac-areas{border-top:1px solid var(--line);margin-top:8px}
+.ac-area{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:3px 6px;border-radius:8px;flex-wrap:wrap}
+.ac-area.ch{background:color-mix(in srgb,var(--warn,#d99a2b) 10%,transparent)}
+.ac-area .seg.sm button{padding:3px 8px;font-size:12px}

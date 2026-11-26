@@ -4,7 +4,7 @@ The single list of everything: what is done, what is being built, what comes nex
 It lives in the code (docs/ROADMAP.md) and opens in the tool under Home › Plan & progress. Every batch updates it before it is deployed.
 Nothing the owner asked for may be dropped from this list. A line only leaves "Next" or "Discussed" by moving to "Done", with its date.
 
-Updated: 27 Nov 2026, 01:35 (Pakistan time)
+Updated: 27 Nov 2026, 01:55 (Pakistan time)
 
 ## The owner's standing rules (every screen, every batch is checked against these)
 1. **Everything is connected.** Stock ↔ inventory ↔ partners ↔ buying ↔ sourcing ↔ selling ↔ money. Nothing is a screen on its own: every figure comes from the one ledger and setup behind it, and every action writes there. If something is not connected, it is not finished.
@@ -44,7 +44,7 @@ Updated: 27 Nov 2026, 01:35 (Pakistan time)
    - a statement
 2. **Task management** – ✅ checked 27-11: every old task came in (2 tasks, 11 categories, 3 templates, 20 shop reminders, 629 order reminders; 2,319 tasks made by rules). The screens were complete but hidden under Team & Work, so **Tasks** is now its own menu group: My tasks, Board, Weekly, Templates, Absence calendar. Still to do: MY TOOL's tasks come over once the MY TOOL link key is pasted.
 3. **Documents: "File a document" from anywhere** – ✅ 27-11: a "File a document" button on every record, PO, cycle and product page (and in each record's Documents). Drop a file, screenshot or link: it is read, its kind is guessed and that record is offered first with the reason; one press puts it there. Filed documents now also show in the PO and cycle document lists (before, they showed only on the record).
-4. Access card: Edit / View only / Hidden for each area; a blocked person gets an "Ask the Owner" button on Home.
+4. **Access card by area** – ✅ 27-11: every person's card (Setup › Roles and rights › Access cards) has 7 areas – Buying, Inventory & warehouse, Products & selling, Money, Partners, Tasks & team, Setup – each Edit / View only / Hidden, with "changed from the role" shown. A person who cannot open an area sees it on Home with **Ask the Owner** (one press; the Owner gets the request and answers it under Requests). Owner-only rights never move.
 5. Guide me: steps for more screens.
 6. Register lines still PARTIAL (98) or FORM ONLY (39).
 7. Reports: "every figure can be clicked down to its record, file and row" (MR-1285).
@@ -69,6 +69,7 @@ Updated: 27 Nov 2026, 01:35 (Pakistan time)
 - Security: no secrets, no real data in the public repo; nothing is typed into password boxes for the owner.
 
 ## Done (newest first)
+- 27-11: Access card by area (Edit / View only / Hidden) + "Ask the Owner" on Home.
 - 27-11: Shop quantity check (inventory step d finished).
 - 27-11: Tasks got its own menu group. "File a document" on every record page; filed documents show in the PO / cycle document lists too.
 - 27-11: Menu – Inventory and Partners are now their own groups (owner 00:09). Inventory: Inventory · FBA check · Stock by partner · Receiving & Warehouse. Partners: Each partner + the partner screens. Each partner page built.

@@ -38,7 +38,7 @@ class AdminController extends Controller
         $as = strtoupper((string) $r->query('role', '')); $seeAs = null;      // owner 26-11 21:59: the Owner opens each role's Home from the menu
         if ($as !== '' && $as !== $u->role_code && in_array($as, \App\Models\User::ROLES, true) && \App\Services\Perm::has($u, 'admin.permissions')) { $seeAs = clone $u; $seeAs->role_code = $as; $seeAs->custom_role = null; }
         $cards = HomeCards::for($seeAs ?? $u, (int) Context::ent());
-        return ['cards' => $cards, 'recent' => $recent, 'as_role' => $seeAs ? $as : null] + ($r->query('timing') && $u->role_code === 'OWNER' ? ['timing' => ['recent' => $tr, 'cards' => HomeCards::$ms]] : []);      // owner 26-11 'slow': which card takes the time
+        return ['cards' => $cards, 'recent' => $recent, 'as_role' => $seeAs ? $as : null, 'blocked' => \App\Services\AccessCards::blocked($seeAs ?? $u)] + ($r->query('timing') && $u->role_code === 'OWNER' ? ['timing' => ['recent' => $tr, 'cards' => HomeCards::$ms]] : []);      // owner 26-11 'slow': which card takes the time
     }
 
     /** R-G_CORE-103 the charts of a dashboard (reads only). */
@@ -513,7 +513,7 @@ class AdminController extends Controller
     public function accessSave(Request $r, int $id)
     {
         P::need($r->user(), 'admin.permissions');
-        $d = $r->validate(['role' => 'nullable|string|max:40', 'until' => 'nullable|date', 'approve_limit' => 'nullable|numeric|min:0|max:100000000', 'reset' => 'nullable|boolean', 'ticks' => 'nullable|array', 'ticks.*' => 'boolean']);
+        $d = $r->validate(['role' => 'nullable|string|max:40', 'until' => 'nullable|date', 'approve_limit' => 'nullable|numeric|min:0|max:100000000', 'reset' => 'nullable|boolean', 'ticks' => 'nullable|array', 'ticks.*' => 'boolean', 'areas' => 'nullable|array', 'areas.*' => 'in:edit,view,hidden']);
         foreach (['until', 'approve_limit'] as $k) if ($r->has($k)) $d[$k] = $r->input($k);
         return $this->guard(fn () => ['ok' => true, 'card' => \App\Services\AccessCards::save($id, $d, $r->user())]);
     }

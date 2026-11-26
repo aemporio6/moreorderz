@@ -26,6 +26,49 @@ class AccessCards
         'setup' => ['Change settings, lists and rights', '/(^admin\.|^setup\.|settings|\.SETUP$|Templates$|mapping\.manage|csvFormats|alertRules)/'],
     ];
 
+    /**
+     * Next #4 – access by AREA (the menu groups): Edit / View only / Hidden for one person. area => [label, codes of the area, view codes, main right, menu groups]
+     * View = the area's looking rights (.SEE, its reports, the task dashboard); Edit = every right of the area; Hidden = none. Owner-only rights never move.
+     */
+    public const AREAS = [
+        'buying' => ['Buying & sourcing', '/^(buying\.|report:(purchases|suppliers|research|landed|in_transit|supplier_perf|po_payments)$)/', 'buying.SEE', ['Buy & Receive']],
+        'stock' => ['Inventory & warehouse', '/^(stock\.|wh\.|report:(stock|stock_location|wh_\w+|valuation|slow_dead)$)/', 'stock.SEE', ['Inventory']],
+        'selling' => ['Products & selling', '/^(orders\.|products\.|print\.|report:(sales_\w+|price_log)$)/', 'orders.SEE', ['Products & Selling']],
+        'money' => ['Money', '/^(money\.|finance\.|close\.|tax\.|report:(cash|vat|ledger|expenses|close)$)/', 'money.SEE', ['Money']],
+        'partners' => ['Partners & investors', '/^(partners\.|report:partners$)/', 'partners.SEE', ['Partners']],
+        'work' => ['Tasks & team', '/^(work\.|people\.|report:(tasks_week|team_engagements|users)$)/', 'work.TASK_DASH', ['Tasks', 'Team & Documents']],
+        'setup' => ['Setup', '/^(admin\.|setup\.|connect\.|company\.|import\.|app\.|report:menu$)/', 'admin.audit', ['Setup']],
+    ];
+    private const VIEW = '/(\.SEE$|^report:|^work\.TASK_DASH$|^work\.tasks_may$|^admin\.audit$)/';
+
+    /** [all codes, view codes] of an area, without owner-only rights */
+    public static function areaCodes(string $area): array
+    {
+        $re = self::AREAS[$area][1]; $all = [];
+        foreach (array_keys(Perm::catalogue()) as $c) if (preg_match($re, $c) && ! in_array($c, Perm::OWNER_ONLY, true) && ! preg_match('/_owner$/', $c)) $all[] = $c;
+        return [$all, array_values(array_filter($all, fn ($c) => preg_match(self::VIEW, $c) || $c === self::AREAS[$area][2]))];
+    }
+
+    /** edit / view / hidden for a person (or his role alone), and whether it is only part of it */
+    public static function areaLevel(object $u, string $area, bool $roleOnly = false): array
+    {
+        [$all, $view] = self::areaCodes($area); [$base, $key] = Perm::rolesOf($u);
+        $has = fn ($c) => $roleOnly ? Perm::roleCan($base, $key, $c) : Perm::has($u, $c);
+        $v = count(array_filter($view, $has)); $e = count(array_filter(array_diff($all, $view), $has)); $ne = count($all) - count($view);
+        $level = $v === 0 && $e === 0 ? 'hidden' : ($e > 0 ? 'edit' : 'view');
+        return ['level' => $level, 'part' => $level === 'edit' ? $e < $ne : ($level === 'view' ? $v < count($view) : false)];
+    }
+
+    /** The areas a person cannot open (for Home: "Ask the Owner"), with the main right to ask for and whether he asked already. */
+    public static function blocked(object $u): array
+    {
+        if (($u->role_code ?? '') === 'OWNER' && empty($u->custom_role)) return [];
+        $out = [];
+        foreach (self::AREAS as $k => [$label, , $main]) if (Perm::known($main) && ! Perm::has($u, $main))
+            $out[] = ['area' => $k, 'label' => $label, 'right' => $main, 'asked' => DB::table('mo_access_requests')->where(['user_id' => $u->id, 'perm_code' => $main, 'status' => 'OPEN'])->exists()];
+        return $out;
+    }
+
     private static function codes(string $tick): array
     {
         $re = self::TICKS[$tick][1]; $out = [];
@@ -55,7 +98,7 @@ class AccessCards
             $cards[] = ['id' => (int) $u->id, 'name' => $u->display_name ?: $u->login_id, 'login' => $u->login_id, 'role' => $u->custom_role ?: $u->role_code, 'owner' => $owner,
                 'until' => $u->access_until ?? null, 'expired' => ! empty($u->access_until) && $u->access_until < date('Y-m-d'), 'approve_limit' => $u->approve_limit ?? null,
                 'shops' => $scope === null ? null : DB::table('t_branches')->whereIn('id', $scope ?: [0])->orderBy('shop_name')->pluck('shop_name')->all(),
-                'ticks' => $ticks, 'last_login' => $u->last_login_at, 'requests' => DB::table('mo_access_requests')->where('user_id', $u->id)->where('status', 'OPEN')->count(),
+                'ticks' => $ticks, 'areas' => $owner ? [] : array_map(fn ($k) => ['key' => $k, 'label' => self::AREAS[$k][0]] + self::areaLevel($u, $k) + ['role' => self::areaLevel($u, $k, true)['level']], array_keys(self::AREAS)), 'last_login' => $u->last_login_at, 'requests' => DB::table('mo_access_requests')->where('user_id', $u->id)->where('status', 'OPEN')->count(),
                 'suggest' => $owner ? null : self::suggest($u, $ticks)];
         }
         return ['cards' => $cards, 'roles' => $roles, 'ticks' => array_map(fn ($k, $t) => ['key' => $k, 'label' => $t[0]], array_keys(self::TICKS), self::TICKS)];
@@ -91,6 +134,12 @@ class AccessCards
         foreach ((array) ($in['ticks'] ?? []) as $k => $on) {
             if (! isset(self::TICKS[$k])) continue; $fresh = DB::table('t_users')->where('id', $userId)->first(); [$base, $key] = Perm::rolesOf($fresh);
             foreach (self::codes($k) as $c) { $role = Perm::roleCan($base, $key, $c); Perm::setUser($userId, $c, $role === (bool) $on ? null : ($on ? 'GRANTED' : 'REVOKED'), 'Access card: ' . self::TICKS[$k][0] . ($on ? ' on' : ' off'), null, (int) $by->id); }
+        }
+        foreach ((array) ($in['areas'] ?? []) as $k => $lvl) {
+            if (! isset(self::AREAS[$k]) || ! in_array($lvl, ['edit', 'view', 'hidden'], true)) continue;
+            $fresh = DB::table('t_users')->where('id', $userId)->first(); [$base, $key] = Perm::rolesOf($fresh); [$all, $view] = self::areaCodes($k);
+            foreach ($all as $c) { $on = $lvl === 'edit' || ($lvl === 'view' && in_array($c, $view, true)); $role = Perm::roleCan($base, $key, $c);
+                Perm::setUser($userId, $c, $role === $on ? null : ($on ? 'GRANTED' : 'REVOKED'), 'Access card: ' . self::AREAS[$k][0] . ' – ' . $lvl, null, (int) $by->id); }
         }
         return collect(self::cards((int) Context::ent())['cards'])->firstWhere('id', $userId) ?? [];
     }
