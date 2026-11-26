@@ -209,7 +209,8 @@ class SaleLines
         $prod = (int) $s->fk_product_id ? DB::table('t_product_vendors')->where('id', $s->fk_product_id)->first(['weight', 'unit_gross_weight', 'dimensions']) : null; $dims = $prod ? array_map('floatval', array_slice(preg_split('/[^\d.]+/', (string) $prod->dimensions, -1, PREG_SPLIT_NO_EMPTY), 0, 3)) + [0, 0, 0] : [0, 0, 0];
         $fit = $prod ? Carriers::cheapest((float) (($prod->unit_gross_weight ?: $prod->weight) ?: 0) * max(1, (int) $s->qty), (float) $dims[0], (float) $dims[1], (float) $dims[2], $mp, $day) : null;
         $cheapest = $fit && in_array($fit['id'], array_column($svc, 'id'), true) ? $fit : collect($svc)->where('rate', '>', 0)->sortBy('rate')->first();
-        return ['services' => $svc, 'packings' => array_merge([['id' => 0, 'label' => 'No packing', 'rate' => 0.0]], $packs), 'cheapest' => $cheapest['id'] ?? null,
+        $dd = CarrierPresets::dropdown($mp ?: null, (int) ($s->fk_id_branch ?? 0) ?: null, (int) $s->fk_id_car_pkg_svc ?: null);      /* R-D-65: the sale's "Edit carrier" offers the groups of its marketplace / shop in the same order as every carrier field */
+        return ['services' => $svc, 'groups' => array_map(fn ($g) => ['header' => $g['header'], 'ids' => array_column($g['items'], 'id')], $dd['groups']), 'packings' => array_merge([['id' => 0, 'label' => 'No packing', 'rate' => 0.0]], $packs), 'cheapest' => $cheapest['id'] ?? null,
             'formula' => 'Buy Amount = raw × qty + carrier + packing (carrier and packing once per line). Profit = Total − Buy Amount.'];
     }
 

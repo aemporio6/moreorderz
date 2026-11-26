@@ -157,6 +157,12 @@ class ProductImportsTest extends TestCase
         $sale = $this->f('t_sales', ['fk_id_ent' => 1, 'order_no' => 'DQ-1', 'd_order' => '2026-11-03', 'sku' => 'DQ-C1', 'qty' => 1, 'status' => 'Pending', 'ds_note' => 'gift wrap', 'bought_local' => 0, 'created_at' => now()]);
         $this->assertSame(1, \App\Services\DataQuality::run(1)['item_note']['opened']); $this->assertSame(1, DB::table('tasks')->where('dedupe_key', 'DQ_ITEM_NOTE:sale:' . $sale)->count());
         DB::table('t_sales')->where('id', $sale)->update(['bought_local' => 1]); $this->assertSame(1, \App\Services\DataQuality::run(1)['item_note']['closed']);
+        // the same check on the purchase-audit rows (ebay_audit): an item note, not local, no vendor
+        $mp = $this->f('cat_marketplaces', ['fk_id_ent' => 1, 'marketplace_short' => 'DQa', 'f_active' => 1]); $shop = $this->f('t_branches', ['fk_id_ent' => 1, 'fk_id_marketplace' => $mp, 'shop_no' => 'DQA', 'iso_branch' => 'DQA', 'shop_name' => 'DQ shop', 'f_active' => 1]);
+        $run = $this->f('t_audit_main', ['mon' => 8, 'yr' => 2026, 'fk_id_branch' => $shop]); $al = $this->f('ebay_audit', ['fk_id_audit_main' => $run, 'Order_number' => 'A-77', 'sku_ebay' => 'K1', 'item_note' => 'check colour', 'f_local' => 0]);
+        $this->assertSame(1, \App\Services\DataQuality::run(1)['audit_note']['opened']); $this->assertSame(1, DB::table('tasks')->where('dedupe_key', 'DQ_ITEM_NOTE:audit:' . $al)->count());
+        $this->assertSame('A-77', $this->getJson('/api/data-quality')->json('audit_notes')[0]['order']);
+        DB::table('ebay_audit')->where('id', $al)->update(['f_local' => 1]); $this->assertSame(1, \App\Services\DataQuality::run(1)['audit_note']['closed']);
         $va = $this->makeUser('VA'); $this->actingAs($va)->postJson('/api/data-quality/run')->assertStatus(403);
     }
 }

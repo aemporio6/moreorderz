@@ -192,6 +192,35 @@ class CarrierPresets
         })->all();
     }
 
+    /**
+     * R-D-65 the options of a carrier field on any registry form: the same dropdown (groups offered for the form's marketplace / shop, in the rule's order),
+     * flattened to "Group › Carrier - Service Package (rate)"; a preset in two groups is listed once (the first); 'default' = default of the first offered group.
+     */
+    public static function formOptions(string $formKey, array $parents, ?string $q = null): array
+    {
+        $mp = null; $shop = null;
+        foreach (Registry::fields($formKey) as $p) { $v = (int) ($parents[$p['field_name']] ?? 0); if (! $v) continue;
+            if ($p['column_name'] === 'fk_id_marketplace') $mp = $v; elseif (in_array($p['column_name'], ['fk_id_branch', 'fk_id_shop'], true)) $shop = $v; }
+        $d = self::dropdown($mp, $shop); $opts = []; $seen = [];
+        foreach ($d['groups'] as $g) foreach ($g['items'] as $i) { if (isset($seen[$i['id']])) continue; $seen[$i['id']] = 1; $l = $g['header'] . ' › ' . $i['label']; if ($q !== null && $q !== '' && mb_stripos($l, $q) === false) continue; $opts[] = [(string) $i['id'], $l]; }
+        return ['options' => $opts, 'default' => $d['default'], 'saved_as' => 'current'];
+    }
+
+    /** R-D-65 preset id => its place in the dropdown (group order, then order inside the group) – lists that are not registry fields sort by it. */
+    public static function rank(?int $marketplace = null, ?int $shop = null): array
+    {
+        $out = []; $n = 0; foreach (self::dropdown($marketplace, $shop)['groups'] as $g) foreach ($g['items'] as $i) $out[(int) $i['id']] ??= $n++;
+        return $out;
+    }
+
+    /** id => "Carrier - Service Package (rate)" for any preset, active or not. */
+    public static function labelsOf(array $ids): array
+    {
+        $out = []; foreach (DB::table('t_carrier_pkg_svc as p')->leftJoin('t_carriers as c', 'c.id', '=', 'p.fk_id_carrier')->leftJoin('t_carrier_packages as k', 'k.id', '=', 'p.fk_id_car_package')->leftJoin('t_carrier_services as v', 'v.id', '=', 'p.fk_id_car_service')
+            ->whereIn('p.id', array_map('intval', $ids) ?: [0])->get(['p.*', 'c.carrier_name', 'k.package_name', 'v.service_name']) as $p) $out[(int) $p->id] = self::label($p);
+        return $out;
+    }
+
     /** The Owner picks the preset for one unclear value. */
     public static function resolve(int $reviewId, int $preset, ?object $u): array
     {

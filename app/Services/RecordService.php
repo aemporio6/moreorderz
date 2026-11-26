@@ -22,7 +22,10 @@ class RecordService
         $allCols = array_slice(array_values(array_unique(array_map(fn ($f) => $f['column_name'], $fields))), 0, 80);
         // the user's own choice of columns (a saved view keeps it); without one the first 12 show
         $want = array_values(array_intersect(is_array($p['cols'] ?? null) ? $p['cols'] : array_filter(explode(',', (string) ($p['cols'] ?? ''))), $allCols));
-        $cols = $want ?: array_slice($allCols, 0, (int) ($p['max_cols'] ?? 12));
+        /* R-G_CORE-108: on a master form "Complete %" is one of the columns – in the default view it takes the last of the 12 places; in a person's own choice it shows when chosen */
+        $dq = isset(DqScore::masterForms()[$formKey]); $asked = is_array($p['cols'] ?? null) ? $p['cols'] : array_filter(explode(',', (string) ($p['cols'] ?? '')));
+        $max = (int) ($p['max_cols'] ?? 12); $dqShow = $dq && ($want ? in_array('dq_score', $asked, true) : true);
+        $cols = $want ?: array_slice($allCols, 0, $dqShow ? max(1, $max - 1) : $max);
         $q = DB::table($table);
         self::scope($q, $table);
         if (! empty($p['q'])) {
@@ -43,16 +46,23 @@ class RecordService
         $sort = Registry::hasColumn($table, (string) ($p['sort'] ?? '')) ? $p['sort'] : $pk;
         $per = max(1, min(250, (int) ($p['per_page'] ?? 100)));
         $page = max(1, (int) ($p['page'] ?? 1));
-        $rows = $q->orderBy($sort, ($p['dir'] ?? 'desc') === 'asc' ? 'asc' : 'desc')->offset(($page - 1) * $per)->limit($per)->get(array_merge([$pk . ' as id'], $cols));
+        /* R-G_CORE-108: a master form's list has the column "Complete %" (data-quality score of the record); it sorts like any column */
+        $dir = ($p['dir'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
+        if ($dq && ($p['sort'] ?? '') === 'dq_score') $q->orderByRaw("(SELECT d.score_pct FROM sys_dq_scores d WHERE d.form_key = ? AND d.record_id = `$table`.`$pk` LIMIT 1) $dir", [$formKey])->orderBy($pk);
+        else $q->orderBy($sort, $dir);
+        $rows = $q->offset(($page - 1) * $per)->limit($per)->get(array_merge([$pk . ' as id'], $cols));
+        $scores = $dqShow && $rows->count() ? DB::table('sys_dq_scores')->where('form_key', $formKey)->whereIn('record_id', $rows->pluck('id')->all())->pluck('score_pct', 'record_id') : collect();
         $labels = self::labels($fields, $rows);
         $col = fn ($c) => ['name' => $c, 'label' => self::fieldByCol($fields, $c)['label'], 'type' => self::fieldByCol($fields, $c)['type'], 'group' => ListFilter::group(self::fieldByCol($fields, $c)['type'])];
+        $dqCol = ['name' => 'dq_score', 'label' => 'Complete %', 'type' => 'number', 'group' => 'number', 'computed' => true];
         return [
-            'form_key' => $formKey, 'title' => Registry::fields($formKey)[0]['form_title'], 'table' => $table, 'total' => $total, 'page' => $page, 'per_page' => $per, 'all_columns' => array_map($col, $allCols),
-            'columns' => array_map($col, $cols), 'totals' => $totals, 'where' => $where, 'where_text' => ListFilter::words($where, self::byCol($fields)),
+            'form_key' => $formKey, 'title' => Registry::fields($formKey)[0]['form_title'], 'table' => $table, 'total' => $total, 'page' => $page, 'per_page' => $per, 'all_columns' => array_merge(array_map($col, $allCols), $dq ? [$dqCol] : []),
+            'columns' => array_map(fn ($c) => $c === 'dq_score' ? $dqCol : $col($c), $want && $dqShow ? array_values(array_filter($asked, fn ($c) => $c === 'dq_score' || in_array($c, $cols, true))) : array_merge($cols, $dqShow ? ['dq_score'] : [])) /* the person's own order */, 'totals' => $totals, 'where' => $where, 'where_text' => ListFilter::words($where, self::byCol($fields)),
             'locked' => SystemRows::locked($table, $rows->pluck('id')->all()),      /* R-F_SETUP-42 the lock in the list */
-            'rows' => $rows->map(function ($r) use ($labels, $table) {
+            'rows' => $rows->map(function ($r) use ($labels, $table, $dqShow, $scores) {
                 $a = Vault::maskRow($table, (array) $r);
                 foreach ($a as $k => $v) if (isset($labels[$k][(string) $v])) $a[$k . '__label'] = $labels[$k][(string) $v];
+                if ($dqShow) $a['dq_score'] = isset($scores[$a['id']]) ? (int) $scores[$a['id']] : null;      /* empty until the nightly job has scored the record */
                 return $a;
             })->all(),
         ];

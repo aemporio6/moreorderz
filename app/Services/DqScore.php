@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
  * R-G_CORE-108 data-quality score per record of every master form (registry is_master = Y):
  * filled fields ÷ fields that count – a required field counts double; calc / param / auto / read-only / secret fields and tick boxes do not count.
  * Kept in sys_dq_scores (form, record, score %, missing field names) by the nightly job and on demand for the record that is opened.
+ * Lists of a master form show the score as a sortable column "Complete %" (RecordService::list).
  * A record below Settings › Choices DQ_TASK_BELOW_PCT raises task DQ_ITEM_NOTE (key score : form : record); it closes when the score reaches the limit.
  */
 class DqScore
@@ -64,7 +65,7 @@ class DqScore
                 if ($limit > 0 && $r['score'] < $limit) {
                     if (! TaskEngine::isOpen('DQ_ITEM_NOTE', ['score', $form, $id]) && $opened < self::TASK_CAP) {
                         $titles[$form] ??= (string) (Registry::fields($form)[0]['form_title'] ?? $form);
-                        TaskEngine::open('DQ_ITEM_NOTE', ['score', $form, $id], "{$titles[$form]} \"" . mb_substr((string) ($lc ? ($row[$lc] ?? "#$id") : "#$id"), 0, 80) . "\" is {$r['score']} % complete – fill: " . mb_substr(implode(', ', $r['missing']), 0, 150), ['ent' => $ent, 'module' => $t, 'record_id' => $id, 'fix_url' => "#/rec/$form/$id"]); $opened++;
+                        TaskEngine::open('DQ_ITEM_NOTE', ['score', $form, $id], "{$titles[$form]} \"" . mb_substr((string) ($lc ? ($row[$lc] ?? "#$id") : "#$id"), 0, 80) . "\" is {$r['score']} % complete – fill: " . mb_substr(implode(', ', $r['missing']), 0, 150), ['ent' => $ent, 'module' => $t, 'record_id' => $id, 'fix_url' => "#/rec/$form/$id", 'owner_user_id' => (int) ($row['created_by'] ?? 0) ?: null /* the record owner; when that person is gone the rule's own owner order applies */]); $opened++;
                     }
                 } elseif (TaskEngine::close('DQ_ITEM_NOTE', ['score', $form, $id], 'The record is complete enough now')) $closed++;
             }

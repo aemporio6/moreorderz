@@ -79,6 +79,15 @@ class CarrierPresetsTest extends TestCase
         $this->assertSame(['A eBay only'], $sel); $this->assertNull($cur['current']); $this->assertNull($cur['default']);
         $old = CP::dropdown($ebay, null, $this->x['dead']);
         $this->assertSame(['id' => $this->x['dead'], 'label' => '(current: RM - Old preset (4.00))', 'rate' => 4.0, 'selected' => true, 'current' => true], $old['current']);
+        // every registry carrier field (product, shop default, sale line …) gets the same list: group order, a preset once, the default, "(current)" label for a saved value
+        $shopField = collect(\App\Services\Registry::fields('t_branch'))->firstWhere('column_name', 'fk_id_default_carrier')['field_name']; $mpField = collect(\App\Services\Registry::fields('t_branch'))->firstWhere('column_name', 'fk_id_marketplace')['field_name'];
+        $fo = $this->getJson("/api/options/t_branch/$shopField?" . http_build_query(['parent' => [$mpField => $ebay]]))->assertOk()->json();
+        $this->assertSame(['A eBay only › RM - 2nd Class Large Letter (1.55)', 'A eBay only › RM - 2nd Class (3.35)', 'Other presets › RM - Loose one'], array_column($fo['options'], 1), 'the preset that is also in group B is listed once, in the first group');
+        $this->assertSame([$this->x['a'], 'current'], [$fo['default'], $fo['saved_as']]);
+        $this->assertSame(['★ B all [EVD] › RM - 2nd Class (3.35)', 'Other presets › RM - 2nd Class Large Letter (1.55)', 'Other presets › RM - Loose one'], array_column($this->getJson("/api/options/t_branch/$shopField?" . http_build_query(['parent' => [$mpField => $amz]]))->json('options'), 1));
+        $this->assertSame('RM - Old preset (4.00)', $this->getJson("/api/options/t_branch/$shopField/saved?ids=" . $this->x['dead'])->json('labels')[(string) $this->x['dead']], 'a saved inactive preset keeps its name');
+        $pf = collect(\App\Services\Registry::definition('t_product_vendor')['sections'])->flatMap(fn ($x) => $x['fields'])->firstWhere('col', 'fk_id_car_pkg_svc'); $this->assertTrue($pf['carrier_dd']);
+        $this->assertSame([$this->x['b'], $this->x['a'], $free], array_slice(array_keys(CP::rank($ebay)), 0, 3));
         // an inactive group is not offered
         DB::table('car_preset_groups')->where('id', $A)->update(['f_active' => 0]); $this->assertNotContains('A eBay only', array_column(CP::dropdown($ebay)['groups'], 'name'));
     }

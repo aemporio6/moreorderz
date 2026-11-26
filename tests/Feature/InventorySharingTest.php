@@ -30,6 +30,14 @@ class InventorySharingTest extends TestCase
         $this->assertSame(['sharing' => 2, 'hidden' => 1, 'out_of_sync' => 0], $d['summary']); $rows = collect($d['rows'])->keyBy('id');
         $this->assertSame([10, 9.99, 'Shown', 'NEVER', 'FILE'], [$rows[$la]['qty'], $rows[$la]['price'], $rows[$la]['visibility'], $rows[$la]['state'], $rows[$la]['sync']], 'quantity offered = available 12 minus the profile buffer 2');
         $this->assertSame(['Hidden', 0, 'HIDDEN'], [$rows[$lc]['visibility'], $rows[$lc]['qty'], $rows[$lc]['state']]);
+        // visibility per marketplace × shop (R-D-20): Private for shop A, Pool for the marketplace, so B and C read Pool; the dropship line names its supplier profile (R-D-97)
+        $this->assertSame('Not set for this shop', $rows[$la]['visibility_mode']); $this->assertFalse($rows[$la]['sold_there']);
+        $this->f('t_product_visibility', ['fk_id_product' => $p, 'fk_id_marketplace' => $mp, 'fk_id_branch' => 0, 'visibility_mode' => 'pool']); $this->f('t_product_visibility', ['fk_id_product' => $p, 'fk_id_marketplace' => $mp, 'fk_id_branch' => $a, 'visibility_mode' => 'private']);
+        $sup = $this->f('t_src_suppliers', ['fk_id_ent' => 1, 'supplier_code' => 'DS94', 'supplier_name' => 'Drop Co', 'f_active' => 1]); $this->f('dropship_supplier_profiles', ['fk_id_ent' => 1, 'code' => 'DSP-94', 'fk_id_supplier' => $sup, 'f_active' => 1]);
+        DB::table('t_product_vendors')->where('id', $p)->update(['fk_id_vendor_inventory' => $sup]); DB::table('t_product_listings')->where('id', $lb)->update(['fulfilment' => 'DROPSHIP']);
+        $v = collect($this->getJson('/api/inventory-sharing?sku=SH-94')->json('rows'))->keyBy('id');
+        $this->assertSame(['Private', 'Pool', 'Pool'], [$v[$la]['visibility_mode'], $v[$lb]['visibility_mode'], $v[$lc]['visibility_mode']]); $this->assertSame([true, 'DSP-94', null], [$v[$lb]['dropship'], $v[$lb]['dropship_profile'], $v[$la]['dropship_profile']]);
+        DB::table('t_product_listings')->where('id', $lb)->update(['fulfilment' => 'FBM']);
         // a failed push shows red "out of sync" with the error and a Push now button
         DB::table('stock_push_queue')->insert(['fk_id_ent' => 1, 'fk_id_branch' => $a, 'fk_id_listing' => $la, 'qty' => 10, 'action' => 'SET', 'via' => 'FILE', 'status' => 'FAILED', 'reason' => 'PUSH_NOW', 'note' => 'Shop refused the file: bad SKU', 'created_at' => now()]);
         DB::table('stock_push_queue')->insert(['fk_id_ent' => 1, 'fk_id_branch' => $b, 'fk_id_listing' => $lb, 'qty' => 10, 'action' => 'SET', 'via' => 'FILE', 'status' => 'EXPORTED', 'reason' => 'PUSH_NOW', 'created_at' => now(), 'done_at' => now()]);

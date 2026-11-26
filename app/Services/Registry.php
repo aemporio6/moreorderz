@@ -89,6 +89,7 @@ class Registry
                 'add_form' => ($way = FormAssist::addWay($f))['form'] ?? null, 'add_inline' => ! empty($way['inline']), 'secret' => (bool) $f['secret'], 'auto_correct' => $f['auto_correct'],
                 'default_why' => self::defaultWhy($f),
                 'has_options' => in_array($f['type'], ['select', 'multiselect'], true),
+                'carrier_dd' => FormAssist::sourceTable($f) === 't_carrier_pkg_svc',      /* R-D-65: default of the first offered group for a new row, "(current: x)" for a saved value that is no longer offered */
                 'numbered' => str_starts_with((string) $f['default_rule'], 'numbering:'),
                 'add_preset' => str_starts_with((string) $f['source'], 'ref:') ? ['fk_reference_id' => DB::table('cat_references')->where('ref_code', substr($f['source'], 4))->value('id')] : (DirectorPickers::addPreset($formKey, (string) $f['field_name']) ?? FormStandard::partyPreset((string) $f['source']) ?? FormStandard::sourcePreset((string) $f['source'])),
                 'placeholder' => DirectorPickers::placeholder($formKey, (string) $f['field_name']), 'person_field' => DirectorPickers::personField($formKey, (string) $f['field_name']),

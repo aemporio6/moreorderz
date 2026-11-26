@@ -51,7 +51,7 @@
 62|B|class PresetGroups|7e-161: preset group form – name required (spaces collapsed), ≤ 100, unique; code upper case ^[A-Z0-9][A-Z0-9_-]{0,19}$; 11 colour swatches (other → default #17a2b8); description ≤ 255; active; new = max sort + 10, scope ALL, "Group saved."; edit logs "field: old → new" (car_preset_log + history tab); star (shown first); drag sort ×10 only unfiltered ("Order saved." / "Nothing to sort."); Copy → 88 chars + " (copy)", " (copy) 2" with items, pins, scope, default; Delete removes group, items, scope only; list search, status filter, preset count, "N saved preset(s) are in no group", deep link ?id= (screen #/preset-groups, link from Carriers; PresetGroupsTest)
 63|B|CarrierPresets::combos|combination browser + add: unsaved combination -> preset at rate 0 + task CAR_RATE_MISSING, "already in the group" count, log
 64|F|form:car_preset_group_item|form only
-65|P|CarrierPresets::dropdown|dropdown service built (order, default, Other presets, current) + preview; the carrier fields of the forms do not call it yet
+65|B|formOptions|one carrier dropdown for every form: every registry carrier field (product, shop default, sale line, manual sale, preset group) gets CarrierPresets::formOptions – offered groups for the marketplace / shop, rule order, a preset once, default of the first group for a new row, "(current: x)" for a saved value no longer offered; product price rows and the sale Edit carrier are grouped the same way; fulfilment and not-listed lists follow its order; preview on the groups screen; CarrierPresetsTest
 66|B|mo_carrier_value_review|old virtual carrier ids: converted when exactly one preset fits, otherwise kept and listed; screen "Old carrier values to decide" (menu row, record by name, candidates, Owner picks from the carrier dropdown), dry run writes nothing; CarrierPresetsTest
 68|B|class ListDefaults|protected default list items: the default (e.g. condition "New") cannot be deleted or deactivated ("The default \"New\" condition cannot be deleted."), an item in use is refused with "This condition is used by n product(s). Reassign them first." and a Reassign action in the bulk preview (bulk/{key}/reassign); ProductsBatchTest r68; dev DB has no conditions so the browser step was not clicked
 69|F|form:cat_brands|forms only
@@ -78,7 +78,7 @@
 91|F|form:product_certificate|form only; expiry task not built
 92|F|form:label_regulation_profile|form only
 93|F|form:product_image|form only
-94|P|InventorySharing|screen Stock > Inventory sharing: listing per shop x SKU, shown / hidden, price, quantity offered after the profile buffer, last push + result, out-of-sync filter, bulk show / hide / set price / push now, menu row; open: the visibility column is the listing state, not the R-D-20 marketplace visibility; dropship profile is matched by the listing vendor only
+94|B|InventorySharing|Stock > Inventory sharing: listing per shop x SKU, visibility (R-D-20 Pool / Private for that marketplace x shop + shown / hidden), price, quantity offered after the profile buffer, last push + result, dropship supplier profile of a DROPSHIP line, filters shop / SKU / out of sync, bulk show / hide / set price / push now with rights, menu row; InventorySharingTest
 95|F|form:t_inv_settings|form only
 96|F|form:threepl_profile|form only
 97|F|form:dropship_supplier_profile|form only

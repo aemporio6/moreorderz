@@ -30,6 +30,7 @@ class FormAssist
         $ids = array_values(array_unique(array_filter(array_map('strval', $ids), fn ($x) => $x !== ''))); $out = array_combine($ids, $ids) ?: [];
         $t = self::sourceTable($f); if (! $t || ! $ids) return $out;
         if ($t === 't_account') { foreach (DB::table('t_account')->whereIn('id', $ids)->get(['id', 'first_name', 'sur_name', 'account_code']) as $a) $out[(string) $a->id] = trim($a->first_name . ' ' . $a->sur_name) ?: (string) $a->account_code; return $out; }
+        if ($t === 't_carrier_pkg_svc') { foreach (CarrierPresets::labelsOf($ids) as $id => $l) $out[(string) $id] = $l; return $out; }      /* R-D-65: the label a carrier field always shows */
         $label = $t === 't_src_suppliers' ? 'supplier_name' : Registry::labelColumn($t); $pk = Registry::pk($t);
         if ($label && Registry::hasColumn($t, $label)) foreach (DB::table($t)->whereIn($pk, $ids)->pluck($label, $pk) as $id => $name) if ((string) $name !== '') $out[(string) $id] = (string) $name;
         return $out;
@@ -82,6 +83,7 @@ class FormAssist
     public static function options(string $formKey, string $name, ?string $q, array $parents = [], int $limit = 200): array
     {
         $f = self::field($formKey, $name) ?? abort(404);
+        if (self::sourceTable($f) === 't_carrier_pkg_svc') return CarrierPresets::formOptions($formKey, $parents, $q) + ['more' => false, 'recent' => self::recent($formKey, $name)];      // R-D-65 one carrier dropdown for every form
         if (($c = Chains::options($formKey, $f, $parents, $q)) !== null) return $c + ['more' => false, 'recent' => self::recent($formKey, $name)];      // person chains (R-C-21)
         $ent = Context::ent(); $filters = []; $t = self::sourceTable($f);
         if ($t && Schema::hasTable($t)) {

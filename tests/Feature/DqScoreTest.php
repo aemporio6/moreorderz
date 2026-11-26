@@ -30,11 +30,20 @@ class DqScoreTest extends TestCase
         $id = (int) DB::table('t_product_vendors')->insertGetId(RecordService::fillNotNull('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'DQ-108', 'product_name_vendor' => 'Thin record', 'f_active' => 1, 'e_product_type' => 'pool']));
         $chip = $this->getJson("/api/page/t_product_vendor/$id")->assertOk()->json('dq'); $this->assertStringContainsString('% complete', $chip['text']); $this->assertNotEmpty($chip['missing']);
         $this->assertSame(0, DB::table('sys_dq_scores')->count(), 'opening a record writes nothing');
+        DB::table('t_product_vendors')->where('id', $id)->update(['created_by' => $this->owner->id]);
         \App\Services\Choices::set('DQ_TASK_BELOW_PCT', '80', 1); $score = DQ::put('t_product_vendor', $id)['score']; $this->assertLessThan(80, $score);
         $r = DQ::run('t_product_vendor'); $this->assertGreaterThanOrEqual(1, $r['opened']);
         $row = DB::table('sys_dq_scores')->where('form_key', 't_product_vendor')->where('record_id', $id)->first(); $this->assertSame($score, (int) $row->score_pct); $this->assertNotEmpty(json_decode($row->missing_fields, true));
         $key = "DQ_ITEM_NOTE:score:t_product_vendor:$id"; $t = DB::table('tasks')->where('dedupe_key', $key)->get(); $this->assertCount(1, $t); $this->assertStringContainsString("is $score % complete – fill:", $t[0]->title);
         DQ::run('t_product_vendor'); $this->assertSame(1, DB::table('tasks')->where('dedupe_key', $key)->count(), 'one task per record');
+        $this->assertSame($this->owner->id, (int) $t[0]->owner_user_id, 'the task goes to the record owner');
+        // the list of a master form has the sortable column "Complete %"
+        $full = (int) DB::table('t_product_vendors')->insertGetId(RecordService::fillNotNull('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'DQ-109', 'product_name_vendor' => 'Fuller record', 'f_active' => 1, 'e_product_type' => 'pool', 'ean' => '5000000000017', 'upc' => '1', 'opc' => '1', 'hs_code' => '9', 'weight' => '10', 'dimensions' => '1x1', 'variant' => 'Red', 'product_description' => 'd']));
+        DQ::put('t_product_vendor', $full); $this->assertGreaterThan($score, (int) DB::table('sys_dq_scores')->where('record_id', $full)->where('form_key', 't_product_vendor')->value('score_pct'));
+        $l = $this->getJson('/api/list/t_product_vendor?sort=dq_score&dir=asc&q=DQ-10')->assertOk()->json(); $c = collect($l['columns'])->firstWhere('name', 'dq_score'); $this->assertSame(['Complete %', true], [$c['label'], $c['computed']]);
+        $this->assertSame([$id, $full], array_column($l['rows'], 'id')); $this->assertSame($score, $l['rows'][0]['dq_score']);
+        $this->assertSame([$full, $id], array_column($this->getJson('/api/list/t_product_vendor?sort=dq_score&dir=desc&q=DQ-10')->json('rows'), 'id'));
+        $this->assertNull(collect($this->getJson('/api/list/t_sales')->json('columns') ?? [])->firstWhere('name', 'dq_score'), 'only master forms have the column');
         // the limit lowered below the score (as if filled) → the task closes by itself; "No tasks" opens none
         \App\Services\Choices::set('DQ_TASK_BELOW_PCT', '0', 1); $this->assertGreaterThanOrEqual(1, DQ::run('t_product_vendor')['closed']); $this->assertSame('DONE', DB::table('tasks')->where('id', $t[0]->id)->value('status'));
         $this->assertNull(DQ::chip('no_such_form', 1));

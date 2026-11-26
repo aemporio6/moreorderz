@@ -53,7 +53,7 @@ class NotListed
         }
         return ['rows' => $rows, 'shops' => self::shops($ent)->map(fn ($s) => ['id' => (int) $s->id, 'name' => trim($s->shop_no . ' ' . $s->shop_name)])->all(),
             'types' => DB::table('t_product_vendors')->where('fk_id_ent', $ent)->whereNotNull('e_product_type')->distinct()->pluck('e_product_type')->all(),
-            'presets' => DB::table('t_carrier_pkg_svc')->where('f_active', 1)->orderBy('pkg_svc_name')->get(['id', 'pkg_svc_name as name']), 'packings' => DB::table('t_packings')->where('f_active', 1)->orderBy('packing_name')->get(['id', 'packing_name as name'])];
+            'presets' => DB::table('t_carrier_pkg_svc')->where('f_active', 1)->orderBy('pkg_svc_name')->get(['id', 'pkg_svc_name as name'])->sortBy(fn ($r) => ($rk ??= CarrierPresets::rank())[(int) $r->id] ?? 99999)->values(),      /* R-D-65 the dropdown's order */ 'packings' => DB::table('t_packings')->where('f_active', 1)->orderBy('packing_name')->get(['id', 'packing_name as name'])];
     }
 
     /** Drill-down: Shop no, SKU, Product – the not-listed products of the shops in scope (or one shop). */
