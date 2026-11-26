@@ -46,7 +46,8 @@ class CsvConvertTest extends TestCase
         $this->actingAs($va); $s = $this->up($this->file(['2026-11-03,W-1,Dog lead,John,Smith,1 High St,Leeds,2,9.50,LEAD-1']), $va); $this->assertSame('They will appear once they are ready by the Super Admin', $s['map_note']); $this->assertFalse($s['can_map']);
         try { C::rows($s['token'], ['map' => self::MAP], $va); $this->fail(); } catch (\Throwable $e) { $this->assertTrue(true); }      // mapping by hand: Owner / Admin only
         $this->actingAs($mgr); $id = C::saveFormat('Mgr format', self::MAP, $mgr)['id']; try { C::deleteFormat($id, $mgr); $this->fail(); } catch (\InvalidArgumentException $e) { $this->assertSame('Only the Owner can delete a format.', $e->getMessage()); }
-        $this->actingAs($va); $this->assertSame('John Smith', C::rows($s['token'], ['format' => $id], $va)['rows'][0]['customer']);      // a saved format can be used by everyone
+        C::approveFormat($id, true, $this->owner);      // R-D-54: a format saved by a manager is shared once the Owner approves it
+        $this->actingAs($va); $this->assertSame('John Smith', C::rows($s['token'], ['format' => $id], $va)['rows'][0]['customer']);      // an approved format can be used by everyone
         $this->actingAs($this->owner); C::deleteFormat($id, $this->owner); $this->assertSame([], C::formats($this->owner)); $this->assertFalse(DB::table('mo_export_templates')->where('name', 'Standard sheet – Mgr format')->exists());
     }
 
@@ -72,5 +73,26 @@ class CsvConvertTest extends TestCase
         $r = C::update($s['token'], $this->shop, $o, $this->owner, true); $this->assertStringContainsString('20 line(s) changed, 1 refused (confirmed), 1 not found', $r['message']);
         $this->assertSame(20, DB::table('t_sales')->whereIn('id', $ids)->where('tracking_no', 'like', 'TRK%')->count()); $this->assertSame(20, DB::table('t_sales')->whereIn('id', $ids)->where('cust_name', 'Jo')->count());      // only order_tracking changes
         $this->assertSame(20, DB::table('t_sale_change_log')->whereIn('fk_id_sale', $ids)->where('action', 'FILE_UPDATE')->count()); $this->assertNull(DB::table('t_sales')->where('order_no', 'U-21')->value('tracking_no'));      // 20 history rows; the confirmed line untouched
+    }
+    /** R-D-54: named mappings carry "approved / shared"; others pick from the approved ones; match and target column must differ. */
+    public function test_d54_approved_formats_and_the_mapping_right(): void
+    {
+        $this->world(); $mgr = $this->makeUser('MANAGER'); $va = $this->makeUser('VA'); $p = $this->file(['2026-11-03,R-1,Thing,A,B,1 Street,Town,1,5.00,S1']);
+        $own = C::saveFormat('Owner format', self::MAP, $this->owner); $this->assertTrue(collect($own['formats'])->firstWhere('name', 'Owner format')['approved']);
+        $this->actingAs($mgr); $m = C::saveFormat('Manager format', self::MAP, $mgr); $this->assertStringContainsString('others see it once it is approved', $m['message']);
+        $this->assertSame(['Manager format' => false, 'Owner format' => true], collect($m['formats'])->pluck('approved', 'name')->all(), 'the saver sees the own format as waiting');
+        // the rule: VA opens the wizard → sees only approved formats, no "Map CSV columns" save option
+        $this->actingAs($va); $w = $this->up($p, $va);
+        $this->assertSame([['Owner format'], false, false, 'They will appear once they are ready by the Super Admin'], [array_column($w['formats'], 'name'), $w['can_map'], $w['can_approve'], $w['map_note']]);
+        try { C::rows($w['token'], ['format' => $m['id']], $va); $this->fail(); } catch (\InvalidArgumentException $e) { $this->assertSame('Format not found.', $e->getMessage()); }
+        $this->postJson('/api/csv-convert/format/' . $m['id'] . '/approve', ['approved' => true])->assertStatus(403);
+        try { C::saveFormat('Owner format', self::MAP, $mgr); $this->fail(); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('already exists', $e->getMessage()); }
+        // the Owner approves → everyone can pick it; takes it back → gone again
+        $this->actingAs($this->owner)->postJson('/api/csv-convert/format/' . $m['id'] . '/approve', ['approved' => true])->assertOk()->assertJsonPath('message', 'Format "Manager format" approved – everyone can pick it now.');
+        $this->assertSame(['Manager format', 'Owner format'], array_column(C::formats($va), 'name')); $this->assertNotEmpty(C::rows($w['token'], ['format' => $m['id']], $va));
+        C::approveFormat($m['id'], false, $this->owner); $this->assertSame(['Owner format'], array_column(C::formats($va), 'name'));
+        // update mode: the column to match and the column to change must be different
+        $q = $this->file(['U-1,S1,TRK1'], 'Order,SKU,Tracking'); $t = $this->up($q)['token'];
+        try { C::update($t, $this->shop, ['key' => ['order_no' => 0], 'fields' => ['tracking_no' => 0]], $this->owner, false); $this->fail(); } catch (\InvalidArgumentException $e) { $this->assertSame('The column to match and the column to change must be different (Tracking number).', $e->getMessage()); }
     }
 }

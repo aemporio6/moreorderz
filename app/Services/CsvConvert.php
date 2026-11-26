@@ -30,7 +30,7 @@ class CsvConvert
         $token = $u->id . '_' . date('YmdHis') . '_' . bin2hex(random_bytes(4)); copy($path, self::dir() . "/$token.csv"); file_put_contents(self::dir() . "/$token.json", json_encode(['user' => $u->id, 'ent' => Context::ent(), 'name' => $name]));
         $samples = []; foreach ($csv['headers'] as $i => $h) { $samples[] = ['letter' => self::letter($i), 'header' => $h, 'sample' => mb_substr((string) ($csv['rows'][0][1][$h] ?? ''), 0, 60)]; }
         return ['token' => $token, 'file' => $name, 'rows' => count($csv['rows']), 'headers' => $csv['headers'], 'samples' => $samples, 'formats' => self::formats($u), 'columns' => self::COLUMNS, 'updatable' => array_map(fn ($x) => $x[0], self::UPDATABLE),
-            'can_map' => Perm::has($u, 'orders.csvFormats'), 'can_delete' => ($u->role_code ?? '') === 'OWNER', 'can_update' => Perm::has($u, 'orders.importUpdate'), 'map_note' => Perm::has($u, 'orders.csvFormats') ? null : 'They will appear once they are ready by the Super Admin'];
+            'can_map' => Perm::has($u, 'orders.csvFormats'), 'can_delete' => Perm::has($u, 'import.mapping.manage'), 'can_approve' => Perm::has($u, 'import.mapping.manage'), 'can_update' => Perm::has($u, 'orders.importUpdate'), 'map_note' => Perm::has($u, 'orders.csvFormats') ? null : 'They will appear once they are ready by the Super Admin'];
     }
 
     public static function letter(int $i): string { $s = ''; $i++; while ($i > 0) { $m = ($i - 1) % 26; $s = chr(65 + $m) . $s; $i = intdiv($i - 1, 26); } return $s; }
@@ -44,8 +44,10 @@ class CsvConvert
 
     public static function formats(?object $u): array
     {
-        return DB::table('csv_generator_history')->where('import_controller_name', 'standard_sheet')->orderBy('import_name')->get()->map(function ($f) { $sys = (array) json_decode((string) $f->system_columns, true); $csv = (array) json_decode((string) $f->csv_columns, true);
-            return ['id' => (int) $f->id, 'name' => $f->import_name, 'map' => array_combine(array_keys($sys) ? $sys : [], $csv ?: []) ?: [], 'letters' => array_map(fn ($c) => is_int($c) ? self::letter($c) : $c, $csv)]; })->all();
+        /* R-D-54: without the right "import.mapping.manage" a person picks from the approved formats (and sees the ones they saved themselves, marked as waiting) */
+        $all = Perm::has($u, 'import.mapping.manage');
+        return DB::table('csv_generator_history')->where('import_controller_name', 'standard_sheet')->when(! $all, fn ($q) => $q->where(fn ($w) => $w->where('f_approved', 1)->orWhere('created_by', (int) ($u->id ?? 0))))->orderBy('import_name')->get()->map(function ($f) { $sys = (array) json_decode((string) $f->system_columns, true); $csv = (array) json_decode((string) $f->csv_columns, true);
+            return ['id' => (int) $f->id, 'name' => $f->import_name, 'approved' => (bool) $f->f_approved, 'map' => array_combine(array_keys($sys) ? $sys : [], $csv ?: []) ?: [], 'letters' => array_map(fn ($c) => is_int($c) ? self::letter($c) : $c, $csv)]; })->all();
     }
 
     /** Save a format by name (Owner / Admin): system columns + CSV column indexes (shown as letters). Every column must be mapped. */
@@ -55,10 +57,12 @@ class CsvConvert
         $e = []; $sys = []; $cols = []; foreach (self::COLUMNS as $k => $lab) { $v = $map[$k] ?? null; if ($v === null || $v === '') { $e[$k] = "Map $lab."; continue; } if ($v !== self::EMPTY && ! preg_match('/^\d+$/', (string) $v)) { $e[$k] = "Map $lab to a column of the file."; continue; } if ($v === self::EMPTY && ! str_starts_with($k, 'address_')) { $e[$k] = "$lab cannot be empty."; continue; } $sys[] = $k; $cols[] = $v === self::EMPTY ? self::EMPTY : (int) $v; }
         if ($e) throw \Illuminate\Validation\ValidationException::withMessages($e);
         $row = ['import_name' => $name, 'system_columns' => json_encode($sys), 'csv_columns' => json_encode($cols), 'import_controller_name' => 'standard_sheet', 'fk_id_account' => (int) ($u->fk_id_account ?? 0), 'created_by' => $u->id, 'created_at' => now()];
+        $ok = Perm::has($u, 'import.mapping.manage'); $row += ['f_approved' => $ok ? 1 : 0, 'approved_by' => $ok ? $u->id : null, 'approved_at' => $ok ? now() : null];      /* R-D-54 a format saved by someone else waits for approval */
         $id = DB::table('csv_generator_history')->where('import_controller_name', 'standard_sheet')->where('import_name', $name)->value('id');
+        if ($id && ! $ok && (int) DB::table('csv_generator_history')->where('id', $id)->value('created_by') !== (int) $u->id) throw new \InvalidArgumentException("A format named \"$name\" already exists – choose another name.");
         if ($id) DB::table('csv_generator_history')->where('id', $id)->update($row); else $id = DB::table('csv_generator_history')->insertGetId($row); Audit::log('csv_generator_history', (int) $id, $id ? 'UPDATE' : 'INSERT', ['name' => $name]);
         $tpl = self::asExportTemplate($name, $u);      /* R-A_SALES-78 the format is also an export template of the sales list (List Standard) */
-        return ['message' => "Format \"$name\" saved" . ($tpl ? ' – also an export template of the sales list.' : '.'), 'id' => (int) $id, 'template_id' => $tpl, 'formats' => self::formats($u)];
+        return ['message' => "Format \"$name\" saved" . ($ok ? '' : ' – others see it once it is approved') . ($tpl ? ' – also an export template of the sales list.' : '.'), 'id' => (int) $id, 'template_id' => $tpl, 'formats' => self::formats($u)];
     }
 
     public const TEMPLATE_PREFIX = 'Standard sheet – ';
@@ -73,9 +77,19 @@ class CsvConvert
 
     public static function deleteFormat(int $id, ?object $u): array
     {
-        if (($u->role_code ?? '') !== 'OWNER') throw new \InvalidArgumentException('Only the Owner can delete a format.');
+        if (! Perm::has($u, 'import.mapping.manage')) throw new \InvalidArgumentException('Only the Owner can delete a format.');
         $f = DB::table('csv_generator_history')->where('id', $id)->where('import_controller_name', 'standard_sheet')->first() ?? throw new \InvalidArgumentException('Format not found.'); DB::table('csv_generator_history')->where('id', $id)->delete(); Audit::log('csv_generator_history', $id, 'DELETE', ['name' => $f->import_name]); DB::table('mo_export_templates')->where('list_key', 'sale_line')->where('name', self::TEMPLATE_PREFIX . $f->import_name)->delete();
         return ['message' => "Format \"{$f->import_name}\" deleted.", 'formats' => self::formats($u)];
+    }
+
+    /** R-D-54 approve / share a saved format, or take the approval back. */
+    public static function approveFormat(int $id, bool $approved, ?object $u): array
+    {
+        Perm::need($u, 'import.mapping.manage');
+        $f = DB::table('csv_generator_history')->where('id', $id)->where('import_controller_name', 'standard_sheet')->first() ?? throw new \InvalidArgumentException('Format not found.');
+        DB::table('csv_generator_history')->where('id', $id)->update(['f_approved' => $approved ? 1 : 0, 'approved_by' => $approved ? $u->id : null, 'approved_at' => $approved ? now() : null]);
+        Audit::log('csv_generator_history', $id, $approved ? 'APPROVE' : 'REJECT', ['f_approved' => [(int) $f->f_approved, $approved ? 1 : 0]], $f->import_name);
+        return ['message' => "Format \"{$f->import_name}\" " . ($approved ? 'approved – everyone can pick it now.' : 'is no longer shared.'), 'formats' => self::formats($u)];
     }
 
     private static function mapOf(array $o, ?object $u): array
@@ -131,6 +145,7 @@ class CsvConvert
         $col = fn ($v) => $v === null || $v === '' ? null : ($h[(int) $v] ?? throw new \InvalidArgumentException('A mapped column is not in this file.'));
         $kOrder = $col($o['key']['order_no'] ?? null) ?? throw new \InvalidArgumentException('Map the Order number column (the key).'); $kSku = $col($o['key']['sku'] ?? null);
         $fields = []; foreach ((array) ($o['fields'] ?? []) as $f => $c) if (isset(self::UPDATABLE[$f]) && ($c = $col($c))) $fields[$f] = $c; if (! $fields) throw new \InvalidArgumentException('Map at least one column to change.');
+        foreach ($fields as $f => $c) if ($c === $kOrder || ($kSku !== null && $c === $kSku)) throw new \InvalidArgumentException('The column to match and the column to change must be different (' . self::UPDATABLE[$f][0] . ').');      /* R-D-54 */
         $changes = []; $refused = []; $notFound = []; $same = 0;
         foreach ($meta['csv']['rows'] as [$ln, $r]) {
             $no = trim((string) ($r[$kOrder] ?? '')); if ($no === '') continue; $sku = $kSku ? trim((string) ($r[$kSku] ?? '')) : '';

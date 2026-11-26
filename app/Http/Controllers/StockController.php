@@ -81,6 +81,11 @@ class StockController extends Controller
     public function legacyListingsApply(Request $r) { return $this->wh(fn () => \App\Services\LegacyListings::run(true, $r->user())); }
     public function legacyListingsUndo(Request $r, int $job) { return $this->wh(fn () => \App\Services\LegacyListings::undo($job, $r->user())); }
 
+    /** R-D-51 products bulk upload, old 34-column layout. */
+    public function oldBulkStage(Request $r) { return $this->wh(fn () => \App\Services\OldBulkProducts::stage((int) Context::ent(), $r->hasFile('file') ? $r->file('file')->getClientOriginalName() : null, $r->hasFile('file') ? (string) file_get_contents($r->file('file')->getRealPath()) : null, $r->user())); }
+    public function oldBulkConfirm(Request $r, int $job) { return $this->wh(fn () => \App\Services\OldBulkProducts::confirm((int) Context::ent(), $job, $r->user())); }
+    public function oldBulkUndo(Request $r, int $job) { return $this->wh(fn () => \App\Services\OldBulkProducts::undo((int) Context::ent(), $job, $r->user())); }
+
     public function familyUndo(Request $r, int $job) { return $this->wh(fn () => \App\Services\ProductImports::familyUndo($job, $r->user())); }
     public function stagedMeta(Request $r) { return \App\Services\ProductImports::stagedMeta((int) Context::ent(), $r->user()); }
     public function stagedClear(Request $r) { \App\Services\Perm::need($r->user(), 'stock.CHANGE'); return \App\Services\ProductImports::stagedClear($r->user()); }

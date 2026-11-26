@@ -252,6 +252,9 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('product-imports/legacy-listings', [StockController::class, 'legacyListings']);      // R-D-60 (dry run, writes nothing)
         Route::post('product-imports/legacy-listings', [StockController::class, 'legacyListingsApply']);
         Route::post('product-imports/legacy-listings/undo/{job}', [StockController::class, 'legacyListingsUndo'])->whereNumber('job');
+        Route::post('product-imports/old-bulk', [StockController::class, 'oldBulkStage']);      // R-D-51 (preview – saves nothing but the person's staging)
+        Route::post('product-imports/old-bulk/{job}/confirm', [StockController::class, 'oldBulkConfirm'])->whereNumber('job');
+        Route::post('product-imports/old-bulk/undo/{job}', [StockController::class, 'oldBulkUndo'])->whereNumber('job');
         Route::get('product-imports/staged/meta', [StockController::class, 'stagedMeta']);      // R-D-53
         Route::post('product-imports/staged/clear', [StockController::class, 'stagedClear']);
         Route::post('product-imports/staged', [StockController::class, 'stagedStage']);
@@ -509,6 +512,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('csv-convert', [OrdersController::class, 'csvConvertUpload']);
         Route::post('csv-convert/format', [OrdersController::class, 'csvConvertFormat']);
         Route::post('csv-convert/format/{id}/delete', [OrdersController::class, 'csvConvertFormatDelete'])->whereNumber('id');
+        Route::post('csv-convert/format/{id}/approve', [OrdersController::class, 'csvConvertFormatApprove'])->whereNumber('id');      // R-D-54
         Route::post('csv-convert/preview', [OrdersController::class, 'csvConvertPreview']);
         Route::post('csv-convert/download', [OrdersController::class, 'csvConvertDownload']);
         Route::post('csv-convert/queue', [OrdersController::class, 'csvConvertQueue']);
