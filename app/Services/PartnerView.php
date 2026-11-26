@@ -40,6 +40,21 @@ class PartnerView
         return ['rows' => $rows, 'base' => Fx::base($ent), 'own' => $only !== null];
     }
 
+    /**
+     * The investor's name. The old tool's investor number is a company (Companies House) – mapped to its company party (InvestorParties) –
+     * so: the mapped company party with its directors, else the Companies House company, else the investor party, else the person.
+     */
+    public static function name(int $acc): string
+    {
+        $party = (int) DB::table('t_product_investors')->where('fk_id_account', $acc)->whereNotNull('fk_id_party')->value('fk_id_party');
+        $co = $party ? DB::table('t_party_profile')->where('fk_id_account', $party)->value('company_name') : null;
+        $co ??= DB::table('cat_company_house')->where('id', $acc)->value('company_name');
+        if ($co) { $d = $party ? DB::table('t_party_directors as d')->leftJoin('t_account as p', 'p.id', '=', 'd.fk_id_director')->where('d.fk_id_party', $party)->orderBy('d.position')->get([DB::raw("TRIM(CONCAT_WS(' ', p.first_name, p.sur_name)) n"), 'd.share_pct'])
+                ->map(fn ($r) => trim($r->n . ($r->share_pct !== null ? ' ' . rtrim(rtrim(number_format((float) $r->share_pct, 2, '.', ''), '0'), '.') . '%' : '')))->filter()->implode(', ') : '';
+            return $co . ($d ? ' – ' . $d : ''); }
+        return (string) (DB::table('t_inv_parties')->where('fk_id_account', $acc)->value('display_name') ?: PartnerService::name($acc));
+    }
+
     public static function summary(int $ent, int $acc): array
     {
         $mine = InvestorPortal::products($ent, $acc);
@@ -51,7 +66,7 @@ class PartnerView
         $ag = DB::table('fin_investor_agreements')->where('company_id', $ent)->where('investor_id', $acc)->where('status', 'ACTIVE')->get(['scope', 'profit_share_pct', 'capital_amount']);
         $from = now()->subDays(30)->toDateString(); $sold = 0.0; $soldVal = 0.0;
         if ($mine) foreach (DB::table('t_sales')->whereIn('fk_product_id', array_keys($mine))->where('d_order', '>=', $from)->whereIn('status', ['Confirmed', 'Pending'])->groupBy('fk_product_id')->selectRaw('fk_product_id p, SUM(qty) q, SUM(COALESCE(total_amount_gbp,total_amount)) v')->get() as $s) { $sold += (float) $s->q * $mine[(int) $s->p]; $soldVal += (float) $s->v * $mine[(int) $s->p]; }
-        $nm = PartnerService::name($acc); if (str_starts_with($nm, 'Partner ')) $nm = (string) (DB::table('t_inv_parties')->where('fk_id_account', $acc)->value('display_name') ?: $nm);      // the investor's name is on his party when the person record is missing
+        $nm = self::name($acc);
         return ['account' => $acc, 'name' => $nm, 'products' => count($mine), 'units' => $inv['units'], 'fba' => $inv['fba'], 'on_the_way' => $inv['on_the_way'], 'inbound' => $inv['inbound'],
             'stock_value' => $inv['value_raw'], 'stock_cost' => $inv['value_cost'], 'sold30' => round($sold, 1), 'sales30' => round($soldVal, 2),
             'revenue' => round((float) $per->rev, 2), 'profit' => round((float) $per->pbs, 2), 'share' => round((float) $per->sh, 2), 'units_sold' => (int) $per->un, 'capital_recovered' => round((float) $per->cap, 2),

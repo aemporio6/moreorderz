@@ -36,7 +36,7 @@ Updated: 27 Nov 2026, 00:20 (Pakistan time)
    - "His stock in Inventory" opens Inventory filtered to his products
    - a partner login sees only his own account
    Live 27-11 00:35: 12 partners / investors show with their products, stock and shares from the old data.
-   Still to do: 6 of them show only as "Partner N" – the old investor link points to a person who did not come over from the old tool. Fix it once in Products › Investors (map to the right person or party). Then bring in any old investor links that are still missing. Earlier finding: Found 26-11 23:55: on live there are 0 partner agreements, 0 capital entries and 0 withdrawals, and every stock lot shows "Company". The old tool's product ↔ investor links (t_product_investors, 85 lines) were kept only as history. Its partner settings must be read from the old database and turned into agreements, lot owners and opening balances. For every partner:
+   27-11 00:45: the old investor numbers were company numbers. 85 product–investor links are now mapped to their company (Partners › Investor links). Each partner shows as "Company – directors %". The owner confirmed investor 28 = VPOPY LIMITED (B-TEST 1 and 3). Earlier finding: Found 26-11 23:55: on live there are 0 partner agreements, 0 capital entries and 0 withdrawals, and every stock lot shows "Company". The old tool's product ↔ investor links (t_product_investors, 85 lines) were kept only as history. Its partner settings must be read from the old database and turned into agreements, lot owners and opening balances. For every partner:
    - share %
    - profit and loss
    - payments both ways (what he gave and what he took)
