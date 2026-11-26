@@ -98,9 +98,14 @@ class ShareLinks
     {
         $products = DB::table('t_src_po_lines')->where('fk_id_po', $po->id)->where('f_active', 1)->whereNotNull('fk_id_product')->pluck('fk_id_product')->unique()->all();
         if (! $products) return [];
-        return DB::table('product_artwork_files as a')->join('sys_documents as d', 'd.id', '=', 'a.fk_id_document')->whereIn('a.fk_id_product', $products)->where('a.artwork_status', 'APPROVED')->orderBy('a.fk_id_product')->orderByDesc('a.id')
+        // owner 27-11: the products' vault files the supplier needs (artwork, dielines, carton marks, FNSKU / barcode labels) are offered too – id 900000000 + the vault row
+        $vault = \Illuminate\Support\Facades\Schema::hasTable('product_assets') ? DB::table('product_assets as a')->join('sys_documents as d', 'd.id', '=', 'a.fk_id_document')->join('t_product_vendors as p', 'p.id', '=', 'a.fk_id_product')
+            ->whereIn('a.fk_id_product', $products)->whereIn('a.kind', ['ARTWORK', 'DIELINE', 'CARTON_MARK', 'LABEL_FNSKU', 'BARCODE'])->where('d.status', 'ACTIVE')->orderBy('a.fk_id_product')->orderBy('a.sort_no')
+            ->get(['a.id', 'a.kind', 'p.SKU_VENDOR', 'd.title', 'd.orig_name', 'd.stored_name', 'd.drive_url', 'd.mime'])
+            ->map(fn ($r) => ['id' => 900000000 + (int) $r->id, 'name' => $r->SKU_VENDOR . ' · ' . ($r->orig_name ?: $r->title), 'kind' => ProductVault::KINDS[$r->kind] ?? $r->kind, 'stored' => $r->stored_name, 'orig' => $r->orig_name, 'mime' => $r->mime, 'drive_url' => str_starts_with((string) $r->drive_url, 'http') ? $r->drive_url : null])->all() : [];
+        return array_merge($vault, DB::table('product_artwork_files as a')->join('sys_documents as d', 'd.id', '=', 'a.fk_id_document')->whereIn('a.fk_id_product', $products)->where('a.artwork_status', 'APPROVED')->orderBy('a.fk_id_product')->orderByDesc('a.id')
             ->get(['a.id', 'a.artwork_kind', 'a.version_no', 'd.title', 'd.orig_name', 'd.stored_name', 'd.drive_url', 'd.mime'])
-            ->map(fn ($r) => ['id' => (int) $r->id, 'name' => trim(($r->title ?: $r->orig_name ?: 'Artwork') . ' v' . $r->version_no), 'kind' => $r->artwork_kind, 'stored' => $r->stored_name, 'orig' => $r->orig_name, 'mime' => $r->mime, 'drive_url' => $r->drive_url])->all();
+            ->map(fn ($r) => ['id' => (int) $r->id, 'name' => trim(($r->title ?: $r->orig_name ?: 'Artwork') . ' v' . $r->version_no), 'kind' => $r->artwork_kind, 'stored' => $r->stored_name, 'orig' => $r->orig_name, 'mime' => $r->mime, 'drive_url' => $r->drive_url])->all());
     }
 
     /** One action of the link's own purpose. Anything else is refused. */

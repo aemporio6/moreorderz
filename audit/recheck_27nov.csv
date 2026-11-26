@@ -29,3 +29,6 @@ MR-0305,BUILT,function BuyingService::payOrAsk,"27-11 recheck: supplier payments
 MR-0807,BUILT,class StepFormulas,"27-11 recheck: live money formulas of the step forms recomputed on the server on every save (GRN, production, QC, transfers, customs, PO lines)"
 MR-0295,BUILT,form:t_src_forwarders,"27-11 recheck: forwarder list (code, name, contact, country, services) – the one source of every forwarder field (shipments, freight, freight costs, cycles, quick buy, old entry, ICC rates)"
 MR-0314,BUILT,form:t_src_shipments,"27-11 recheck: shipments with lines and the forwarder from the forwarder list; cartons / CBM / weight from the PO's packing"
+MR-0243,BUILT,function SaleLines::bulkPreview,"27-11 recheck: bulk delete of a shop's Pending sales between two dates with preview (lines, batches, left alone), reason, and a second person's approval above the limit"
+MR-0062,BUILT,class ShareLinks,"27-11: supplier link for a PO (confirm, photos, ship date, artwork); the artwork list now also has the products' vault artwork, dielines, carton marks and FNSKU / barcode labels"
+MR-0288,BUILT,class AllocationPlan,"27-11 recheck: allocation plan – incoming per location by shipment ETA, a proposed transfer per allocation after a GRN with task, confirm moves the stock, dismiss with reason; the ICC counts the same open PO units for the company as a whole"

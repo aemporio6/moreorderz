@@ -60,4 +60,21 @@ class ProductVaultTest extends TestCase
         $r2 = $this->post('/api/intake', ['files' => [UploadedFile::fake()->createWithContent('box design.ai', '%!PS-Adobe vector')], 'ctx_entity' => $best['entity'], 'ctx_id' => $p])->assertOk()->json('items.0');
         $this->assertSame(['vault', 'ARTWORK', 100], [$r2['proposals'][0]['action'], $r2['proposals'][0]['kind'], $r2['proposals'][0]['score']]);
     }
+
+    /** A vault picture has a public signed link (for a marketplace listing); labels / artwork never; a wrong signature or a removed file ends it. */
+    public function test_public_link_of_a_vault_picture(): void
+    {
+        Storage::fake('local'); $this->actingAs($this->owner); Context::set(1, $this->owner->id);
+        $p = $this->f('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'PUB-1', 'product_name_vendor' => 'Lamp', 'stock' => 0, 'f_active' => 1, 'e_product_type' => 'pool']);
+        Storage::disk('local')->put('intake/x/main.jpg', 'JPEGDATA'); Storage::disk('local')->put('intake/x/art.pdf', 'PDF');
+        $d1 = $this->f('sys_documents', ['fk_id_ent' => 1, 'doc_no' => 'D-P1', 'title' => 'main', 'orig_name' => 'main.jpg', 'stored_name' => 'intake/x/main.jpg', 'mime' => 'image/jpeg', 'status' => 'ACTIVE']);
+        $d2 = $this->f('sys_documents', ['fk_id_ent' => 1, 'doc_no' => 'D-P2', 'title' => 'art', 'orig_name' => 'art.pdf', 'stored_name' => 'intake/x/art.pdf', 'mime' => 'application/pdf', 'status' => 'ACTIVE']);
+        $a1 = ProductVault::put(1, $p, $d1, 'IMAGE_MAIN'); $a2 = ProductVault::put(1, $p, $d2, 'ARTWORK');
+        $files = collect($this->getJson("/api/vault/$p")->json('places'))->flatMap(fn ($x) => $x['files']);
+        $url = $files->firstWhere('id', $a1)['public']; $this->assertNotNull($url); $this->assertNull($files->firstWhere('id', $a2)['public'], 'artwork is never public');
+        auth()->logout(); $path = parse_url($url, PHP_URL_PATH);
+        $this->assertSame('JPEGDATA', $this->get($path)->assertOk()->getContent());
+        $this->get(preg_replace('/-[a-f0-9]{32}\./', '-' . str_repeat('0', 32) . '.', $path))->assertNotFound();
+        DB::table('product_assets')->where('id', $a1)->delete(); $this->get($path)->assertNotFound();
+    }
 }

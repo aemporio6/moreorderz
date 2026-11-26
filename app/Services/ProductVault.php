@@ -109,7 +109,8 @@ class ProductVault
         $places = [];
         foreach (self::KINDS as $k => $label) $places[$k] = ['kind' => $k, 'label' => $label, 'files' => []];
         foreach ($files as $f) $places[$f->kind]['files'][] = ['id' => (int) $f->id, 'doc' => (int) $f->doc, 'doc_no' => $f->doc_no, 'name' => $f->orig_name ?: $f->title, 'url' => $f->drive_url, 'main' => (bool) $f->f_main,
-            'image' => str_starts_with((string) $f->mime, 'image/') || preg_match('/\.(jpe?g|png|webp|gif)$/i', (string) $f->orig_name), 'marketplace' => $f->marketplace, 'marketplace_id' => $f->fk_id_marketplace ? (int) $f->fk_id_marketplace : null, 'at' => substr((string) $f->created_at, 0, 10)];
+            'image' => str_starts_with((string) $f->mime, 'image/') || preg_match('/\.(jpe?g|png|webp|gif)$/i', (string) $f->orig_name), 'marketplace' => $f->marketplace, 'marketplace_id' => $f->fk_id_marketplace ? (int) $f->fk_id_marketplace : null, 'at' => substr((string) $f->created_at, 0, 10),
+            'public' => in_array($f->kind, self::PUBLIC, true) && str_starts_with((string) $f->mime, 'image/') ? self::publicUrl((int) $f->id, (string) $f->orig_name) : null];
         if ($img = self::imageUrl($p->product_img)) array_unshift($places['IMAGE_MAIN']['files'], ['id' => null, 'doc' => null, 'name' => 'Image on the product', 'url' => $img, 'main' => ! $places['IMAGE_MAIN']['files'], 'image' => true, 'marketplace' => null, 'kept_on_product' => true]);
         if (\Illuminate\Support\Facades\Schema::hasTable('t_product_vendors_images')) foreach (DB::table('t_product_vendors_images as i')->leftJoin('cat_marketplaces as m', 'm.id', '=', 'i.fk_id_marketplace')->where('i.fk_id_product_vendors', $pid)->orderBy('i.sort_no')->get(['i.image_url', 'i.f_main', 'm.marketplace_short']) as $i)
             $places[$i->marketplace_short ? 'LISTING' : 'IMAGE']['files'][] = ['id' => null, 'doc' => null, 'name' => basename((string) parse_url((string) $i->image_url, PHP_URL_PATH)) ?: 'image', 'url' => $i->image_url, 'main' => (bool) $i->f_main, 'image' => true, 'marketplace' => $i->marketplace_short, 'kept_on_product' => true];
@@ -129,5 +130,23 @@ class ProductVault
         $need = array_values(array_unique($need, SORT_REGULAR));
         return ['product' => ['id' => (int) $p->id, 'sku' => $p->SKU_VENDOR, 'name' => $p->product_name_vendor], 'places' => array_values($places), 'count' => count($files), 'needed' => $need,
             'kinds' => self::KINDS, 'marketplaces' => $listed->map(fn ($m) => ['id' => (int) $m->id, 'name' => $m->marketplace_short])->all()];
+    }
+
+    /** The places whose pictures may be shown without a login (a marketplace or a designer opens them): pictures only, never labels, artwork or papers. */
+    public const PUBLIC = ['IMAGE_MAIN', 'IMAGE', 'LIFESTYLE', 'LISTING', 'A_PLUS', 'PACKAGING_PHOTO'];
+
+    /** A public link of one vault picture: /v/<id>-<signature>.<ext> – the signature is made with the app key, so it cannot be guessed; taking the file out of the vault ends it. */
+    public static function publicUrl(int $assetId, string $name = ''): string
+    {
+        $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION)); $ext = in_array($ext, self::IMAGE, true) ? $ext : 'jpg';
+        return url('/v/' . $assetId . '-' . substr(hash_hmac('sha256', 'vault:' . $assetId, (string) config('app.key')), 0, 32) . '.' . $ext);
+    }
+
+    /** The file behind a public link, or null (wrong signature, gone, not a picture place, not a picture). */
+    public static function publicFile(int $assetId, string $sig): ?object
+    {
+        if (! hash_equals(substr(hash_hmac('sha256', 'vault:' . $assetId, (string) config('app.key')), 0, 32), $sig)) return null;
+        $f = DB::table('product_assets as a')->join('sys_documents as d', 'd.id', '=', 'a.fk_id_document')->where('a.id', $assetId)->where('d.status', 'ACTIVE')->whereIn('a.kind', self::PUBLIC)->first(['d.stored_name', 'd.mime', 'd.orig_name']);
+        return $f && str_starts_with((string) $f->mime, 'image/') && $f->stored_name ? $f : null;
     }
 }

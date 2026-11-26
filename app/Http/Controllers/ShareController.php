@@ -81,6 +81,13 @@ class ShareController extends Controller
         return $this->shell('Send your documents', $b);
     }
 
+    /** Owner 27-11: one vault picture without a login (a marketplace listing or a designer opens it); pictures only, signed link. */
+    public function vaultPicture(Request $r, int $id, string $sig)
+    {
+        $f = \App\Services\ProductVault::publicFile($id, $sig); abort_unless($f && Storage::disk('local')->exists($f->stored_name), 404);
+        return response(Storage::disk('local')->get($f->stored_name), 200, ['Content-Type' => $f->mime, 'Cache-Control' => 'public, max-age=86400', 'X-Content-Type-Options' => 'nosniff', 'Content-Security-Policy' => "default-src 'none'"]);
+    }
+
     public function file(Request $r, string $token, int $id)
     {
         $l = ShareLinks::resolve($token); if (! $l || $l->entity_type !== 'PO') return $this->gone();

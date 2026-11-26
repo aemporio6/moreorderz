@@ -86,6 +86,12 @@ class ShareLinksTest extends TestCase
         $l4 = $this->postJson("/api/po/$po/share-links", ['purpose' => 'ARTWORK_DOWNLOAD'])->json(); $t4 = substr($l4['url'], strrpos($l4['url'], '/') + 1); auth()->logout();
         $h = $this->get("/s/$t4")->assertOk()->getContent(); $this->assertStringContainsString('Mug label v2', $h); $this->assertStringNotContainsString('Mug label draft', $h);
         $this->assertSame('PDF-A', $this->get("/s/$t4/file/$ok")->assertOk()->getContent()); $this->get("/s/$t4/file/$draft")->assertStatus(404);
+        // owner 27-11: the product's vault artwork / carton marks are offered too; its pictures never
+        $d3 = $this->f('sys_documents', ['fk_id_ent' => 1, 'doc_no' => 'D-A3', 'title' => 'Carton mark', 'orig_name' => 'mark.pdf', 'stored_name' => 'artwork/mark.pdf', 'mime' => 'application/pdf', 'status' => 'ACTIVE']); Storage::disk('local')->put('artwork/mark.pdf', 'PDF-M');
+        $d4 = $this->f('sys_documents', ['fk_id_ent' => 1, 'doc_no' => 'D-A4', 'title' => 'Lifestyle', 'orig_name' => 'life.jpg', 'stored_name' => 'artwork/life.jpg', 'mime' => 'image/jpeg', 'status' => 'ACTIVE']);
+        $va = \App\Services\ProductVault::put(1, $prod, $d3, 'CARTON_MARK'); \App\Services\ProductVault::put(1, $prod, $d4, 'LIFESTYLE');
+        $h = $this->get("/s/$t4")->assertOk()->getContent(); $this->assertStringContainsString('mark.pdf', $h); $this->assertStringNotContainsString('life.jpg', $h);
+        $this->assertSame('PDF-M', $this->get('/s/' . $t4 . '/file/' . (900000000 + $va))->assertOk()->getContent());
         DB::table('sys_share_links')->where('id', $l4['id'])->update(['expires_at' => now()->subMinute()]);
         $this->get("/s/$t4")->assertStatus(410); $this->get("/s/$t4/file/$ok")->assertStatus(410);
         $this->actingAs($this->owner); $rows = collect($this->getJson("/api/po/$po/share-links")->assertOk()->json('rows'))->keyBy('id');

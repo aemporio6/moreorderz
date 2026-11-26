@@ -30,6 +30,7 @@ Route::get('/print-agent/next', [\App\Http\Controllers\PrintController::class, '
 Route::post('/print-agent/{id}/done', [\App\Http\Controllers\PrintController::class, 'agentDone'])->whereNumber('id')->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class])->middleware('throttle:240,1');
 // WhatsApp webhook: no sign-in, no CSRF; only bodies signed with the app secret of a WhatsApp connection are read
 // R-B_SOURCING-64 supplier link without login: one record, one purpose; unknown / expired / revoked links answer 410
+Route::get('/v/{id}-{sig}.{ext}', [\App\Http\Controllers\ShareController::class, 'vaultPicture'])->where(['id' => '[0-9]+', 'sig' => '[a-f0-9]{32}', 'ext' => '[a-z]{3,4}'])->middleware('throttle:120,1');      // owner 27-11 a vault picture without a login
 Route::get('/s/{token}', [\App\Http\Controllers\ShareController::class, 'page'])->where('token', '[a-f0-9]{64}')->middleware('throttle:60,1');
 Route::get('/s/{token}/file/{id}', [\App\Http\Controllers\ShareController::class, 'file'])->where('token', '[a-f0-9]{64}')->whereNumber('id')->middleware('throttle:60,1');
 Route::post('/s/{token}/{action}', [\App\Http\Controllers\ShareController::class, 'act'])->where('token', '[a-f0-9]{64}')->whereIn('action', ['accept', 'change', 'photos', 'date', 'upload'])->middleware('throttle:20,1');

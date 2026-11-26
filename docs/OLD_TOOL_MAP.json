@@ -653,17 +653,11 @@
 "functions": 1,
 "lines": 21,
 "status": {
-"BUILT": 17,
-"PARTIAL": 3,
+"BUILT": 18,
+"PARTIAL": 2,
 "NOT_APPLICABLE": 1
 },
 "open": [
-{
-"reg": "MR-0062",
-"status": "PARTIAL",
-"text": "Supplier link (no login): PO confirm, production photo, ship date; artwork / carton marks download",
-"note": "R-B_SOURCING-64: supplier link without login for a PO: right src.share_link, purposes PO_CONFIRM / PRODUCTION_PHOTO / SHIP_DATE / ARTWORK_DOWNLOAD, long random value shown once and only its SHA-256 ke"
-},
 {
 "reg": "MR-0089",
 "status": "PARTIAL",
@@ -1099,18 +1093,10 @@
 "functions": 6,
 "lines": 19,
 "status": {
-"PARTIAL": 1,
-"BUILT": 17,
+"BUILT": 18,
 "NOT_APPLICABLE": 1
 },
-"open": [
-{
-"reg": "MR-0243",
-"status": "PARTIAL",
-"text": "T_sale_order (23 functions) comes back as: Gen 2 listing, manual add/edit, refund, bulk delete, reports. Fix: BUG: no auth on bulkDeleteSale, refundSale, updateSale; SQL injection…. Improved: Freeze as read-only history;",
-"note": "sales listing, edit, refund, delete line / month with Undo, annual + detailed reports built; manual order entry is the New order form; bulk delete with preview / approval not built"
-}
-]
+"open": []
 },
 {
 "controller": "T_sale_order_reminders",
@@ -1168,17 +1154,9 @@
 "functions": 5,
 "lines": 2,
 "status": {
-"PARTIAL": 1,
-"BUILT": 1
+"BUILT": 2
 },
-"open": [
-{
-"reg": "MR-0288",
-"status": "PARTIAL",
-"text": "T_src_allocation (6 functions) comes back as: Destination allocation per PO/product. Fix: Record-only, moves no qty; same CRUD defects. Improved: Allocation drives stock plan; Standard",
-"note": "R-F_SETUP-47: allocations: incoming per location = planned - received of shipped POs by shipment ETA (PO total only when no allocation), after a GRN one proposed transfer per allocation to another loc"
-}
-]
+"open": []
 },
 {
 "controller": "T_src_carton",
