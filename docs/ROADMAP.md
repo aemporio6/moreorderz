@@ -35,7 +35,8 @@ Updated: 27 Nov 2026, 00:20 (Pakistan time)
    - sold in 30 days, settled months (revenue, profit, his share), invoices and payments, partner ledger
    - "His stock in Inventory" opens Inventory filtered to his products
    - a partner login sees only his own account
-   Still to do: bring the old investor links from the old tool into live where they are missing. The new screens then fill by themselves. Earlier finding: Found 26-11 23:55: on live there are 0 partner agreements, 0 capital entries and 0 withdrawals, and every stock lot shows "Company". The old tool's product ↔ investor links (t_product_investors, 85 lines) were kept only as history. Its partner settings must be read from the old database and turned into agreements, lot owners and opening balances. For every partner:
+   Live 27-11 00:35: 12 partners / investors show with their products, stock and shares from the old data.
+   Still to do: 6 of them show only as "Partner N" – the old investor link points to a person who did not come over from the old tool. Fix it once in Products › Investors (map to the right person or party). Then bring in any old investor links that are still missing. Earlier finding: Found 26-11 23:55: on live there are 0 partner agreements, 0 capital entries and 0 withdrawals, and every stock lot shows "Company". The old tool's product ↔ investor links (t_product_investors, 85 lines) were kept only as history. Its partner settings must be read from the old database and turned into agreements, lot owners and opening balances. For every partner:
    - share %
    - profit and loss
    - payments both ways (what he gave and what he took)
