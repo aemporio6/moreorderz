@@ -26,7 +26,7 @@ class SimpleWordsTest extends TestCase
         $this->actingAs($this->owner); $b = $this->getJson('/api/boot')->assertOk()->json();
         $this->assertSame(W::MAP, $b['words']);
         $css = (string) file_get_contents(public_path('app/design.css'));
-        $this->assertStringContainsString('font-family:"Plus Jakarta Sans"', $css); $this->assertStringNotContainsString('fonts.googleapis', $css . file_get_contents(resource_path('views/app.blade.php')));
-        preg_match_all('#url\("(/app/fonts/[^"]+)"\)#', $css, $m); $this->assertCount(2, $m[1]); foreach ($m[1] as $f) $this->assertFileExists(public_path(ltrim($f, '/')), 'the font file is inside the app – no outside link');
+        foreach (['font-family:"Inter"', 'font-family:"Manrope"', '--font:"Inter"'] as $k) $this->assertStringContainsString($k, $css);      // owner 26-11 21:02: Inter for text, Manrope for headings and the menu $this->assertStringNotContainsString('fonts.googleapis', $css . file_get_contents(resource_path('views/app.blade.php')));
+        preg_match_all('#url\("(/app/fonts/[^"]+)"\)#', $css, $m); $this->assertCount(6, $m[1]); foreach ($m[1] as $f) $this->assertFileExists(public_path(ltrim($f, '/')), 'the font file is inside the app – no outside link');
     }
 }

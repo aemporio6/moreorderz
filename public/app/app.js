@@ -292,15 +292,15 @@
       (one ? g.secs[0].items.map(i => itemLink(i, cur)).join('')
         : g.secs.map((s, k) => `<div class="mn-s ${s.items.some(i => i.id === cur) ? 'cur' : ''}" data-k="${k}" tabindex="0"><span><b>${esc(s.name)}</b><small>${esc(s.about || s.items.length + ' screens')}</small></span><span class="mn-n">${s.items.length}</span><span class="mn-tri">▸</span></div>`).join('')) + `</div></div>`;
     document.body.appendChild(FLY); const p1 = FLY.firstChild; flyPlace(p1, row, row.getBoundingClientRect().right + 8);
-    FLY.onmouseenter = flyKeep; FLY.onmouseleave = flyLater; FLY.addEventListener('click', e => { if (e.target.closest('a.mn-i') && !e.ctrlKey && !e.metaKey && !e.shiftKey) flyClose(); });
+    FLY.onmouseenter = flyKeep; FLY.addEventListener('click', e => { if (e.target.closest('.mn-tri')) return; if (e.target.closest('a.mn-i') && !e.ctrlKey && !e.metaKey && !e.shiftKey) flyClose(); });
     const sub = el => { const s = g.secs[+el.dataset.k]; $$('.mn-s.on', FLY).forEach(x => x.classList.remove('on')); el.classList.add('on'); let p2 = $('.mn-p2', FLY); if (p2) p2.remove(); const p3x = $('.mn-p3', FLY); if (p3x) p3x.remove();
       p2 = document.createElement('div'); p2.className = 'mn-p mn-p2'; p2.innerHTML = `<div class="mn-ph"><b>${esc(s.name)}</b><small>${esc(s.about || '')}</small></div><div class="mn-pb">${s.items.map(i => itemLink(i, cur)).join('')}</div>`;
       FLY.appendChild(p2); flyPlace(p2, el, p1.getBoundingClientRect().right + 8); };
-    $$('.mn-s', FLY).forEach(el => { el.onmouseenter = () => sub(el); el.onclick = () => sub(el); el.onkeydown = e => { if (e.key === 'Enter' || e.key === 'ArrowRight') { sub(el); const a = $('.mn-p2 a', FLY); if (a) a.focus(); } }; });
+    $$('.mn-s', FLY).forEach(el => { el.onclick = () => sub(el); el.onkeydown = e => { if (e.key === 'Enter' || e.key === 'ArrowRight') { sub(el); const a = $('.mn-p2 a', FLY); if (a) a.focus(); } }; });
     const first = $('.mn-s.cur', FLY) || null; if (first) sub(first);
     /* the next window of a screen that has several lists (▸): hover the screen → its lists beside it; the window closes when the mouse leaves */
     const items = g.secs.flatMap(s => s.items);
-    FLY.addEventListener('mouseover', e => { const a = e.target.closest('a.mn-i'); if (!a || !FLY.contains(a) || a.closest('.mn-p3')) return; const panel = a.closest('.mn-p'), it = items.find(x => String(x.id) === a.dataset.iid);
+    FLY.addEventListener('click', e => { const t = e.target.closest('.mn-tri'); const a = t && t.closest('a.mn-i'); if (!a || !FLY.contains(a) || a.closest('.mn-p3')) return; e.preventDefault(); e.stopPropagation(); const panel = a.closest('.mn-p'), it = items.find(x => String(x.id) === a.dataset.iid);      /* a screen with several lists: its ▸ opens them (the name still opens the screen) */
       const old = $('.mn-p3', FLY); if (old && old.dataset.iid === a.dataset.iid) return; if (old) old.remove(); $$('a.mn-i.on', FLY).forEach(x => x.classList.remove('on'));
       if (!it || (it.subs || []).length < 2) return; a.classList.add('on');
       const p3 = document.createElement('div'); p3.className = 'mn-p mn-p3'; p3.dataset.iid = a.dataset.iid;
@@ -316,9 +316,9 @@
     $('#side').classList.add('mn'); flyClose();
     $('#side').innerHTML = `<div class="mn-label">Menu</div>` + G.map((g, k) => `<div class="mn-g ${g.secs.some(s => s.items.some(i => i.id === cur)) ? 'cur' : ''}" data-g="${k}" tabindex="0" role="button" aria-haspopup="true">
         <span class="mn-ic">${ic(g.icon || 'file')}</span><span class="mn-t"><b>${esc(g.name)}</b><small>${esc(g.about || '')}</small></span><span class="mn-tri">▸</span></div>`).join('') +
-      `<div class="mn-foot small faint">Point at a group to open it · right-click a screen to open it in a new tab</div>`;
+      `<div class="mn-foot small faint">Click a group to open it · ▸ shows more · right-click a screen to open it in a new tab</div>`;
     $$('#side .mn-g').forEach(row => { const g = G[+row.dataset.g];
-      row.onmouseenter = () => flyOpen(row, g); row.onmouseleave = flyLater; row.onclick = () => flyOpen(row, g);      /* a click keeps the window open (hover already opened it); it closes when the mouse leaves or with Esc */
+      row.onclick = () => { if (FLY && FLY.dataset.g === row.dataset.g) flyClose(); else flyOpen(row, g); };      /* owner 26-11 21:02: opens on a click only (not when the mouse passes); a second click, a click outside or Esc closes it */
       row.onkeydown = e => { if (e.key === 'Enter' || e.key === 'ArrowRight') { flyOpen(row, g); const f = $('.mn-s, a.mn-i', FLY); if (f) f.focus(); } }; });
   }
   function drawSideFold() {
@@ -3937,6 +3937,9 @@
       <div class="kpis"><div class="card kpi ${d.on ? 'done' : 'warn'}"><div class="bar"></div><div class="lbl">Link</div><div class="val">${d.on ? 'On' : 'Off'}</div></div>
         <div class="card kpi"><div class="bar"></div><div class="lbl">Link key</div><div class="val" style="font-size:18px">${d.key ? '…' + esc(d.key.key_tail) : 'none'}</div><div class="small muted">${d.key ? 'made ' + esc(String(d.key.created_at).slice(0, 16)) + (d.key.last_used_at ? ' · last used ' + esc(String(d.key.last_used_at).slice(0, 16)) : ' · not used yet') : 'make one below'}</div></div>
         <div class="card kpi ${d.inbox.length ? 'warn' : ''}"><div class="bar"></div><div class="lbl">Waiting for your yes</div><div class="val">${d.inbox.length}</div></div></div>
+      <div class="card" style="margin-bottom:12px;border:1px solid var(--accent-line)"><div class="card-b" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        <button class="btn primary" id="mlOne" style="font-size:16px;padding:12px 22px">${ic('plus')} Connect MY TOOL</button>
+        <div style="flex:1;min-width:240px"><b>One click here, one paste in MY TOOL.</b><div class="small muted">Switches the link on, makes a new key and copies it. Then in MY TOOL › Settings › Link with MoreOrderz: paste the key, press Save and Test connection. The address is filled in for you below.</div></div></div><div id="mlOneOut"></div></div>
       <div class="card" style="margin-bottom:12px"><div class="card-h"><h3>1. Switch and key</h3></div><div class="card-b">
         <label class="chk"><input type="checkbox" id="mlOn" ${d.on ? 'checked' : ''}> Link on (off = nothing goes out, nothing is accepted)</label>
         <label class="chk" style="margin-left:18px"><input type="checkbox" id="mlBank" ${d.bank ? 'checked' : ''}> Accept bank details</label>
@@ -3951,6 +3954,15 @@
     const save = async body => { try { busy(true); await api('mytool-link', { method: 'POST', body }); toast('Saved'); pageMyToolLink(); } catch (e) { toast(e.message, 'err'); } finally { busy(false); } };
     $('#mlOn').onchange = e => save({ on: e.target.checked }); $('#mlBank').onchange = e => save({ bank: e.target.checked });
     $('#mlSave').onclick = () => { const recv = {}, send = {}; $$('[data-recv]').forEach(s => recv[s.dataset.recv] = s.value); $$('[data-send]').forEach(s => send[s.dataset.send] = s.value); save({ recv, send }); };
+    $('#mlOne').onclick = async () => {      /* owner 26-11 21:02: the connection in one click */
+      let x; try { busy(true); await api('mytool-link', { method: 'POST', body: { on: true } }); x = await api('mytool-link/key', { method: 'POST' }); } catch (e) { return toast(e.message, 'err'); } finally { busy(false); }
+      let copied = false; try { await navigator.clipboard.writeText(x.key); copied = true; } catch (e) {}
+      $('#mlOneOut').innerHTML = `<div class="card-b" style="border-top:1px solid var(--line)"><div style="display:grid;gap:8px;max-width:760px">
+        <div><span class="chip done">1</span> <b>Key ${copied ? 'copied' : 'made'}</b> – shown only now${copied ? '' : ' – press Copy'}: <div style="display:flex;gap:6px;margin-top:4px"><input class="input mono" id="mlK1" readonly value="${esc(x.key)}" style="flex:1"><button class="btn" data-cp="mlK1">Copy</button></div></div>
+        <div><span class="chip done">2</span> <b>MoreOrderz address</b>: <div style="display:flex;gap:6px;margin-top:4px"><input class="input mono" id="mlA1" readonly value="${esc(d.address)}" style="flex:1"><button class="btn" data-cp="mlA1">Copy</button></div></div>
+        <div><span class="chip plain">3</span> In <b>MY TOOL</b> › Settings › <b>Link with MoreOrderz</b>: link On · paste the address and the key · <b>Save</b> · <b>Test connection</b>. This page shows "last used" as soon as MY TOOL has reached it.</div></div></div>`;
+      $$('[data-cp]').forEach(bn => bn.onclick = async () => { const i = $('#' + bn.dataset.cp); try { await navigator.clipboard.writeText(i.value); toast('Copied'); } catch (e) { i.select(); } });
+      toast(copied ? 'Connected on this side – the key is copied. Paste it in MY TOOL.' : 'Key made – press Copy, then paste it in MY TOOL.'); };
     $('#mlKey').onclick = async () => { let x; try { x = await api('mytool-link/key', { method: 'POST' }); } catch (e) { return toast(e.message, 'err'); }
       $('#mlShow').innerHTML = `<div class="card" style="margin-top:10px;border-left:3px solid var(--warn)"><div class="card-b"><b>Your link key – copy it now, it is shown only this once:</b><div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap"><input class="input mono" id="mlK" readonly value="${esc(x.key)}" style="flex:1;min-width:260px"><button class="btn" id="mlCopy">Copy</button></div></div></div>`;
       $('#mlCopy').onclick = async () => { try { await navigator.clipboard.writeText($('#mlK').value); toast('Copied'); } catch (e) { $('#mlK').select(); } }; };
