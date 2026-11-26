@@ -453,4 +453,14 @@ class CoreAreaTest extends TestCase
         $this->postJson('/api/prefs/pick', ['defaults' => ['_old-entry:mode' => 'Sea', 'bad key!' => 'x']])->assertOk();
         $this->assertSame(['_old-entry:mode' => 'Sea'], $this->getJson('/api/prefs/pick')->json('list.defaults'));
     }
+
+    /** Owner 26-11 22:52: a central list that is empty on a database fills itself from the register the first time it is used. */
+    public function test_empty_central_list_fills_itself(): void
+    {
+        $this->actingAs($this->owner); \App\Services\Context::set(1, $this->owner->id);
+        $code = (string) substr((string) DB::table('sys_registry')->where('form_key', 'icc')->where('field_name', 'season')->value('source'), 5);
+        $this->assertNotSame('', $code); DB::table('sys_field_options')->where('list_code', $code)->delete(); \App\Services\Registry::forget();
+        $o = $this->getJson('/api/options/icc/season')->assertOk()->json('options');
+        $this->assertGreaterThanOrEqual(3, count($o), 'the values come back from the register'); $this->assertSame(0, \App\Services\Registry::fillList($code), 'only an empty list is filled');
+    }
 }

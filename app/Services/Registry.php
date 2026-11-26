@@ -132,6 +132,21 @@ class Registry
     }
 
     /** Dropdown options of one field: [value, label] pairs. $q narrows by text, $ent keeps to the company. */
+    /**
+     * A central list (sys_field_options) that has no values yet takes them from the fields of the register that use it (options_full) – the
+     * values were in the register, but on a database where the register came in after the list step they never reached the list (live 26-11).
+     * Returns how many values were added.
+     */
+    public static function fillList(string $code): int
+    {
+        if ($code === '' || DB::table('sys_field_options')->where('list_code', $code)->exists()) return 0;
+        $n = 0; $seen = [];
+        foreach (DB::table('sys_registry')->where('source', 'list:' . $code)->whereNotNull('options_full')->where('options_full', '<>', '')->pluck('options_full') as $raw)
+            foreach (json_decode((string) $raw, true) ?: [] as $o) { $v = (string) (is_array($o) ? ($o[0] ?? '') : $o); if ($v === '' || isset($seen[$v])) continue; $seen[$v] = 1;
+                DB::table('sys_field_options')->insert(['list_code' => $code, 'value' => mb_substr($v, 0, 120), 'label' => mb_substr((string) (is_array($o) ? ($o[1] ?? $v) : $v), 0, 120), 'sort' => (++$n) * 10, 'f_active' => 1]); }
+        return $n;
+    }
+
     public static function options(array $f, ?int $ent = null, ?string $q = null, int $limit = 200): array
     {
         $src = (string) $f['source'];
@@ -141,6 +156,7 @@ class Registry
             return array_values(array_map(fn ($x) => is_array($x) ? [(string) $x[0], (string) ($x[1] ?? $x[0])] : [(string) $x, (string) $x], $o));
         }
         if ($kind === 'list') {
+            if (! DB::table('sys_field_options')->where('list_code', $arg)->exists()) self::fillList($arg);      // owner 26-11 22:52: an empty central list fills itself from the register
             return DB::table('sys_field_options')->where('list_code', $arg)->where('f_active', 1)->orderBy('sort')->orderBy('label')
                 ->get(['value', 'label'])->map(fn ($r) => [$r->value, $r->label])->all();
         }

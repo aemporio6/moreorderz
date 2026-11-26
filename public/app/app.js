@@ -252,7 +252,42 @@
     const prev = h1.previousElementSibling; if (prev && /›/.test(prev.textContent)) return;      // the page has its own "Settings ›" line
     h1.insertAdjacentHTML('beforebegin', `<div class="crumb">${crumbTxt.slice(0, a === b || a.includes(b) || b.includes(a) ? -1 : crumbTxt.length).map(esc).join(' › ')}${a === b || a.includes(b) || b.includes(a) ? ' ›' : ''}</div>`);
   }
-  let navTimer; function afterRender(route) { try { ensureHead(route); } catch (e) {} try { takeHandoff(); } catch (e) {} taskHead(route); paintFav(); playbookBar(route); stepPager(route); guideNow(route); clearTimeout(navTimer);
+  /* Owner 26-11 22:57: the frame of every screen – ← Back, "+ New …" for the screen's own record (or a fresh entry on an entry screen),
+     a "Still needed" line that names the required boxes and jumps to them, and Quick / Full on a long hand-built form (Quick = only the
+     parts with something required; nothing is lost, Full shows it all again). No screen has to add these itself. */
+  function pageFrame(route) {
+    const m = $('#main'), head = m && m.querySelector('.page-head'); if (!head || head.dataset.pf) return; head.dataset.pf = '1';
+    const left = head.firstElementChild; let act = head.querySelector('.actions') || (head.children.length > 1 ? head.lastElementChild : null); if (!act) { act = document.createElement('div'); act.className = 'actions'; head.appendChild(act); } act.classList.add('pf-act');
+    if (route && route !== '#/home' && !/^#\/?$/.test(route) && history.length > 1 && left) left.insertAdjacentHTML('afterbegin', `<a href="#" class="ph-back" title="Back to where you were (Alt + ←)">← Back</a>`);
+    const bk = head.querySelector('.ph-back'); if (bk) bk.onclick = e => { e.preventDefault(); history.back(); };
+    const hasNew = [...m.querySelectorAll('.page-head button, .page-head a.btn, #lNew')].some(b => /^\s*(\+\s*)?(new|add|create)\b/i.test(b.textContent.trim()) && !b.closest('.ap-wrap'));
+    const save = [...m.querySelectorAll('button.primary')].find(b => /^\s*save\b/i.test(b.textContent)), id = currentItem(); let it = null; if (id) for (const sx of S.boot.menu) { const f = sx.items.find(i => i.id === id); if (f) { it = f; break; } }
+    if (!hasNew && save && !m.querySelector('#lNew')) act.insertAdjacentHTML('afterbegin', `<button class="btn" type="button" id="pfFresh" title="Empty the form for the next one">+ New entry</button>`);
+    else if (!hasNew && it && it.new_form) act.insertAdjacentHTML('afterbegin', `<button class="btn primary" type="button" id="pfNew">${ic('plus')} New ${esc(String(it.new_form[1]).replace(/\s*[—–(].*$/, '').toLowerCase())}</button>`);
+    const fr = $('#pfFresh'); if (fr) fr.onclick = () => { render(); toast('A fresh, empty form'); };
+    const nw = $('#pfNew'); if (nw) nw.onclick = () => openForm(it.new_form[0], null, { onSaved: () => render() });
+    requiredBar(m, act);
+  }
+  function requiredBar(m, act) {
+    const req = [...m.querySelectorAll('label')].filter(l => /\*/.test((l.firstChild && l.firstChild.textContent) || l.textContent.split('\n')[0]) && l.querySelector('input,select,textarea') && !l.closest('.overlay,.mo-dd'));
+    const inputs = m.querySelectorAll('input,select,textarea');
+    if (inputs.length >= 12 && m.querySelectorAll('.card').length >= 2 && req.length) {      // Quick / Full on a long hand-built form
+      const key = 'mo_quick:' + (S.route || '').split('?')[0]; let q = false; try { q = localStorage.getItem(key) === '1'; } catch (e) {}
+      act.insertAdjacentHTML('beforeend', `<span class="seg pf-qf" data-ap-skip><button type="button" data-q="1" class="${q ? 'on' : ''}">Quick</button><button type="button" data-q="0" class="${q ? '' : 'on'}">Full</button></span>`);
+      const apply = on => { m.querySelectorAll('.card').forEach(c => { if (c.closest('.page-head') || c.querySelector('#ixDrop')) return; const need = c.querySelector('label') && [...c.querySelectorAll('label')].some(l => req.includes(l)); const isForm = c.querySelector('input,select,textarea');
+          c.classList.toggle('pf-hide', on && !!isForm && !need); if (need) c.querySelectorAll('.form > label, .form label.small').forEach(l => l.classList.toggle('pf-hide', on && !req.includes(l))); });
+        act.querySelectorAll('.pf-qf button').forEach(b => b.classList.toggle('on', (b.dataset.q === '1') === on)); try { localStorage.setItem(key, on ? '1' : '0'); } catch (e) {} };
+      act.querySelectorAll('.pf-qf button').forEach(b => b.onclick = () => apply(b.dataset.q === '1')); apply(q);
+    }
+    if (!req.length) return;
+    const bar = document.createElement('div'); bar.className = 'pf-need'; const head = m.querySelector('.page-head'); head.insertAdjacentElement('afterend', bar);
+    const name = l => (l.firstChild && l.firstChild.textContent || l.textContent).replace(/\*/g, '').trim().split('\n')[0];
+    const filled = l => { const el = l.querySelector('input,select,textarea'); return el && String(el.value || '').trim() !== ''; };
+    const draw = () => { const left = req.filter(l => !filled(l)); bar.innerHTML = left.length ? `<b>Still needed (${left.length} of ${req.length}):</b> ${left.map((l, i) => `<a href="#" data-pn="${req.indexOf(l)}">${esc(name(l))}</a>`).join(' · ')} <span class="muted">– everything else is optional and can be filled later</span>` : `<b class="ok-t">✓ Everything needed is filled</b> <span class="muted">– you can save</span>`;
+      bar.classList.toggle('done', !left.length); bar.querySelectorAll('[data-pn]').forEach(a => a.onclick = e => { e.preventDefault(); const l = req[+a.dataset.pn], el = l.querySelector('input,select,textarea'); l.closest('.pf-hide') && l.closest('.pf-hide').classList.remove('pf-hide'); l.scrollIntoView({ block: 'center', behavior: 'smooth' }); const box = l.querySelector('.ap-box'); setTimeout(() => (box || el).focus(), 300); }); };
+    m.addEventListener('input', draw); m.addEventListener('change', draw); draw();
+  }
+  let navTimer; function afterRender(route) { try { ensureHead(route); } catch (e) {} try { pageFrame(route); } catch (e) {} try { takeHandoff(); } catch (e) {} taskHead(route); paintFav(); playbookBar(route); stepPager(route); guideNow(route); clearTimeout(navTimer);
     navTimer = setTimeout(async () => { if (S.route !== route || route === '#/home') return; const h = $('#main h1'); if (!h) return; try { NAV = await api('nav', { method: 'POST', body: { title: h.textContent.trim().slice(0, 150), url: route } }); paintFav(); } catch (e) {} }, 1500); }
   // R-B_SOURCING-20: floating Previous / Next on every step place of a cycle record (cycle page sections, Samples · QC · Customs, the step lists of the cycle); skipped steps are jumped
   async function stepPager(route) {

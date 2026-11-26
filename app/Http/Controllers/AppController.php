@@ -51,7 +51,7 @@ class AppController extends Controller
             if ($soon && $role !== 'OWNER') continue;
             $fk = array_values(array_filter(array_map(fn ($f) => trim(explode('(', $f)[0]), preg_split('/[;,\s]+/', (string) $m->forms, -1, PREG_SPLIT_NO_EMPTY)), fn ($k) => Registry::exists($k) && Registry::table($k)));
             $subs = count($fk) > 1 ? array_values(array_map(fn ($k) => ['name' => (string) ($titles[$k] ?? ((Registry::fields($k)[0]['form_title'] ?? '') ?: ucfirst(str_replace('_', ' ', preg_replace('/^t_/', '', $k))))), 'route' => '#/list/' . $k], array_filter($fk, fn ($k) => \App\Services\Perm::has(Auth::user(), "form:$k:VIEW")))) : [];      // owner 26-11: a screen with several lists opens the next window (▸) with them
-            $secs[$m->parent_id]['items'][] = ['subs' => $subs, 'id' => $m->id_module, 'no' => $m->screen_no, 'name' => $m->module_name, 'about' => config('menu_help.items.' . $m->module_key), 'route' => $rt, 'soon' => $soon, 'forms' => array_values(array_filter(array_map(fn ($f) => trim(explode('(', $f)[0]), preg_split('/[;,\s]+/', (string) $m->forms, -1, PREG_SPLIT_NO_EMPTY)), fn ($k) => Registry::exists($k) && Registry::table($k)))];
+            $secs[$m->parent_id]['items'][] = ['subs' => $subs, 'id' => $m->id_module, 'no' => $m->screen_no, 'name' => $m->module_name, 'about' => config('menu_help.items.' . $m->module_key), 'route' => $rt, 'soon' => $soon, 'new_form' => self::newForm((string) $m->forms, $titles), 'forms' => array_values(array_filter(array_map(fn ($f) => trim(explode('(', $f)[0]), preg_split('/[;,\s]+/', (string) $m->forms, -1, PREG_SPLIT_NO_EMPTY)), fn ($k) => Registry::exists($k) && Registry::table($k)))];
         }
         return array_values(array_filter($secs, fn ($s) => $s['items']));
     }
@@ -66,6 +66,14 @@ class AppController extends Controller
     private static function roleSees(?string $roles, string $role): bool
     {
         return Rights::sees($roles, $role);
+    }
+
+    /** Owner 26-11 22:57: the "+ New …" of a screen = its first create form, marked (C) in the menu row – [key, title] or null. */
+    private static function newForm(string $forms, $titles): ?array
+    {
+        if (! preg_match_all('/([A-Za-z0-9_]+)\s*\(C\)/', $forms, $m)) return null;
+        foreach ($m[1] as $k) if (Registry::exists($k) && Registry::table($k)) return [$k, (string) ($titles[$k] ?? (Registry::fields($k)[0]['form_title'] ?? $k))];
+        return null;
     }
 
     /** A menu item opens the list of its first data form; special screens get their own route as they are built. */
