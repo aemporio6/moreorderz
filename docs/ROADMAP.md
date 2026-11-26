@@ -58,7 +58,7 @@ Updated: 27 Nov 2026, 05:30 (Pakistan time)
 10. Decision engine: tests for REBALANCE_FBA and CAPITAL_CALL with real-shaped data.
 
 ## Old tool – still open (owner 27-11 01:30: "look inside my old MoreOrderz, put what is left in the checklist, finish it")
-The whole list is on one screen: **Home › Old tool check** – every old screen (138 controllers of the old code) with its register lines, and every old table with how much of its data came over. 27-11 recheck against the code: many lines marked open were in fact already built (tax worksheet, carton calculation, BUY file, Amazon Business orders, Etsy month, task team settings, marketplace fields) – they are now marked built with their evidence (audit/recheck_27nov.csv). **26 lines are really open (27-11, after the third recheck)**, built in this order:
+The whole list is on one screen: **Home › Old tool check** – every old screen (138 controllers of the old code) with its register lines, and every old table with how much of its data came over. 27-11 recheck against the code: many lines marked open were in fact already built (tax worksheet, carton calculation, BUY file, Amazon Business orders, Etsy month, task team settings, marketplace fields) – they are now marked built with their evidence (audit/recheck_27nov.csv). **24 lines are really open (27-11)**, built in this order:
 1. ✅ Corporation-tax worksheet – already built (TaxService). ✅ Carton calculation – already built (CartonCalc).
 2. ✅ 27-11: product type / trend codes – required, upper case, unique in the company (MR-0935); company list shows its directors (share %) and a Tax link to that company's tax dashboard (MR-1122). ✅ country lists show pinned countries first (MR-1125). ✅ carrier presets inside a group – pin, drag order, default, remove, clean-up, where offered (MR-0930, 0982); location can never sit under itself (MR-0887, 0978); product manager role → product manager (MR-0976).
 3. ✅ 27-11 Product page as in the old tool, connected (Inventory › a product): one bar to every part – Overview, Details (every field by section, Edit, Duplicate), Purchases (every PO line and lot that came in, + Record a purchase), Stock, Selling, Variations, Packaging, Vault, History in words (names, not ids) + Prices, Marketplace fields, Variations editor, Investors; deep link ?tab=. The product record has a "Product page" button (MR-0220, 0882, 0897, 0963, 0989).
@@ -90,6 +90,7 @@ The whole list is on one screen: **Home › Old tool check** – every old scree
 - Security: no secrets, no real data in the public repo; nothing is typed into password boxes for the owner.
 
 ## Done (newest first)
+- 27-11: Inventory › Inventory setup (locations tree with units, location types, adjustment and price-change reasons on one page); the main company is mirrored into the tenant row.
 - 27-11: Security sweep – old secrets kept in columns no form showed (vendor portal password and bank details, an old account password, bank question answers) are sealed in the vault; local vendor card complete (MR-0981, 0227). Packing list into products; FBA / shipment cartons from the packaging.
 - 27-11: Packaging engine + PO packing; product vault; old tool product images shown again (39 of the first 50 products have their photo back).
 - 27-11: Carrier presets inside a group; location loop check; product manager; old-tool lines rechecked (45 really open).

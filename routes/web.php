@@ -88,6 +88,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('partner-view', [\App\Http\Controllers\PartnerViewController::class, 'index']);      // owner 26-11 23:19 each partner's whole account
         Route::get('partner-view/{acc}', [\App\Http\Controllers\PartnerViewController::class, 'show'])->whereNumber('acc');
         Route::get('inventory/fba', [\App\Http\Controllers\InventoryController::class, 'fbaRecon']);      // inventory (d) FBA report vs ledger
+        Route::get('inventory-setup', [\App\Http\Controllers\InventoryController::class, 'setup']);      // R-D-45
+        Route::post('inventory-setup/{kind}', [\App\Http\Controllers\InventoryController::class, 'setupReason'])->where('kind', 'adjust|price');
         Route::get('product/{id}/purchases', [\App\Http\Controllers\InventoryController::class, 'purchases'])->whereNumber('id');      // R-D-42
         Route::get('vault/{id}', [\App\Http\Controllers\InventoryController::class, 'vault'])->whereNumber('id');      // owner 27-11 02:31 the product's vault
         Route::post('vault/asset/{id}', [\App\Http\Controllers\InventoryController::class, 'vaultAsset'])->whereNumber('id');

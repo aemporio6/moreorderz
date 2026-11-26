@@ -309,6 +309,7 @@ class RecordService
             FormAssist::remember($formKey, $data);   // for the "you used this last time" chips
             if ($table === 't_src_po_lines') PoLines::sync((int) $id);
             if ($table === 't_account_banks') SupplierBanks::afterSave((int) $id);
+            if ($table === 'cat_company_house') self::tenantMirror((int) $id);      // R-F_SETUP-50 the company marked "main" is the tenant row's name, code, address, phone
             if ($table === 't_src_investments') SourcingCapital::sync((int) $id);      // MR-0301 capital into a cycle = the partner's CAPITAL_IN
             if ($table === 't_src_investors') foreach (DB::table('t_src_investments')->where('fk_id_investor', $id)->pluck('id') as $iv) SourcingCapital::sync((int) $iv);
             if ($table === 'cat_inventory_locations' && ! $created) WarehouseSites::afterSave((int) $id, (array) $old);      // R-H-6 rename → one shelf label
@@ -378,6 +379,15 @@ class RecordService
         return ['form_key' => $formKey, 'table' => $table, 'id' => $id, 'form_title' => Registry::fields($formKey)[0]['form_title'], 'title' => (string) ($row[$lc] ?? "#$id"),
             'sections' => $sections, 'parents' => $parents, 'children' => array_values($children), 'tasks' => $tasks, 'history' => $hist,
             'field_labels' => collect(Registry::fields($formKey))->filter(fn ($f) => $f['column_name'])->mapWithKeys(fn ($f) => [$f['column_name'] => $f['label']])->all()];
+    }
+
+    /** R-F_SETUP-50: one main company per tenant (another one saved as main takes the mark over); t_enterprise mirrors it and is never typed. */
+    public static function tenantMirror(int $companyId): void
+    {
+        $c = DB::table('cat_company_house')->where('id', $companyId)->first(); if (! $c || ! (int) ($c->f_tenant_main ?? 0) || ! (int) $c->fk_id_ent) return;
+        DB::table('cat_company_house')->where('fk_id_ent', $c->fk_id_ent)->where('id', '<>', $companyId)->where('f_tenant_main', 1)->update(['f_tenant_main' => 0]);
+        $set = array_filter(['ent_name' => trim((string) $c->company_name) ?: null, 'iso_ent' => trim((string) $c->iso_code) ?: null, 'ent_address' => trim((string) $c->company_address) ?: null, 'ent_phone' => trim((string) ($c->company_telephone ?: $c->company_house_telephone)) ?: null], fn ($v) => $v !== null);
+        if ($set) DB::table('t_enterprise')->where('id', $c->fk_id_ent)->update($set);
     }
 
     /** R-D-16 history in words: a changed field shows its label, a chosen record its name (not its id). */

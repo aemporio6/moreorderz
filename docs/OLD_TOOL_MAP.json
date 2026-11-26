@@ -635,18 +635,10 @@
 "functions": 4,
 "lines": 6,
 "status": {
-"FORM_ONLY": 1,
-"BUILT": 4,
+"BUILT": 5,
 "NOT_APPLICABLE": 1
 },
-"open": [
-{
-"reg": "MR-0219",
-"status": "FORM_ONLY",
-"text": "Inventory_setup (6 functions) comes back as: Location types, locations, adjustment and price reasons + stock alerts + manual…. Fix: No rights; catalogs are global (no fk_id_ent); t_product_locations.qt…. Improved: Standa",
-"note": "setup lists as forms; bin generator + SKU homes built"
-}
-]
+"open": []
 },
 {
 "controller": "Login",
@@ -716,18 +708,11 @@
 "functions": 102,
 "lines": 42,
 "status": {
-"BUILT": 34,
-"FORM_ONLY": 1,
+"BUILT": 35,
 "PARTIAL": 3,
 "NOT_APPLICABLE": 4
 },
 "open": [
-{
-"reg": "MR-0377",
-"status": "FORM_ONLY",
-"text": "Masters + quick views (product, supplier, shop, company, cycle, old entry, direct, t_account only person master, location, document)",
-"note": "R-F_SETUP-50: form only"
-},
 {
 "reg": "MR-1404",
 "status": "PARTIAL",

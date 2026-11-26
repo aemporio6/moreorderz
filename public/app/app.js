@@ -502,7 +502,8 @@
       if (r === '#/roadmap') return await pageRoadmap();      // owner 26-11 23:23
       if (r.startsWith('#/fba-check')) return await pageFbaCheck();      // inventory (d)
       if (r.startsWith('#/shop-stock-check')) return await pageShopCheck();
-      if (r.startsWith('#/old-tool-check')) return await pageOldCheck();      // owner 27-11 01:30      // inventory (d) each shop's quantity
+      if (r.startsWith('#/old-tool-check')) return await pageOldCheck();
+      if (r.startsWith('#/inventory-setup')) return await pageInvSetup();      // R-D-45      // owner 27-11 01:30      // inventory (d) each shop's quantity
       if (r.startsWith('#/inventory/')) return await pageInventoryStory(+r.split('/')[2].split('?')[0]);      // owner 26-11 23:14
       if (r === '#/inventory' || r.startsWith('#/inventory?')) { const u = new URLSearchParams(r.split('?')[1] || ''); if (u.get('owner')) { INV.investor = u.get('owner'); INV.page = 1; } return await pageInventory(); }
       if (r.startsWith('#/decisions')) return await pageDecisions(new URLSearchParams(r.split('?')[1] || '').get('code') || '');      // MR-1443 … 1450
@@ -2171,6 +2172,27 @@
 
 
   /* Inventory (d): Amazon's last FBA report against the stock ledger, SKU by SKU – book the difference (found / lost) or move it in from a warehouse */
+  async function pageInvSetup() {      /* R-D-45 the four inventory catalogs on one page */
+    busy(true); let d; try { d = await api('inventory-setup'); } finally { busy(false); }
+    const T = pageInvSetup.t || 'locations', n = v => (+v || 0).toLocaleString('en-GB'), tabs = [['locations', 'Locations', d.locations.length], ['kinds', 'Location types', d.kinds.length], ['adjust', 'Adjustment reasons', d.reasons.adjust.length], ['price', 'Price-change reasons', d.reasons.price.length]];
+    const reasons = k => `<div class="card"><div class="card-h"><h3>${k === 'adjust' ? 'Adjustment reasons' : 'Price-change reasons'}</h3><span class="small muted">every ${k === 'adjust' ? 'stock adjustment' : 'price change'} picks one of these</span></div>
+      <div class="card-b" style="display:flex;gap:8px"><input class="q" id="isNew" placeholder="New reason…" style="flex:1" data-ap-skip><button class="btn primary" id="isAdd" type="button">Add</button></div>
+      <div class="tbl-wrap"><table class="t"><thead><tr><th>Reason</th><th class="num">Used</th><th>Active</th><th></th></tr></thead><tbody>${d.reasons[k].map(r => `<tr><td><input class="q" data-rn="${r.id}" value="${esc(r.name)}" ${r.system ? 'disabled title="A system reason keeps its name"' : ''} data-ap-skip>${r.system ? ' <span class="chip plain">system</span>' : ''}</td><td class="num">${n(r.used)}</td>
+        <td><label class="small"><input type="checkbox" data-ra="${r.id}" ${r.active ? 'checked' : ''} ${r.system ? 'disabled' : ''}> active</label></td><td></td></tr>`).join('') || '<tr><td colspan="4" class="muted">None yet.</td></tr>'}</tbody></table></div></div>`;
+    const body = T === 'locations' ? `<div class="card"><div class="card-h"><h3>Locations</h3><span class="small muted">site › zone › bin, with the units in each</span><span style="margin-left:auto;display:flex;gap:6px"><button class="btn sm primary" id="isLoc">+ New location</button><a class="btn sm" href="#/list/locations">Full list</a><a class="btn sm" href="#/create/location_generator">Make many bins</a></span></div>
+        <div class="tbl-wrap"><table class="t"><thead><tr><th>Location</th><th>Code</th><th>Type</th><th>Sellable</th><th class="num">Units</th><th>Active</th></tr></thead><tbody>${d.locations.map(l => `<tr data-go="#/rec/location/${l.id}"><td style="padding-left:${12 + l.depth * 18}px">${l.depth ? '└ ' : ''}${esc(l.name)}${l.orphan ? ' <span class="chip warn plain">no parent found</span>' : ''}</td><td class="small">${esc(l.code || '')}</td><td class="small">${esc((l.kind || '').toLowerCase())}</td><td>${l.sellable ? 'yes' : 'no'}</td><td class="num">${n(l.units)}</td><td>${l.active ? '' : '<span class="chip plain">off</span>'}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">No location yet.</td></tr>'}</tbody></table></div></div>`
+      : T === 'kinds' ? `<div class="card"><div class="card-h"><h3>Location types</h3><span class="small muted">from the central list – the system types drive the stock rules and cannot be switched off</span><a class="btn sm" href="#/settings" style="margin-left:auto">Central lists</a></div>
+        <div class="tbl-wrap"><table class="t"><thead><tr><th>Type</th><th>Code</th><th class="num">Locations</th><th></th></tr></thead><tbody>${d.kinds.map(k => `<tr><td>${esc(k.label)}</td><td class="small">${esc(k.value)}</td><td class="num">${n(k.locations)}</td><td>${k.system ? '<span class="chip plain">system</span>' : ''}${k.active ? '' : ' <span class="chip plain">off</span>'}</td></tr>`).join('')}</tbody></table></div></div>` : reasons(T);
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Inventory setup</h1><div class="sub">The four lists the stock works with – locations, their types, the reasons of an adjustment and of a price change. One place; every form reads them from here.</div></div></div>
+      <div class="seg" style="margin-bottom:12px">${tabs.map(([k, l, c]) => `<button type="button" class="${T === k ? 'on' : ''}" data-ist="${k}">${l} · ${c}</button>`).join('')}</div>${body}`;
+    $$('[data-ist]').forEach(b => b.onclick = () => { pageInvSetup.t = b.dataset.ist; pageInvSetup(); });
+    $$('#main tr[data-go]').forEach(tr => tr.onclick = () => go(tr.dataset.go));
+    const loc = $('#isLoc'); if (loc) loc.onclick = () => openForm('location', null, { onSaved: () => pageInvSetup() });
+    const say = async (body) => { try { toast((await api('inventory-setup/' + T, { method: 'POST', body })).message); } catch (e) { toast(e.message, 'err'); } pageInvSetup(); };
+    const add = $('#isAdd'); if (add) { add.onclick = () => { const v = $('#isNew').value.trim(); if (v) say({ name: v }); }; $('#isNew').onkeydown = e => { if (e.key === 'Enter') add.click(); }; }
+    $$('[data-rn]').forEach(i => i.onchange = () => say({ id: +i.dataset.rn, name: i.value }));
+    $$('[data-ra]').forEach(c => c.onchange = () => say({ id: +c.dataset.ra, active: c.checked ? 1 : 0 }));
+  }
   async function pageOldCheck() {
     busy(true); let d; try { d = await api('old-tool-check'); } finally { busy(false); }
     const n = v => (+v || 0).toLocaleString('en-GB'), st = { NOT_YET: ['Not here yet', 'err'], PART: ['Part came', 'warn'], CAME: ['Came over', 'ok'], REPLACED: ['Done the new way', 'ok'], RETIRED: ['Old copy – not needed', ''], NOT_NEEDED: ['Tool settings – the new tool has its own', ''] };

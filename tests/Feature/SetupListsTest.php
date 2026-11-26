@@ -62,4 +62,15 @@ class SetupListsTest extends TestCase
         $this->assertSame(['PO-PH-1', 20], [$x['pos'][0]['no'], (int) $x['pos'][0]['qty']]); $this->assertSame('LOT-PH-1', $x['lots'][0]['lot']); $this->assertEquals(3, $x['summary']['avg_cost']);
         $this->assertArrayHasKey('field_labels', $this->getJson('/api/page/t_product_vendor/' . $p)->assertOk()->json());
     }
+
+    /** R-F_SETUP-50: the company marked main is mirrored into the tenant row; only one main per tenant. */
+    public function test_f50_tenant_row_mirrors_the_main_company(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id);
+        $a = $this->f('cat_company_house', ['fk_id_ent' => 1, 'company_name' => 'Alpha Main Ltd', 'iso_code' => 'AML', 'registration_no' => '11111111', 'company_address' => '1 High St', 'f_tenant_main' => 1, 'f_active' => 1]);
+        RecordService::tenantMirror($a); $this->assertSame(['Alpha Main Ltd', 'AML'], [DB::table('t_enterprise')->where('id', 1)->value('ent_name'), DB::table('t_enterprise')->where('id', 1)->value('iso_ent')]);
+        $b = $this->f('cat_company_house', ['fk_id_ent' => 1, 'company_name' => 'Beta Main Ltd', 'iso_code' => 'BML', 'registration_no' => '22222222', 'f_tenant_main' => 1, 'f_active' => 1]);
+        RecordService::tenantMirror($b);
+        $this->assertSame(0, (int) DB::table('cat_company_house')->where('id', $a)->value('f_tenant_main'), 'the mark moves'); $this->assertSame('Beta Main Ltd', DB::table('t_enterprise')->where('id', 1)->value('ent_name'));
+    }
 }
