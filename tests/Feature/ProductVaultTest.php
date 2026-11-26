@@ -26,6 +26,12 @@ class ProductVaultTest extends TestCase
         $this->assertSame('CARTON_MARK', ProductVault::guess('LAMP-01 carton mark.pdf'));
         $this->assertSame('CERTIFICATE', ProductVault::guess('LAMP-01 UKCA certificate.pdf'));
         $this->assertSame('LISTING', ProductVault::guess('LAMP-01 amazon 4.jpg'));
+        // an old tool image file name is shown from the old tool's image folder (setting), a link as it is, anything else not at all
+        $this->assertNull(ProductVault::imageUrl('abc123.webp'), 'no folder set yet');
+        DB::table('sys_settings')->insert(['setting_key' => 'OLD_IMAGE_BASE', 'setting_value' => 'https://old.example.test/uploads/product_images/', 'fk_id_ent' => 0]); \App\Services\Settings::flush();
+        $this->assertSame('https://old.example.test/uploads/product_images/abc123.webp', ProductVault::imageUrl('abc123.webp'));
+        $this->assertSame('https://cdn.test/x.jpg', ProductVault::imageUrl('https://cdn.test/x.jpg'));
+        $this->assertNull(ProductVault::imageUrl('../../etc/passwd'));
     }
 
     public function test_a_dropped_picture_goes_to_its_product_vault(): void

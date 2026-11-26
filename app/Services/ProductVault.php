@@ -21,6 +21,13 @@ class ProductVault
     public const VECTOR = ['ai', 'eps', 'svg', 'cdr', 'psd', 'indd'];
     public const IMAGE = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'heic'];
 
+    /** An image kept on the product: a full link as it is; an old tool file name → the old tool's image folder (Settings OLD_IMAGE_BASE, e.g. https://old-tool/uploads/product_images/). */
+    public static function imageUrl(?string $v): ?string
+    {
+        $v = trim((string) $v); if ($v === '') return null; if (preg_match('~^(https?:)?//|^/~i', $v)) return $v;
+        $base = trim((string) Settings::get('OLD_IMAGE_BASE', null, '')); return $base !== '' && preg_match('/^[\w.\- ()]+\.(jpe?g|png|webp|gif|bmp)$/i', $v) ? rtrim($base, '/') . '/' . rawurlencode($v) : null;
+    }
+
     /** The place of a file from its name, type and words. */
     public static function guess(string $name, string $ext = '', string $text = ''): string
     {
@@ -103,7 +110,7 @@ class ProductVault
         foreach (self::KINDS as $k => $label) $places[$k] = ['kind' => $k, 'label' => $label, 'files' => []];
         foreach ($files as $f) $places[$f->kind]['files'][] = ['id' => (int) $f->id, 'doc' => (int) $f->doc, 'doc_no' => $f->doc_no, 'name' => $f->orig_name ?: $f->title, 'url' => $f->drive_url, 'main' => (bool) $f->f_main,
             'image' => str_starts_with((string) $f->mime, 'image/') || preg_match('/\.(jpe?g|png|webp|gif)$/i', (string) $f->orig_name), 'marketplace' => $f->marketplace, 'marketplace_id' => $f->fk_id_marketplace ? (int) $f->fk_id_marketplace : null, 'at' => substr((string) $f->created_at, 0, 10)];
-        if ($p->product_img) array_unshift($places['IMAGE_MAIN']['files'], ['id' => null, 'doc' => null, 'name' => 'Image on the product', 'url' => $p->product_img, 'main' => ! $places['IMAGE_MAIN']['files'], 'image' => true, 'marketplace' => null, 'kept_on_product' => true]);
+        if ($img = self::imageUrl($p->product_img)) array_unshift($places['IMAGE_MAIN']['files'], ['id' => null, 'doc' => null, 'name' => 'Image on the product', 'url' => $img, 'main' => ! $places['IMAGE_MAIN']['files'], 'image' => true, 'marketplace' => null, 'kept_on_product' => true]);
         if (\Illuminate\Support\Facades\Schema::hasTable('t_product_vendors_images')) foreach (DB::table('t_product_vendors_images as i')->leftJoin('cat_marketplaces as m', 'm.id', '=', 'i.fk_id_marketplace')->where('i.fk_id_product_vendors', $pid)->orderBy('i.sort_no')->get(['i.image_url', 'i.f_main', 'm.marketplace_short']) as $i)
             $places[$i->marketplace_short ? 'LISTING' : 'IMAGE']['files'][] = ['id' => null, 'doc' => null, 'name' => basename((string) parse_url((string) $i->image_url, PHP_URL_PATH)) ?: 'image', 'url' => $i->image_url, 'main' => (bool) $i->f_main, 'image' => true, 'marketplace' => $i->marketplace_short, 'kept_on_product' => true];
         // what an important place still lacks

@@ -84,7 +84,7 @@ class InventoryHub
             $reserved = (float) ($res[$r->id] ?? 0); $ic = $icc[$r->id] ?? null; $s = $sold[$r->id] ?? null; $daily = $s ? (float) $s->n / 30 : 0;
             $fb = $fbaBy[$r->id] ?? []; $fbaRep = array_sum(array_map(fn ($x) => (int) $x->fulfillable, $fb)); $fbaUnits = $fbaL > 0 ? (int) $fbaL : $fbaRep;      /* the ledger once FBA is booked, else the last Amazon report */ $fbaIn = array_sum(array_map(fn ($x) => (int) $x->inbound_working + (int) $x->inbound_shipped + (int) $x->inbound_receiving, $fb));
             $ls = $lst[$r->id] ?? collect(); $vs = $vis[$r->id] ?? collect(); $avail = max(0, $sell - $reserved);
-            $im = $img[$r->id][0] ?? null; $photo = $im ? ($im->thumb_url ?: $im->image_url) : (preg_match('~^https?://~', (string) $r->product_img) ? $r->product_img : null);
+            $im = $img[$r->id][0] ?? null; $photo = $im ? ($im->thumb_url ?: $im->image_url) : ProductVault::imageUrl($r->product_img);      // an old tool file name is shown from the old tool's image folder
             $out[] = ['id' => (int) $r->id, 'sku' => $r->sku, 'name' => $r->name, 'photo' => $photo, 'parent' => (int) $r->f_parent === 2 || ($kids[$r->id] ?? 0) > 0, 'children' => (int) ($kids[$r->id] ?? 0), 'child_of' => (int) $r->f_id_parent ?: null,
                 'asin' => $ls->pluck('asin')->filter()->unique()->values()->all(), 'mode' => $r->mode,
                 'fba_check' => $fbaL > 0 && $fb && (int) $fbaL !== $fbaRep ? ['ledger' => (int) $fbaL, 'report' => $fbaRep] : null,
