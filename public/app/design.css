@@ -625,3 +625,6 @@ input:not([type=checkbox]):not([type=radio]):focus,select:focus,textarea:focus,.
 .ac-tick input{width:17px;height:17px;flex:none;accent-color:var(--accent,#0E6E6A)}
 .ac-role{font-size:14px;padding:6px 10px;min-width:150px}
 .ac-grid{align-items:start}
+/* owner 26-11 21:59: where you are, above every heading */
+#main .crumb{font-size:12.5px;font-weight:600;letter-spacing:.02em;color:var(--muted,#5D6B76);margin:0 0 3px;text-transform:none}
+#main .auto-head{margin-bottom:14px}

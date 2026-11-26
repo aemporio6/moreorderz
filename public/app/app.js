@@ -157,7 +157,25 @@
     $('#gnX').onclick = () => { GN.open = false; drawGn(); };
     $$('[data-gngo]', p).forEach(b => b.onclick = () => { const g = b.dataset.gngo; if (g === 'action:new') { const n = $('#lNew'); if (n) n.click(); return; } go(g); });
   }
-  let navTimer; function afterRender(route) { taskHead(route); paintFav(); playbookBar(route); stepPager(route); guideNow(route); clearTimeout(navTimer);
+  /* Owner 26-11 21:59: every screen says at the top what it is. A screen with no heading gets the menu name and its one-line meaning; a screen whose heading
+     differs from the menu button gets a small "Section › Button" line above it, so you always know where you are and how you got there. */
+  function ensureHead(route) {
+    const m = $('#main'); if (!m || !S.boot || !S.boot.menu) return;
+    const id = currentItem(); let sec = null, it = null; if (id) for (const s of S.boot.menu) { const f = s.items.find(i => i.id === id); if (f) { sec = s; it = f; break; } }
+    const grp = sec && (S.boot.menu_groups || []).find(g => (g.sections || []).includes(sec.name));
+    const crumbTxt = it ? [grp && grp.name !== sec.name ? grp.name : null, sec.name, it.name].filter(Boolean) : [];
+    const h1 = m.querySelector('h1');
+    if (!h1) {
+      const title = it ? it.name : (document.title || '').replace(/\s*[–|-]\s*MoreOrderz.*$/, '') || 'MoreOrderz';
+      m.insertAdjacentHTML('afterbegin', `<div class="page-head auto-head"><div>${crumbTxt.length > 1 ? `<div class="crumb">${crumbTxt.slice(0, -1).map(esc).join(' › ')} ›</div>` : ''}<h1>${esc(title)}</h1>${it && it.about ? `<div class="sub">${esc(it.about)}</div>` : ''}</div></div>`);
+      return;
+    }
+    if (!it || h1.parentNode.querySelector('.crumb')) return;
+    const norm = x => String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(), a = norm(h1.textContent), b = norm(it.name);
+    const prev = h1.previousElementSibling; if (prev && /›/.test(prev.textContent)) return;      // the page has its own "Settings ›" line
+    h1.insertAdjacentHTML('beforebegin', `<div class="crumb">${crumbTxt.slice(0, a === b || a.includes(b) || b.includes(a) ? -1 : crumbTxt.length).map(esc).join(' › ')}${a === b || a.includes(b) || b.includes(a) ? ' ›' : ''}</div>`);
+  }
+  let navTimer; function afterRender(route) { try { ensureHead(route); } catch (e) {} taskHead(route); paintFav(); playbookBar(route); stepPager(route); guideNow(route); clearTimeout(navTimer);
     navTimer = setTimeout(async () => { if (S.route !== route || route === '#/home') return; const h = $('#main h1'); if (!h) return; try { NAV = await api('nav', { method: 'POST', body: { title: h.textContent.trim().slice(0, 150), url: route } }); paintFav(); } catch (e) {} }, 1500); }
   // R-B_SOURCING-20: floating Previous / Next on every step place of a cycle record (cycle page sections, Samples · QC · Customs, the step lists of the cycle); skipped steps are jumped
   async function stepPager(route) {
@@ -576,10 +594,13 @@
     $$('[data-chlink]', box).forEach(el => el.addEventListener('click', () => { const l = el.getAttribute('data-chlink'); if (l) go(l); }));
     const re = () => dashCharts(which, { ...params, months: $('#chM') ? $('#chM').value : '', shop: $('#chS') ? $('#chS').value : '' }, withFilters); if ($('#chM', box)) $('#chM', box).onchange = re; if ($('#chS', box)) $('#chS', box).onchange = re;
   }
+  const HOME_OF = { OWNER: ['Owner Home', 'Every number of the business on one page'], MANAGER: ['Manager Home', 'The team\'s work and what needs a decision'], VA: ['VA / TL Home', 'Today\'s tasks for a VA or team lead'], TL: ['VA / TL Home', 'Today\'s tasks for a VA or team lead'],
+    WAREHOUSE: ['Warehouse Home', 'What to receive, pick and pack today'], FINANCE: ['Finance Home', 'Payments due, bank and approvals'], ACCOUNTANT: ['Accountant Home', 'Ledger, month close and filings'], PARTNER: ['Partner Home', 'Your share, sales and statements'] };
   async function pageHome() {
-    const b = S.boot; let d = { cards: [], recent: [] };
-    try { d = await api('home'); } catch (e) {}
-    $('#main').innerHTML = `<div class="page-head"><div><h1>Good to see you, ${esc(b.user.name.split(' ')[0])}</h1><div class="sub">${esc((b.companies.find(c => c.id == b.ent) || {}).name || '')} · ${esc(b.user.role)} · ${esc(b.today)}</div></div>
+    const b = S.boot; let d = { cards: [], recent: [] }; const asR = (new URLSearchParams((S.route || location.hash).split('?')[1] || '').get('role') || '').toUpperCase();
+    try { d = await api('home' + (asR ? '?role=' + encodeURIComponent(asR) : '')); } catch (e) {}
+    const hr = d.as_role || b.user.role, [hTitle, hAbout] = HOME_OF[hr] || ['Home', 'Today\'s numbers and your work'];
+    $('#main').innerHTML = `<div class="page-head"><div><h1>${esc(hTitle)}</h1><div class="sub">${esc(hAbout)} · ${d.as_role ? `<b>what a ${esc(hr.toLowerCase())} sees first</b> · <a href="#/home">back to your Home</a>` : 'good to see you, ' + esc(b.user.name.split(' ')[0])} · ${esc((b.companies.find(c => c.id == b.ent) || {}).name || '')} · ${esc(b.today)}</div></div>
       <div class="actions"><button class="btn primary" id="hCreate">${ic('plus')} Create</button></div></div>
       ${b.setup_open ? `<div class="card" style="margin-bottom:12px;border-color:var(--accent)"><div class="card-b" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div><b>Setting up the tool is not finished.</b> <span class="muted">The setup steps show what is still missing.</span></div><a class="btn primary" href="#/setup">Open setup</a></div></div>` : ''}
       <div class="kpis">${d.cards.map(c => `<div class="card kpi ${esc(c.tone || '')}" data-go="${esc(c.go || '')}"><div class="bar"></div><div class="lbl">${esc(c.label)}</div><div class="val">${esc(c.value)}</div><div class="foot">${esc(c.foot || '')}</div>${(c.lines || []).map(l => `<div class="small" style="display:flex;justify-content:space-between;gap:8px;border-top:1px solid var(--line);padding-top:3px;margin-top:3px"><span class="muted">${esc(l.company)}</span><b>${esc(l.value)}</b></div>`).join('')}</div>`).join('')}</div>

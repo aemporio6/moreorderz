@@ -75,7 +75,7 @@ class AppController extends Controller
     {
         $no = (string) $m->screen_no;
         if ($no === '' && str_starts_with((string) $m->url, '#/')) return (string) $m->url;      /* a row added after the numbered screens carries its own address (Inventory sharing, Data quality, Allocation plan, Task board) */
-        if (str_starts_with($no, '1.')) return '#/home';
+        if (str_starts_with($no, '1.')) return ['1.2' => '#/my-account', '1.3' => '#/home?role=MANAGER', '1.4' => '#/home?role=VA', '1.5' => '#/home?role=WAREHOUSE', '1.6' => '#/home?role=FINANCE', '1.7' => '#/home?role=ACCOUNTANT'][$no] ?? '#/home';      // owner 26-11 21:59: every Home button opens its own page (all were '#/home', so a click on the page you were on did nothing)
         if ($no === '3.5') return '#/old-entry';      /* R-B_SOURCING-5 / 13 old purchases */
         if ($no === '10.4') return '#/purchase-audit';      /* R-A_SALES-60 … 64 audit runs */
         if ($no === '10.7') return '#/invoices';
@@ -103,7 +103,10 @@ class AppController extends Controller
         if ($no === '4.13') return '#/stock/held';
         if ($no === '4.10') return '#/stock/ledger?act=transfer';
         if ($no === '11.3') return '#/waterfall';
-        if (in_array($no, ['11.1', '11.2', '11.4', '11.5', '11.6'], true)) return '#/partners';
+        if ($no === '11.2') return '#/list/fin_investor_agreement';      // owner 26-11 21:59: each button its own screen (11.2 / 11.5 / 11.6 all opened the partners page)
+        if ($no === '11.5') return '#/my-account';
+        if ($no === '11.6') return '#/ledger';
+        if (in_array($no, ['11.1', '11.4'], true)) return '#/partners';
         if ($no === '16.1') return '#/reports';
         if ($no === '10.2') return '#/close';
         if ($no === '9.1') return '#/money';
