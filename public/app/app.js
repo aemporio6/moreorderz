@@ -5593,15 +5593,24 @@
   // ---------- + Create: everything that can be created, grouped by department; new modules appear by themselves ----------
   let lastCreateQ = '';
   function openCreate(q = '') {
-    const list = S.boot.create, depts = [...new Set(list.map(c => c.dept))];
+    const seen = new Set(), list = S.boot.create.filter(c => { const k = c.dept + '|' + c.title.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }), depts = [...new Set(list.map(c => c.dept))];      /* two forms with the same name in one area: shown once (the first – the quick one) */
     const { ov, close } = modal('Create', `Everything you can create, from anywhere – ${list.length} entries. Each one opens its form and is saved in its own module.`,
-      `<input class="q crq" placeholder="Type what you want to create… (e.g. research, printer, sample, expense, carrier)" autofocus><div class="cr-grid" id="crGrid"></div>`,
+      `<div class="cr-chain" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px"><span class="small muted">1. What</span><span class="faint">→</span>
+        <label class="small muted">2. For company <select class="input sm" id="crCo">${(S.boot.companies || []).map(c => `<option value="${c.id}" ${+c.id === +S.boot.ent ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label><span class="faint">→</span>
+        <label class="small muted">3. Brand <select class="input sm" id="crBr"><option value="">(none / choose in the form)</option></select></label></div>
+      <input class="q crq" placeholder="Type what you want to create… (e.g. research, printer, sample, expense, carrier)" autofocus><div class="cr-grid" id="crGrid"></div>`,
       `<span class="left">Tip: press <span class="kbd">N</span> on any screen.</span>`);
     const draw = () => { const t = $('.crq', ov).value.trim().toLowerCase();
       $('#crGrid', ov).innerHTML = depts.map(d => { const its = list.filter(c => c.dept === d && (!t || c.title.toLowerCase().includes(t) || c.key.includes(t))); if (!its.length) return '';
         return `<div class="cr-dept"><h4>${esc(d)} <span class="faint" style="font-weight:400">${its.length}</span></h4>${its.map(c => `<div class="cr-item" data-k="${esc(c.key)}">${ic('plus')}${esc(c.title)}${c.quick ? '<span class="q">quick</span>' : ''}</div>`).join('')}</div>`; }).join('') || `<div class="empty">Nothing matches “${esc(t)}”.</div>`; };
     $('.crq', ov).value = q; draw(); $('.crq', ov).oninput = draw; setTimeout(() => $('.crq', ov).focus(), 30);
-    $('#crGrid', ov).onclick = e => { const it = e.target.closest('.cr-item'); if (!it) return; lastCreateQ = $('.crq', ov).value; close(); openForm(it.dataset.k, null, { fromCreate: true }); };
+    /* MR-1259 the Create chain: what → company → brand. The company switches the working company (as the selector at the top); the brand fills every brand field of the form that reads the brand list */
+    api('options/t_src_cycles/brand').then(o => { const sel = $('#crBr', ov); if (sel) sel.innerHTML += (o.options || []).map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join(''); }).catch(() => {});
+    $('#crGrid', ov).onclick = async e => { const it = e.target.closest('.cr-item'); if (!it) return; lastCreateQ = $('.crq', ov).value;
+      const co = +($('#crCo', ov) || {}).value || 0, br = ($('#crBr', ov) || {}).value || ''; close();
+      if (co && co !== +S.boot.ent) { try { await api('company', { method: 'POST', body: { ent: co } }); S.boot = await api('boot'); drawTop(); drawSide(); toast('Now working in ' + ((S.boot.companies || []).find(c => +c.id === co) || {}).name); } catch (x) { return toast(x.message, 'err'); } }
+      const preset = {}; if (br) { try { const d = await api('form/' + it.dataset.k); (d.fields || (d.sections || []).flatMap(x => x.fields) || []).filter(f => String(f.source || '') === 'table:cat_brands').forEach(f => { preset[f.name] = br; if (f.col) preset[f.col] = br; }); } catch (x) {} }
+      openForm(it.dataset.k, null, { fromCreate: true, preset }); };
   }
   MO.openCreate = openCreate;
 

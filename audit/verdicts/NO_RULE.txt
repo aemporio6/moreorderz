@@ -1,6 +1,6 @@
 MR-1257|P|function cycle|step bar on buying cycles + first-time setup steps; not a step guide in every module
 MR-1258|P|class OrderFiles|formats found from the file itself; one importer with a breakdown per folder / module not built
-MR-1259|P|function createCatalogue|Create everywhere – now built from the registry (every main form of every module appears by itself: 234 entries, was 143), searchable multi-select with All / None, dropdowns that follow the field above, toast says where it was saved with its code and Open; open: the full what → company → brand chain of the + Create wizard
+MR-1259|B|cr-chain|universal Create on Home and everywhere, built from the registry (every main form of every module appears by itself, 234 entries; one entry per name), search, the chain what → company → brand (company switches the working company, brand fills the brand fields of the form), toast with where it was saved and Open; a record made in a module appears in its list and in Create
 MR-1260|B|class Finder|one search for every module: no exact spelling (stems, sound, typing mistakes, synonyms), results in categories with scope chips, suggestions from the first letter, records of every form (indexed on save), the same word search inside every list; FinderTest
 MR-1261|B|function narrow|filters on every field of every list: per-column filter and a filter builder (operators per type, AND / OR groups, multi-select values, date presets); the list narrows as rules are added; ListStandardTest
 MR-1262|B|class Importer|Import a file: a dropped file is read (nothing saved) and every place that takes files is scored from its headers / sheets / type – "goes to X (best), could also go to Y" with the columns that decided, Open on the best
@@ -56,7 +56,7 @@ MR-1312|M||ICC module not built
 MR-1313|B|function decisions|Phase 12 per D13: live profit views, decision engine (FinanceArea::decisions – what to reorder, reprice, stop), scenario / cash forecast (CashForecast), marketplace API adapters; AI content, GL replacement and native app out of scope by the decision
 MR-1314|B|form:t_account|team member form as Person + Account kit tabs (sub-lists), employment / previous employment for Owner / HR
 MR-1317|B|function save|one form per record, one save path
-MR-1318|P|in_quick|Quick mode
+MR-1318|B|in_quick|Quick = the same form: every section shows its required + key fields (registry in_quick), "Show all n more" opens the rest of that section in place, the same save; seen on live (New purchase order: Basics 2 fields · Show all 3 more)
 MR-1319|B|function addOption|+ Add on every dropdown (form or in place, the new value saved to its central list and seen by every form); fixed and system-made lists keep a stated reason (FormStandard::audit, 0 left without). FormStandardTest.
 MR-1320|P|function chips|registry forms: chips, help, default tag, - / +, searchable dropdowns, cascading lists – on every field; open: the hand-made dialogs of the screens (orders, bank, stock …) do not have chips / help yet
 MR-1321|B|people.personal_data|7e-219: same as MR-0037 (Registry::visible OWNER_HR, Mask::row staff bank, RecordService list)
