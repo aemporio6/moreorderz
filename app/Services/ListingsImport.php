@@ -28,11 +28,12 @@ class ListingsImport
         $mine = $u->fk_id_account && (int) $shop->fk_id_seller === (int) $u->fk_id_account;
         if (! $mine && ! Perm::has($u, 'products.importListingsAll')) throw new \InvalidArgumentException('Refused: you are not the seller of shop ' . $shop->shop_no . ' – the Owner can give "Import listings of every shop".');
         $sk = $col('custom label (sku)'); $ti = $col('title'); $va = $col('variation details'); $it = $col('item number'); $pr = $col('current price') !== false ? $col('current price') : $col('start price');
+        $qc = false; foreach (['available quantity', 'quantity available', 'quantity', 'qty'] as $n) if (($qc = $col($n)) !== false) break;      // inventory (d): what the shop shows
         $file = [];
         foreach (array_slice($rows, 1) as $r) {
             $sku = trim((string) ($r[$sk] ?? '')); if ($sku === '') continue;
             $file[mb_strtoupper($sku)] = ['sku' => $sku, 'title' => mb_substr(trim(trim((string) ($r[$ti] ?? '')) . ' ' . ($va !== false ? trim((string) ($r[$va] ?? '')) : '')), 0, 255), 'item' => $it !== false ? mb_substr(trim((string) ($r[$it] ?? '')), 0, 60) : null,
-                'price' => $pr !== false ? MarketplaceFiles::num($r[$pr] ?? '') : null];
+                'price' => $pr !== false ? MarketplaceFiles::num($r[$pr] ?? '') : null, 'qty' => $qc !== false && is_numeric(trim((string) ($r[$qc] ?? ''))) ? (int) trim((string) $r[$qc]) : null];
         }
         $have = DB::table('t_product_listings')->where('fk_id_ent', $ent)->where('fk_id_branch', $shop->id)->get()->keyBy(fn ($l) => mb_strtoupper((string) $l->marketplace_sku));
         $prod = DB::table('t_product_vendors')->where('fk_id_ent', $ent)->whereIn(DB::raw('UPPER(SKU_VENDOR)'), array_keys($file) ?: ['-'])->get(['id', 'SKU_VENDOR'])->keyBy(fn ($p) => mb_strtoupper($p->SKU_VENDOR));
@@ -43,10 +44,10 @@ class ListingsImport
                 if (! $l) {
                     $p = $prod[$k] ?? null; if (! $p) { $unknown[] = $f['sku']; continue; }
                     $id = (int) DB::table('t_product_listings')->insertGetId(['fk_id_ent' => $ent, 'fk_id_product' => $p->id, 'fk_id_branch' => $shop->id, 'fk_id_marketplace' => (int) $shop->fk_id_marketplace, 'item_id' => $f['item'] ?: null, 'marketplace_sku' => mb_substr($f['sku'], 0, 100),
-                        'listing_title' => $f['title'], 'status' => 'ACTIVE', 'price' => $f['price'] ?: null, 'd_listed' => date('Y-m-d'), 'last_report_at' => now(), 'f_active' => 1, 'created_by' => $u->id, 'created_at' => now()]);
+                        'listing_title' => $f['title'], 'status' => 'ACTIVE', 'price' => $f['price'] ?: null, 'd_listed' => date('Y-m-d'), 'last_report_at' => now(), 'f_active' => 1, 'created_by' => $u->id, 'created_at' => now()] + ($f['qty'] !== null ? ['listed_qty' => $f['qty'], 'listed_qty_at' => now()] : []));
                     $log['created'][] = $id; continue;
                 }
-                $set = ['last_report_at' => now()];
+                $set = ['last_report_at' => now()] + ($f['qty'] !== null ? ['listed_qty' => $f['qty'], 'listed_qty_at' => now()] : []);
                 if ($l->status !== 'ACTIVE') { $set['status'] = 'ACTIVE'; $log['reopened'][] = ['id' => (int) $l->id, 'status' => $l->status]; }
                 if ($f['title'] !== '' && $f['title'] !== (string) $l->listing_title) { $set['listing_title'] = $f['title']; $log['changed'][] = ['id' => (int) $l->id, 'title' => $l->listing_title]; }
                 DB::table('t_product_listings')->where('id', $l->id)->update($set + ['updated_by' => $u->id, 'updated_at' => now()]);

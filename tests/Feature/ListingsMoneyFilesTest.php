@@ -118,4 +118,24 @@ class ListingsMoneyFilesTest extends TestCase
         $this->assertStringContainsString('"QA-2PK","","0","END"', \App\Services\ListingQty::zeroCsv(1, $this->shop));
         $this->assertSame([0, false], [DB::table('stock_push_queue')->where('status', 'PENDING')->count(), \App\Services\TaskEngine::isOpen('LIST_OOS_PUSH', [$this->shop])]);
     }
+
+    /** Inventory (d) rest: the listings report brings the quantity each shop shows; the Shop quantity check compares it with what we can send. */
+    public function test_shop_quantity_check(): void
+    {
+        $this->actingAs($this->owner); \App\Services\Context::set(1, $this->owner->id);
+        $a = $this->p('SQ-A'); $b = $this->p('SQ-B'); $c = $this->p('SQ-C');
+        Stock::adjust(1, $a, $this->bin, 10, 'opening', ['unit_cost' => 1]); Stock::adjust(1, $c, $this->bin, 5, 'opening', ['unit_cost' => 1]);
+        $file = "Item number,Title,Custom label (SKU),Current price,Available quantity\n1,A,SQ-A,2,12\n2,B,SQ-B,2,0\n3,C,SQ-C,2,2\n";
+        ListingsImport::import('101_active.csv', $file, $this->owner);
+        $this->assertSame(12, (int) DB::table('t_product_listings')->where('marketplace_sku', 'SQ-A')->value('listed_qty'));
+        $d = $this->getJson('/api/inventory/shop-check?shop=' . $this->shop)->assertOk()->json();
+        $st = array_column($d['rows'], 'state', 'sku');
+        $this->assertEquals(['SQ-A' => 'OVERSELL', 'SQ-B' => 'MATCH', 'SQ-C' => 'SHORT'], array_intersect_key($st, array_flip(['SQ-A', 'SQ-B', 'SQ-C'])));
+        $row = collect($d['rows'])->firstWhere('sku', 'SQ-A'); $this->assertSame([12, 10, 2], [$row['shown'], $row['should'], $row['diff']]);
+        $this->assertSame('OVERSELL', $d['rows'][0]['state'], 'what can hurt comes first');
+        $this->assertSame(1, $this->getJson('/api/inventory/shop-check?state=SHORT&shop=' . $this->shop)->json('count'));
+        // a file without a quantity column keeps the last quantity
+        ListingsImport::import('101_active2.csv', "Item number,Title,Custom label (SKU),Current price\n1,A,SQ-A,2\n2,B,SQ-B,2\n3,C,SQ-C,2\n", $this->owner);
+        $this->assertSame(12, (int) DB::table('t_product_listings')->where('marketplace_sku', 'SQ-A')->value('listed_qty'));
+    }
 }

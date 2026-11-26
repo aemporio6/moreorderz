@@ -4,7 +4,7 @@ The single list of everything: what is done, what is being built, what comes nex
 It lives in the code (docs/ROADMAP.md) and opens in the tool under Home › Plan & progress. Every batch updates it before it is deployed.
 Nothing the owner asked for may be dropped from this list. A line only leaves "Next" or "Discussed" by moving to "Done", with its date.
 
-Updated: 27 Nov 2026, 01:10 (Pakistan time)
+Updated: 27 Nov 2026, 01:35 (Pakistan time)
 
 ## The owner's standing rules (every screen, every batch is checked against these)
 1. **Everything is connected.** Stock ↔ inventory ↔ partners ↔ buying ↔ sourcing ↔ selling ↔ money. Nothing is a screen on its own: every figure comes from the one ledger and setup behind it, and every action writes there. If something is not connected, it is not finished.
@@ -24,7 +24,7 @@ Updated: 27 Nov 2026, 01:10 (Pakistan time)
     - opening a product shows its whole story
   - (c) ✅ FBA is a ledger location per Amazon shop (= per country), made by itself. FBA units are sold only by that shop, never counted as merchant stock. The two-step transfer to an FC already existed (reserve → pick → ship into in transit → receive at the FC).
   - FBA check: Amazon's report on live uses ASINs, and 31 ASINs are not linked to any product yet. Link each one once in FBA check (search the product → it becomes the Amazon listing); after that, "Book" fills FBA in the ledger.
-  - (d) ✅ FBA check (Inventory › FBA check): Amazon's last report against the ledger, SKU by SKU, with the reason. "Book" brings the ledger to Amazon's figure – as found / lost stock, or as units moved in from a warehouse. Still to do: each shop's quantity against what is available.
+  - (d) ✅ FBA check (Inventory › FBA check): Amazon's last report against the ledger, SKU by SKU, with the reason. "Book" brings the ledger to Amazon's figure – as found / lost stock, or as units moved in from a warehouse. ✅ 27-11: **Shop quantity check** (Inventory › Shop quantity check): each shop's listings against what we can really send – "shows more than we have" (orders we cannot send) first, then "shows less" (lost sales). The quantity comes from the shop's active listings report (the Available quantity column, read by the listings import); the fix is the shop's quantity file, one press. Live has no listing report with quantities yet, so lines show "not reported" until each shop's active listings file is loaded once.
   - (e) ✅ From a product's story: Move units, Change owner, Give to a shop, Pool / Private. Everything goes through the ledger.
   - (f) ✅ Who sees what: a person limited to shops sees only those shops' products – on Inventory, the product story, the stock list, the stock ledger, lots and a product's stock page (Inventory sharing already did this). Still to do: a partner sees his own lots and shares, which comes with the partner work below.
 
@@ -69,6 +69,7 @@ Updated: 27 Nov 2026, 01:10 (Pakistan time)
 - Security: no secrets, no real data in the public repo; nothing is typed into password boxes for the owner.
 
 ## Done (newest first)
+- 27-11: Shop quantity check (inventory step d finished).
 - 27-11: Tasks got its own menu group. "File a document" on every record page; filed documents show in the PO / cycle document lists too.
 - 27-11: Menu – Inventory and Partners are now their own groups (owner 00:09). Inventory: Inventory · FBA check · Stock by partner · Receiving & Warehouse. Partners: Each partner + the partner screens. Each partner page built.
 - 26-11: Inventory screen + product story; old shop lines → listings (3,310).
