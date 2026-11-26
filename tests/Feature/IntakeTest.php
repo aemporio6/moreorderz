@@ -57,4 +57,25 @@ class IntakeTest extends TestCase
         $this->postJson('/api/intake', ['link' => 'https://127.0.0.1/secret.csv'])->assertStatus(422);
         $this->assertSame('xlsx', Intake::sniff("PK\x03\x04....xl/workbook.xml", 'noending'));
     }
+
+    /** Next #3: "File a document" from a record – that record is offered first with its guessed kind, the window lists only its files, and the PO / cycle documents list shows it. */
+    public function test_file_a_document_from_a_record(): void
+    {
+        Storage::fake('local'); $this->actingAs($this->owner); Context::set(1, $this->owner->id);
+        $cy = $this->f('t_src_cycles', ['fk_id_ent' => 1, 'cycle_code' => 'CYC-FD', 'product_name' => 'Lamp', 'status' => 'OPEN', 'f_active' => 1]);
+        $po = $this->f('t_src_po', ['fk_id_ent' => 1, 'po_code' => 'PO-FD-1', 'po_number' => 'PO-FD-1', 'po_date' => '2026-11-01', 'fk_id_cycle' => $cy, 'po_total' => 10, 'status' => 'CONFIRMED', 'f_active' => 1]);
+        $other = $this->post('/api/intake', ['files' => [UploadedFile::fake()->createWithContent('other.txt', 'hello')]])->assertOk()->json('items.0');
+        $pdf = UploadedFile::fake()->createWithContent('packing list march', "%PDF-1.4\nbinary");
+        $r = $this->post('/api/intake', ['files' => [$pdf], 'texts' => ["PACKING LIST\nCartons 12\nGross weight 140 kg"], 'ctx_entity' => 't_src_po', 'ctx_id' => $po])->assertOk()->json('items.0');
+        $best = $r['proposals'][0]; $this->assertSame(['attach', 't_src_po', $po, 99], [$best['action'], $best['entity'], $best['entity_id'], $best['score']]);
+        $this->assertSame('Packing list', $best['category']); $this->assertStringContainsString('PO-FD-1', $best['title']); $this->assertSame(['entity' => 't_src_po', 'id' => $po], $r['ctx']);
+        $mine = $this->getJson("/api/intake?status=NEW&ctx_entity=t_src_po&ctx_id=$po")->assertOk()->json('items');
+        $this->assertSame([$r['id']], array_column($mine, 'id'), 'the window shows only the files of this record');
+        $this->assertNull($this->post('/api/intake', ['files' => [UploadedFile::fake()->createWithContent('x.txt', 'x')], 'ctx_entity' => 't_src_po', 'ctx_id' => 999999])->json('items.0.ctx'), 'a record that does not exist is not taken');
+        $this->postJson('/api/intake/' . $r['id'], ['action' => 'attach', 'entity' => 't_src_po', 'entity_id' => $po, 'category' => 'Packing list'])->assertOk();
+        $rows = $this->getJson("/api/po/$po/documents")->assertOk()->json('rows');
+        $this->assertCount(1, $rows); $this->assertSame('Packing list', $rows[0]['type']); $this->assertTrue($rows[0]['filed']); $this->assertStringContainsString('/api/intake/', $rows[0]['url']);
+        $this->assertCount(1, $this->getJson("/api/cycle/$cy/documents")->json('rows'), 'the cycle shows its PO\'s documents too');
+        $this->assertNotEquals($other['id'], $r['id']);
+    }
 }

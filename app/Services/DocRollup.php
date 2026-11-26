@@ -81,6 +81,19 @@ class DocRollup
                 if (! in_array($label, $rows[$d->id]['via'], true)) { $rows[$d->id]['via'][] = $label; $rows[$d->id]['via_detail'][] = trim($label . ' ' . (self::code($label, $col, $d) ?? '')); }
             }
         }
+        // Next #3: documents filed through Import anything / "File a document" (sys_documents linked to the record) show here too – one list, never two places
+        foreach ($paths as $label => [$col, $ids]) {
+            if (! $ids) continue; $t = self::CODES[$label][0] ?? (['fk_id_production' => 't_src_production', 'fk_id_freight' => 't_src_freight', 'fk_id_investment' => 't_src_investments', 'fk_id_allocation' => 't_src_allocations'][$col] ?? null); if (! $t) continue;
+            $ents = array_values(array_filter(array_unique([$t, RecordService::formOfTable($t)])));
+            foreach (DB::table('sys_document_links as l')->join('sys_documents as d', 'd.id', '=', 'l.fk_id_document')->leftJoin('cat_doc_types as y', 'y.id', '=', 'd.fk_id_doc_type')->leftJoin('t_users as u', 'u.id', '=', 'd.uploaded_by')
+                ->where('d.fk_id_ent', $ent)->where('d.status', 'ACTIVE')->whereIn('l.entity', $ents)->whereIn('l.entity_id', $ids)
+                ->get(['d.id', 'y.doc_type_name as type', 'd.title', 'd.drive_url', 'd.created_at', 'u.display_name as by', 'l.entity_id']) as $d) {
+                $k = 'S' . $d->id; $ok = self::linkOk($d->drive_url) || str_starts_with((string) $d->drive_url, '/');
+                $rows[$k] ??= ['id' => -(int) $d->id, 'type' => (string) ($d->type ?: 'Document'), 'name' => (string) $d->title, 'via' => [], 'via_detail' => [], 'uploaded_by' => $d->by, 'uploaded_on' => $d->created_at ? substr((string) $d->created_at, 0, 10) : null,
+                    'url' => $ok ? $d->drive_url : null, 'link_ok' => $ok, 'link_problem' => $ok ? null : self::BAD_LINK, 'preview' => $ok ? self::preview($d->drive_url) : null, 'filed' => true];
+                if (! in_array($label, $rows[$k]['via'], true)) { $rows[$k]['via'][] = $label; $rows[$k]['via_detail'][] = trim($label . ' ' . (self::code($label, $col, (object) [$col => $d->entity_id]) ?? '')); }
+            }
+        }
         $rows = array_values($rows);
         usort($rows, fn ($a, $b) => [mb_strtolower($a['type']), mb_strtolower($a['name']), $a['id']] <=> [mb_strtolower($b['type']), mb_strtolower($b['name']), $b['id']]);
         foreach ($rows as &$r) { $r['linked_via'] = implode(', ', $r['via']); $r['linked_via_detail'] = 'via ' . implode(', ', $r['via_detail']); } unset($r);

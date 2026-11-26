@@ -16,17 +16,18 @@ class IntakeController extends Controller
     private function run(callable $fn) { try { return $fn(); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
     private function may(Request $r): void { $u = $r->user(); abort_unless(Perm::has($u, 'buying.SEE') || Perm::has($u, 'money.SEE') || Perm::has($u, 'orders.SEE') || Perm::has($u, 'stock.SEE'), 403, 'You do not have the right to import – ask the Owner.'); }
 
-    public function index(Request $r) { $this->may($r); return Intake::list($this->ent(), strtoupper((string) $r->query('status', 'NEW'))); }
+    public function index(Request $r) { $this->may($r); return Intake::list($this->ent(), strtoupper((string) $r->query('status', 'NEW')), $r->filled('ctx_entity') ? ['entity' => (string) $r->query('ctx_entity'), 'id' => (int) $r->query('ctx_id')] : null); }
 
     /** files[] (with texts[i] = what the browser read, readers[i]), or text (a pasted table / words), or link. */
     public function take(Request $r)
     {
         $this->may($r); $u = $r->user(); $ent = $this->ent(); $out = []; $err = [];
+        $ctx = $r->filled('ctx_entity') ? ['entity' => (string) $r->input('ctx_entity'), 'id' => (int) $r->input('ctx_id')] : null;      // filed from a record
         foreach (array_values((array) $r->file('files', [])) as $i => $f) {
-            try { $out[] = Intake::take($ent, $u, (string) file_get_contents($f->getRealPath()), (string) $f->getClientOriginalName(), (string) ($r->input("sources.$i") ?: 'UPLOAD'), null, $r->input("texts.$i"), $r->input("readers.$i")); }
+            try { $out[] = Intake::take($ent, $u, (string) file_get_contents($f->getRealPath()), (string) $f->getClientOriginalName(), (string) ($r->input("sources.$i") ?: 'UPLOAD'), null, $r->input("texts.$i"), $r->input("readers.$i"), $ctx); }
             catch (\InvalidArgumentException $e) { $err[] = $e->getMessage(); }
         }
-        if (trim((string) $r->input('text', '')) !== '') { $t = (string) $r->input('text'); try { $out[] = Intake::take($ent, $u, $t, 'pasted ' . date('Y-m-d H.i') . (preg_match('/\t/', $t) ? '.tsv' : '.txt'), 'PASTE', null, $t, 'pasted'); } catch (\InvalidArgumentException $e) { $err[] = $e->getMessage(); } }
+        if (trim((string) $r->input('text', '')) !== '') { $t = (string) $r->input('text'); try { $out[] = Intake::take($ent, $u, $t, 'pasted ' . date('Y-m-d H.i') . (preg_match('/\t/', $t) ? '.tsv' : '.txt'), 'PASTE', null, $t, 'pasted', $ctx); } catch (\InvalidArgumentException $e) { $err[] = $e->getMessage(); } }
         if (trim((string) $r->input('link', '')) !== '') { try { foreach (Intake::fromLink($ent, $u, (string) $r->input('link')) as $x) { if (isset($x['error'])) $err[] = $x['error']; else $out[] = $x; } } catch (\InvalidArgumentException $e) { $err[] = $e->getMessage(); } }
         if (! $out && $err) return response()->json(['message' => implode(' ', $err)], 422);
         return ['items' => $out, 'errors' => $err];

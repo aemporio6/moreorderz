@@ -39,7 +39,7 @@ class Intake
     }
 
     /** Take one thing in: keep the bytes, read what can be read here, understand it. $text = what the browser read (PDF / picture). */
-    public static function take(int $ent, object $u, string $bytes, string $name, string $source = 'UPLOAD', ?string $url = null, ?string $text = null, ?string $readBy = null): array
+    public static function take(int $ent, object $u, string $bytes, string $name, string $source = 'UPLOAD', ?string $url = null, ?string $text = null, ?string $readBy = null, ?array $ctx = null): array
     {
         if ($bytes === '') throw new \InvalidArgumentException("$name is empty.");
         if (strlen($bytes) > self::MAX_MB * 1048576) throw new \InvalidArgumentException("$name is larger than " . self::MAX_MB . ' MB – keep it in Drive and paste its link.');
@@ -49,12 +49,34 @@ class Intake
         $path = 'intake/' . $ent . '/' . date('Ym') . '/' . bin2hex(random_bytes(8)) . '.' . $ext;
         Storage::disk('local')->put($path, $bytes);
         $id = (int) DB::table('mo_intake')->insertGetId(['fk_id_ent' => $ent, 'user_id' => $u->id, 'name' => $name, 'ext' => $ext, 'mime' => mb_substr((string) (new \finfo(FILEINFO_MIME_TYPE))->buffer($bytes), 0, 100),
-            'size_bytes' => strlen($bytes), 'sha256' => $sha, 'path' => $path, 'source' => $source, 'url' => $url ? mb_substr($url, 0, 500) : null, 'status' => 'NEW', 'created_at' => now(), 'updated_at' => now()]);
+            'size_bytes' => strlen($bytes), 'sha256' => $sha, 'path' => $path, 'source' => $source, 'url' => $url ? mb_substr($url, 0, 500) : null, 'status' => 'NEW', 'created_at' => now(), 'updated_at' => now()]
+            + (($c = self::ctx($ctx)) ? ['ctx_entity' => $c[0], 'ctx_id' => $c[1]] : []));
         $t = $text !== null && trim($text) !== '' ? $text : self::read(Storage::disk('local')->path($path), $ext);
         DB::table('mo_intake')->where('id', $id)->update(['text' => mb_substr((string) $t, 0, 200000), 'read_by' => $text !== null && trim($text) !== '' ? ($readBy ?: 'browser') : ($t !== '' ? 'server' : null)]);
         $a = self::analyse($id);
         if ($before) $a['again'] = 'The same file came in before (' . substr((string) $before->created_at, 0, 16) . ', ' . strtolower($before->status) . ').';
         return $a;
+    }
+
+    /**
+     * Next #3 "File a document from anywhere": the record the person was on when he filed it. [form key, id] or null.
+     * The browser sends a form key (record page) or a table (PO, cycle, product pages); it must exist and be a real record.
+     */
+    public static function ctx(?array $c): ?array
+    {
+        if (! $c || empty($c['entity']) || (int) ($c['id'] ?? 0) <= 0) return null;
+        $e = (string) $c['entity']; if (! Registry::exists($e)) $e = (string) (RecordService::formOfTable($e) ?: '');
+        if ($e === '' || ! Registry::exists($e)) return null; $t = Registry::table($e);
+        return $t && DB::table($t)->where('id', (int) $c['id'])->exists() ? [mb_substr($e, 0, 60), (int) $c['id']] : null;
+    }
+
+    /** "PO P-0012" / "supplier Shenzhen Toys" – what the record is called, for the proposal. */
+    public static function ctxLabel(string $e, int $id): string
+    {
+        $t = (string) Registry::table($e); $col = $t ? Registry::labelColumn($t) : null;
+        $v = $t && $col ? trim((string) DB::table($t)->where('id', $id)->value($col)) : '';
+        $what = ['t_src_po' => 'PO', 't_src_suppliers' => 'supplier', 't_product_vendors' => 'product', 't_src_cycles' => 'cycle', 't_sales' => 'order', 't_invoices' => 'invoice', 't_branches' => 'shop'][$t] ?? 'this record';
+        return $what . ' ' . ($v !== '' && $col !== 'id' ? mb_substr($v, 0, 60) : '#' . $id);
     }
 
     /** Text of what the server can read itself: tables, Excel, Word, PDF (when the PDF tool is there). */
@@ -118,6 +140,12 @@ class Intake
             if (! $sup && in_array($dk, ['Proforma invoice (PI)', 'Commercial invoice', 'Packing list', 'Contract'], true) && ($nm = self::sellerName($text)))
                 $props[] = ['action' => 'form', 'form' => $supForm, 'title' => "New supplier “{$nm}”", 'preset' => ['supplier_name' => $nm, '__label' => $nm], 'why' => 'this seller is not among your suppliers yet', 'score' => 65];
         }
+        if (! empty($r->ctx_entity) && $r->ctx_id) {      // filed from a record: that record comes first, with its kind
+            $dk = $dk ?? SupplierUploads::kind((string) $r->name, $text, $ext); $lbl = self::ctxLabel((string) $r->ctx_entity, (int) $r->ctx_id);
+            $props = array_values(array_filter($props, fn ($p) => ! ($p['action'] === 'attach' && $p['entity'] === $r->ctx_entity && (int) $p['entity_id'] === (int) $r->ctx_id)));
+            $props[] = ['action' => 'attach', 'entity' => (string) $r->ctx_entity, 'entity_id' => (int) $r->ctx_id, 'category' => $dk, 'title' => 'Put it on ' . $lbl . ' as ' . $dk, 'why' => 'you filed it from this record; its kind is guessed from ' . ($text !== '' ? 'what it says' : 'its name'), 'score' => 99];
+            $facts['from'] = $lbl;
+        }
         $props[] = ['action' => 'keep', 'title' => 'Keep it in Documents', 'why' => 'kept with the company, found by search', 'score' => 30];
         $props[] = ['action' => 'skip', 'title' => 'Set aside', 'why' => 'nothing is done; it stays listed under Set aside', 'score' => 1];
         usort($props, fn ($a, $b) => $b['score'] <=> $a['score']);
@@ -157,12 +185,13 @@ class Intake
     {
         return ['id' => (int) $r->id, 'name' => $r->name, 'ext' => $r->ext, 'size' => (int) $r->size_bytes, 'source' => $r->source, 'kind' => $r->kind, 'status' => $r->status, 'at' => $r->created_at,
             'facts' => json_decode((string) $r->facts_json, true) ?: [], 'proposals' => json_decode((string) $r->proposals_json, true) ?: [], 'done' => json_decode((string) $r->done_json, true) ?: null,
-            'read_by' => $r->read_by, 'preview' => mb_substr((string) $r->text, 0, 600), 'document' => $r->fk_id_document ? (int) $r->fk_id_document : null];
+            'read_by' => $r->read_by, 'ctx' => ! empty($r->ctx_entity) ? ['entity' => $r->ctx_entity, 'id' => (int) $r->ctx_id] : null, 'preview' => mb_substr((string) $r->text, 0, 600), 'document' => $r->fk_id_document ? (int) $r->fk_id_document : null];
     }
 
-    public static function list(int $ent, string $status = 'NEW'): array
+    public static function list(int $ent, string $status = 'NEW', ?array $ctx = null): array
     {
         $q = DB::table('mo_intake')->where('fk_id_ent', $ent)->orderByDesc('id')->limit(200);
+        if ($c = self::ctx($ctx)) $q->where('ctx_entity', $c[0])->where('ctx_id', $c[1]);
         if ($status !== 'ALL') $q->where('status', $status);
         return ['items' => $q->get()->map(fn ($r) => self::row($r))->all(), 'counts' => DB::table('mo_intake')->where('fk_id_ent', $ent)->groupBy('status')->selectRaw('status, COUNT(*) n')->pluck('n', 'status')];
     }

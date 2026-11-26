@@ -4,7 +4,7 @@ The single list of everything: what is done, what is being built, what comes nex
 It lives in the code (docs/ROADMAP.md) and opens in the tool under Home › Plan & progress. Every batch updates it before it is deployed.
 Nothing the owner asked for may be dropped from this list. A line only leaves "Next" or "Discussed" by moving to "Done", with its date.
 
-Updated: 27 Nov 2026, 00:20 (Pakistan time)
+Updated: 27 Nov 2026, 01:10 (Pakistan time)
 
 ## The owner's standing rules (every screen, every batch is checked against these)
 1. **Everything is connected.** Stock ↔ inventory ↔ partners ↔ buying ↔ sourcing ↔ selling ↔ money. Nothing is a screen on its own: every figure comes from the one ledger and setup behind it, and every action writes there. If something is not connected, it is not finished.
@@ -42,8 +42,8 @@ Updated: 27 Nov 2026, 00:20 (Pakistan time)
    - payments both ways (what he gave and what he took)
    - his inventory: on hand, his share, coming in, going out, and its value
    - a statement
-2. **Task management.** The old tasks did come in (2,321 on live, 3 templates). Still to check: the task screens are complete and as easy as in the old tool.
-3. Documents: "File a document" from anywhere. Its kind and its record are guessed, with the reason shown (reuses Import anything).
+2. **Task management** – ✅ checked 27-11: every old task came in (2 tasks, 11 categories, 3 templates, 20 shop reminders, 629 order reminders; 2,319 tasks made by rules). The screens were complete but hidden under Team & Work, so **Tasks** is now its own menu group: My tasks, Board, Weekly, Templates, Absence calendar. Still to do: MY TOOL's tasks come over once the MY TOOL link key is pasted.
+3. **Documents: "File a document" from anywhere** – ✅ 27-11: a "File a document" button on every record, PO, cycle and product page (and in each record's Documents). Drop a file, screenshot or link: it is read, its kind is guessed and that record is offered first with the reason; one press puts it there. Filed documents now also show in the PO and cycle document lists (before, they showed only on the record).
 4. Access card: Edit / View only / Hidden for each area; a blocked person gets an "Ask the Owner" button on Home.
 5. Guide me: steps for more screens.
 6. Register lines still PARTIAL (98) or FORM ONLY (39).
@@ -69,6 +69,7 @@ Updated: 27 Nov 2026, 00:20 (Pakistan time)
 - Security: no secrets, no real data in the public repo; nothing is typed into password boxes for the owner.
 
 ## Done (newest first)
+- 27-11: Tasks got its own menu group. "File a document" on every record page; filed documents show in the PO / cycle document lists too.
 - 27-11: Menu – Inventory and Partners are now their own groups (owner 00:09). Inventory: Inventory · FBA check · Stock by partner · Receiving & Warehouse. Partners: Each partner + the partner screens. Each partner page built.
 - 26-11: Inventory screen + product story; old shop lines → listings (3,310).
 - 26-11: Empty central lists fill themselves (live had 127 empty lists, now 47 – the rest are lists of records not made yet). Every screen got Back / + New / Still needed / Quick-Full.
