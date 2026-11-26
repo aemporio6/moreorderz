@@ -152,20 +152,33 @@ class CycleAlerts
     }
 
     /** Quantity check per cycle product (R-39, v1.7: read from the GRN lines). */
+    /** Live 26-11 'slow': the quantity rows of many cycles read once (detect() over every cycle read ~8 tables per cycle). */
+    private static ?array $qpre = null;
+
+    private static function qRows(array $ids): array
+    {
+        $by = fn ($rows) => $rows->groupBy(fn ($r) => (int) $r->cy);
+        $prod = fn ($q) => $q->where(fn ($w) => $w->whereNull('line_type')->orWhereIn('line_type', ['', 'PRODUCT']));
+        return ['poProd' => $by($prod(DB::table('t_src_po_lines')->whereIn('fk_id_cycle', $ids)->where('f_active', 1))->get(['fk_id_cycle as cy', 'fk_id_po', 'fk_id_product'])),
+            'production' => $by(DB::table('t_src_production')->whereIn('fk_id_cycle', $ids)->where('f_active', 1)->get(['fk_id_cycle as cy', 'fk_id_po', 'produced_qty'])),
+            'qc' => $by(DB::table('t_src_qc')->whereIn('fk_id_cycle', $ids)->where('f_active', 1)->whereNull('re_inspection_of')->get(['fk_id_cycle as cy', 'fk_id_po', 'qty_passed'])),
+            'stock' => $by(DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->leftJoin('cat_inventory_locations as c', 'c.id', '=', 'b.fk_id_location')->whereIn('l.fk_id_cycle', $ids)
+                ->where(fn ($w) => $w->whereNull('c.kind')->orWhereNotIn('c.kind', ['DAMAGED', 'SHIPPED']))->groupBy('l.fk_id_cycle', 'l.fk_id_product')->selectRaw('l.fk_id_cycle cy, l.fk_id_product p, SUM(b.qty) q')->get()),
+            'poLines' => $by(DB::table('t_src_po_lines')->where('f_active', 1)->whereIn('fk_id_cycle', $ids)->get(['fk_id_cycle as cy', 'fk_id_cycle_product', 'fk_id_product', 'qty_ordered'])),
+            'allocs' => $by(DB::table('t_src_allocations')->where('f_active', 1)->whereIn('fk_id_cycle', $ids)->get(['fk_id_cycle as cy', 'fk_id_cycle_product', 'allocated_qty', 'confirmed_qty', 'dispatched_qty'])),
+            'grn' => $by(DB::table('t_src_grn_lines as l')->join('t_src_grn as g', 'g.id', '=', 'l.fk_id_grn')->whereIn('g.fk_id_cycle', $ids)->where('g.f_active', 1)->get(['g.fk_id_cycle as cy', 'l.fk_id_product', 'l.expected_qty', 'l.received_qty', 'l.accepted_qty', 'l.damaged_qty', 'l.missing_qty']))];
+    }
+
     public static function quantities(int $cycleId): array
     {
-        $out = [];
+        $out = []; $R = self::$qpre ?? self::qRows([$cycleId]); $g = fn (string $k) => $R[$k]->get($cycleId, collect());
         /* R-39 (new) trail: produced / QC passed per PO (a PO with one product gives them to that product), in stock = lots of the cycle still on hand */
-        $poProd = DB::table('t_src_po_lines')->where('fk_id_cycle', $cycleId)->where('f_active', 1)->where(fn ($q) => $q->whereNull('line_type')->orWhereIn('line_type', ['', 'PRODUCT']))->get(['fk_id_po', 'fk_id_product'])->groupBy('fk_id_po')
-            ->map(fn ($g) => $g->pluck('fk_id_product')->unique()->count() === 1 ? (int) $g->first()->fk_id_product : null);
+        $poProd = $g('poProd')->groupBy('fk_id_po')->map(fn ($x) => $x->pluck('fk_id_product')->unique()->count() === 1 ? (int) $x->first()->fk_id_product : null);
         $prodBy = []; $qcBy = []; $cyProd = 0.0; $cyQc = 0.0;
-        foreach (DB::table('t_src_production')->where('fk_id_cycle', $cycleId)->where('f_active', 1)->get(['fk_id_po', 'produced_qty']) as $r) { $cyProd += (float) $r->produced_qty; if ($pid = $poProd[$r->fk_id_po] ?? (count($poProd) === 1 ? $poProd->first() : null)) $prodBy[$pid] = ($prodBy[$pid] ?? 0) + (float) $r->produced_qty; }
-        foreach (DB::table('t_src_qc')->where('fk_id_cycle', $cycleId)->where('f_active', 1)->whereNull('re_inspection_of')->get(['fk_id_po', 'qty_passed']) as $r) { $cyQc += (float) $r->qty_passed; if ($pid = $poProd[$r->fk_id_po] ?? (count($poProd) === 1 ? $poProd->first() : null)) $qcBy[$pid] = ($qcBy[$pid] ?? 0) + (float) $r->qty_passed; }
-        $stock = DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->leftJoin('cat_inventory_locations as c', 'c.id', '=', 'b.fk_id_location')->where('l.fk_id_cycle', $cycleId)
-            ->where(fn ($w) => $w->whereNull('c.kind')->orWhereNotIn('c.kind', ['DAMAGED', 'SHIPPED']))->groupBy('l.fk_id_product')->selectRaw('l.fk_id_product p, SUM(b.qty) q')->pluck('q', 'p');
-        $poLines = DB::table('t_src_po_lines')->where('f_active', 1)->where('fk_id_cycle', $cycleId)->get(['fk_id_cycle_product', 'fk_id_product', 'qty_ordered']);
-        $allocs = DB::table('t_src_allocations')->where('f_active', 1)->where('fk_id_cycle', $cycleId)->get(['fk_id_cycle_product', 'allocated_qty', 'confirmed_qty', 'dispatched_qty'])->groupBy(fn ($a) => (int) $a->fk_id_cycle_product);
-        $grnLines = DB::table('t_src_grn_lines as l')->join('t_src_grn as g', 'g.id', '=', 'l.fk_id_grn')->where('g.fk_id_cycle', $cycleId)->where('g.f_active', 1)->get(['l.fk_id_product', 'l.expected_qty', 'l.received_qty', 'l.accepted_qty', 'l.damaged_qty', 'l.missing_qty'])->groupBy(fn ($x) => (int) $x->fk_id_product);
+        foreach ($g('production') as $r) { $cyProd += (float) $r->produced_qty; if ($pid = $poProd[$r->fk_id_po] ?? (count($poProd) === 1 ? $poProd->first() : null)) $prodBy[$pid] = ($prodBy[$pid] ?? 0) + (float) $r->produced_qty; }
+        foreach ($g('qc') as $r) { $cyQc += (float) $r->qty_passed; if ($pid = $poProd[$r->fk_id_po] ?? (count($poProd) === 1 ? $poProd->first() : null)) $qcBy[$pid] = ($qcBy[$pid] ?? 0) + (float) $r->qty_passed; }
+        $stock = $g('stock')->pluck('q', 'p');
+        $poLines = $g('poLines'); $allocs = $g('allocs')->groupBy(fn ($a) => (int) $a->fk_id_cycle_product); $grnLines = $g('grn')->groupBy(fn ($x) => (int) $x->fk_id_product);
         foreach (DB::table('t_src_cycle_products as cp')->leftJoin('t_product_vendors as p', 'p.id', '=', 'cp.fk_id_product')->where('cp.fk_id_cycle', $cycleId)->get(['cp.id', 'cp.fk_id_product', 'p.SKU_VENDOR as sku', 'cp.product_name']) as $cp) {
             /* live 26-11 'slow': the cycle's PO lines, allocations and GRN lines read once (above), summed here per product – was 3 queries per product */
             $ord = (float) $poLines->filter(fn ($l) => (int) $l->fk_id_cycle_product === (int) $cp->id || ($l->fk_id_cycle_product === null && (int) $l->fk_id_product === (int) $cp->fk_id_product))->sum(fn ($l) => (float) $l->qty_ordered);
@@ -230,6 +243,7 @@ class CycleAlerts
         // SRC_LOT_NO_COST: an active lot without a landed unit cost
         foreach (DB::table('fin_lots as l')->leftJoin('t_src_inventory_receipts as r', 'r.id', '=', 'l.fk_id_receipt')->where('l.company_id', $ent)->where('l.qty_left', '>', 0)->where(fn ($q) => $q->whereNull('l.unit_cost_gbp')->orWhere('l.unit_cost_gbp', '<=', 0))->when($cycleId, fn ($q) => $q->where('l.fk_id_cycle', $cycleId))->get(['l.id', 'l.lot_code', 'l.sku', 'l.fk_id_cycle', 'r.receipt_code']) as $l)
             $add('SRC_LOT_NO_COST', [$l->lot_code ?: $l->id], $l->fk_id_cycle ? (int) $l->fk_id_cycle : null, 'P2', 'Enter Landed Unit Cost · ' . ($l->receipt_code ?: $l->lot_code ?: $l->sku), 'Field empty on this lot', 'Inventory Receiving', null, ['module' => 'fin_lots', 'record_id' => $l->id, 'fix_url' => $l->fk_id_cycle ? "#/cycle/{$l->fk_id_cycle}" : '#/stock']);
+        $cids = $cy->keys()->map(fn ($x) => (int) $x)->all(); $wasPre = self::$pre; if (count($cids) > 1) { self::$qpre = self::qRows($cids); if (! $wasPre) self::preload($cids); }      // many cycles: their rows read once
         foreach ($cy as $c) {
             // SRC_QTY_MISMATCH / SRC_OVER_ALLOC from the quantity check (R-39)
             foreach (self::quantities((int) $c->id) as $q) {
@@ -260,6 +274,7 @@ class CycleAlerts
             foreach (DB::table('t_product_vendors')->where('fk_id_ent', $ent)->where('stock', '>', 0)->where(fn ($q) => $q->whereNull('landing_price')->orWhere('landing_price', '<=', 0))->get(['id', 'SKU_VENDOR', 'stock']) as $p)
                 $add('STK_NO_COST', [$p->SKU_VENDOR ?: $p->id], null, 'P2', "Stock without a cost · {$p->SKU_VENDOR}", (int) $p->stock . ' unit(s) in stock, landing price empty', 'Stock', null, ['module' => 't_product_vendors', 'record_id' => $p->id, 'fix_url' => "#/stock/product/{$p->id}"]);
         }
+        self::$qpre = null; if (! $wasPre && count($cids) > 1) { self::$pre = []; StepColours::forget(); }
         return $rows;
     }
 
