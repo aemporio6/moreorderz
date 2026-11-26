@@ -37,8 +37,8 @@
   }
   async function api(path, opt = {}) {
     const res = await fetch('/api/' + path, { method: opt.method || 'GET', credentials: 'same-origin',
-      headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf, ...coHdr(opt), ...(opt.body ? { 'Content-Type': 'application/json' } : {}) },
-      body: opt.body ? JSON.stringify(opt.body) : undefined });
+      headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf, ...coHdr(opt), ...(opt.body && !(opt.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}) },
+      body: opt.body ? (opt.body instanceof FormData ? opt.body : JSON.stringify(opt.body)) : undefined });      // files (FormData) go as they are – before, they were sent as empty JSON
     if (res.status === 401 || res.status === 419) { location.href = '/login'; throw new Error('Signed out'); }
     const data = await res.json().catch(() => ({}));
     if (res.status === 409 && data.choose_company && !opt._ent) { const e = await pickCompany(data.message, data.companies); return api(path, { ...opt, _ent: e }); }
@@ -252,7 +252,7 @@
     const prev = h1.previousElementSibling; if (prev && /›/.test(prev.textContent)) return;      // the page has its own "Settings ›" line
     h1.insertAdjacentHTML('beforebegin', `<div class="crumb">${crumbTxt.slice(0, a === b || a.includes(b) || b.includes(a) ? -1 : crumbTxt.length).map(esc).join(' › ')}${a === b || a.includes(b) || b.includes(a) ? ' ›' : ''}</div>`);
   }
-  let navTimer; function afterRender(route) { try { ensureHead(route); } catch (e) {} taskHead(route); paintFav(); playbookBar(route); stepPager(route); guideNow(route); clearTimeout(navTimer);
+  let navTimer; function afterRender(route) { try { ensureHead(route); } catch (e) {} try { takeHandoff(); } catch (e) {} taskHead(route); paintFav(); playbookBar(route); stepPager(route); guideNow(route); clearTimeout(navTimer);
     navTimer = setTimeout(async () => { if (S.route !== route || route === '#/home') return; const h = $('#main h1'); if (!h) return; try { NAV = await api('nav', { method: 'POST', body: { title: h.textContent.trim().slice(0, 150), url: route } }); paintFav(); } catch (e) {} }, 1500); }
   // R-B_SOURCING-20: floating Previous / Next on every step place of a cycle record (cycle page sections, Samples · QC · Customs, the step lists of the cycle); skipped steps are jumped
   async function stepPager(route) {
@@ -4803,16 +4803,99 @@
     $('#smChk').onclick = async () => { try { show(await api('supplier-orders/match?shop=' + $('#smShop').value)); } catch (e) { toast(e.message, 'err'); } };
     $('#smGo').onclick = async () => { try { const d = await api('supplier-orders/match', { method: 'POST', body: { shop: +$('#smShop').value } }); toast(d.message); show(d); } catch (e) { toast(e.message, 'err'); } };
   }
+  /* Owner 26-11 22:28 – ONE importer for everything. Drop / choose / paste / link anything: files of every kind (many at once, a whole folder),
+     screenshots, a table copied from Excel, a Drive file or folder link. The browser reads PDFs (pdf.js) and pictures (OCR, English + Chinese) on
+     this device; the server keeps the file, reads tables / Excel / Word, works out what it is and what it belongs to, and offers each its place –
+     the best one is chosen; nothing happens until you press. Below: the screens of each kind of work, as before. */
+  const IX = { status: 'NEW', busy: 0 };
+  const ixLoad = src => new Promise((res, rej) => { if (document.querySelector(`script[src="${src}"]`)) return res(); const s2 = document.createElement('script'); s2.src = src; s2.onload = res; s2.onerror = () => rej(new Error('The reader could not be loaded – check the internet connection.')); document.head.appendChild(s2); });
+  async function ixPdfText(file, note) {
+    await ixLoad('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'); const lib = window.pdfjsLib; lib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const doc = await lib.getDocument({ data: await file.arrayBuffer() }).promise; let out = ''; const pages = Math.min(doc.numPages, 8);
+    for (let i = 1; i <= pages; i++) { const pg = await doc.getPage(i); const c = await pg.getTextContent(); let line = '', lastY = null; c.items.forEach(it => { const y = Math.round(it.transform[5]); if (lastY !== null && Math.abs(y - lastY) > 3) { out += line.trim() + '\n'; line = ''; } line += it.str + ' '; lastY = y; }); out += line.trim() + '\n\n'; }
+    if (out.replace(/\s/g, '').length >= 40) return [out, 'PDF text'];
+    note('scanned PDF – reading the pages as pictures…'); let ocr = '';      // a scanned PDF: its pages are pictures
+    for (let i = 1; i <= Math.min(doc.numPages, 3); i++) { const pg = await doc.getPage(i); const vp = pg.getViewport({ scale: 2 }); const cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height; await pg.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise; ocr += (await ixOcr(cv, note)) + '\n\n'; }
+    return [ocr, 'OCR of the scanned PDF'];
+  }
+  let ixWorker = null;
+  async function ixOcr(img, note) {
+    await ixLoad('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js');
+    if (!ixWorker) { note('loading the picture reader (first time only)…'); ixWorker = await window.Tesseract.createWorker(['eng', 'chi_sim'], 1, { logger: m => { if (m.status === 'recognizing text') note('reading the picture ' + Math.round((m.progress || 0) * 100) + ' %'); } }); }
+    const r = await ixWorker.recognize(img); return (r.data && r.data.text) || '';
+  }
+  async function ixRead(file, note) {
+    const n = (file.name || '').toLowerCase(), t = file.type || '';
+    try { if (t === 'application/pdf' || /\.pdf$/.test(n)) return await ixPdfText(file, note);
+      if (/^image\//.test(t) || /\.(jpe?g|png|webp|gif|bmp)$/.test(n)) { note('reading the picture…'); return [await ixOcr(file, note), 'OCR (picture)']; } }
+    catch (e) { note('could not read it here (' + e.message + ') – it is kept anyway'); }
+    return [null, null];
+  }
+  async function ixSend(files, extra = {}) {
+    const box = $('#ixLive'); if (!box) return; IX.busy++;
+    const rows = files.map((f, i) => { const d = document.createElement('div'); d.className = 'ix-live'; d.innerHTML = `<b>${esc(f.name || 'pasted picture')}</b> <span class="small muted" data-n>waiting…</span>`; box.appendChild(d); return d; });
+    const texts = [], readers = [];
+    for (let i = 0; i < files.length; i++) { const note = m => { const x = $('[data-n]', rows[i]); if (x) x.textContent = m; }; note('reading…'); const [tx, by] = await ixRead(files[i], note); texts[i] = tx; readers[i] = by; note(tx ? `read: ${tx.replace(/\s+/g, ' ').trim().length} characters (${by})` : 'sending…'); }
+    for (let k = 0; k < files.length; k += 5) { const fd = new FormData(); files.slice(k, k + 5).forEach((f, j) => { fd.append(`files[${j}]`, f, f.name || 'pasted.png'); if (texts[k + j]) fd.append(`texts[${j}]`, texts[k + j]); if (readers[k + j]) fd.append(`readers[${j}]`, readers[k + j]); if (extra.source) fd.append(`sources[${j}]`, extra.source); });
+      try { const r = await api('intake', { method: 'POST', body: fd }); (r.errors || []).forEach(e => toast(e, 'warn')); } catch (e) { toast(e.message, 'err'); } }
+    rows.forEach(r => r.remove()); IX.busy--; IX.status = 'NEW'; ixDraw();
+  }
+  async function ixSendText(body) { try { busy(true); const r = await api('intake', { method: 'POST', body }); (r.errors || []).forEach(e => toast(e, 'warn')); IX.status = 'NEW'; ixDraw(); } catch (e) { toast(e.message, 'err'); } finally { busy(false); } }
+  async function ixDraw() {
+    const host = $('#ixList'); if (!host) return; let d; try { d = await api('intake?status=' + IX.status); } catch (e) { host.innerHTML = `<div class="muted">${esc(e.message)}</div>`; return; }
+    const c = d.counts || {}; $('#ixTabs').innerHTML = [['NEW', 'To place'], ['DONE', 'Placed'], ['SKIPPED', 'Set aside'], ['ALL', 'All']].map(([k, l]) => `<button type="button" class="${IX.status === k ? 'on' : ''}" data-ixs="${k}">${l}${k !== 'ALL' && c[k] ? ' · ' + c[k] : ''}</button>`).join('');
+    $$('[data-ixs]').forEach(b => b.onclick = () => { IX.status = b.dataset.ixs; ixDraw(); });
+    const fact = f => [f.kind && `<span class="chip accent plain">${esc(f.kind)}</span>`, f.supplier && `Supplier <b>${esc(f.supplier)}</b>`, f.pos && `PO <b>${esc(f.pos.join(', '))}</b>`, f.products && `Products <b>${esc(f.products.slice(0, 6).join(', '))}${f.products.length > 6 ? '…' : ''}</b>`,
+      f.amount && `Amount <b>${money(f.amount)} ${esc(f.currency || '')}</b>`, f.date && `Date <b>${esc(f.date)}</b>`, f.refs && `Ref <b>${esc(f.refs.slice(0, 3).join(', '))}</b>`, f.table && `<span class="muted">${esc(f.table)}</span>`].filter(Boolean).join(' · ');
+    host.innerHTML = d.items.length ? d.items.map(x => `<div class="card ix-item" data-ix="${x.id}"><div class="card-b">
+      <div class="ix-top"><a href="/api/intake/${x.id}/file" target="_blank" rel="noopener" class="ix-name">${esc(x.name)}</a><span class="small muted">${esc(x.source.toLowerCase())} · ${(x.size / 1024).toFixed(0)} KB · ${esc(String(x.at || '').slice(0, 16))}</span>${x.status !== 'NEW' ? `<span class="chip ${x.status === 'DONE' ? 'ok' : ''} plain">${x.status === 'DONE' ? 'placed' : 'set aside'}</span>` : ''}</div>
+      <div class="ix-facts">${fact(x.facts)}</div><div class="small muted">${esc(x.facts.read || '')}${x.facts.po_guess ? ' · ' + esc(x.facts.po_guess) : ''}${x.again ? ' · ' + esc(x.again) : ''}</div>
+      ${x.status === 'NEW' ? `<div class="ix-props">${x.proposals.map((p, i) => `<label class="ix-prop ${i === 0 ? 'on' : ''}"><input type="radio" name="ixp${x.id}" value="${i}" ${i === 0 ? 'checked' : ''}><span><b>${esc(p.title)}</b><small>${esc(p.why || '')}</small></span></label>`).join('')}
+        <label class="ix-prop"><input type="radio" name="ixp${x.id}" value="other"><span><b>Another record…</b><small>search any PO, supplier, product, payment, shop…</small></span></label></div>
+        <div class="ix-other" hidden><input class="q" placeholder="Type a PO number, supplier, SKU…" autocomplete="off"><div class="ix-found"></div></div>
+        <div class="ix-act"><button class="btn primary" data-ixgo type="button">Do it</button>${x.preview ? '<a href="#" class="small" data-ixpv>What it says</a>' : ''}</div><pre class="ix-pv small" hidden>${esc(x.preview)}</pre>`
+        : x.done ? `<div class="small">${esc(x.done.action === 'open' ? 'handed to ' + (x.done.screen || 'its screen') : x.done.action === 'skip' ? 'set aside' : 'on ' + (x.done.entity || '') + ' #' + (x.done.entity_id || ''))}${x.document ? ` · <a href="/api/intake/${x.id}/file" target="_blank" rel="noopener">open the file</a>` : ''}</div>` : ''}
+      </div></div>`).join('') : `<div class="muted" style="padding:10px 4px">${IX.status === 'NEW' ? 'Nothing waiting. Drop or paste anything above.' : 'Nothing here.'}</div>`;
+    $$('#ixList [data-ix]').forEach(card => { const id = +card.dataset.ix, x = d.items.find(y => y.id === id); if (!x || x.status !== 'NEW') return; let other = null;
+      $$('.ix-prop input', card).forEach(r => r.onchange = () => { $$('.ix-prop', card).forEach(l => l.classList.toggle('on', l.contains(r) && r.checked)); $('.ix-other', card).hidden = r.value !== 'other'; if (r.value === 'other') $('.ix-other input', card).focus(); });
+      let tm; $('.ix-other input', card).oninput = e => { clearTimeout(tm); tm = setTimeout(async () => { const q = e.target.value.trim(); if (q.length < 2) return; try { const f = await api('find?q=' + encodeURIComponent(q) + '&scope=records'); const recs = (f.groups || []).flatMap(g => g.items).filter(i => /^#\/rec\//.test(i.url || '')).slice(0, 10);
+        $('.ix-found', card).innerHTML = recs.length ? recs.map((i, k) => `<a href="#" data-k="${k}" class="ix-rec">${esc(i.title)} <span class="muted small">${esc(i.sub || '')}</span></a>`).join('') : '<span class="muted small">Nothing found</span>';
+        $$('.ix-rec', card).forEach(a => a.onclick = ev => { ev.preventDefault(); const m = recs[+a.dataset.k].url.match(/^#\/rec\/([\w-]+)\/(\d+)/); other = { entity: m[1], entity_id: +m[2] }; $$('.ix-rec', card).forEach(z => z.classList.remove('on')); a.classList.add('on'); }); } catch (er) {} }, 250); };
+      const pv = $('[data-ixpv]', card); if (pv) pv.onclick = e => { e.preventDefault(); $('.ix-pv', card).hidden = !$('.ix-pv', card).hidden; };
+      $('[data-ixgo]', card).onclick = async () => { const v = ($('.ix-prop input:checked', card) || {}).value; if (v === undefined) return;
+        if (v === 'other') { if (!other) return toast('Find and click the record first', 'warn'); return ixDo(id, { action: 'attach', ...other }); }
+        const p = x.proposals[+v];
+        if (p.action === 'open') { try { const res = await fetch('/api/intake/' + id + '/file', { credentials: 'same-origin' }); const blob = await res.blob(); S.handoff = new File([blob], x.name, { type: blob.type }); } catch (e) {} await ixDo(id, { action: 'open', screen: p.screen }, true); return go(p.screen); }
+        if (p.action === 'form') return openForm(p.form, null, { preset: p.preset || {}, onSaved: r => ixDo(id, { action: 'attach', entity: p.entity_after || p.form, entity_id: r.id, category: x.facts.kind }) });
+        ixDo(id, { action: p.action, entity: p.entity, entity_id: p.entity_id, category: p.category }); }; });
+  }
+  async function ixDo(id, body, quiet) { try { const r = await api('intake/' + id, { method: 'POST', body }); if (!quiet) toast(r.message); ixDraw(); } catch (e) { toast(e.message, 'err'); } }
+  // a file handed over from Import anything: the first file box of the screen takes it by itself
+  function takeHandoff() { if (!S.handoff) return; const inp = $('#main input[type=file]'); if (!inp) return; const f = S.handoff; S.handoff = null;
+    try { const dt = new DataTransfer(); dt.items.add(f); inp.files = dt.files; inp.dispatchEvent(new Event('change', { bubbles: true })); toast(`“${f.name}” is brought here from Import anything – check and load it`); } catch (e) { toast('Choose the file again here: ' + f.name, 'warn'); } }
+
   function pageImportHub() {
     const tiles = [['#/orders', 'Orders', 'eBay orders report, Temu order list, any order table – Orders › Load order file.'], ['#/settlements', 'Marketplace money files', 'TikTok workbook, Amazon settlement (date range and flat file V2), eBay transaction report, OnBuy / Temu tables.'],
       ['#/bank', 'Bank statements', 'CSV or Excel from the bank, in the layout of that bank.'], ['#/labels', 'Carrier label PDFs', 'Labels downloaded from the carrier, linked to their orders.'], ['#/supplier-orders', 'Supplier order history', 'Amazon Business order report of a buying supplier (file named by shop no., e.g. 1.csv) – kept with its VAT evidence.'], ['#/product-imports', 'Products: families, parent + child file, bulk upload', 'Report type PRODUCT_FAMILY (parent SKU, child SKU), the parent + child staged import and report type Products with the built-in mapping "Old bulk products" (34 columns): check or preview first, then save; undo.'], ['#/wh-csv', 'Warehouse locations and SKU homes (CSV)', 'Report types WH_LOCATIONS and WH_SKU_HOMES: export, change in Excel, check first (changes nothing), then load; look-alike codes are held back; undo by batch.'], ['#/tasks?scope=all&import=1', 'Tasks (CSV)', 'New tasks from a CSV file: check first (changes nothing), then all or nothing; undo by batch. Partner / Manager.'], ['#/import-history', 'Everything loaded so far', 'Every file, when, by whom, new / already there / problems; and the old-tool import, table by table.']];
-    $('#main').innerHTML = `<div class="page-head"><div><h1>Import a file</h1><div class="sub">Each kind of file is loaded where its work is done. The tool finds the layout from the file itself; a file loaded twice adds nothing.</div></div></div>
-      <div class="card" style="padding:14px 16px;margin-bottom:12px"><b>Not sure where a file goes?</b> <span class="small muted">Choose it here – the tool reads its columns (saves nothing) and recommends the place.</span><div style="margin-top:8px"><input type="file" id="impRec" accept=".csv,.tsv,.txt,.xlsx,.xls,.pdf"></div><div id="impRecOut" style="margin-top:8px"></div></div>
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Import anything</h1><div class="sub">One place for every file: drop, choose, paste or link it – tables, Excel, PDFs, Word, photos, screenshots, a Drive file or a whole Drive folder. It is kept, read, understood and offered to its place; nothing is done until you press <b>Do it</b>.</div></div></div>
+      <div class="card ix-drop" id="ixDrop" tabindex="0"><div class="ix-drop-in"><div class="ix-big">Drop anything here</div><div class="small muted">or paste (Ctrl + V) a screenshot, a table copied from Excel, words or a link</div>
+        <div class="ix-btns"><label class="btn primary">Choose files<input type="file" id="ixFiles" multiple hidden></label><label class="btn">Choose a folder<input type="file" id="ixFolder" webkitdirectory multiple hidden></label></div>
+        <div class="ix-link"><input class="q" id="ixLink" placeholder="…or paste a link: Google Drive file or folder, Google Sheet, any https link to a file" data-ap-skip><button class="btn" id="ixLinkGo" type="button">Take it</button></div></div><div id="ixLive"></div></div>
+      <div class="seg" id="ixTabs" style="margin:14px 0 10px;flex-wrap:wrap"></div><div id="ixList" class="ix-list"></div>
+      <h3 style="margin:22px 0 8px">Or go straight to the screen of the work</h3>
       <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">${tiles.map(([h, t, w]) => `<a class="card" href="${h}" style="display:block;padding:14px;text-decoration:none;color:inherit"><b>${esc(t)}</b><div class="small muted" style="margin-top:4px">${esc(w)}</div></a>`).join('')}</div>`;
-    $('#impRec').onchange = async e => { const f = e.target.files[0]; if (!f) return; const fd = new FormData(); fd.append('file', f); $('#impRecOut').innerHTML = '<span class="muted">Reading…</span>';
-      try { const r = await api('import/recommend', { method: 'POST', body: fd }); const b = r.best;
-        $('#impRecOut').innerHTML = `<div>This goes to <b>${esc(b.title)}</b> <span class="chip ok">best · ${b.score}</span> <a class="btn sm primary" href="${esc(b.screen)}">Open</a><div class="small muted">${esc(b.why)}</div></div>${r.others.length ? `<div class="small" style="margin-top:6px">It could also go to: ${r.others.map(o => `<a href="${esc(o.screen)}">${esc(o.title)}</a> (${o.score})`).join(' · ')}</div>` : ''}<div class="small muted" style="margin-top:4px">Choose the file again on that screen – it checks the file before anything is saved.</div>`; }
-      catch (er) { $('#impRecOut').innerHTML = `<span class="err">${esc(er.message)}</span>`; } };
+    const drop = $('#ixDrop');
+    ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+    ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+    drop.addEventListener('drop', e => { const fs = [...(e.dataTransfer.files || [])]; if (fs.length) return ixSend(fs); const t = e.dataTransfer.getData('text'); if (t) /^https:\/\//.test(t.trim()) ? ixSendText({ link: t.trim() }) : ixSendText({ text: t }); });
+    $('#ixFiles').onchange = e => { const fs = [...e.target.files]; e.target.value = ''; if (fs.length) ixSend(fs); };
+    $('#ixFolder').onchange = e => { const fs = [...e.target.files].filter(f => !/(^|\/)\./.test(f.webkitRelativePath || f.name)); e.target.value = ''; if (fs.length) ixSend(fs, { source: 'FOLDER' }); };
+    $('#ixLinkGo').onclick = () => { const v = $('#ixLink').value.trim(); if (!v) return; $('#ixLink').value = ''; ixSendText({ link: v }); };
+    $('#ixLink').onkeydown = e => { if (e.key === 'Enter') $('#ixLinkGo').click(); };
+    if (!IX.pasteOn) { IX.pasteOn = true; document.addEventListener('paste', e => { if (!$('#ixDrop') || (e.target.closest && e.target.closest('input,textarea') && e.target.id !== 'ixDrop')) return;
+      const fs = [...(e.clipboardData.files || [])]; if (fs.length) { e.preventDefault(); return ixSend(fs.map((f, i) => f.name && f.name !== 'image.png' ? f : new File([f], 'screenshot ' + new Date().toISOString().slice(0, 16).replace('T', ' ') + (i ? ' ' + i : '') + '.png', { type: f.type })), { source: 'SCREENSHOT' }); }
+      const t = e.clipboardData.getData('text'); if (t && t.trim()) { e.preventDefault(); /^https:\/\/\S+$/.test(t.trim()) ? ixSendText({ link: t.trim() }) : ixSendText({ text: t }); } }); }
+    ixDraw();
   }
   // ---------- Settings: which person sections / tabs each kind shows (R-C-2) ----------
   async function pagePersonSections() {

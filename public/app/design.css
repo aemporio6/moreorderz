@@ -667,3 +667,27 @@ label .ap-wrap{display:flex;width:100%}
 #main .form input.q,#main .card-b input.q,#main td input.q,#main label > input.q,#main .ap-wrap input.q{min-height:36px;padding:6px 10px;border:1px solid var(--line,#d9e1e5);border-radius:10px;background:var(--surface,#fff);font-size:14px;box-sizing:border-box}
 #main .form input.q:focus,#main .card-b input.q:focus,#main td input.q:focus,#main label > input.q:focus{border-color:var(--accent,#0E6E6A);outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#0E6E6A) 14%,transparent)}
 #main .form label.small{display:flex;flex-direction:column;gap:3px}
+/* owner 26-11 22:28 – Import anything */
+.ix-drop{border:2px dashed color-mix(in srgb,var(--accent,#0E6E6A) 40%,var(--line,#d9e1e5));background:color-mix(in srgb,var(--accent,#0E6E6A) 4%,var(--surface,#fff));padding:22px;text-align:center;outline:none}
+.ix-drop.over,.ix-drop:focus{border-color:var(--accent,#0E6E6A);background:color-mix(in srgb,var(--accent,#0E6E6A) 9%,var(--surface,#fff))}
+.ix-big{font:800 22px var(--font-head);margin-bottom:4px}
+.ix-btns{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:14px 0}
+.ix-link{display:flex;gap:8px;max-width:720px;margin:0 auto}
+.ix-link .q{flex:1;min-width:0}
+.ix-live{text-align:left;padding:6px 10px;border-radius:8px;background:var(--surface,#fff);margin-top:6px;font-size:13.5px}
+.ix-list{display:grid;gap:12px}
+.ix-top{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.ix-name{font:700 15.5px var(--font-head);overflow-wrap:anywhere}
+.ix-facts{margin:6px 0 2px;font-size:14px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.ix-props{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:6px;margin-top:10px}
+.ix-prop{display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border:1px solid var(--line,#e2e8eb);border-radius:10px;cursor:pointer}
+.ix-prop.on{border-color:var(--accent,#0E6E6A);background:color-mix(in srgb,var(--accent,#0E6E6A) 6%,transparent)}
+.ix-prop span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.ix-prop small{color:var(--muted,#5D6B76);font-size:12.5px}
+.ix-other{margin-top:8px}
+.ix-other .q{width:100%}
+.ix-found{display:flex;flex-direction:column;margin-top:4px}
+.ix-rec{padding:5px 8px;border-radius:7px}
+.ix-rec.on{background:color-mix(in srgb,var(--accent,#0E6E6A) 10%,transparent);font-weight:600}
+.ix-act{display:flex;gap:12px;align-items:center;margin-top:10px}
+.ix-pv{white-space:pre-wrap;max-height:220px;overflow:auto;background:rgba(0,0,0,.03);padding:8px;border-radius:8px}

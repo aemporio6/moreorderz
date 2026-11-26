@@ -70,6 +70,11 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('docs/{key}/{id}', [\App\Http\Controllers\CoreExtrasController::class, 'docs'])->whereNumber('id'); Route::post('docs/{key}/{id}', [\App\Http\Controllers\CoreExtrasController::class, 'docAdd'])->whereNumber('id');      // MR-1266 / MR-1418
         Route::post('doc/{doc}', [\App\Http\Controllers\CoreExtrasController::class, 'docEdit'])->whereNumber('doc'); Route::post('doc/{doc}/version', [\App\Http\Controllers\CoreExtrasController::class, 'docVersion'])->whereNumber('doc'); Route::post('doc/{doc}/remove', [\App\Http\Controllers\CoreExtrasController::class, 'docRemove'])->whereNumber('doc');
         Route::post('practice-company', [\App\Http\Controllers\CoreExtrasController::class, 'sandbox']);      // MR-1541
+        Route::get('intake', [\App\Http\Controllers\IntakeController::class, 'index']);      // owner 26-11 22:28 the one importer
+        Route::post('intake', [\App\Http\Controllers\IntakeController::class, 'take'])->middleware('throttle:60,1');
+        Route::post('intake/{id}', [\App\Http\Controllers\IntakeController::class, 'decide'])->whereNumber('id');
+        Route::post('intake/{id}/again', [\App\Http\Controllers\IntakeController::class, 'again'])->whereNumber('id');
+        Route::get('intake/{id}/file', [\App\Http\Controllers\IntakeController::class, 'file'])->whereNumber('id');
         Route::post('import/recommend', [\App\Http\Controllers\CoreExtrasController::class, 'importRecommend']);      // MR-1262
         Route::get('fee-check', [\App\Http\Controllers\CoreExtrasController::class, 'feeCheck']); Route::get('fee-check/proof', [\App\Http\Controllers\CoreExtrasController::class, 'feeProof']);      // MR-1536
         Route::get('whats-new', [\App\Http\Controllers\CoreExtrasController::class, 'whatsNew']); Route::post('whats-new/flag', [\App\Http\Controllers\CoreExtrasController::class, 'featureSet']);      // MR-1542
