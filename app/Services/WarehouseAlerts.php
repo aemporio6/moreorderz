@@ -40,6 +40,10 @@ class WarehouseAlerts
         foreach (DB::table('fin_lots as l')->leftJoin('fin_lot_balances as b', 'b.fk_id_lot', '=', 'l.id')->where('l.company_id', $ent)->groupBy('l.id', 'l.fk_id_product', 'l.qty_left')
             ->havingRaw('l.qty_left <> COALESCE(SUM(b.qty), 0)')->get(['l.id', 'l.fk_id_product', 'l.qty_left', DB::raw('COALESCE(SUM(b.qty), 0) as in_bins')]) as $r)
             $p[] = ['key' => [0, self::sku((int) $r->fk_id_product), 'LOT' . $r->id], 'title' => self::sku((int) $r->fk_id_product) . ": lot {$r->id} has {$r->qty_left} units left but {$r->in_bins} in its bins", 'opt' => ['module' => 'fin_lots', 'record_id' => (int) $r->id]];
+        foreach (StockService::segCheck($ent) as $r) {      // R-H-11 the equation per SKU and segregated owner
+            $who = DB::table('t_account')->where('id', $r['owner'])->value(DB::raw("TRIM(CONCAT_WS(' ', first_name, sur_name))")) ?: 'owner ' . $r['owner']; $loc = DB::table('cat_inventory_locations')->where('id', $r['location'])->value('location_name');
+            $p[] = ['key' => [(int) $r['location'], self::sku($r['product']), 'SEG' . $r['owner']], 'title' => self::sku($r['product']) . " of $who in $loc: physical {$r['physical']} but book {$r['book']} – count the bin", 'opt' => ['module' => 'cat_inventory_locations', 'record_id' => $r['location'], 'fix_url' => '#/stock/counts']];
+        }
         return $p;
     }
 

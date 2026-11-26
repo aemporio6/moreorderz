@@ -8,7 +8,7 @@
 8|B|class WarehouseSites|a site belongs to one company and may be shared (shared_companies): the shared company may book stock into its bins, scan them and see only its own SKUs with "+ n other SKUs not in your scope"; another company gets "Not in your scope."; Warehouse mode › Sites lists own and shared sites (7e-147); WarehouseSitesTest r8
 9|B|class SkuHomes|SKU homes: one main home per site, overflow homes, min / max
 10|B|function suggest|storage modes FIXED / HYBRID / CHAOTIC in the putaway suggestion
-11|M||segregated owner stock not built
+11|B|function segCheck|WH_SEGREGATED_OWNERS (Settings › Warehouse, default none): owner rows t_product_locations (SKU, bin, owner) kept with every balance change, receiving into their own rows, pool orders never pick / count them (pick, binsOf, availableFor), their orders pick only their rows, reconciliation per SKU and segregated owner in WH_RECON_MISMATCH, setting change rebuilds the rows, warehouse moves keep the owner; unique key product + bin + owner (migration 000184); SegregatedOwnerTest
 12|B|class StockService|movement types, one writer
 13|B|function consumeForSale|negative stock blocked; warehouse moves never change owner
 14|B|function goLive|go-live per site: dry run per SKU (book units at the site and its old shelves vs the old shelf rows), migration map old shelf → new bin places min(row qty, book not placed), no map → UNASSIGNED with "S-2 30 – no mapped bin"; the dry run changes nothing; apply moves the lot balances only (same lots, owners, cost) so Σ physical = Σ book; a second run → 0 changes; Owner only (7e-147); WarehouseSitesTest r14

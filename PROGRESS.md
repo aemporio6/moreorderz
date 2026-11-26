@@ -725,3 +725,4 @@ The spec (R-H-1, D-W1) keeps two layers: physical bin stock and lot ownership, w
 - 7e-210: R-D-36, R-D-44, R-C-45 PARTIAL → BUILT; error pages (R-G_CORE-121) built, command-line text open. 867 tests, suite once (312 s), browser check clean (SAME). BUILT 1073 / PARTIAL 205 / FORM ONLY 103 / MISSING 52.
 - 7e-211: R-G_CORE-121, R-H-4 finished; R-G_CORE-77, 78, R-D-55 were built already (verdicts corrected). 867 tests, suite once (314 s), browser check clean (SAME). BUILT 1078 / PARTIAL 200 / FORM ONLY 103 / MISSING 52.
 - 7e-212: R-G_CORE-103 dashboard charts built; 6 stale NO_RULE verdicts corrected. 869 tests, suite once (343 s), browser check clean (SAME). BUILT 1085 / PARTIAL 194 / FORM ONLY 103 / MISSING 51.
+- 7e-213: R-G_CORE-102 All companies (added up) and R-H-11 segregated owner stock BUILT. 874 tests (869 + 5), suite once 311 s, browser check clean (SAME), phone 390. BUILT 1088 / PARTIAL 192 / FORM ONLY 103 / MISSING 50.

@@ -14,14 +14,15 @@ class TaskLists
     public const OPEN = ['TODO', 'DOING', 'STUCK', 'REWORK'];
     public const CHIPS = ['open' => 'Open', 'late' => 'Late', 'stuck' => 'Stuck', 'today' => 'Due today', 'waiting' => 'Waiting approval', 'nodue' => 'No due date', 'closed' => 'Closed', 'all' => 'All'];
     public const SOURCES = ['MANUAL' => 'By a person', 'RULE' => 'Rule', 'REPEAT' => 'Repeat', 'TEMPLATE' => 'Template'];
-    private const COLS = ['t.id', 't.title', 't.status', 't.priority', 't.due_at', 't.depends_on_task_id', 't.due_changes', 't.flags', 't.parent_task_id', 't.rule_code', 't.source', 't.fix_url', 't.linked_module', 't.linked_record_id',
+    private const COLS = ['t.id', 'tco.ent_name as company', 't.title', 't.status', 't.priority', 't.due_at', 't.depends_on_task_id', 't.due_changes', 't.flags', 't.parent_task_id', 't.rule_code', 't.source', 't.fix_url', 't.linked_module', 't.linked_record_id',
         't.reference_id', 't.amount_gbp', 't.stuck_on_type', 't.stuck_on_id', 't.stuck_on_text', 't.stuck_since', 'u.display_name as owner', 'c.name as category', 't.category_id', 't.owner_user_id', 't.assigned_by_user_id', 't.rework_count', 't.score',
         't.evidence_required', 't.acknowledged_at', 't.created_at', 't.last_update_at', 't.done_at'];
 
     public static function base()
     {
         return DB::table('tasks as t')->leftJoin('t_users as u', 'u.id', '=', 't.owner_user_id')->leftJoin('task_categories as c', 'c.id', '=', 't.category_id')
-            ->where(fn ($w) => $w->where('t.fk_id_ent', Context::ent())->orWhere('t.fk_id_ent', 0)->orWhereNull('t.fk_id_ent'));
+            ->leftJoin('t_enterprise as tco', 'tco.id', '=', 't.fk_id_ent')
+            ->where(fn ($w) => $w->whereIn('t.fk_id_ent', Context::ents() ?: [0])->orWhere('t.fk_id_ent', 0)->orWhereNull('t.fk_id_ent'));      // R-G_CORE-102 every company in All companies mode, each task once
     }
 
     public static function boss(object $u): bool { return in_array($u->role_code, TaskScore::BOSS, true); }

@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
  * - a Partner (Owner counts as Partner) sees all; a CONFIDENTIAL task only its owner and the Partners (not a Manager, cover, helper or watcher);
  * - a Manager sees every task that is not confidential;
  * - anyone else: tasks he owns, assigned, is stuck on, helps, watches, or covers for an absent owner (the cover is new);
- * - only tasks of the company he works in (fk_id_ent = the current company; system rows with 0 / empty too).
+ * - only tasks of the company he works in (fk_id_ent = the current company, every company in All companies mode; system rows with 0 / empty too).
  * Not visible → "Task not found." (404).
  */
 class TaskVisibility
@@ -28,8 +28,8 @@ class TaskVisibility
     /** The rule as a SQL condition on a query of "tasks as t". */
     public static function apply($q, object $u, string $a = 't')
     {
-        $ent = Context::ent() ?: (int) ($u->fk_id_ent ?? 0);      // a job without a session uses the person's company
-        if ($ent) $q->where(fn ($w) => $w->where("$a.fk_id_ent", $ent)->orWhere("$a.fk_id_ent", 0)->orWhereNull("$a.fk_id_ent"));
+        $ents = Context::all() ? Context::ents() : array_filter([Context::ent() ?: (int) ($u->fk_id_ent ?? 0)]);      // a job without a session uses the person's company; R-G_CORE-102 every company in All companies mode
+        if ($ents) $q->where(fn ($w) => $w->whereIn("$a.fk_id_ent", $ents)->orWhere("$a.fk_id_ent", 0)->orWhereNull("$a.fk_id_ent"));
         if (self::partner($u)) return $q;
         $notConf = fn ($w) => $w->whereNull("$a.is_confidential")->orWhere("$a.is_confidential", 0);
         if (($u->role_code ?? '') === 'MANAGER' || Perm::has($u, 'work.tasks_may')) return $q->where(fn ($w) => $w->where($notConf)->orWhere("$a.owner_user_id", $u->id));

@@ -50,15 +50,32 @@ class RecordService
         $dir = ($p['dir'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
         if ($dq && ($p['sort'] ?? '') === 'dq_score') $q->orderByRaw("(SELECT d.score_pct FROM sys_dq_scores d WHERE d.form_key = ? AND d.record_id = `$table`.`$pk` LIMIT 1) $dir", [$formKey])->orderBy($pk);
         else $q->orderBy($sort, $dir);
-        $rows = $q->offset(($page - 1) * $per)->limit($per)->get(array_merge([$pk . ' as id'], $cols));
+        $coCol = Context::all() ? (Registry::hasColumn($table, 'fk_id_ent') ? 'fk_id_ent' : (Registry::hasColumn($table, 'company_id') ? 'company_id' : null)) : null;
+        $byCo = [];      // R-G_CORE-102 a total per company + the grand total (the totals row)
+        if ($coCol && $total) {
+            $names = DB::table('t_enterprise')->pluck('ent_name', 'id');
+            foreach ((clone $q)->groupBy("$table.$coCol")->selectRaw(implode(', ', array_merge(["`$table`.`$coCol` as co", 'COUNT(*) as n'], array_map(fn ($c) => "SUM(`$c`) as `$c`", empty($p['no_totals']) ? $sumCols : []))))->get() as $g) {
+                $g = (array) $g; $byCo[] = ['company_id' => (int) $g['co'], 'company' => (int) $g['co'] ? ($names[(int) $g['co']] ?? 'Company ' . $g['co']) : 'Shared (every company)', 'figures' => ['rows' => (int) $g['n']] + array_map(fn ($v) => round((float) $v, 2), array_intersect_key($g, array_flip($sumCols)))];
+            }
+        }
+        $coNote = null;
+        if ($byCo && count(array_unique(array_map(fn ($c) => Fx::base($c['company_id'] ?: (int) Context::ent()), $byCo))) > 1) {      // another base currency: the grand total in the home base at today's rate
+            $home = (int) Context::ent(); $miss = []; $totals = array_fill_keys(array_keys($totals), 0.0);
+            foreach ($byCo as $c) { $f = AllCompanies::factor($c['company_id'] ?: $home, $home, date('Y-m-d')); if ($f === null) { $miss[] = $c['company']; continue; }
+                foreach ($totals as $k => $v) $totals[$k] = round($v + ($c['figures'][$k] ?? 0) * $f, 2); }
+            $coNote = $miss ? 'Rate missing for ' . implode(', ', $miss) . ' – its money is not in the total.' : 'Totals per company are in each company\'s own currency; the grand total is in ' . Fx::base($home) . '.';
+        }
+        $rows = $q->offset(($page - 1) * $per)->limit($per)->get(array_merge([$pk . ' as id'], $cols, $coCol ? ["$coCol as __co"] : []));
+        if ($coCol) { $names ??= DB::table('t_enterprise')->pluck('ent_name', 'id'); $rows = $rows->map(function ($r) use ($names) { $r = (array) $r; $co = (int) $r['__co']; unset($r['__co']); return (object) (['company' => $co ? ($names[$co] ?? 'Company ' . $co) : 'Shared'] + $r); }); }
         $scores = $dqShow && $rows->count() ? DB::table('sys_dq_scores')->where('form_key', $formKey)->whereIn('record_id', $rows->pluck('id')->all())->pluck('score_pct', 'record_id') : collect();
         $labels = self::labels($fields, $rows);
         $col = fn ($c) => ['name' => $c, 'label' => self::fieldByCol($fields, $c)['label'], 'type' => self::fieldByCol($fields, $c)['type'], 'group' => ListFilter::group(self::fieldByCol($fields, $c)['type'])];
         $dqCol = ['name' => 'dq_score', 'label' => 'Complete %', 'type' => 'number', 'group' => 'number', 'computed' => true];
         return [
             'form_key' => $formKey, 'title' => Registry::fields($formKey)[0]['form_title'], 'table' => $table, 'total' => $total, 'page' => $page, 'per_page' => $per, 'all_columns' => array_merge(array_map($col, $allCols), $dq ? [$dqCol] : []),
-            'columns' => array_map(fn ($c) => $c === 'dq_score' ? $dqCol : $col($c), $want && $dqShow ? array_values(array_filter($asked, fn ($c) => $c === 'dq_score' || in_array($c, $cols, true))) : array_merge($cols, $dqShow ? ['dq_score'] : [])) /* the person's own order */, 'totals' => $totals, 'where' => $where, 'where_text' => ListFilter::words($where, self::byCol($fields)),
+            'columns' => array_merge($coCol ? [['name' => 'company', 'label' => 'Company', 'type' => 'text', 'group' => 'text', 'computed' => true]] : [], array_map(fn ($c) => $c === 'dq_score' ? $dqCol : $col($c), $want && $dqShow ? array_values(array_filter($asked, fn ($c) => $c === 'dq_score' || in_array($c, $cols, true))) : array_merge($cols, $dqShow ? ['dq_score'] : []))) /* the person's own order */, 'totals' => $totals, 'where' => $where, 'where_text' => ListFilter::words($where, self::byCol($fields)),
             'locked' => SystemRows::locked($table, $rows->pluck('id')->all()),      /* R-F_SETUP-42 the lock in the list */
+            'all_companies' => $coCol ? ['companies' => $byCo, 'base' => Fx::base((int) Context::ent()), 'rate_missing' => [], 'note' => $coNote] : null,
             'rows' => $rows->map(function ($r) use ($labels, $table, $dqShow, $scores) {
                 $a = Vault::maskRow($table, (array) $r);
                 foreach ($a as $k => $v) if (isset($labels[$k][(string) $v])) $a[$k . '__label'] = $labels[$k][(string) $v];
@@ -371,10 +388,10 @@ class RecordService
     {
         if ($table === ProductScope::TABLE) ProductScope::apply($q, \Illuminate\Support\Facades\Auth::user(), $table);      // R-D-21 who sees which product (instead of the product's own shop column)
         else Perm::scopeQuery($q, $table, \Illuminate\Support\Facades\Auth::user(), $table);
-        $ent = Context::ent();
-        if (! $ent) return;
-        if (Registry::hasColumn($table, 'fk_id_ent')) $q->where(fn ($w) => $w->where("$table.fk_id_ent", $ent)->orWhere("$table.fk_id_ent", 0)->orWhereNull("$table.fk_id_ent"));
-        elseif (Registry::hasColumn($table, 'company_id')) $q->where(fn ($w) => $w->where("$table.company_id", $ent)->orWhereNull("$table.company_id"));
+        $ents = Context::ents();      // R-G_CORE-102: every company the Owner may see in All companies mode
+        if (! $ents) return;
+        if (Registry::hasColumn($table, 'fk_id_ent')) $q->where(fn ($w) => $w->whereIn("$table.fk_id_ent", $ents)->orWhere("$table.fk_id_ent", 0)->orWhereNull("$table.fk_id_ent"));
+        elseif (Registry::hasColumn($table, 'company_id')) $q->where(fn ($w) => $w->whereIn("$table.company_id", $ents)->orWhereNull("$table.company_id"));
     }
 
     /** Dropdown values shown as words in lists. */

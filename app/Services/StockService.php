@@ -336,7 +336,14 @@ class StockService
     /** R-H-15 owner-rule available for a Private owner: that owner's lots in sellable bins − his open commitments; never more than the physical available. */
     public static function availableFor(int $productId, ?int $owner): int
     {
-        $all = self::available($productId); if (! $owner) return $all;
+        $all = self::available($productId);
+        if (! $owner) {      // R-H-11: a pool order never counts a segregated owner's units
+            $seg = self::segregated((int) DB::table('t_product_vendors')->where('id', $productId)->value('fk_id_ent')); if (! $seg) return $all;
+            $sell = (int) DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->join('cat_inventory_locations as c', 'c.id', '=', 'b.fk_id_location')->where('l.fk_id_product', $productId)->where(fn ($w) => $w->whereNull('l.fk_id_owner')->orWhereNotIn('l.fk_id_owner', $seg))
+                ->where(fn ($w) => $w->whereNull('c.kind')->orWhereNotIn('c.kind', self::NOT_SELLABLE))->where(fn ($w) => $w->whereNull('c.f_sellable')->orWhere('c.f_sellable', 1))->sum('b.qty');
+            $held = (int) DB::table('wh_reservations')->where('fk_id_product', $productId)->whereIn('status', ['OPEN', 'ALLOCATED'])->where(fn ($w) => $w->where('owner_rule', '<>', 'PRIVATE')->orWhereNotIn('fk_id_owner_seg', $seg))->sum(DB::raw('qty - COALESCE(qty_picked,0)'));
+            return max(0, min($all, $sell - $held));
+        }
         $mine = (int) DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->join('cat_inventory_locations as c', 'c.id', '=', 'b.fk_id_location')->where('l.fk_id_product', $productId)->where('l.fk_id_owner', $owner)
             ->where(fn ($w) => $w->whereNull('c.kind')->orWhereNotIn('c.kind', self::NOT_SELLABLE))->where(fn ($w) => $w->whereNull('c.f_sellable')->orWhere('c.f_sellable', 1))->sum('b.qty');
         $held = (int) DB::table('wh_reservations')->where('fk_id_product', $productId)->where('owner_rule', 'PRIVATE')->where('fk_id_owner_seg', $owner)->whereIn('status', ['OPEN', 'ALLOCATED'])->sum(DB::raw('qty - COALESCE(qty_picked,0)'));
@@ -386,7 +393,7 @@ class StockService
     public static function productLocations(int $productId): array
     {
         $rows = DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->where('l.fk_id_product', $productId)->whereNotNull('b.fk_id_location')->groupBy('b.fk_id_location')->havingRaw('SUM(b.qty) <> 0')->selectRaw('b.fk_id_location as id, SUM(b.qty) as qty')->get();
-        $notes = DB::table('t_product_locations')->where('fk_id_product', $productId)->pluck('notes', 'fk_id_location'); $out = []; $placed = 0; $bad = [];
+        $notes = DB::table('t_product_locations')->where('fk_id_product', $productId)->where('fk_id_owner_seg', 0)->pluck('notes', 'fk_id_location'); $out = []; $placed = 0; $bad = [];
         foreach ($rows as $r) { $lab = self::locationLabel((int) $r->id); $q = (float) $r->qty; $placed += $q; if (! $lab['active']) $bad[] = $lab['label'];
             $out[] = ['id' => (int) $r->id, 'label' => $lab['label'], 'qty' => $q + 0, 'note' => (string) ($notes[$r->id] ?? ''), 'inactive' => ! $lab['active']]; }
         usort($out, fn ($a, $b) => strcmp($a['label'], $b['label'])); $stock = self::balance($productId);
@@ -402,7 +409,7 @@ class StockService
     {
         if ($apply && ($u->role_code ?? '') !== 'OWNER') throw new \InvalidArgumentException('Only the Owner places the old quantities.');
         $un = (int) DB::table('cat_inventory_locations')->where('fk_id_ent', $ent)->where('kind', 'UNASSIGNED')->orderBy('id')->value('id'); $ok = []; $review = [];      /* read only – a dry run creates nothing */
-        $typed = DB::table('t_product_locations as t')->join('t_product_vendors as p', 'p.id', '=', 't.fk_id_product')->where('p.fk_id_ent', $ent)->where('t.qty', '>', 0)->orderBy('t.fk_id_product')->get(['t.id', 't.fk_id_product', 't.fk_id_location', 't.qty', 'p.SKU_VENDOR'])->groupBy('fk_id_product');
+        $typed = DB::table('t_product_locations as t')->join('t_product_vendors as p', 'p.id', '=', 't.fk_id_product')->where('p.fk_id_ent', $ent)->where('t.qty', '>', 0)->where('t.fk_id_owner_seg', 0)      /* R-H-11 owner rows are kept by the system, never old typed figures */->orderBy('t.fk_id_product')->get(['t.id', 't.fk_id_product', 't.fk_id_location', 't.qty', 'p.SKU_VENDOR'])->groupBy('fk_id_product');
         foreach ($typed as $pid => $rows) {
             $sum = (float) $rows->sum('qty'); $stock = (float) self::balance((int) $pid); $atUn = $un ? (float) self::balance((int) $pid, $un) : 0.0; $sku = $rows[0]->SKU_VENDOR;
             $why = abs($sum - $stock) > 0.0001 ? 'typed ' . ($sum + 0) . ', stock ' . ($stock + 0) : (abs($atUn - $sum) > 0.0001 ? 'the units are already placed elsewhere' : ($rows->contains(fn ($r) => (int) $r->fk_id_location === $un || ! DB::table('cat_inventory_locations')->where('id', $r->fk_id_location)->where('f_active', 1)->exists()) ? 'a typed location is switched off or unknown' : null));
@@ -430,7 +437,7 @@ class StockService
     {
         Perm::need($u, 'stock.CHANGE'); $ent = (int) Context::ent();
         if (! DB::table('t_product_vendors')->where('id', $productId)->where('fk_id_ent', $ent)->exists() || ! DB::table('cat_inventory_locations')->where('id', $locationId)->where('fk_id_ent', $ent)->exists()) throw new \InvalidArgumentException('Product or location not found.');
-        $note = mb_substr(trim($note), 0, 255); $old = DB::table('t_product_locations')->where('fk_id_product', $productId)->where('fk_id_location', $locationId)->first();
+        $note = mb_substr(trim($note), 0, 255); $old = DB::table('t_product_locations')->where('fk_id_product', $productId)->where('fk_id_location', $locationId)->where('fk_id_owner_seg', 0)->first();      // the shared row (R-H-11 owner rows are kept by the system)
         if ($old) DB::table('t_product_locations')->where('id', $old->id)->update(['notes' => $note, 'updated_at' => now()]);
         else DB::table('t_product_locations')->insert(RecordService::fillNotNull('t_product_locations', ['fk_id_product' => $productId, 'fk_id_location' => $locationId, 'qty' => 0, 'notes' => $note, 'created_by' => $u->id, 'created_at' => now()]));
         Audit::log('t_product_locations', (int) ($old->id ?? DB::getPdo()->lastInsertId()), $old ? 'UPDATE' : 'INSERT', ['notes' => [$old->notes ?? null, $note]], null, $ent);
@@ -509,6 +516,7 @@ class StockService
             ->where('l.fk_id_product', $productId)->where('b.fk_id_location', $locId)->where('b.qty', '>', 0)
             ->when($rule === 'PRIVATE', fn ($q) => $q->where('l.fk_id_owner', $owner))
             ->when($rule === 'POOL', fn ($q) => $q->where(fn ($w) => $w->where('l.visibility', 'POOL')->orWhereNull('l.fk_id_owner')))   // pool lots and the company's own lots; never a partner's private lot
+            ->when($rule === 'POOL' && ($seg = self::segregated((int) DB::table('t_product_vendors')->where('id', $productId)->value('fk_id_ent'))), fn ($q) => $q->where(fn ($w) => $w->whereNull('l.fk_id_owner')->orWhereNotIn('l.fk_id_owner', $seg)))      // R-H-11 a segregated owner's units are never picked for a pool order
             ->when($rule === null && $owner, fn ($q) => $q->where('l.fk_id_owner', $owner))
             ->when($lot, fn ($q) => $q->where('l.id', $lot))
             ->orderBy('l.received_date')->orderBy('l.id')->lockForUpdate()
@@ -538,6 +546,47 @@ class StockService
         if ($new < 0) throw new \RuntimeException('Stock cannot go below zero.');
         $b ? DB::table('fin_lot_balances')->where('id', $b->id)->update(['qty' => $new, 'updated_at' => now()])
            : DB::table('fin_lot_balances')->insert(['fk_id_lot' => $lotId, 'fk_id_location' => $locId, 'qty' => $new, 'updated_at' => now()]);
+        $l = DB::table('fin_lots')->where('id', $lotId)->first(['company_id', 'fk_id_owner', 'fk_id_product']);      // R-H-11 a segregated owner's units have their own physical row
+        if ($l && $l->fk_id_owner && in_array((int) $l->fk_id_owner, self::segregated((int) $l->company_id), true)) self::syncSeg((int) $l->fk_id_product, $locId, (int) $l->fk_id_owner);
+    }
+
+    // ---------- R-H-11 segregated owners ----------
+
+    /** Owners whose units sit apart (Settings › Warehouse WH_SEGREGATED_OWNERS, default none). */
+    public static function segregated(int $ent): array
+    {
+        return array_values(array_unique(array_filter(array_map('intval', preg_split('/[\s,;]+/', (string) Settings::get('WH_SEGREGATED_OWNERS', $ent, ''))))));
+    }
+
+    /** The physical row (SKU, bin, owner) = that owner's lot units in the bin. Shared stock keeps owner 0. */
+    public static function syncSeg(int $productId, int $locId, int $owner): void
+    {
+        $qty = (int) DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->where('l.fk_id_product', $productId)->where('l.fk_id_owner', $owner)->where('b.fk_id_location', $locId)->sum('b.qty');
+        $row = DB::table('t_product_locations')->where(['fk_id_product' => $productId, 'fk_id_location' => $locId, 'fk_id_owner_seg' => $owner])->first();
+        if ($row) DB::table('t_product_locations')->where('id', $row->id)->update(['qty' => $qty, 'last_move_at' => now(), 'updated_at' => now()]);
+        elseif ($qty) DB::table('t_product_locations')->insert(RecordService::fillNotNull('t_product_locations', ['fk_id_product' => $productId, 'fk_id_location' => $locId, 'fk_id_owner_seg' => $owner, 'qty' => $qty, 'last_move_at' => now(), 'created_by' => (int) Context::userId(), 'created_at' => now()]));
+    }
+
+    /** Rebuild every segregated row of a company (after the setting changes or a go-live move); rows of owners no longer segregated go to 0. */
+    public static function syncSegAll(int $ent): int
+    {
+        $seg = self::segregated($ent); $n = 0;
+        DB::table('t_product_locations as t')->join('t_product_vendors as p', 'p.id', '=', 't.fk_id_product')->where('p.fk_id_ent', $ent)->where('t.fk_id_owner_seg', '<>', 0)->update(['t.qty' => 0]);
+        if (! $seg) return 0;
+        foreach (DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->where('l.company_id', $ent)->whereIn('l.fk_id_owner', $seg)->where('b.qty', '>', 0)->distinct()->get(['l.fk_id_product', 'b.fk_id_location', 'l.fk_id_owner']) as $r) { self::syncSeg((int) $r->fk_id_product, (int) $r->fk_id_location, (int) $r->fk_id_owner); $n++; }
+        return $n;
+    }
+
+    /** R-H-11 / R-H-54 reconciliation per SKU and segregated owner: physical rows = book lots, per site. */
+    public static function segCheck(int $ent): array
+    {
+        $bad = [];
+        foreach (self::segregated($ent) as $o) {
+            $book = DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->where('l.company_id', $ent)->where('l.fk_id_owner', $o)->groupBy('l.fk_id_product', 'b.fk_id_location')->selectRaw('l.fk_id_product p, b.fk_id_location loc, SUM(b.qty) q')->get()->keyBy(fn ($r) => $r->p . ':' . $r->loc);
+            $phys = DB::table('t_product_locations as t')->join('t_product_vendors as pv', 'pv.id', '=', 't.fk_id_product')->where('pv.fk_id_ent', $ent)->where('t.fk_id_owner_seg', $o)->get(['t.fk_id_product as p', 't.fk_id_location as loc', 't.qty as q'])->keyBy(fn ($r) => $r->p . ':' . $r->loc);
+            foreach ($book->keys()->merge($phys->keys())->unique() as $k) { $b = (int) ($book[$k]->q ?? 0); $f = (int) ($phys[$k]->q ?? 0); if ($b !== $f) $bad[] = ['owner' => $o, 'product' => (int) explode(':', $k)[0], 'location' => (int) explode(':', $k)[1], 'book' => $b, 'physical' => $f]; }
+        }
+        return $bad;
     }
 
     private static function move(int $ent, int $productId, string $type, int $qty, int $locId, ?int $lotId, ?int $owner, float $cost, ?string $srcType, ?int $srcId, ?string $note = null, ?int $pair = null): int

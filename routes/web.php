@@ -189,7 +189,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('health', [AdminController::class, 'health']);
         Route::post('health/retry', [AdminController::class, 'retryEvents']);
         Route::get('ledger', [AdminController::class, 'ledger']);
-        Route::get('stock/on-hand', [StockController::class, 'onHand']);
+        Route::get('stock/on-hand', [StockController::class, 'onHand'])->middleware(\App\Http\Middleware\AllCompaniesView::class);
         Route::get('products', [StockController::class, 'products']);
         Route::get('products/bin', [StockController::class, 'productBin']);
         Route::get('investor-map', [StockController::class, 'investorMap']);
@@ -232,7 +232,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::match(['get', 'post'], 'stock/old-location-qty', [StockController::class, 'oldLocationQty']);      // R-D-44 (GET = dry run)
         Route::post('stock/product/{id}/location-note', [StockController::class, 'productLocationNote'])->whereNumber('id');      // R-D-44
         Route::get('stock/ledger', [StockController::class, 'ledger']);
-        Route::get('stock/lots', [StockController::class, 'lots']);
+        Route::get('stock/lots', [StockController::class, 'lots'])->middleware(\App\Http\Middleware\AllCompaniesView::class);
         Route::post('stock/lots/{id}/cost', [StockController::class, 'lotCost'])->whereNumber('id');
         Route::post('stock/lots/{id}/void', [StockController::class, 'lotVoid'])->whereNumber('id');      // R-D-43
         Route::get('stock/pick', [StockController::class, 'pick']);
@@ -270,7 +270,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('stock/bin-code-preview', [StockController::class, 'binCodePreview']);      // R-H-4 live preview (reads only)
         Route::match(['get', 'post'], 'stock/bin-rename', [StockController::class, 'binRename']);      // GET = preview
         Route::post('stock/bin-rename/undo/{job}', [StockController::class, 'binRenameUndo'])->whereNumber('job');
-        Route::get('charts/{which}', [AdminController::class, 'charts'])->where('which', 'home|buying|money|tasks');      // R-G_CORE-103
+        Route::get('charts/{which}', [AdminController::class, 'charts'])->where('which', 'home|buying|money|tasks')->middleware(\App\Http\Middleware\AllCompaniesView::class);      // R-G_CORE-103
         Route::get('inventory-sharing', [StockController::class, 'sharing']);      // R-D-94
         Route::post('inventory-sharing', [StockController::class, 'sharingBulk']);
         Route::get('product-imports/staged/template', [StockController::class, 'stagedTemplate']);      // R-G_CORE-74
@@ -289,7 +289,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('tariff-3pl/{mp}', [StockController::class, 'tariffSave'])->whereNumber('mp');
         Route::post('prices/{productId}/marketplace/{mp}', [StockController::class, 'mpPriceSave'])->whereNumber('productId')->whereNumber('mp');
         Route::post('stock/bins', [StockController::class, 'bins']);
-        Route::get('buying', [BuyingController::class, 'dashboard']);
+        Route::get('buying', [BuyingController::class, 'dashboard'])->middleware(\App\Http\Middleware\AllCompaniesView::class);
         Route::get('buying/pick', [BuyingController::class, 'pick']);
         Route::get('research/{id}', [BuyingController::class, 'research'])->whereNumber('id');
         Route::post('research/{id}/numbers', [BuyingController::class, 'researchNumbers'])->whereNumber('id');
@@ -317,7 +317,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('cycle/{id}/whatsapp', [BuyingController::class, 'cycleWhatsapp'])->whereNumber('id');
         Route::get('src-report/landed/{id}', [BuyingController::class, 'repLanded'])->whereNumber('id');
         Route::get('period/{card}', fn (\Illuminate\Http\Request $r, string $card) => \App\Services\Period::forCard((int) $r->user()->id, $card, $r->query('period'), $r->query('from'), $r->query('to')))->where('card', '[a-z_]+');
-        Route::get('buying/card/{card}', [BuyingController::class, 'card'])->where('card', '[a-z]+');
+        Route::get('buying/card/{card}', [BuyingController::class, 'card'])->where('card', '[a-z]+')->middleware(\App\Http\Middleware\AllCompaniesView::class);
         Route::get('buying/contacts', [BuyingController::class, 'contactsToday']);
         Route::post('buying/contacts/whatsapp', [BuyingController::class, 'contactsWa']);
         Route::get('buying/shipments', [BuyingController::class, 'shipBoard']);
@@ -382,7 +382,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('grn/{id}/post', [BuyingController::class, 'postGrn'])->whereNumber('id');
         Route::match(['get', 'post'], 'fx', [BuyingController::class, 'fx']);
         Route::get('reports', [ReportController::class, 'index']);
-        Route::get('reports/{key}', [ReportController::class, 'show'])->where('key', '[a-z_]+');
+        Route::get('reports/{key}', [ReportController::class, 'show'])->where('key', '[a-z_]+')->middleware(\App\Http\Middleware\AllCompaniesView::class);
         Route::get('reports/{key}/csv', [ReportController::class, 'csv'])->where('key', '[a-z_]+');
         Route::get('reports/team_engagements/xlsx', [ReportController::class, 'teamXlsx']);
         Route::get('my-account', [PartnerController::class, 'myAccount']);
@@ -407,8 +407,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('close/check', [CloseController::class, 'check']);
         Route::post('close/waive', [CloseController::class, 'waive']);
         Route::post('close/lock', [CloseController::class, 'lock']);
-        Route::get('money', [MoneyController::class, 'dashboard']);
-        Route::get('profit', [MoneyController::class, 'profit']);
+        Route::get('money', [MoneyController::class, 'dashboard'])->middleware(\App\Http\Middleware\AllCompaniesView::class);
+        Route::get('profit', [MoneyController::class, 'profit'])->middleware(\App\Http\Middleware\AllCompaniesView::class);
         Route::get('refunds', [MoneyController::class, 'refunds']);
         Route::post('refunds/manual', [MoneyController::class, 'refundManual']);
         Route::post('refunds/{id}', [MoneyController::class, 'refundDecide'])->whereNumber('id');
@@ -457,7 +457,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('printers/{id}/replace', [PrintController::class, 'replace'])->whereNumber('id');
         Route::post('print-routes', [PrintController::class, 'route']);
         Route::get('orders', [OrdersController::class, 'board']);
-        Route::get('sales', [OrdersController::class, 'saleLines']);
+        Route::get('sales', [OrdersController::class, 'saleLines'])->middleware(\App\Http\Middleware\AllCompaniesView::class);
         Route::get('marketplaces', [OrdersController::class, 'marketplaces']);
         Route::post('marketplaces', [OrdersController::class, 'marketplaceSave']);
         Route::post('marketplaces/country', [OrdersController::class, 'marketplaceCountry']);
@@ -481,8 +481,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('va-statements/{id}/reject', [OrdersController::class, 'vaStatementReject'])->whereNumber('id');
         Route::get('va-statements/{id}/pdf', [OrdersController::class, 'vaStatementPdf'])->whereNumber('id');
         Route::get('shops/labels', [OrdersController::class, 'shopLabels']);
-        Route::get('sales/reports/annual', [OrdersController::class, 'saleReportAnnual']);
-        Route::get('sales/reports/detailed', [OrdersController::class, 'saleReportDetailed']);
+        Route::get('sales/reports/annual', [OrdersController::class, 'saleReportAnnual'])->middleware(\App\Http\Middleware\AllCompaniesView::class);
+        Route::get('sales/reports/detailed', [OrdersController::class, 'saleReportDetailed'])->middleware(\App\Http\Middleware\AllCompaniesView::class);
         Route::get('sales/reports/{report}/{format}', [OrdersController::class, 'saleReportDownload'])->where(['report' => 'annual|detailed', 'format' => 'csv|xlsx|pdf']);
         Route::post('sales/import/{id}/refresh-va', [OrdersController::class, 'saleRefreshVa'])->whereNumber('id');
         Route::post('sales/{id}/margin-accept', [OrdersController::class, 'saleMarginAccept'])->whereNumber('id');

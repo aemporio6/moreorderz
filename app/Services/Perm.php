@@ -41,6 +41,7 @@ class Perm
         'admin.users' => 'Add and change users',
         'admin.views_may' => 'Manage shared list views',
         'app.company_owner' => 'Switch company (see every company)',
+        'company.all' => 'All companies (added up) – see every company together',
         'buying.BUY' => 'Raise and change purchase orders',
         'buying.COST' => 'Enter landed costs',
         'buying.shareLink' => 'Make a supplier link without login',

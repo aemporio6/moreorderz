@@ -28,7 +28,7 @@ class AppController extends Controller
         return [
             'user' => ['id' => $u->id, 'name' => $u->display_name ?: $u->login_id, 'role' => $va ? $va[0] : $role, 'role_name' => $va ? $va[1] : ($u->custom_role ?: $role)],
             'view_as' => $va ? $va[1] : null,
-            'ent' => Context::ent(), 'companies' => $companies, 'words' => \App\Services\SimpleWords::MAP /* owner 26-11: the one list of easy words */, 'menu' => self::menu($va ? $va[0] : $role), 'create' => self::createCatalogue($va ? $va[0] : $role),
+            'ent' => Context::ent(), 'all_companies' => Context::all(), 'can_all' => \App\Services\AllCompanies::may($u), 'companies' => $companies, 'words' => \App\Services\SimpleWords::MAP /* owner 26-11: the one list of easy words */, 'menu' => self::menu($va ? $va[0] : $role), 'create' => self::createCatalogue($va ? $va[0] : $role),
             'setup_open' => $role === 'OWNER' && \App\Services\SetupWizard::open((int) Context::ent()),
             'task_header' => \App\Services\TaskRoles::header($u),      // R-G_CORE-20
             'tasks_open' => DB::table('tasks')->where('owner_user_id', $u->id)->whereNotIn('status', ['DONE', 'APPROVED', 'CANCELLED'])->count(),
@@ -323,8 +323,14 @@ class AppController extends Controller
 
     public function company(Request $r)
     {
-        $id = (int) $r->input('ent');
         $u = Auth::user();
+        if ($r->input('ent') === 'all') {      // R-G_CORE-102
+            abort_unless(\App\Services\AllCompanies::may($u), 403, 'Only the Owner (right "All companies") can see all companies together.');
+            $r->session()->put('ent_all', 1);
+            return ['ent' => 'all'];
+        }
+        $r->session()->forget('ent_all');
+        $id = (int) $r->input('ent');
         abort_unless(\App\Services\Perm::has($u, 'app.company_owner') || $id === (int) $u->fk_id_ent, 403, 'You cannot work in that company.');
         abort_unless(DB::table('t_enterprise')->where('id', $id)->where('f_active', 1)->exists(), 404);
         $r->session()->put('ent', $id);

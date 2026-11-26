@@ -87,7 +87,7 @@ class WarehouseMode
         [, $grn, $product] = array_pad(explode(':', (string) $t->dedupe_key), 3, 0); $rec = StockService::systemLocation($ent, 'RECEIVING');
         $have = (int) DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->where('b.fk_id_location', $rec)->where('l.fk_id_product', (int) $product)->sum('b.qty');
         $qty = $qty ?: $have; if ($qty <= 0 || $qty > $have) throw new \InvalidArgumentException("Only $have unit(s) wait in RECEIVING.");
-        $max = DB::table('t_product_locations')->where('fk_id_location', $bin)->where('fk_id_product', (int) $product)->value('max_qty');
+        $max = DB::table('t_product_locations')->where('fk_id_location', $bin)->where('fk_id_product', (int) $product)->where('fk_id_owner_seg', 0)->value('max_qty');
         if ($max !== null && CountTriggers::inBin((int) $product, $bin) + $qty > (int) $max) {      // R-H-47 (4): putaway refused for no room → the bin is counted
             CountTriggers::trigger($ent, $bin, (int) $product, 'PUTAWAY_NO_ROOM');
             throw new \InvalidArgumentException('No room: the bin takes at most ' . (int) $max . ' and holds ' . CountTriggers::inBin((int) $product, $bin) . '. Choose another bin – this bin is put on the count list.');

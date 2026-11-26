@@ -230,7 +230,7 @@ class StockController extends Controller
     public function product(Request $r, int $id)
     {
         $this->can($r, 'stock.SEE');
-        abort_unless(DB::table('t_product_vendors')->where('id', $id)->where('fk_id_ent', Context::ent())->exists(), 404);
+        abort_unless(DB::table('t_product_vendors')->where('id', $id)->whereIn('fk_id_ent', Context::ents())->exists(), 404);      // R-G_CORE-102 any company in All companies mode
         $d = StockService::productStock($id);
         if (! \App\Services\Perm::has($r->user(), 'stock.MONEY')) foreach ($d['rows'] as $row) unset($row->unit_cost_gbp);
         return $d;

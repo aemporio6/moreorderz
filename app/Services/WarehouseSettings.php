@@ -23,7 +23,7 @@ class WarehouseSettings
                 'WH_BIN_MULTI_SKU' => ['Several SKUs per bin', self::YN, 'Y', 'No = a bin holds one SKU only.'],
                 'WH_UNASSIGNED_SELLABLE' => ['Unassigned stock is sellable', self::YN, 'Y', 'Units not yet in a bin (after go-live) can be sold.'],
                 'WH_RECEIVING_SELLABLE' => ['Receiving stock is sellable', self::YN, 'N', 'Units waiting for putaway can be sold.'],
-                'WH_SEGREGATED_OWNERS' => ['Owners kept apart', 'people', '', 'Partners whose units never mix in a bin with others (person ids).', ['optional' => true]],
+                'WH_SEGREGATED_OWNERS' => ['Owners kept apart', 'people', '', 'Owners whose units sit apart (for example a consignment partner): their units have their own shelf rows, only their orders pick them, and the stock check runs per owner. Recommended: none.', ['optional' => true]],
             ],
             'Location codes' => [
                 'WH_LOC_FORMAT' => ['Bin code format', 'text', '{ZONE}-{LEVEL}-{BIN}', 'Tokens {SITE} {ZONE} {LEVEL} {BIN} {POS} (R-H-4).', ['max' => 60, 'pattern' => '/\{(SITE|ZONE|LEVEL|BIN|POS)\}/', 'hint' => 'Use at least one token: {SITE} {ZONE} {LEVEL} {BIN} {POS}']],
@@ -151,6 +151,7 @@ class WarehouseSettings
         }
         $r = TypedSettings::store($ent, $key, $d[0], self::value($key, $ent, $d), $v, 'WAREHOUSE_SETTING');
         if (in_array($key, ['WH_UNASSIGNED_SELLABLE', 'WH_RECEIVING_SELLABLE'], true)) WarehouseSites::syncSellable($ent);      // R-H-3 the system bins follow the setting
+        if ($key === 'WH_SEGREGATED_OWNERS') StockService::syncSegAll($ent);      // R-H-11 their units get (or lose) their own physical rows
         return $r;
     }
 }

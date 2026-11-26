@@ -27,6 +27,7 @@ class PermCatalogue
         'admin.users' => ['Users', 'Users and system', ['OWNER', 'MANAGER']],
         'admin.views_may' => ['Views – may', 'Users and system', ['OWNER', 'MANAGER']],
         'app.company_owner' => ['Company – owner', 'Forms and records', ['OWNER']],
+        'company.all' => ['All companies (added up)', 'Forms and records', ['OWNER']],      // R-G_CORE-102
         'buying.BUY' => ['Buy', 'Buying', ['OWNER', 'MANAGER', 'SOURCING']],
         'buying.COST' => ['Set costs', 'Buying', ['OWNER', 'MANAGER', 'FINANCE']],
         'buying.shareLink' => ['Make and revoke a supplier link without login (PO confirm, production photos, ship date, artwork)', 'Buying', ['OWNER', 'MANAGER', 'SOURCING']],      // R-B_SOURCING-64 src.share_link

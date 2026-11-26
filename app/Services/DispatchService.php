@@ -553,6 +553,7 @@ class DispatchService
             ->where(fn ($w) => $w->whereNull('c.kind')->orWhereNotIn('c.kind', ['DAMAGED', 'RETURNS', 'PRODUCTION', 'TRANSIT', 'WRITTEN_OFF', 'QUARANTINE', 'MISSING', 'SUPPLIER', 'CUSTOMER', 'SHIPPED', 'DISPATCH', 'RECEIVING']))
             ->where(fn ($w) => $w->whereNull('c.f_sellable')->orWhere('c.f_sellable', 1))
             ->where(fn ($w) => $privateOwner ? $w->where('l.fk_id_owner', $privateOwner) : $w->where('l.visibility', 'POOL')->orWhereNull('l.fk_id_owner'))
+            ->when(! $privateOwner && ($seg = StockService::segregated($ent)), fn ($q) => $q->where(fn ($w) => $w->whereNull('l.fk_id_owner')->orWhereNotIn('l.fk_id_owner', $seg)))      // R-H-11 segregated owners pick only their own rows
             ->groupBy('b.fk_id_location', 'c.pick_seq')->orderByRaw('c.pick_seq IS NULL, c.pick_seq')->orderBy('b.fk_id_location')
             ->get(['b.fk_id_location as loc', DB::raw('COALESCE(c.pick_seq, 999999) as pick_seq'), DB::raw('SUM(b.qty) as qty')])->all();
     }

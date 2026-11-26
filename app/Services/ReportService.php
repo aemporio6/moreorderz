@@ -139,7 +139,7 @@ class ReportService
     private static function r_wh_bin(int $ent, string $from, string $to): array
     {
         $rows = DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->join('cat_inventory_locations as c', 'c.id', '=', 'b.fk_id_location')->join('t_product_vendors as p', 'p.id', '=', 'l.fk_id_product')
-            ->leftJoin('cat_inventory_locations as s', 's.id', '=', 'c.fk_id_site')->leftJoin('t_product_locations as h', fn ($j) => $j->on('h.fk_id_location', '=', 'c.id')->on('h.fk_id_product', '=', 'l.fk_id_product'))
+            ->leftJoin('cat_inventory_locations as s', 's.id', '=', 'c.fk_id_site')->leftJoin('t_product_locations as h', fn ($j) => $j->on('h.fk_id_location', '=', 'c.id')->on('h.fk_id_product', '=', 'l.fk_id_product')->where('h.fk_id_owner_seg', 0))
             ->where('l.company_id', $ent)->where('b.qty', '<>', 0)->groupBy('c.id', 'c.location_name', 's.location_name', 'p.SKU_VENDOR', 'h.home_role', 'h.last_counted_at')->orderBy('s.location_name')->orderBy('c.location_name')
             ->selectRaw('s.location_name site, c.location_name bin, p.SKU_VENDOR sku, SUM(b.qty) units, h.home_role, h.last_counted_at')->get();
         return [[['site', 'Site', 'text'], ['bin', 'Bin', 'text'], ['sku', 'SKU', 'text'], ['units', 'Units', 'int'], ['home', 'Home role', 'text'], ['counted', 'Last counted', 'text']],

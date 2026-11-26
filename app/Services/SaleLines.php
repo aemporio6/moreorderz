@@ -455,7 +455,7 @@ class SaleLines
         $q = DB::table('t_sales as s')->where('s.fk_id_ent', $ent)->where('s.sale_source', '<>', 'history'); Perm::mine($q, 's.fk_id_branch');
         if (($f['type'] ?? '') === 'summary') $q->where('s.sale_source', 'summary'); elseif (empty($f['batch'])) $q->where('s.sale_source', '<>', 'summary');      // daily totals are shown apart, never inside the order lines
         if (! empty($f['batch'])) $q->where('s.fk_id_import', (int) $f['batch']);
-        else { if (! empty($f['marketplace']) || empty($f['created_by'])) $q->where('s.fk_id_marketplace', (int) ($f['marketplace'] ?? 0)); if (! empty($f['from'])) $q->where('s.d_order', '>=', $f['from']); if (! empty($f['to'])) $q->where('s.d_order', '<=', $f['to']); }
+        else { if ((! empty($f['marketplace']) || empty($f['created_by'])) && empty($f['any_marketplace'])) $q->where('s.fk_id_marketplace', (int) ($f['marketplace'] ?? 0));      /* any_marketplace: the Home sales card = Σ of the Sales list over every marketplace */ if (! empty($f['from'])) $q->where('s.d_order', '>=', $f['from']); if (! empty($f['to'])) $q->where('s.d_order', '<=', $f['to']); }
         if (! empty($f['shop'])) $q->where('s.fk_id_branch', (int) $f['shop']);
         if (! empty($f['created_by'])) $q->where('s.created_by', (int) $f['created_by']);      // R-F_SETUP-26: drill from the Sales card "By VA"
         if (($f['status'] ?? '') === 'open') $q->whereNotIn('s.status', ['Cancelled', 'Refunded']);

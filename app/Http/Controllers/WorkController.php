@@ -113,7 +113,12 @@ class WorkController extends Controller
             if ($scope === 'to_approve') $rows = $rows->filter(fn ($t) => $t->source !== 'RULE' && \App\Services\TaskScore::refusal($t, $u) === null)->values();
             $d = ['tasks' => $L::decorate($rows, $u)];
         }
-        $toApprove = DB::table('tasks as t')->where('t.status', 'DONE')->where('t.source', '<>', 'RULE')->where(fn ($w) => $w->where('t.fk_id_ent', Context::ent())->orWhereNull('t.fk_id_ent'))->get(['t.id', 't.status', 't.owner_user_id', 't.assigned_by_user_id'])->filter(fn ($t) => \App\Services\TaskScore::refusal($t, $u) === null)->count();
+        if (Context::all()) {      // R-G_CORE-102: open / late tasks per company + the total
+            $today = date('Y-m-d'); $names = DB::table('t_enterprise')->pluck('ent_name', 'id');
+            $g = $L::visible($L::base(), $u)->whereIn('t.status', $L::OPEN)->groupBy('t.fk_id_ent')->selectRaw('t.fk_id_ent as co, COUNT(*) as open, SUM(CASE WHEN t.due_at IS NOT NULL AND DATE(t.due_at) < ? THEN 1 ELSE 0 END) as late', [$today])->get();
+            $d['all_companies'] = ['companies' => $g->map(fn ($x) => ['company_id' => (int) $x->co, 'company' => (int) $x->co ? ($names[(int) $x->co] ?? 'Company ' . $x->co) : 'Shared (every company)', 'rate_missing' => false, 'figures' => ['open' => (int) $x->open, 'late' => (int) $x->late]])->values()->all(), 'base' => \App\Services\Fx::base((int) Context::ent()), 'rate_missing' => [], 'note' => null];
+        }
+        $toApprove = DB::table('tasks as t')->where('t.status', 'DONE')->where('t.source', '<>', 'RULE')->where(fn ($w) => $w->whereIn('t.fk_id_ent', Context::ents() ?: [0])->orWhereNull('t.fk_id_ent'))->get(['t.id', 't.status', 't.owner_user_id', 't.assigned_by_user_id'])->filter(fn ($t) => \App\Services\TaskScore::refusal($t, $u) === null)->count();
         return $d + ['scope' => $scope, 'to_approve' => $toApprove, 'my_score' => \App\Services\TaskScore::person((int) $u->id), 'qualities' => array_keys(\App\Services\TaskScore::QUALITY), 'stuck_on_me' => DB::table('tasks')->where('status', 'STUCK')->where('stuck_on_type', 'USER')->where('stuck_on_id', $u->id)->count(),
             'stuck_on' => \App\Services\Guide::STUCK_ON, 'people' => DB::table('t_users')->where('f_active', 1)->where('id', '<>', $u->id)->orderBy('display_name')->get(['id', DB::raw('COALESCE(display_name, login_id) as name')]),
             'snoozes' => in_array($u->role_code, ['OWNER', 'PARTNER', 'MANAGER'], true) ? \App\Services\TaskActions::snoozes((int) Context::ent()) : [], 'bulk' => in_array($u->role_code, \App\Services\TaskScore::BOSS, true) ? \App\Services\TaskBulk::ACTIONS : null, 'can_end_snooze' => in_array($u->role_code, ['OWNER', 'PARTNER'], true),

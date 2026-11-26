@@ -181,7 +181,7 @@ class WarehouseSites
         $plan = []; $moves = 0;
         foreach (DB::table('fin_lot_balances as x')->join('fin_lots as l', 'l.id', '=', 'x.fk_id_lot')->whereIn('x.fk_id_location', $old)->where('x.qty', '>', 0)->groupBy('l.fk_id_product')->selectRaw('l.fk_id_product p, SUM(x.qty) q')->get() as $r) {
             $book = (int) $r->q; $left = $book; $lines = [];
-            foreach (DB::table('t_product_locations')->where('fk_id_product', $r->p)->whereIn('fk_id_location', $kids)->where('qty', '>', 0)->orderBy('id')->get() as $row) {
+            foreach (DB::table('t_product_locations')->where('fk_id_product', $r->p)->whereIn('fk_id_location', $kids)->where('qty', '>', 0)->where('fk_id_owner_seg', 0)->orderBy('id')->get() as $row) {
                 $to = $map[$row->fk_id_location] ?? null;
                 if (! $to) { $lines[] = ['from' => (int) $row->fk_id_location, 'to' => null, 'qty' => 0, 'note' => DB::table('cat_inventory_locations')->where('id', $row->fk_id_location)->value('location_name') . " {$row->qty} – no mapped bin"]; continue; }
                 $q = min((int) $row->qty, $left); if ($q <= 0) continue; $left -= $q;
@@ -203,6 +203,7 @@ class WarehouseSites
                 }
             }
         });
+        StockService::syncSegAll($ent);      // R-H-11 segregated owners' rows follow the moved lots
         Audit::log('cat_inventory_locations', $siteId, 'UPDATE', ['go_live_moves' => $moves], 'warehouse go-live', $ent);
         return ['site' => $s->location_name, 'plan' => $plan, 'moved' => $moves] + ['again' => self::goLive($ent, $siteId, $map, false)['changes']];
     }
