@@ -74,6 +74,10 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('fee-check', [\App\Http\Controllers\CoreExtrasController::class, 'feeCheck']); Route::get('fee-check/proof', [\App\Http\Controllers\CoreExtrasController::class, 'feeProof']);      // MR-1536
         Route::get('whats-new', [\App\Http\Controllers\CoreExtrasController::class, 'whatsNew']); Route::post('whats-new/flag', [\App\Http\Controllers\CoreExtrasController::class, 'featureSet']);      // MR-1542
         Route::get('return-abuse', [\App\Http\Controllers\CoreExtrasController::class, 'returnAbuse']); Route::get('return-abuse/check/{sale}', [\App\Http\Controllers\CoreExtrasController::class, 'returnAbuseCheck'])->whereNumber('sale');      // MR-1544
+        Route::get('decisions', function (\Illuminate\Http\Request $r) {      // MR-1443 … 1450 decision engine (reads only)
+            $u = $r->user(); if (! \App\Services\Perm::has($u, 'money.SEE') && ! \App\Services\Perm::has($u, 'buying.SEE')) return response()->json(['message' => 'You do not have the right to open this page – ask the Owner.'], 403);
+            return \App\Services\Decisions::all((int) \App\Services\Context::ent(), $r->query('code') ?: null);
+        });
         Route::get('icc', [\App\Http\Controllers\IccController::class, 'board']);      // MR-0031 07_ICC
         Route::get('icc/{id}', [\App\Http\Controllers\IccController::class, 'show'])->whereNumber('id');
         Route::post('icc/{id}', [\App\Http\Controllers\IccController::class, 'save'])->whereNumber('id');

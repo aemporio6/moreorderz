@@ -74,7 +74,7 @@ return [
         'M_13_7_PLAYBOOKS' => 'Step-by-step guides for each job',
         'M_14_1_DOCUMENTS' => 'Every file kept with a record', 'M_14_2_DRIVE_FOLDERS' => 'Google Drive folders linked to the tool',
         'M_15_1_IMPORT_A_FILE' => 'Load a marketplace, bank or carrier file', 'M_15_2_IMPORT_HISTORY' => 'Every file loaded, and undo', 'M_15_3_WATCHED_DRIVE_FOLDERS' => 'Folders the tool reads by itself',
-        'M_15_4_MAPPINGS_REPORT_TYPES' => 'How each file\'s columns are read', 'M_15_5_API_CONNECTIONS' => 'Live links to marketplaces and carriers', 'M_15_MYTOOL_LINK' => 'Connect MY TOOL: key, permissions, what came in', 'M_14_SUPPLIER_INBOX' => 'Files suppliers sent with their upload link – filed by themselves',
+        'M_15_4_MAPPINGS_REPORT_TYPES' => 'How each file\'s columns are read', 'M_15_5_API_CONNECTIONS' => 'Live links to marketplaces and carriers', 'M_15_MYTOOL_LINK' => 'Connect MY TOOL: key, permissions, what came in', 'M_16_DECISIONS' => 'What to do next, the money each is worth, one click to do it', 'M_14_SUPPLIER_INBOX' => 'Files suppliers sent with their upload link – filed by themselves',
         'M_16_1_ALL_REPORTS_GROUPED_' => 'Every report of the tool, by area',
         'M_17_1_FIRST_TIME_SETUP_WIZARD' => 'Set the tool up step by step', 'M_17_2_COMPANY_FINANCE_SETTINGS' => 'Currency, VAT and finance choices', 'M_17_3_MARKETPLACE_PROFILES' => 'How each marketplace is read',
         'M_17_4_CARRIER_PROFILES_PRESETS' => 'Carriers, services and label settings', 'M_17_5_BANK_STATEMENT_PROFILES' => 'How each bank file is read', 'M_17_6_PAYMENT_PROVIDER_PROFILES' => 'PayPal, Payoneer, Wise and others',

@@ -381,6 +381,7 @@
       if (r === '#/putaway') return await pagePutaway();
       if (r === '#/inbound') return await pageInbound();
       if (r === '#/stock-alerts') return await pageStockAlerts();
+      if (r.startsWith('#/decisions')) return await pageDecisions(new URLSearchParams(r.split('?')[1] || '').get('code') || '');      // MR-1443 … 1450
       if (r === '#/icc' || r.startsWith('#/icc?')) return await pageIcc(new URLSearchParams(r.split('?')[1] || '').get('status') || '');
       if (/^#\/icc\/\d+/.test(r)) return await pageIccOne(+r.split('/')[2].split('?')[0]);
       if (r === '#/settings/sourcing') return await pageSourcingSettings();
@@ -1987,6 +1988,22 @@
   // ---------- ICC – Inventory Cycle Calculator (07_ICC, IC-18): every product worst first, one product with inputs, stages, pipeline, mode compare and cash line ----------
   const ICC_CHIP = { RED: 'err', YELLOW: 'warn', GREEN: 'ok', NONE: '' };
   const fmt = v => v == null ? '–' : (Number.isInteger(+v) ? (+v).toLocaleString('en-GB') : (+v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  /* MR-1443 … 1450 the decision engine: what to do next, the money each is worth, one click to the form that does it */
+  async function pageDecisions(code) {
+    busy(true); let d; try { d = await api('decisions' + (code ? '?code=' + code : '')); } finally { busy(false); }
+    const L = { ORDER_NOW: 'Order now', SWITCH_MODE: 'Ship another way', RAISE_PRICE: 'Raise the price', PAUSE_LISTING: 'Pause the listing', LOWER_PRICE: 'Lower the price', REBALANCE_FBA: 'Send stock to FBA', CANCEL_SUB: 'Cancel a subscription', CHASE_PAYMENT: 'Chase a payment', CAPITAL_CALL: 'Ask partners for capital' };
+    const tone = { ORDER_NOW: 'err', CAPITAL_CALL: 'err', CHASE_PAYMENT: 'warn', PAUSE_LISTING: 'warn', REBALANCE_FBA: 'warn' };
+    const ext = u => /^https?:/.test(u);
+    $('#main').innerHTML = `<div class="page-head"><div><h1>What to do next</h1><div class="sub">Each line is a decision with the money it is worth (${esc(d.base)}) and one button to the form that does it. Worked out from ICC, sales, stock, bank, invoices and subscriptions – nothing is changed until you press.</div></div></div>
+      <div class="seg" style="margin-bottom:12px;flex-wrap:wrap"><button type="button" class="${code ? '' : 'on'}" data-dc="">All · ${d.items.length}</button>${Object.keys(L).filter(k => d.counts[k] || k === code).map(k => `<button type="button" class="${k === code ? 'on' : ''}" data-dc="${k}">${esc(L[k])} · ${d.counts[k] || 0}</button>`).join('')}</div>
+      ${d.items.length ? `<div class="dc-list">${d.items.map(x => `<div class="card dc-item"><div class="card-b"><div class="dc-top"><span class="chip ${tone[x.code] || 'accent'} plain">${esc(x.label)}</span><b class="dc-amt">${money(x.amount)}</b></div>
+        <div class="dc-title">${esc(x.title)}</div><div class="small muted">${esc(x.why)}</div><div class="small" style="margin-top:4px">${esc(x.money)}</div>
+        <div class="dc-act"><a class="btn primary sm" href="${esc(x.go)}" ${ext(x.go) ? 'target="_blank" rel="noopener"' : ''}>${esc(x.go_label)}</a>${x.more ? ` <a class="btn ghost sm" href="${esc(x.more)}">Details</a>` : ''}</div></div></div>`).join('')}</div>`
+        : `<div class="card"><div class="empty">${ic('check')}<div>Nothing to decide right now – every rule is quiet.</div></div></div>`}
+      ${d.skipped.length ? `<div class="small muted" style="margin-top:10px">Not checked this time: ${esc(d.skipped.join(' · '))}</div>` : ''}`;
+    $$('#main [data-dc]').forEach(b => b.onclick = () => go('#/decisions' + (b.dataset.dc ? '?code=' + b.dataset.dc : '')));
+  }
+
   async function pageIcc(status) {
     busy(true); let d; try { d = await api('icc' + (status ? '?status=' + status : '')); } finally { busy(false); }
     const c = d.counts, tile = (k, n, l, cls) => `<a class="btn ${status === k ? 'primary' : 'ghost'}" href="#/icc${k ? '?status=' + k : ''}"><b>${n}</b>&nbsp;${l}</a>`;
@@ -2000,7 +2017,7 @@
   async function pageIccOne(id, mode) {
     busy(true); let d; try { d = await api('icc/' + id + (mode ? '?mode=' + mode : '')); } finally { busy(false); }
     const i = d.inputs, r = d.result, s = d.saved || {}, num = (k, l, v, ph) => `<label class="fld"><span>${l}</span><input type="number" min="0" step="any" data-ii="${k}" value="${v ?? ''}" placeholder="${esc(String(ph ?? ''))}"></label>`;
-    $('#main').innerHTML = `<div class="page-head"><div><h1>ICC · ${esc(i.sku || '#' + id)}</h1><div class="sub">${esc(i.name || '')} · demand from ${esc(i.monthly_source)}</div></div><div><a class="btn ghost" href="#/icc">All products</a></div></div>
+    $('#main').innerHTML = `<div class="page-head"><div><h1>ICC · ${esc(i.sku || '#' + id)}</h1><div class="sub">${esc(i.name || '')} · demand from ${esc(i.monthly_source)}</div></div><div>${r.order_qty ? `<a class="btn primary" href="#/direct-po?product=${id}&qty=${r.order_qty}">Create PO for ${r.order_qty}</a> ` : ''}<a class="btn ghost" href="#/icc">All products</a></div></div>
       <div class="card" style="padding:14px 16px"><div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center"><span class="chip ${ICC_CHIP[r.status] || ''}" style="font-size:1.05em">${esc({ RED: 'Order now', YELLOW: 'Order this week', GREEN: 'Covered', NONE: 'No sales' }[r.status])}</span>
         <span>Order <b>${fmt(r.order_qty)}</b> units (${r.cartons} cartons, ${r.cbm} CBM)</span><span>Order by <b>${esc(r.order_by || '–')}</b></span><span>Runs out <b>${esc(r.stock_out || '–')}</b> (stock only ${esc(r.stock_out_stock_only || '–')})</span><span>Arrives if ordered today <b>${esc(r.arrival)}</b></span>
         ${r.late_days ? `<span class="chip err">${r.late_days} days late · lost profit ${fmt(r.lost_profit)}</span>` : ''}</div>
@@ -4628,7 +4645,8 @@
     const p = await bpick(); let d = null;
     if (sup) { busy(true); try { d = await api('direct-po/prefill?' + new URLSearchParams({ supplier: sup, ...(rep ? { repeat: rep } : {}) })); } catch (e) { toast(e.message, 'err'); } finally { busy(false); } }
     const L = d ? d.lines.map(x => ({ ...x })) : [];
-    if (!L.length) { const pp = prod && p.products.find(x => +x.id === +prod); L.push({ product: pp ? pp.id : '', name: pp ? pp.name : '', sku: pp ? pp.sku || '' : '', qty: '', unit_price: '', units_per_carton: '' }); }
+    const preQty = +(new URLSearchParams((S.route || '').split('?')[1] || '').get('qty')) || '';      // MR-0060 "Create PO for N" from the ICC / decisions
+    if (!L.length) { const pp = prod && p.products.find(x => +x.id === +prod); L.push({ product: pp ? pp.id : '', name: pp ? pp.name : '', sku: pp ? pp.sku || '' : '', qty: pp ? preQty : '', unit_price: '', units_per_carton: '' }); }
     const opt2 = (list, v, blank) => `<option value="">${blank}</option>` + list.map(x => `<option value="${x.id}" ${+x.id === +v ? 'selected' : ''}>${esc(x.name)}</option>`).join('');
     $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/buying">Buying</a> ›</div><h1>Direct PO</h1><div class="sub">One save makes the cycle, the confirmed PO, its lines, cartons and payment terms. Nothing is saved if any part fails.</div></div></div>
       <div class="card"><div class="form" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">

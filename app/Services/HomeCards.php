@@ -82,6 +82,10 @@ class HomeCards
             $n = DB::table('sys_approvals')->where('status', 'PENDING')->count();
             return ['label' => 'Waiting for approval', 'value' => $n, 'foot' => 'money and stock changes above the limit', 'tone' => $n ? 'warn' : 'done', 'go' => '#/list/sys_approvals'];
         });
+        self::register(['OWNER', 'MANAGER', 'FINANCE', 'PARTNER'], function ($ent) {      // MR-1443 … 1450 the decision engine on Home
+            $d = ReadCache::remember("decisions:$ent", 300, fn () => Decisions::all($ent)); $n = count($d['items']); if (! $n) return null;
+            return ['label' => 'What to do next', 'value' => $n, 'foot' => 'worth ' . number_format($d['total'], 2) . ' ' . $d['base'] . ' · top: ' . mb_substr($d['items'][0]['title'], 0, 40), 'tone' => isset($d['counts']['ORDER_NOW']) || isset($d['counts']['CAPITAL_CALL']) ? 'err' : 'warn', 'go' => '#/decisions'];
+        }, true);
         self::register(['OWNER', 'MANAGER', 'SOURCING', 'FINANCE'], function ($ent) {      // owner 26-11 21:31: files suppliers sent with their upload link
             $n = DB::table('t_src_documents')->where('fk_id_ent', $ent)->where('uploaded_by', SupplierUploads::VIA)->where('notes', 'like', '%[inbox]%')->count();
             return $n ? ['label' => 'From suppliers', 'value' => $n, 'foot' => 'new file' . ($n > 1 ? 's' : '') . ' to look at', 'tone' => 'warn', 'go' => '#/supplier-inbox'] : null;

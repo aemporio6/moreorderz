@@ -52,7 +52,7 @@ MR-1308|P|in_quick|Quick = grouped key fields of the same form, same save
 MR-1309|B|class FormStandard|+ Add opens the master form, context pre-filled, saves to the master, returns selected
 MR-1310|B|class Registry|field definitions live as data (4,084 fields)
 MR-1311|B|class MasterChanges|7e-219: D11 pending → Owner approval; supplier bank keeps its phone check (SupplierBanks)
-MR-1312|M||ICC module not built
+MR-1312|B|class Icc|07_ICC module with the six additions: continuous pipeline (every N days, overlapping orders), safety stock, holiday calendar on the production window, history forecast (season + trend), mode comparison in money, cash line; CoreAreaTest worked example + pipeline
 MR-1313|B|function decisions|Phase 12 per D13: live profit views, decision engine (FinanceArea::decisions – what to reorder, reprice, stop), scenario / cash forecast (CashForecast), marketplace API adapters; AI content, GL replacement and native app out of scope by the decision
 MR-1314|B|form:t_account|team member form as Person + Account kit tabs (sub-lists), employment / previous employment for Owner / HR
 MR-1317|B|function save|one form per record, one save path
@@ -62,7 +62,7 @@ MR-1320|B|mf-step|suggestions, help and defaults on every field: registry forms 
 MR-1321|B|people.personal_data|7e-219: same as MR-0037 (Registry::visible OWNER_HR, Mask::row staff bank, RecordService list)
 MR-1322|P|function boot|clean pages
 MR-1323|B|test_nothing_stays_behind|a record saved anywhere is at once in every dropdown that reads its list (one list per thing – e.g. brand on product, listing and sourcing forms), in search (SearchIndex on save), in history and in Create; dropdowns read the lists live, nothing copied (CoreAreaTest)
-MR-1324|M||ICC not built
+MR-1324|P|pageIccOne|ICC per product from the stock screens and the decisions page; not yet a step inside Create of a product
 MR-1325|N||working rule
 MR-1536|B|class FeeCheck|per order of the money files: fee charged against marketplace fee % + fixed (shop override), tolerance settings, overcharges listed, FEE_OVERCHARGE claim task per shop-month with a proof CSV, nightly
 MR-1537|B|function forecast|ICC demand forecast: season from the same month last year against the year (de-seasoned recent rate), trend of the last 90 days against the 90 before; Choice ICC_FORECAST; used for the reorder quantities
@@ -105,8 +105,8 @@ MR-0040|B|class Vault|vault: CVV / PIN never stored, secrets encrypted
 MR-0042|B|M42 the rest of the kit|7e-219: Account kit of a shop: seller accounts with health + subscriptions (tools / VPN / VPS) with cost per month and next payment, IP accounts, PCs with hotspot SIM, social media; due dates list; due engine rows for subscriptions, IPs, cards, SIM recharge, IDs, documents (PeopleSecurityTest c33)
 MR-0044|B|mo_recycle_bin|delete = switch off / recycle bin with Restore and Undo everywhere; no hard delete
 MR-0058|B|class HistoricalPurchase|Quick buy (local purchase) and Old purchase entry (#/old-entry: order, payments, shipment & costs, received – makes the same cycle, PO, lots and landed cost) – verdict was stale
-MR-0059|M||ICC not built
-MR-0060|M||ICC connections not built
+MR-0059|B|function inputs|every input has a system value or a default (listed as "assumed"), calculates with missing inputs, time circle of the stages, order qty, reorder point, mode select; CoreAreaTest
+MR-0060|P|class Decisions|product status chip, reorder point written back, "Create PO for N" (ICC and decisions), STK_REORDER task deduped, cash needed on the board + capital call rule, Home card; WhatsApp digest not built
 MR-0068|P|class OldImport|six old sales tables -> one list as history lines; charges table / compare per rule partly
 MR-0069|P|orders/import|file -> detect -> check -> apply; Drive watch folders and API pulls built to contract; recommend / map / undo steps partly
 MR-0074|P|class EbayApi|API adapters for eBay, Amazon, TikTok, OnBuy, Temu written to the published contracts – none run with real keys; Etsy / Shopify / Wise not built
@@ -186,7 +186,7 @@ MR-0423|N||legend line
 MR-0550|B|WH_PACKSLIP_SHOW_ADDRESS|packing slip hides the buyer address by default (setting)
 MR-0551|B|WH_PARCEL_LOST is a money code|a lost-parcel claim above TASK_URGENT_MONEY makes the task URGENT; SweepTest
 MR-0583|P|class Approvals|approval rules for expense, payment, adjustment, withdrawal; the full rule list of 06 section A not built
-MR-0585|M||ICC not built
+MR-0585|B|pageDirectPo|"Create PO for N" opens Direct PO pre-filled (product, qty); saving makes the PO with its cycle (DirectPo::save)
 MR-0591|N||spec document
 MR-1247|B|function need|every screen action, form, menu item and report asks the permission engine on every request (Perm::need); PermissionTest
 MR-1248|B|class Context|company filter on every query
@@ -243,18 +243,18 @@ MR-1438|B|function shopAllowed|multi-company shared warehouse sites with scope (
 MR-1439|B|class CountTriggers|automatic counts: short pick, empty, negative attempt, putaway no room, ABC schedule (R-H-47)
 MR-1440|B|class CountService|count loss → MISSING bin, kept visible until found or approved write-off (R-H-46)
 MR-1441|N||spec document
-MR-1443|M||decision engine ORDER_NOW not built
-MR-1444|M||decision engine SWITCH_MODE not built
-MR-1445|M||decision engine RAISE_PRICE not built
-MR-1446|M||decision engine LOWER_PRICE / PAUSE_LISTING not built
-MR-1447|M||decision engine REBALANCE_FBA not built
-MR-1448|M||decision engine CANCEL_SUB not built
-MR-1449|M||decision engine CHASE_PAYMENT not built
-MR-1450|M||decision engine CAPITAL_CALL not built
+MR-1443|B|class Decisions|ORDER_NOW: ICC red / yellow → profit lost if late + cash needed, one click Direct PO pre-filled; DecisionsTest
+MR-1444|B|class Decisions|SWITCH_MODE: ICC compare total cheaper in another mode → £ saved, opens the ICC in that mode; DecisionsTest
+MR-1445|B|class Decisions|RAISE_PRICE: 30-day sales > 125 % of plan and cover < cycle → £ a month at +5 %, opens the listings; DecisionsTest
+MR-1446|B|class Decisions|PAUSE_LISTING (margin after fees < floor, £ lost a month) and LOWER_PRICE (cover > 180 days, holding cost) → listings; DecisionsTest
+MR-1447|P|class Decisions|REBALANCE_FBA from the FBA stock snapshots vs warehouse stock → lost sales days, opens a new FBA shipment; no test with snapshot + lots yet
+MR-1448|B|class Decisions|CANCEL_SUB: paid subscription with no shop sale in 60 days → £ a year, opens Subscriptions; DecisionsTest
+MR-1449|B|class Decisions|CHASE_PAYMENT: unpaid invoice past due → £ open, WhatsApp reminder text ready; DecisionsTest
+MR-1450|P|class Decisions|CAPITAL_CALL: lowest 13-week cash (forecast) − ICC orders due in 90 days < keep-limit → shortfall, opens Capital calls; no test case yet
 MR-1457|P|class Approvals|approval by Owner / Manager, never the asker; roles per rule as data not built
 MR-1459|N||seed detail
 MR-1462|P|class Fx|currency from the row / company setting, no fixed default in code
-MR-1464|M||ICC stages not built
+MR-1464|B|function pipeline|F-03 stages per PO line: ordered = qty − produced, production = produced − shipped, transit = shipped − received; CoreAreaTest test_pipeline_store_task_and_screens
 MR-1483|N||seed wording
 MR-1485|N||spec document
 MR-1503|B|function noCost|night job: one task SAL_NO_COST per shop + month while own-stock lines have no cost, closed by itself; tested
@@ -283,7 +283,7 @@ MR-1529|B|SRC_QC_PASS_GREEN|setting used for the green pass rate of a quality ch
 MR-1530|B|class EventCatalogue|one event catalogue; retired aliases refused / mapped, self-check on Health (R-G_CORE-95)
 MR-1532|N||seed values
 MR-1533|N||spec document
-MR-1534|M||ICC not built
+MR-1534|B|class Icc|the six additions: overlap_orders/every_days, safety_days, icc_holidays, forecast(), compare (freight + lost profit), cash (deposit / balance / freight + duty + VAT); CoreAreaTest
 MR-1535|B|camScan|all 8 architect improvements: supplier link without login (ShareLinks M62), camera scanning on every scan box (camScan, BarcodeDetector M54), supplier scorecard (M61), owner exceptions digest (TaskDigest::exceptions M88), data-quality score (DataHealth M56), QC checklist and the rest
 MR-0205|B|class AccFilings|filing / payment calendar home with rights (R-ACC-13)
 MR-0206|B|class AccHubAdmin|company Hub settings, gateway credentials in the vault with reveal log (R-ACC-16 / 17)

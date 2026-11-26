@@ -5,13 +5,14 @@
 <link rel="icon" type="image/svg+xml" href="/app/favicon.svg?v={{ @filemtime(public_path('app/favicon.svg')) }}"><script src="/app/favicon.js?v={{ @filemtime(public_path('app/favicon.js')) }}" defer></script><link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="#125e52"><link rel="apple-touch-icon" href="/app/icons/icon-192.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <title>{{ config('app.name') }}</title>
+<link rel="preload" as="script" href="/app/app.js?v={{ filemtime(public_path('app/app.js')) }}">
 <link rel="stylesheet" href="/app/design.css?v={{ filemtime(public_path('app/design.css')) }}">
 <link rel="stylesheet" href="/app/app.css?v={{ filemtime(public_path('app/app.css')) }}">
 </head>
 <body>
 <header id="top"></header>
 <nav id="side"></nav>
-<main id="main"></main>
+<main id="main"><div class="boot-wait"><div class="boot-dot"></div><b>Opening MoreOrderz…</b><small>After an update the first opening takes a few seconds – then it comes from memory.</small></div></main>
 <div id="loader"><div class="box"><div id="loaderTxt">Working…</div></div></div>
 <div id="toasts"></div>
 <form id="logoutForm" method="post" action="/logout" hidden>@csrf</form>
