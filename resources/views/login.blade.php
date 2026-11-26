@@ -20,7 +20,7 @@ body{display:grid;place-items:center;min-height:100vh;padding:20px}
 <form class="login" method="post" action="/login/code">
   @csrf
   <h1>{{ config('app.name') }}</h1>
-  <p>Enter the 6-digit code from the authenticator app on your phone.</p>
+  @if (($via ?? 'APP') === 'WA')<p>We sent a 6-digit code to your WhatsApp {{ $to }}. It works for 5 minutes.</p>@else<p>Enter the 6-digit code from the authenticator app on your phone.</p>@endif
   @if ($errors->any())<div class="errbox">{{ $errors->first() }}</div>@endif
   <label for="code">Code</label>
   <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="7" autofocus required>

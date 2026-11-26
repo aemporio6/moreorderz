@@ -327,7 +327,10 @@ class StockController extends Controller
     {
         $this->can($r, 'stock.ownership');
         $d = $r->validate(['lot' => 'required|integer', 'qty' => 'required|integer|min:1', 'to_owner' => 'required|integer']);
-        return $this->run(fn () => ['lot' => StockService::transferOwnership((int) Context::ent(), $d['lot'], $d['qty'], $d['to_owner']), 'message' => 'Units given to the new owner (lot split)']);
+        return $this->run(function () use ($d) {
+            if ($aid = \App\Services\MasterChanges::lotOwner((int) Context::ent(), (int) $d['lot'], (int) $d['qty'], (int) $d['to_owner'])) return ['status' => 'WAITING', 'approval' => $aid, 'message' => 'The change of owner waits for the Owner (Approvals) – stock has not changed yet'];      // D11
+            return ['lot' => StockService::transferOwnership((int) Context::ent(), $d['lot'], $d['qty'], $d['to_owner']), 'message' => 'Units given to the new owner (lot split)'];
+        });
     }
 
     public function check(Request $r)

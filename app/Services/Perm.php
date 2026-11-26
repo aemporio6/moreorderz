@@ -174,6 +174,7 @@ class Perm
         foreach (ReportService::LIST as $k => $r) $c["report:$k"] = [$r[1], 'Reports', $r[3]];
         // rights that are not one-per-screen-action
         $c['money.approve'] = ['Approve or reject waiting money items', 'Money', Approvals::APPROVERS];
+        $c['people.personal_data'] = ['See and change personal data: ID numbers, documents, salary, staff bank details, employment (HR)', 'Users and system', ['OWNER']];      /* D7 / M37: give it to an HR role */
         $c['stock.countApprove'] = ['Approve and post a stock count', 'Stock', ['OWNER', 'MANAGER']];
         $c['print.testPage'] = ['Print a printer test page', 'Printing', ['OWNER', 'MANAGER', 'WAREHOUSE']];
         foreach (self::PRINT_KINDS as $k => $roles) $c["print.kind_$k"] = ['Print: ' . ucfirst(strtolower(str_replace('_', ' ', $k))), 'Printing', $roles];

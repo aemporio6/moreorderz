@@ -49,10 +49,9 @@ class ExternalContact
             ->map(fn ($r) => ['id' => (int) $r->id, 'name' => (string) $r->name, 'country' => (int) $r->country])->all();
     }
 
-    private static function s($v): string { return is_scalar($v) ? (string) preg_replace('/\s+/u', ' ', trim((string) $v)) : ''; }
+    private static function s($v): string { if (! is_scalar($v)) return ''; $v = trim((string) $v); return mb_check_encoding($v, 'UTF-8') ? (string) preg_replace('/\s+/u', ' ', $v) : $v; }      // unreadable text is kept as typed, so the check names it
     private static function rows($v): array { return is_array($v) ? array_values($v) : []; }
     private static function date(string $v): bool { $d = \DateTime::createFromFormat('!Y-m-d', $v); return $d && $d->format('Y-m-d') === $v; }
-    private static function latin1(string $v): bool { return $v === '' || ! preg_match('/[^\x00-\x7F]/', $v) || @iconv('UTF-8', 'CP1252', $v) !== false; }
 
     public static function ibanOk(string $iban): bool
     {
@@ -73,7 +72,7 @@ class ExternalContact
         $len = function ($f, $v, $max, $label) use (&$e) { if (mb_strlen($v) > $max) { $e[$f] = "$label can be at most $max characters."; return false; } return true; };
         $text = function ($f, $v, $label, $latin) use (&$e) {
             if ($v === '') return true;
-            if ($latin && ! self::latin1($v)) { $e[$f] = "$label can only use English letters here (this field cannot store Chinese, Urdu, Bengali... letters). Please type it in English."; return false; }
+            if (! mb_check_encoding($v, 'UTF-8')) { $e[$f] = "$label has unreadable characters."; return false; }      // R-C-6: the old "type it in English" block is dropped – Urdu / Hindi / Bangla / Chinese names save
             if (preg_match('/[\x{10000}-\x{10FFFF}]/u', $v)) { $e[$f] = "$label cannot contain emoji or special symbols."; return false; }
             return true; };
         $country = function ($f, $id, $label) use (&$e, $countries) { if (! in_array((int) $id, $countries, true)) { $e[$f] = "Please choose the $label."; return false; } return true; };

@@ -60,7 +60,8 @@ class FormRules
         if ($id && array_key_exists('f_active', $data) && ! (int) $data['f_active'] && (int) ($old['f_active'] ?? 1) && ($t = Registry::table($formKey)) && ($m = ListDefaults::protect($t, $id, (string) ($old[Registry::labelColumn($t) ?: 'id'] ?? $id)))) $def = ['f_active' => str_replace('cannot be deleted', 'cannot be switched off', $m)];
         $ch = Registry::table($formKey) === 't_account' ? PersonChannels::check($data, $old, $id) : [];      // R-G_CORE-48 channels per person
         $ch += in_array(Registry::table($formKey), ['cat_tags', 'cat_brands'], true) ? self::tagBrand((string) Registry::table($formKey), $data, $old, $id) : [];      // R-D-69 tags and brands
-        return $def + $code + $inherit + $ch + OwnItems::check($formKey, $data, $old, $id) + self::checkForm($formKey, $data, $old, $id, $already);      // R-C-20: an own item must be the person's own
+        $pr = ($t = (string) Registry::table($formKey)) && PersonRules::applies($t) ? PersonRules::check($formKey, $t, $data, $old, $id) : [];      // R-C-5 / 6 / 7 / 24 / 25 / 27 / 29 / 33 / 34 / 35, D7
+        return $def + $code + $inherit + $ch + $pr + OwnItems::check($formKey, $data, $old, $id) + self::checkForm($formKey, $data, $old, $id, $already);      // R-C-20: an own item must be the person's own
     }
 
     /**
@@ -288,6 +289,7 @@ class FormRules
     public static function calc(string $formKey, array $values): array
     {
         $t = Registry::table($formKey);
+        if ($t === 't_account_subscriptions') return ['item_kind' => PersonRules::itemKind(isset($values['fk_item_id']) ? (int) $values['fk_item_id'] : null)];      // R-C-33 the item's kind decides which picker shows
         if ($t === 't_src_cartons') { $f = CartonCalc::calc($values, CartonCalc::divisorForRow((int) Context::ent(), $values)); unset($f['gross_used']); return $f; }
         if (in_array($t, ['t_src_products', 't_product_vendors'], true) && is_numeric($values['carton_l'] ?? null) && is_numeric($values['carton_w'] ?? null) && is_numeric($values['carton_h'] ?? null)) return ['carton_cbm' => round((float) $values['carton_l'] * (float) $values['carton_w'] * (float) $values['carton_h'] / 1000000, 4)];
         return [];
@@ -296,7 +298,7 @@ class FormRules
     public static function calcFields(string $formKey): array
     {
         $t = Registry::table($formKey);
-        return match (true) { $t === 't_src_cartons' => ['unit_l', 'unit_w', 'unit_h', 'unit_net_weight', 'unit_gross_weight', 'units_per_carton', 'carton_l', 'carton_w', 'carton_h', 'carton_tare_weight', 'actual_carton_gross_weight', 'total_planned_units'], in_array($t, ['t_src_products', 't_product_vendors'], true) => ['carton_l', 'carton_w', 'carton_h'], default => [] };
+        return match (true) { $t === 't_src_cartons' => ['unit_l', 'unit_w', 'unit_h', 'unit_net_weight', 'unit_gross_weight', 'units_per_carton', 'carton_l', 'carton_w', 'carton_h', 'carton_tare_weight', 'actual_carton_gross_weight', 'total_planned_units'], in_array($t, ['t_src_products', 't_product_vendors'], true) => ['carton_l', 'carton_w', 'carton_h'], $t === 't_account_subscriptions' => ['fk_item_id'], default => [] };
     }
 
     public static function isoTaken(string $iso, ?int $id = null): bool

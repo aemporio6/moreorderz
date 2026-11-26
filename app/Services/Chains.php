@@ -122,6 +122,15 @@ class Chains
                 ->map(fn ($r) => [(string) $r->id, trim(($r->bank ?: 'Bank') . ' ••' . substr(preg_replace('/\D/', '', (string) $r->account_no), -4) . ($r->sort_branch_code ? ' · sort code ' . $r->sort_branch_code : ''))])
                 ->filter(fn ($o) => $q === null || $q === '' || mb_stripos($o[1], $q) !== false)->values()->all(), 'narrowed_by' => $narrow];
         }
+        if ($t === 't_account_addresses' && $formKey === 't_account_credit_card' && in_array($col, ['linked_personal_address', 'linked_business_address'], true)) {      // R-C-24 / R-C-29 Personal = Home, Business = Office
+            $type = $col === 'linked_personal_address' ? 'H' : 'O'; $x->where($t . '.l_address_type', $type);
+            $opts = $x->orderBy($t . '.id')->get([$t . '.*'])->map(fn ($r) => [(string) $r->id, OwnItems::label($t, $r) ?: '#' . $r->id])->filter(fn ($o) => $q === null || $q === '' || mb_stripos($o[1], $q) !== false)->values()->all();
+            return ['options' => $opts, 'narrowed_by' => $narrow] + ($opts || ($q !== null && $q !== '') ? [] : ['hint' => $type === 'H' ? 'No home address yet – + Add home address' : 'No office address yet – + Add office address']);
+        }
+        if ($t === 't_account_company_houses') {      // R-C-13 the person's own companies by name; a supplier company (made from a contact) is never one of them
+            return ['options' => $x->join('cat_company_house as cc', 'cc.id', '=', 't_account_company_houses.fk_company_house_id')->where(fn ($w) => $w->whereNull('cc.f_external')->orWhere('cc.f_external', 0))->orderBy('cc.company_name')
+                ->get(['t_account_company_houses.id', 'cc.company_name'])->map(fn ($r) => [(string) $r->id, (string) $r->company_name])->filter(fn ($o) => $q === null || $q === '' || mb_stripos($o[1], $q) !== false)->values()->all(), 'narrowed_by' => $narrow];
+        }
         if (in_array($t, ['t_account_addresses', 't_account_mobiles', 't_account_credit_cards'], true)) {      // the rule's labels (R-C-20)
             return ['options' => $x->orderBy($t . '.id')->get([$t . '.*'])->map(fn ($r) => [(string) $r->id, OwnItems::label($t, $r) ?: '#' . $r->id])->filter(fn ($o) => $q === null || $q === '' || mb_stripos($o[1], $q) !== false)->values()->all(), 'narrowed_by' => $narrow];
         }

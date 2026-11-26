@@ -109,6 +109,7 @@ class Registry
         if ($mode === 'EDIT' || $mode === 'READONLY') return true;
         $v = $f['visible_to'] ?: 'all';
         if ($v === 'all' || $role === null || $role === 'OWNER') return true;
+        if ($v === 'OWNER_HR') { $u = \Illuminate\Support\Facades\Auth::user(); return $u ? Perm::has($u, 'people.personal_data') : false; }      // D7 / M37 personal data: Owner and the HR right only
         return in_array($role, explode('_', $v), true) || in_array($role, array_map('trim', explode(',', $v)), true);
     }
 
@@ -135,6 +136,14 @@ class Registry
             if (in_array('VA', $roles, true) || in_array('SELLER', $roles, true)) $roles = array_values(array_unique(array_merge($roles, ['VA', 'SELLER'])));
             $with = $roles ? DB::table('t_account_in_types as i')->join('cat_account_types as t', 't.id', '=', 'i.fk_id_account_type')->where('i.f_active', 1)->where('t.f_active', 1)->whereIn(DB::raw('UPPER(t.role_code)'), $roles)->distinct()->pluck('i.fk_id_account')->all() : [];
             return self::tableOptions('t_account', $ent, $q, $limit, false, $with ?: null);
+        }
+        if ($kind === 'buyer') {      // R-C-31 buyer marketplace accounts (side Buyer): "marketplace · person · login"
+            return DB::table('t_account_marketplaces as m')->join('t_account as a', 'a.id', '=', 'm.fk_id_account')->leftJoin('cat_marketplaces as c', 'c.id', '=', 'm.fk_id_marketplace')
+                ->where('m.market_place_type', 'Buyer')->where(fn ($w) => $w->whereNull('m.f_active')->orWhere('m.f_active', 1))
+                ->when($ent, fn ($x) => $x->where(fn ($w) => $w->where('a.fk_id_ent', $ent)->orWhere('a.fk_id_ent', 0)))->orderBy('c.marketplace_short')->orderBy('a.first_name')->limit($limit)
+                ->get(['m.id', 'c.marketplace_short', 'a.first_name', 'a.sur_name', 'm.web_user_login_id'])
+                ->map(fn ($r) => [(string) $r->id, implode(' · ', array_filter([$r->marketplace_short ?: 'Marketplace', trim($r->first_name . ' ' . $r->sur_name), $r->web_user_login_id]))])
+                ->filter(fn ($o) => $q === null || $q === '' || mb_stripos($o[1], $q) !== false)->values()->all();
         }
         if ($kind === 'table' || $kind === 'own') {
             $w = []; if (str_contains($arg, '?')) { parse_str(explode('?', $arg, 2)[1], $w); unset($w['login']); }      // table:x?col=value narrows the list (form standard)
@@ -181,6 +190,7 @@ class Registry
         }
         if (isset(self::GROUPS[$table])) $x->addSelect(DB::raw(self::GROUPS[$table] . ' as grp'));
         foreach ($where as $c => $v) if (is_string($c) && self::hasColumn($table, $c)) $x->where('t.' . $c, $v);
+        if ($table === 'cat_company_house' && ! array_key_exists('f_external', $where) && self::hasColumn($table, 'f_external')) $x->where(fn ($w) => $w->whereNull('t.f_external')->orWhere('t.f_external', 0));      // R-C-13 a supplier company (made from a contact) never shows in the own-company pickers
         if ($ent && self::hasColumn($table, 'fk_id_ent')) $x->where(fn ($w) => $w->where('t.fk_id_ent', $ent)->orWhere('t.fk_id_ent', 0)->orWhereNull('t.fk_id_ent'));
         if (self::hasColumn($table, 'f_active')) $x->where('t.f_active', 1);
         return $x->limit($limit)->get()->map(fn ($r) => isset(self::GROUPS[$table]) ? [(string) $r->id, (string) ($r->lbl ?? $r->id), (string) ($r->grp ?? '') ?: 'Other'] : [(string) $r->id, (string) ($r->lbl ?? $r->id)])->all();

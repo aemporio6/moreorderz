@@ -151,6 +151,9 @@ class AppController extends Controller
     /** R-C-30 the shop's Account kit (seller accounts with their health). */
     public function shopKit(\Illuminate\Http\Request $r, int $id) { Rights::check('VIEW', (string) RecordService::formOfTable('t_branches')); try { return \App\Services\ShopKit::kit((int) \App\Services\Context::ent(), $id); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 404); } }
 
+    public function externalList(\Illuminate\Http\Request $r) { Rights::check('VIEW', (string) RecordService::formOfTable('t_account')); return \App\Services\PersonLinks::external((int) \App\Services\Context::ent(), $r->query('role')); }
+    public function companyPreview(\Illuminate\Http\Request $r, int $id) { Rights::check('VIEW', (string) RecordService::formOfTable('t_account')); return \App\Services\PersonLinks::companyPreview($id, $r->integer('person') ?: null) ?? response()->json(['message' => 'Company not found.'], 404); }
+
     /** R-C-1: people / companies filtered by party type and by managed / external, each on its own. */
     public function parties(\Illuminate\Http\Request $r) { Rights::check('VIEW', (string) RecordService::formOfTable('t_account')); try { return ['rows' => \App\Services\Party::find((int) \App\Services\Context::ent(), $r->only(['party_type', 'kind', 'role', 'q']))]; } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
     public function externalForm(\Illuminate\Http\Request $r) { Rights::check('ADD', 'external_contact'); return \App\Services\ExternalContact::meta((int) \App\Services\Context::ent()); }

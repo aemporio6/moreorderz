@@ -240,6 +240,10 @@ class SourcingExtras
             foreach ($lines as $l) DB::table('t_src_cycle_products')->insert(RecordService::fillNotNull('t_src_cycle_products', ['fk_id_ent' => $ent, 'fk_id_cycle' => $cycle, 'fk_id_product' => $l['product'], 'product_name' => DB::table('t_product_vendors')->where('id', $l['product'])->value('product_name_vendor'), 'target_qty' => $l['qty'], 'row_status' => 'Confirmed', 'f_active' => 1, 'created_by' => Context::userId()]));
             if ($dup) SrcDuplicate::forced((int) $cycle, $dup, (string) $d['dup_reason'], $ent);
             $po = BuyingService::createPo(['dup_checked' => true, 'cycle' => $cycle, 'supplier' => $sup->id, 'currency' => $d['currency'] ?? Fx::base($ent), 'date' => $date, 'deposit_pct' => 100, 'lines' => array_map(fn ($l) => ['product' => (int) $l['product'], 'qty' => (int) $l['qty'], 'unit_price' => (float) $l['unit_price']], $lines)]);
+            if (! empty($d['buyer_account'])) {      // R-C-31 "Bought with account": the buyer marketplace account the goods were bought with
+                if (! DB::table('t_account_marketplaces')->where('id', (int) $d['buyer_account'])->where('market_place_type', 'Buyer')->exists()) throw new \InvalidArgumentException('Choose a buyer marketplace account.');
+                DB::table('t_src_po')->where('id', $po)->update(['fk_id_buyer_account' => (int) $d['buyer_account']]);
+            }
             BuyingService::confirmPo($po);
             $ship = BuyingService::createShipment(['po' => $po, 'eta' => $date]);
             $grn = BuyingService::createGrn(['shipment' => $ship, 'location' => (int) $loc->id, 'date' => $date]);

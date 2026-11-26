@@ -533,7 +533,7 @@ class BuyingController extends Controller
 
     public function quickBuy(Request $r)
     {
-        $d = $r->validate(['supplier' => 'required|integer', 'location' => 'required|integer', 'date' => 'required|date', 'currency' => 'nullable|string|size:3', 'bank' => 'nullable|integer', 'reference' => 'nullable|string|max:150', 'dup_reason' => 'nullable|string|max:300', 'note' => 'nullable|string|max:500',
+        $d = $r->validate(['supplier' => 'required|integer', 'location' => 'required|integer', 'date' => 'required|date', 'currency' => 'nullable|string|size:3', 'bank' => 'nullable|integer', 'reference' => 'nullable|string|max:150', 'dup_reason' => 'nullable|string|max:300', 'note' => 'nullable|string|max:500', 'buyer_account' => 'nullable|integer',
             'lines' => 'required|array|min:1', 'lines.*.product' => 'nullable|integer', 'lines.*.sku' => 'nullable|string|max:80', 'lines.*.qty' => 'required|integer|min:1', 'lines.*.unit_price' => 'required|numeric|min:0']);
         return $this->run(function () use ($d) { $x = \App\Services\SourcingExtras::quickBuy((int) Context::ent(), $d);
             $paid = $x['paid'] ? (collect($x['paid'])->contains(fn ($p) => $p['status'] === 'WAITING') ? ' · payment waits for approval' : ' · paid') : ' · not paid yet';

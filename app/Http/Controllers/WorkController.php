@@ -43,6 +43,7 @@ class WorkController extends Controller
     {
         Rights::check('VIEW', $key);
         $page = RecordService::page($key, $id);
+        $page['uses'] = \App\Services\PersonLinks::uses((string) \App\Services\Registry::table($key), $id);      // "Used for": hotspot SIM, ID submitted to, buyer purchases, card spend, director slot
         $page['dq'] = \App\Services\DqScore::chip($key, $id);      // R-G_CORE-108 completeness chip (master forms only; reads)
         // remembered for "Opened lately" in search
         $ix = DB::table('sys_search_index')->where('url', "#/rec/$key/$id")->first(['title', 'subtitle']);

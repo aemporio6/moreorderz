@@ -52,6 +52,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::match(['get', 'post'], 'people/{id}/access', [AdminController::class, 'personAccess'])->whereNumber('id');      // R-C-44
         Route::get('parties', [AppController::class, 'parties']);      // R-C-1
         Route::get('shops/{id}/kit', [AppController::class, 'shopKit'])->whereNumber('id');      // R-C-30
+        Route::get('people/external', [AppController::class, 'externalList']);      // R-C-19
+        Route::get('people/company-preview/{id}', [AppController::class, 'companyPreview'])->whereNumber('id');      // R-C-36
         Route::get('people/external/new', [AppController::class, 'externalForm']);
         Route::post('people/external/new', [AppController::class, 'externalSave']);
         Route::post('people/external/progress', [AppController::class, 'externalProgress']);      // R-C-11

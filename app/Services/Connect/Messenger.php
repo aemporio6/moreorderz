@@ -61,6 +61,13 @@ class Messenger
         return self::put($ent, $accountId, 'WHATSAPP', $phone, $code, $body, ['template_params' => json_encode($params), 'link_table' => $linkTable, 'link_id' => $linkId], $eventKey);
     }
 
+    /** A message that must go at once (a sign-in code): quiet hours do not hold it. */
+    public static function queueWaNow(int $ent, ?int $accountId, string $phone, string $code, array $vars, ?string $linkTable = null, ?int $linkId = null): int
+    {
+        [$body, $params] = self::render($code, $vars);
+        return self::put($ent, $accountId, 'WHATSAPP', $phone, $code, $body, ['template_params' => json_encode($params), 'link_table' => $linkTable, 'link_id' => $linkId], null, false);
+    }
+
     /** A free-text reply inside the 24-hour window (WhatsApp commands, R-G_CORE-52) – goes at once, quiet hours do not hold a reply. */
     public static function queueText(int $ent, ?int $accountId, string $phone, string $text, ?string $linkTable = null, ?int $linkId = null): int
     {

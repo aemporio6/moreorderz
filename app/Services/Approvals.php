@@ -49,6 +49,9 @@ class Approvals
             $oldEntry = $a->action_code === 'SRC_HISTORICAL' && $u;      /* R-B_SOURCING-55 an old purchase entry is decided by sourcing.approve_old_entry (Owner / Partner), not by the money approvers */
             if (! $oldEntry && ! $viaDelegation && ! ($u ? Perm::has($u, 'money.approve') : in_array(Context::role(), self::APPROVERS, true))) throw new \InvalidArgumentException('Only the Owner or a Manager can decide this.');
             if ($a->action_code === 'SRC_HISTORICAL' && $u && ! Perm::has($u, 'sourcing.approve_old_entry')) throw new \InvalidArgumentException('Partner / Manager only');      /* R-B_SOURCING-55 */
+            if ($a->action_code === MasterChanges::ACTION) MasterChanges::canDecide($a, $u);      /* D11: a master change is decided by the rule's approver (Owner) */
+            elseif ($u && ($max = self::decideLimit($u, (string) $a->action_code, (int) $a->fk_id_ent)) !== null && (float) $a->amount_gbp > $max + 0.0001)
+                throw new \InvalidArgumentException('Above your approval limit of ' . number_format($max, 2) . ' – the Owner decides this one.');      /* E8 sys_approval_limits: VA 500, Finance 2,500, above → Owner */
             if ((int) $a->requested_by === (int) Context::userId()) throw new \InvalidArgumentException('You asked for this yourself – a second person must decide it.');
             if (! $approve && ! trim((string) $reason)) throw new \InvalidArgumentException('Give the reason for saying no.');
             DB::table('sys_approvals')->where('id', $a->id)->update(['status' => $approve ? 'APPROVED' : 'REJECTED', 'decided_by' => Context::userId(), 'decided_at' => now(), 'reason' => $reason]);
@@ -59,6 +62,16 @@ class Approvals
             EventBus::fire($approve ? 'APPROVAL_APPROVED' : 'APPROVAL_REJECTED', 'sys_approvals', $a->id, ['action' => $a->action_code], (int) $a->fk_id_ent);
             return DB::table('sys_approvals')->where('id', $a->id)->first();
         });
+    }
+
+    /** E8 the most a person may approve (sys_approval_limits of the role, the action's own row before the general "*" one); null = no limit (Owner, Partner, roles without a row). */
+    public static function decideLimit(object $u, string $action, int $ent): ?float
+    {
+        $role = (string) ($u->role_code ?? '');
+        if (in_array($role, ['OWNER', 'PARTNER'], true)) return null;
+        $v = DB::table('sys_approval_limits')->where('role_code', $role)->whereIn('fk_id_ent', [0, $ent])->whereIn('action_code', [$action, '*'])
+            ->orderByRaw('action_code = ? DESC', [$action])->orderByDesc('fk_id_ent')->value('max_amount_gbp');
+        return $v === null ? null : (float) $v;
     }
 
     public static function pending(int $ent): array

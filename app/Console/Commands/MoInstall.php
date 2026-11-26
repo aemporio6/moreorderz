@@ -42,10 +42,11 @@ class MoInstall extends Command
     {
         $fh = fopen(database_path('meta/field_registry.csv'), 'r');
         $head = fgetcsv($fh);
-        $rows = [];
+        $rows = []; $raw = [];
         while (($r = fgetcsv($fh)) !== false) {
             $a = array_combine($head, array_pad($r, count($head), ''));
             if ($form !== null && $a['form_key'] !== $form) continue;
+            $raw[] = $a;
             $rows[] = [
                 'form_key' => $a['form_key'], 'form_title' => $a['form_title'], 'form_kind' => $a['form_kind'], 'section' => $a['section'] ?: null,
                 'section_no' => (int) $a['section_no'] ?: 1, 'field_no' => (int) $a['field_no'] ?: 1, 'field_name' => $a['field_name'], 'label' => $a['label'],
@@ -58,6 +59,7 @@ class MoInstall extends Command
             ];
         }
         fclose($fh);
+        if ($bad = \App\Services\RegistryLint::errors($raw)) throw new \RuntimeException('Registry not loaded – ' . count($bad) . ' field(s) to fix: ' . implode('; ', array_slice($bad, 0, 20)));      // R-C-38
         DB::transaction(function () use ($rows, $form) {
             DB::table('sys_registry')->when($form !== null, fn ($q) => $q->where('form_key', $form))->delete();
             foreach (array_chunk($rows, 300) as $chunk) DB::table('sys_registry')->insert($chunk);

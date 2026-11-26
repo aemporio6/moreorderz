@@ -32,7 +32,10 @@ class Mask
     /** A row without the hidden keys. */
     public static function row(string $formKey, array $row, ?object $u): array
     {
-        return array_diff_key($row, array_flip(self::hidden($formKey, $u)));
+        $row = array_diff_key($row, array_flip(self::hidden($formKey, $u)));
+        if (Registry::table($formKey) === 't_account_banks' && isset($row['fk_id_account']) && ! PersonRules::mayPersonal($u) && PersonRules::isStaff((int) $row['fk_id_account']))
+            $row = array_diff_key($row, array_flip(PersonRules::STAFF_BANK));      // D7: a staff member's bank numbers are personal data (HR right)
+        return $row;
     }
 
     /** History changes {column: [old, new]}: a hidden field keeps its line, the values read "(hidden)". */

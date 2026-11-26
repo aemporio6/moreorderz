@@ -78,6 +78,7 @@ class RecordService
             'all_companies' => $coCol ? ['companies' => $byCo, 'base' => Fx::base((int) Context::ent()), 'rate_missing' => [], 'note' => $coNote] : null,
             'rows' => $rows->map(function ($r) use ($labels, $table, $dqShow, $scores) {
                 $a = Vault::maskRow($table, (array) $r);
+                if ($table === 't_account_banks' && isset($a['fk_id_account']) && ! PersonRules::mayPersonal(\Illuminate\Support\Facades\Auth::user()) && PersonRules::isStaff((int) $a['fk_id_account'])) foreach (PersonRules::STAFF_BANK as $sb) if (array_key_exists($sb, $a)) $a[$sb] = '(hidden)';      // D7
                 foreach ($a as $k => $v) if (isset($labels[$k][(string) $v])) $a[$k . '__label'] = $labels[$k][(string) $v];
                 if ($dqShow) $a['dq_score'] = isset($scores[$a['id']]) ? (int) $scores[$a['id']] : null;      /* empty until the nightly job has scored the record */
                 return $a;
@@ -219,6 +220,7 @@ class RecordService
         }
         $roleSet = $table === 't_account' ? PersonRoles::given($input) : null;      /* R-C-16 roles saved as a difference; at least one role stays */
         if ($roleSet !== null && ! $errors && ($why = PersonRoles::check($id, $roleSet))) $errors['account_role[]'] = $why;
+        PersonRules::$reason = (string) ($opt['reason'] ?? $opt['dup_reason'] ?? '');
         $errors = FormRules::check($formKey, $data, $old, $id, $errors) + $errors;      // a form's own message (old texts) wins over the general one      // typed codes, shares, uniqueness of this form (R-F_SETUP-35)
         if ($errors) throw ValidationException::withMessages($errors);
 
@@ -234,6 +236,8 @@ class RecordService
         try { $data = Fx::fillRow($table, $data, $old, (int) Context::ent()); } catch (\RuntimeException $e) { throw ValidationException::withMessages(['exchange_rate' => $e->getMessage()]); }      /* R-B_SOURCING-32 */
         if ($table === 't_account_banks') $data = array_merge($data, SupplierBanks::beforeSave($data, $old, $id));      /* SUP_BANK: a new or changed supplier / forwarder bank waits for the phone check and the Owner */
         if ($table === 'drp_items') foreach (['ship_address', 'ship_phone'] as $mc) if (isset($data[$mc]) && Vault::isMasked($data[$mc])) unset($data[$mc]);      // a masked value shown to the person is never saved back over the real one
+        $held = MasterChanges::hold($table, $formKey, $id, $data, $old);      /* D11 maker-checker: risky master values wait for the Owner */
+        if ($held && ($held['all'] || ! $data)) return ['id' => (int) ($id ?? 0), 'created' => false, 'pending' => true, 'approval' => $held['approval'], 'note' => $held['note']];
         $vault = Vault::prepare($table, $data, $id);   // secrets go to the vault, card numbers keep 4 digits, CVV / PIN are dropped
         try {
             $res = self::write($table, $pk, $id, $data, $old, $formKey, $opt);
@@ -241,6 +245,7 @@ class RecordService
             if ($roleSet !== null) $res['roles'] = PersonRoles::sync((int) $res['id'], $roleSet);
             if ($vault['dropped']) $res['note'] = 'Not kept on purpose (CVV / PIN are never stored): ' . implode(', ', $vault['dropped']) . '.';
             if (! empty($bankWarn)) $res['note'] = $bankWarn;
+            if ($held) { $res['pending'] = true; $res['approval'] = $held['approval']; $res['note'] = trim(($res['note'] ?? '') . ' ' . $held['note']); }
             if ($alike) LookAlikes::logged($table === 't_account' ? (int) $res['id'] : (int) ($data['fk_id_account'] ?? 0), $alike, (string) $opt['dup_reason']);
             return $res;
         } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
@@ -290,6 +295,7 @@ class RecordService
             if ($table === 'tax_periods') AccHubAdmin::periodSaved((int) $id);      // R-ACC-21 / R-TAX-4 a tax period status ticks the matching filing
             if ($table === 't_product_vendors' && $created) ProductFamily::created((int) $id, (int) ($data['fk_id_ent'] ?? $ent ?? 0));      // R-D-1: a 0.00 price row per marketplace
             if ($table === 'fin_partner_users') PartnerOnboarding::refresh((int) DB::table('fin_partner_users')->where($pk, $id)->value('investor_id'), 'Partner login linked');      // R-FIN-3 login_created
+            if ($table === 't_account_employment') PersonRules::employmentSaved((int) $id);      // R-C-52 one active employment row
             if ($table === 't_account_branches') ShopAssignments::saved((int) $id, $created);      // R-C-41: event + VA cache      // FEE / COST freight-cost row, SAMPLE row, PO total (R-B_SOURCING-6)
             if (str_starts_with($table, 't_src_') && ($uid = (int) (\Illuminate\Support\Facades\Auth::id() ?? 0))) WorkflowContext::remember($table, (int) $id, $uid);      // R-B_SOURCING-18: the cycle's carried context
             if (str_starts_with($table, 't_src_') || $table === 'fin_lots') CycleAlerts::touched();      // sourcing alerts run again after the save (R-B_SOURCING-26)
@@ -475,7 +481,7 @@ class RecordService
                 if (self::isExpiry($f) && $first < date('Y-m-01')) return "$l is in the past.";
                 break;
             case 'email':
-                if (! filter_var($v, FILTER_VALIDATE_EMAIL)) return "$l is not a valid email address.";
+                if (! filter_var($v, FILTER_VALIDATE_EMAIL)) return "Please enter a valid email address.";      // R-C-7 the old message word for word
                 break;
             case 'link':
                 if (! preg_match('#^https?://#i', (string) $v)) return "$l must start with http:// or https://.";

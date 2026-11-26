@@ -36,6 +36,7 @@ class AppServiceProvider extends ServiceProvider
             if ($ok) \App\Services\BuyingService::pay($p);
             else \Illuminate\Support\Facades\DB::table('t_src_payments')->where('id', $p['_pending'])->where('status', 'PENDING_APPROVAL')->update(['status' => 'REJECTED', 'f_active' => 0]);
         });
+        \App\Services\Approvals::handler('MASTER_CHANGE', fn (object $a, bool $ok, ?string $reason = null) => \App\Services\MasterChanges::decided($a, $ok, $reason));      // D11 maker-checker of master changes
         \App\Services\Approvals::handler('SUP_BANK', fn (object $a, bool $ok, ?string $reason = null) => \App\Services\SupplierBanks::decided($a, $ok, $reason));      // 06_ENGINES §A SUP_BANK
         \App\Services\Approvals::handler('SRC_HISTORICAL', fn (object $a, bool $ok, ?string $reason = null) => \App\Services\HistoricalPurchase::decided($a, $ok, $reason));      // R-B_SOURCING-5: the stock of an old entry after approval
         \App\Services\Approvals::handler('SRC_LC_OVERRIDE', fn (object $a, bool $ok) => \App\Services\LandedVersions::decided($a, $ok));      // R-B_SOURCING-45

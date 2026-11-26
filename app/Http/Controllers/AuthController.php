@@ -43,6 +43,11 @@ class AuthController extends Controller
             $r->session()->put('login_2fa', ['id' => $u->id, 'remember' => $r->boolean('remember'), 'at' => time()]);
             return redirect('/login/code');
         }
+        if ($to = \App\Services\LoginCode::target($u)) {      // A10: Owner / Finance / Partner without the app get a WhatsApp code
+            $masked = \App\Services\LoginCode::send($u, $to);
+            $r->session()->put('login_2fa', ['id' => $u->id, 'remember' => $r->boolean('remember'), 'at' => time(), 'via' => 'WA', 'to' => $masked]);
+            return redirect('/login/code');
+        }
         return $this->finish($r, $u, $r->boolean('remember'));
     }
 
@@ -63,7 +68,7 @@ class AuthController extends Controller
 
     public function codeForm(Request $r)
     {
-        return $r->session()->has('login_2fa') ? view('login', ['step' => 'code']) : redirect('/login');
+        return $r->session()->has('login_2fa') ? view('login', ['step' => 'code', 'via' => $r->session()->get('login_2fa')['via'] ?? 'APP', 'to' => $r->session()->get('login_2fa')['to'] ?? null]) : redirect('/login');
     }
 
     public function code(Request $r)
@@ -74,7 +79,8 @@ class AuthController extends Controller
         $key = 'login2:' . $u->id . '|' . $r->ip();
         if (RateLimiter::tooManyAttempts($key, 5)) return back()->withErrors(['code' => 'Too many wrong codes. Wait a few minutes and sign in again.']);
         $code = preg_replace('/\s+/', '', (string) $r->input('code'));
-        if (! (new \PragmaRX\Google2FA\Google2FA())->verifyKey(decrypt($u->totp_secret), $code, 1)) {
+        $good = ($p['via'] ?? 'APP') === 'WA' ? \App\Services\LoginCode::check($u, $code) : ($u->totp_secret && (new \PragmaRX\Google2FA\Google2FA())->verifyKey(decrypt($u->totp_secret), $code, 1));
+        if (! $good) {
             RateLimiter::hit($key, 600);
             Audit::log('t_users', $u->id, 'LOGIN_FAIL', ['step' => 'code'], null, $u->fk_id_ent ?? 0);
             return back()->withErrors(['code' => 'That code is not right. Try the next one.']);

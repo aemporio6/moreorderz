@@ -24,9 +24,9 @@ class AccountCodeTest extends TestCase
         $this->postJson('/api/record/t_account', ['values' => ['account_code' => 'BAD CODE!', 'first_name' => 'X']])->assertStatus(422)->assertJsonPath('errors.account_code.0', 'Account Code: up to 10 letters, numbers or "-" (for example 214-EX).');
         $this->postJson('/api/record/t_account', ['values' => ['account_code' => '', 'first_name' => 'X']])->assertStatus(422)->assertJsonPath('errors.account_code.0', 'Account Code is required.');
         $this->postJson('/api/record/t_account', ['values' => ['account_code' => '12345678901', 'first_name' => 'X']])->assertStatus(422);
-        $id = $this->postJson('/api/record/t_account', ['values' => ['account_code' => '215', 'first_name' => 'Managed', 'sur_name' => 'One']])->assertOk()->json('id');
+        $id = $this->postJson('/api/record/t_account', ['values' => ['account_code' => '215', 'title' => 'Mr', 'current_nationality' => $c = (int) \Illuminate\Support\Facades\DB::table('cat_country')->value('id'), 'old_nationality' => $c, 'first_name' => 'Managed', 'sur_name' => 'One']])->assertOk()->json('id');
         $this->assertSame('216', AccountCode::suggest(1));
-        $this->postJson('/api/record/t_account', ['values' => ['account_code' => '215', 'first_name' => 'Twin', 'sur_name' => 'Two']])->assertStatus(422)->assertJsonPath('errors.account_code.0', 'Account Code 215 is already used. Suggested: 216');
+        $this->postJson('/api/record/t_account', ['values' => ['account_code' => '215', 'title' => 'Mr', 'current_nationality' => $c, 'old_nationality' => $c, 'first_name' => 'Twin', 'sur_name' => 'Two']])->assertStatus(422)->assertJsonPath('errors.account_code.0', 'Account Code 215 is already used. Suggested: 216');
         $this->postJson("/api/record/t_account/$id", ['values' => ['account_code' => '215', 'first_name' => 'Managed again', 'sur_name' => 'One']])->assertOk();
     }
 }
