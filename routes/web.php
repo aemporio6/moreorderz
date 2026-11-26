@@ -47,6 +47,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
     // short links for messages (old tool: My, T): after sign-in the person lands on the task list / the task
     Route::get('/my', fn () => redirect('/#/tasks'));
     Route::get('/t/{id}', fn (int $id) => redirect('/#/task/' . $id))->whereNumber('id');
+    Route::get('/r/{n}', [AppController::class, 'shortLink'])->whereNumber('n');      // MR-0089 a short link of any record: after the sign-in (WhatsApp code when set) it opens the record
     Route::prefix('api')->group(function () {
         Route::get('boot', [AppController::class, 'boot']);
         Route::post('company', [AppController::class, 'company']);
@@ -88,6 +89,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('partner-view', [\App\Http\Controllers\PartnerViewController::class, 'index']);      // owner 26-11 23:19 each partner's whole account
         Route::get('partner-view/{acc}', [\App\Http\Controllers\PartnerViewController::class, 'show'])->whereNumber('acc');
         Route::get('inventory/fba', [\App\Http\Controllers\InventoryController::class, 'fbaRecon']);      // inventory (d) FBA report vs ledger
+        Route::get('short-link', [AppController::class, 'shortLinkOf']);      // MR-0089
         Route::get('inventory-setup', [\App\Http\Controllers\InventoryController::class, 'setup']);      // R-D-45
         Route::post('inventory-setup/{kind}', [\App\Http\Controllers\InventoryController::class, 'setupReason'])->where('kind', 'adjust|price');
         Route::get('product/{id}/purchases', [\App\Http\Controllers\InventoryController::class, 'purchases'])->whereNumber('id');      // R-D-42

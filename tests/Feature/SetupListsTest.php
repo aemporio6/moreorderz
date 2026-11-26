@@ -73,4 +73,16 @@ class SetupListsTest extends TestCase
         RecordService::tenantMirror($b);
         $this->assertSame(0, (int) DB::table('cat_company_house')->where('id', $a)->value('f_tenant_main'), 'the mark moves'); $this->assertSame('Beta Main Ltd', DB::table('t_enterprise')->where('id', 1)->value('ent_name'));
     }
+
+    /** MR-0089: a short link of a record – not signed in → the sign-in, then the record; signed in → the record at once. */
+    public function test_short_link_opens_the_record_after_sign_in(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id);
+        $po = $this->f('t_src_po', ['fk_id_ent' => 1, 'po_code' => 'PO-SL-1', 'po_number' => 'PO-SL-1', 'po_date' => '2026-11-01', 'po_total' => 1, 'status' => 'CONFIRMED', 'f_active' => 1]);
+        $r = $this->getJson('/api/short-link?url=' . urlencode("#/po/$po"))->assertOk()->json();
+        $path = parse_url($r['url'], PHP_URL_PATH); $this->assertMatchesRegularExpression('~^/r/\d+$~', $path); $this->assertStringContainsString((string) $po, $r['opens']);
+        $this->get($path)->assertRedirect('/' . $r['opens']);
+        auth()->logout(); $this->get($path)->assertRedirect('/login');
+        $this->getJson('/api/short-link?url=' . urlencode('#/home'))->assertStatus(401);
+    }
 }

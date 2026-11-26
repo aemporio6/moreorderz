@@ -14,6 +14,27 @@ use Illuminate\Support\Facades\DB;
 /** JSON for the screen: boot data (user, companies, menu, Create list), forms, lists, records. */
 class AppController extends Controller
 {
+    /** MR-0089: /r/<n> opens the record n of "search everything" (the record page checks the person's rights). */
+    public function shortLink(int $n)
+    {
+        $url = (string) DB::table('sys_search_index')->where('id', $n)->value('url');
+        return redirect('/' . (preg_match('~^#/[\w\-/?=&.]+$~', $url) ? $url : '#/home'));
+    }
+
+    /** The short link of a record page (#/rec/<form>/<id>, #/inventory/<id>, #/po/<id>): made in the search index when it is not there yet. */
+    public function shortLinkOf(\Illuminate\Http\Request $r)
+    {
+        $u = (string) $r->query('url'); $m = null;
+        if (preg_match('~^#/rec/([\w-]+)/(\d+)~', $u, $m)) { $form = $m[1]; $id = (int) $m[2]; }
+        elseif (preg_match('~^#/(inventory|po|cycle)/(\d+)~', $u, $m)) { $form = \App\Services\RecordService::formOfTable(['inventory' => 't_product_vendors', 'po' => 't_src_po', 'cycle' => 't_src_cycles'][$m[1]]); $id = (int) $m[2]; }
+        else return response()->json(['message' => 'This page has no short link.'], 422);
+        $t = Registry::table((string) $form); abort_unless($t && \App\Services\Perm::has($r->user(), 'form:' . $form . ':VIEW'), 403);
+        $row = DB::table('sys_search_index')->where('entity', $t)->where('entity_id', $id)->first(['id', 'url']);
+        if (! $row) { \App\Services\SearchIndex::put((string) $form, $t, $id); $row = DB::table('sys_search_index')->where('entity', $t)->where('entity_id', $id)->first(['id', 'url']); }
+        abort_unless($row, 404);
+        return ['url' => url('/r/' . $row->id), 'opens' => $row->url];
+    }
+
     public function shell()
     {
         return view('app');

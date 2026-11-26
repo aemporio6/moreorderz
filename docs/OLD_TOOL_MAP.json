@@ -332,17 +332,9 @@
 "functions": 5,
 "lines": 4,
 "status": {
-"BUILT": 3,
-"FORM_ONLY": 1
+"BUILT": 4
 },
-"open": [
-{
-"reg": "MR-1130",
-"status": "FORM_ONLY",
-"text": "[Partial] Sourcing catalogs draw their options from LOV groups",
-"note": "R-F_SETUP-45: forms only"
-}
-]
+"open": []
 },
 {
 "controller": "Cat_product_condition",
@@ -645,17 +637,11 @@
 "functions": 1,
 "lines": 21,
 "status": {
-"BUILT": 18,
-"PARTIAL": 2,
+"BUILT": 19,
+"PARTIAL": 1,
 "NOT_APPLICABLE": 1
 },
 "open": [
-{
-"reg": "MR-0089",
-"status": "PARTIAL",
-"text": "Every page usable at 390 px; short links open the record after WhatsApp-code login",
-"note": "screens checked on a phone width; short links with WhatsApp-code login not built"
-},
 {
 "reg": "MR-1406",
 "status": "PARTIAL",

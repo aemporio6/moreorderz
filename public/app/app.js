@@ -267,6 +267,8 @@
     const fr = $('#pfFresh'); if (fr) fr.onclick = () => { render(); toast('A fresh, empty form'); };
     const nw = $('#pfNew'); if (nw) nw.onclick = () => openForm(it.new_form[0], null, { onSaved: () => render() });
     const cx = ctxOfRoute(route); if (cx && !act.querySelector('#pfFile')) { act.insertAdjacentHTML('beforeend', `<button class="btn" type="button" id="pfFile" title="Drop a file or screenshot – it is read, its kind guessed and put on this record">${ic('paperclip')} File a document</button>`); $('#pfFile').onclick = () => fileDoc(cx, () => render()); }
+    if (cx && !act.querySelector('#pfShort')) { act.insertAdjacentHTML('beforeend', `<button class="btn" type="button" id="pfShort" title="Copy a short link of this record – it opens here after the sign-in (for WhatsApp, a task, an e-mail)">🔗 Short link</button>`);
+      $('#pfShort').onclick = async () => { try { const r = await api('short-link?url=' + encodeURIComponent(location.hash)); try { await navigator.clipboard.writeText(r.url); toast('Copied: ' + r.url); } catch (e) { prompt('Short link', r.url); } } catch (e) { toast(e.message, 'err'); } }; }
     requiredBar(m, act);
   }
   function requiredBar(m, act) {
