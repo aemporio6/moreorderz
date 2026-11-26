@@ -43,7 +43,7 @@
 44|P|class Choices|settings global / company + choices per shop with history; module / parameter framework as forms only
 45|F|form:cat_ports|forms only
 46|M||Save & next step from catalog forms not built
-47|M||allocations feed ICC / transfers not built
+47|P|AllocationPlan|allocations: incoming per location = planned - received of shipped POs by shipment ETA (PO total only when no allocation), after a GRN one proposed transfer per allocation to another location with task, confirm moves the stock, dismiss with reason, no ledger; screen Allocation plan; open: the ICC calculation does not read this incoming yet, the confirmed move is one step (not through transit)
 48|P|class OldImport|import with dry run, report, field compare; the per-company switch / rollback screen not built
 49|N||old dashboards / copy controllers do not exist in the new tool
 50|F|form:t_enterprise|form only

@@ -137,4 +137,26 @@ class PurchaseAuditTest extends TestCase
         $this->postJson("/api/purchase-audit/$run/delete")->assertOk();
         $this->assertSame([0, 0], [DB::table('t_audit_main')->where('id', $run)->count(), DB::table('ebay_audit')->where('fk_id_audit_main', $run)->count()]);
     }
+    /** R-G_CORE-81: fix "Copy tracking and address from BUY to HOLD" – preview old → new, history row per HOLD row, Undo restores. */
+    public function test_g81_copy_tracking_from_buy_to_hold_with_undo(): void
+    {
+        $this->actingAs($this->owner); $run = A::createRun($this->shop, '2026-08', $this->owner); $lines = []; $gd = [];
+        $g = fn ($order, $sku, $trk, $rec, $pc) => implode(',', [$order, '2026-08-01 10:00', 'GBP', '9', $sku, 'T', 'N', 1, '3.00', 'TR', $trk, 'p@x', $rec . ' street', '', '', 'City', 'C', '', 'UK', $rec, $pc, 'e@x', '0']);
+        for ($i = 1; $i <= 4; $i++) { $lines[] = $this->line((string) $i, "G-$i", "K$i", 1, '8.00', "GD : PB-5$i=HO-55$i : 05-08-26 : 1 : 3.00", "T$i"); $gd[] = $g("PB-5$i", "SB$i", "TRK-BUY-$i", "Buyer $i", "PC$i"); $gd[] = $g("HO-55$i", "SH$i", '', 'Warehouse', 'WH1'); }
+        $lines[] = $this->line('9', 'G-9', 'K9', 1, '8.00', 'GD : PB-59=HO-55 : 05-08-26 : 1 : 3.00', 'T9');      // HOLD ref H-55 with no GD HOLD row
+        A::importEbay($run, '105_aug.csv', $this->file($lines), $this->owner); $r = A::uploadGd($run, $this->gdv, implode("\n", $gd) . "\n", $this->owner);
+        $this->assertContains('HO-55', $r['checks'][1]['rows'], 'a HOLD ref of a sale line that is not on the supplier file is listed');
+        $audit = DB::table('sys_audit_log')->where('table_name', 'pur_audit_gd')->count();
+        $pv = $this->getJson("/api/purchase-audit/$run/gd-copy/{$this->gdv}")->assertOk()->json(); $this->assertSame([false, 4], [$pv['applied'], count($pv['rows'])]);
+        $this->assertSame('', (string) DB::table('pur_audit_gd')->where('order_no', 'HO-551')->value('tracking_number'), 'the preview writes nothing'); $this->assertSame($audit, DB::table('sys_audit_log')->where('table_name', 'pur_audit_gd')->count());
+        $this->assertContains('tracking_number', $pv['rows'][0]['fields']);
+        // the rule: copy-tracking fix on 4 HOLD rows → 4 history rows, Undo restores
+        $ok = $this->postJson("/api/purchase-audit/$run/gd-copy/{$this->gdv}")->assertOk()->json(); $this->assertSame('4 HOLD row(s) updated from their BUY order.', $ok['message']);
+        $h = DB::table('pur_audit_gd')->where('order_no', 'HO-552')->first(); $this->assertSame(['TRK-BUY-2', 'Buyer 2', 'PC2', 'Buyer 2 street'], [$h->tracking_number, $h->recipient, $h->buyer_post_code, $h->address1]);
+        $this->assertSame($audit + 4, DB::table('sys_audit_log')->where('table_name', 'pur_audit_gd')->count());
+        $this->assertSame(0, count($this->getJson("/api/purchase-audit/$run/gd-copy/{$this->gdv}")->json('rows')), 'nothing left to copy');
+        $this->postJson('/api/purchase-audit/gd-copy/undo/' . $ok['job'])->assertOk()->assertJsonPath('message', 'Undone: 4 HOLD row(s) put back as they were.');
+        $h = DB::table('pur_audit_gd')->where('order_no', 'HO-552')->first(); $this->assertSame(['', 'Warehouse', 'WH1'], [(string) $h->tracking_number, $h->recipient, $h->buyer_post_code]);
+        $this->postJson('/api/purchase-audit/gd-copy/undo/' . $ok['job'])->assertStatus(422);
+    }
 }

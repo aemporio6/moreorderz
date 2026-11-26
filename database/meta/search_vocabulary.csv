@@ -78,6 +78,8 @@ all tasks,needs action,VOCAB,#/tasks?scope=all
 allocate,allocation and platform plan,VOCAB,#/list/t_src_allocations
 allocate overhead,shared expense rules,VOCAB,#/list/aud_expense_rule
 allocation,allocation and platform plan,VOCAB,#/list/t_src_allocations
+allocation plan,allocation plan,VOCAB,#/allocation-plan
+allocation transfer,allocation plan,VOCAB,#/allocation-plan
 allocations,allocation and platform plan,VOCAB,#/list/t_src_allocations
 amazon,marketplace operations hubs,VOCAB,#/hubs
 amazon business,supplier order history,VOCAB,#/supplier-orders
@@ -446,6 +448,7 @@ confirm month,month confirm,VOCAB,#/confirm
 confirm po,purchase orders,VOCAB,#/list/t_src_po
 confirm sales,month confirm,VOCAB,#/confirm
 confirm shipment,tracking upload,VOCAB,#/tracking-upload
+confirm transfer,allocation plan,VOCAB,#/allocation-plan
 confirmation statement,tax and filings,VOCAB,#/compliance
 connect,api connections,VOCAB,#/connections
 connected apps,api connections,VOCAB,#/connections
@@ -979,6 +982,9 @@ inbound shipment,fc and 3pl inbound shipments,VOCAB,#/list/fba_shipment
 inbox,messages and whatsapp,VOCAB,#/messages
 income from sales,sales lines,VOCAB,#/sales
 income statement,profit views,VOCAB,#/profit
+incoming by eta,allocation plan,VOCAB,#/allocation-plan
+incoming per location,allocation plan,VOCAB,#/allocation-plan
+incoming stock,allocation plan,VOCAB,#/allocation-plan
 incoterm,freight,VOCAB,#/list/t_src_freight
 incoterm list,catalog masters,VOCAB,#/list/cat_country
 incoterms,freight,VOCAB,#/list/t_src_freight
@@ -1636,6 +1642,8 @@ promoted listing,bought from,VOCAB,#/sales
 promoted listing fee,payouts and settlements,VOCAB,#/settlements
 promoted listings,payouts and settlements,VOCAB,#/settlements
 propose columns,learn sale columns,VOCAB,#/import
+proposed transfer,allocation plan,VOCAB,#/allocation-plan
+proposed transfers,allocation plan,VOCAB,#/allocation-plan
 proxy,account kit,VOCAB,#/list/t_mobile_device
 psi,qc,VOCAB,#/list/t_src_qc
 psp,payment provider profiles,VOCAB,#/list/payment_provider_profile
@@ -2076,6 +2084,7 @@ stock loss,stock ledger,VOCAB,#/stock/ledger
 stock move,stock on hand,VOCAB,#/stock
 stock movements,stock ledger,VOCAB,#/stock/ledger
 stock on hand,stock on hand,VOCAB,#/stock
+stock on the way,allocation plan,VOCAB,#/allocation-plan
 stock out,stock ledger,VOCAB,#/stock/ledger
 stock owner,lots and owners,VOCAB,#/stock/lots
 stock owner change,ownership transfers,VOCAB,#/list/ownership_transfer

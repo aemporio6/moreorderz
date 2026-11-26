@@ -424,6 +424,7 @@ class BuyingService
             if (Settings::get('WH_PUTAWAY_STEP', $ent, 'N') === 'Y') foreach (collect($lines)->groupBy('product') as $pid => $ls) { $good = (int) $ls->sum(fn ($x) => $x['qty'] - $x['damaged_qty']); if ($good > 0) WarehouseMode::openPutaway($ent, $grnId, (int) $pid, $good, (string) $g->grn_number); }
             DB::table('t_src_grn')->where('id', $grnId)->update(['posting_status' => 'POSTED', 'status' => 'POSTED', 'approved_by' => (string) Context::userId(), 'approved_at' => date('Y-m-d')]);
             DB::table('t_src_shipments')->where('id', $ship->id)->update(['actual_arrival' => $g->arrival_date ?: $g->grn_date, 'status' => 'ARRIVED']);
+            AllocationPlan::propose($grnId);      /* R-F_SETUP-47: allocations to another location propose a transfer – nothing moves until the user confirms */
             TaskEngine::close('SRC_SHIP_ARRIVING', CycleAlerts::key('SRC_SHIP_ARRIVING', (int) $ship->id), 'Arrived'); TaskEngine::close('SRC_SHIP_OVERDUE', CycleAlerts::key('SRC_SHIP_OVERDUE', (int) $ship->id), 'Arrived');
             $allIn = ! DB::table('t_src_po_lines as p')->where('p.fk_id_po', $po->id)->where('p.f_active', 1)->where(fn ($q) => $q->whereNull('p.line_type')->orWhereIn('p.line_type', ['', 'PRODUCT']))
                 ->whereRaw('p.qty_confirmed > (SELECT COALESCE(SUM(l.received_qty + l.missing_qty),0) FROM t_src_grn_lines l JOIN t_src_grn g ON g.id=l.fk_id_grn WHERE l.fk_id_po_line=p.id AND g.posting_status="POSTED")')->exists();

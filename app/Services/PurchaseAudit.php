@@ -347,6 +347,45 @@ class PurchaseAudit
                 'recipient' => $contact ? $g->recipient : '•••', 'tracking' => $g->tracking_number, 'address' => $contact ? trim("$g->address1 $g->city $g->buyer_post_code") : '•••'])->values()->all()];
     }
 
+    /**
+     * R-G_CORE-81 fix "Copy tracking and address from BUY to HOLD": for every sale line that names a BUY order and a HOLD order, the HOLD rows on the supplier file take the
+     * tracking number and the address of the BUY order. Preview old → new per HOLD row; applying writes one history row per HOLD row and keeps the old values for Undo.
+     */
+    public const GD_COPY = ['tracking_number', 'recipient', 'address1', 'address2', 'address3', 'city', 'county', 'buyer_country', 'buyer_post_code'];
+
+    public static function gdCopy(int $runId, int $vendorId, bool $apply, object $u): array
+    {
+        Perm::need($u, 'orders.CONFIRM'); self::run($runId, $u); self::vendor($vendorId, 'GD'); $U = fn ($x) => mb_strtoupper(trim((string) $x)); $contact = Perm::has($u, 'orders.dsSeeContact');
+        $gd = DB::table('pur_audit_gd')->where('fk_id_audit_main', $runId)->where('fk_id_vendor', $vendorId)->orderBy('id')->get(); $buy = $gd->where('e_hold_buy', 'BUY')->groupBy(fn ($g) => $U($g->order_no)); $hold = $gd->where('e_hold_buy', 'HOLD')->groupBy(fn ($g) => $U($g->order_no));
+        $plan = []; $seen = [];
+        foreach (DB::table('ebay_audit')->where('fk_id_audit_main', $runId)->where('fk_id_vendor', $vendorId)->whereNotNull('pur_ref_no_gd_hold')->where('pur_ref_no_gd_hold', '<>', '')->orderBy('id')->get() as $l) {
+            $b = ($buy[$U($l->pur_ref_no)] ?? collect())->first(); if (! $b) continue;
+            foreach ($hold[$U($l->pur_ref_no_gd_hold)] ?? [] as $h) {
+                if (isset($seen[$h->id])) continue; $seen[$h->id] = 1; $old = []; $new = [];
+                foreach (self::GD_COPY as $c) if ((string) $h->$c !== (string) $b->$c && (string) $b->$c !== '') { $old[$c] = $h->$c; $new[$c] = $b->$c; }
+                if ($new) $plan[] = ['id' => (int) $h->id, 'hold' => $h->order_no, 'buy' => $b->order_no, 'sku' => $h->sku_gd, 'old' => $old, 'new' => $new];
+            }
+        }
+        $show = fn (array $v) => array_map(fn ($k, $x) => $k === 'tracking_number' || $contact ? $x : '•••', array_keys($v), $v);
+        $out = ['applied' => false, 'rows' => array_map(fn ($p) => ['hold' => $p['hold'], 'buy' => $p['buy'], 'sku' => $p['sku'], 'fields' => array_keys($p['new']), 'old' => $show($p['old']), 'new' => $show($p['new'])], $plan)];
+        if (! $apply || ! $plan) return $out + ['message' => count($plan) . ' HOLD row(s) would take the tracking and address of their BUY order.'];
+        $job = DB::transaction(function () use ($plan, $runId, $vendorId, $u) {
+            foreach ($plan as $p) { DB::table('pur_audit_gd')->where('id', $p['id'])->update($p['new']); $ch = []; foreach ($p['new'] as $k => $v) $ch[$k] = [$p['old'][$k], $v]; Audit::log('pur_audit_gd', $p['id'], 'UPDATE', $ch, "Copied from BUY {$p['buy']} to HOLD {$p['hold']}"); }
+            return (int) DB::table('bulk_jobs')->insertGetId(['job_no' => 'GC-' . date('ymd') . '-' . strtoupper(substr(bin2hex(random_bytes(3)), 0, 5)), 'list_key' => 'gd_copy', 'fk_id_account' => $u->id, 'change_json' => json_encode(['run' => $runId, 'vendor' => $vendorId, 'old' => array_column($plan, 'old', 'id')]),
+                'row_count' => count($plan), 'status' => 'APPLIED', 'created_at' => now(), 'applied_at' => now()]);
+        });
+        return ['applied' => true, 'job' => $job, 'message' => count($plan) . ' HOLD row(s) updated from their BUY order.'] + $out;
+    }
+
+    public static function gdCopyUndo(int $jobId, object $u): array
+    {
+        Perm::need($u, 'orders.CONFIRM'); $j = DB::table('bulk_jobs')->where('id', $jobId)->where('list_key', 'gd_copy')->first() ?? throw new \InvalidArgumentException('Batch not found.');
+        if ($j->status !== 'APPLIED') throw new \InvalidArgumentException('This batch was already undone.'); $c = json_decode((string) $j->change_json, true); self::run((int) $c['run'], $u);
+        DB::transaction(function () use ($c, $j) { foreach ($c['old'] as $id => $old) { DB::table('pur_audit_gd')->where('id', (int) $id)->where('fk_id_audit_main', (int) $c['run'])->update($old); Audit::log('pur_audit_gd', (int) $id, 'UPDATE', ['undo' => $j->job_no], 'Undo of copy BUY to HOLD'); }
+            DB::table('bulk_jobs')->where('id', $j->id)->update(['status' => 'UNDONE', 'undone_at' => now()]); });
+        return ['message' => 'Undone: ' . count($c['old']) . ' HOLD row(s) put back as they were.'];
+    }
+
     /** Hold ageing: an HO not used in a sale after DS_HOLD_DAYS → task "cancel hold" (one per order, closed when used). */
     private static function holdTasks(int $runId, int $vendorId, array $r): void
     {

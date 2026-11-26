@@ -94,6 +94,11 @@ class StockController extends Controller
     public function dataQualityRun(Request $r) { \App\Services\Perm::need($r->user(), 'stock.CHANGE'); return $this->wh(fn () => \App\Services\DataQuality::run((int) Context::ent()) + ['message' => 'Checked – tasks opened for red rows and closed for fixed ones.']); }
     public function stagedUndo(Request $r, int $job) { return $this->wh(fn () => \App\Services\OldBulkProducts::undo((int) Context::ent(), $job, $r->user(), 'product_staged')); }
 
+    /** R-F_SETUP-47 allocations: incoming per location + proposed transfers. */
+    public function allocPlan(Request $r) { return $this->wh(fn () => \App\Services\AllocationPlan::page((int) Context::ent(), $r->user())); }
+    public function allocConfirm(Request $r, int $id) { return $this->wh(fn () => \App\Services\AllocationPlan::confirm($id, $r->user())); }
+    public function allocDismiss(Request $r, int $id) { return $this->wh(fn () => \App\Services\AllocationPlan::dismiss($id, (string) $r->input('reason'), $r->user())); }
+
     public function familyUndo(Request $r, int $job) { return $this->wh(fn () => \App\Services\ProductImports::familyUndo($job, $r->user())); }
     public function stagedMeta(Request $r) { return \App\Services\ProductImports::stagedMeta((int) Context::ent(), $r->user()); }
     public function stagedClear(Request $r) { \App\Services\Perm::need($r->user(), 'stock.CHANGE'); return \App\Services\ProductImports::stagedClear($r->user()); }

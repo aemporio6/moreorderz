@@ -258,6 +258,9 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('data-quality', [StockController::class, 'dataQuality']);      // R-G_CORE-82
         Route::post('data-quality/run', [StockController::class, 'dataQualityRun']);
         Route::post('product-imports/staged/undo/{job}', [StockController::class, 'stagedUndo'])->whereNumber('job');      // R-G_CORE-74
+        Route::get('allocation-plan', [StockController::class, 'allocPlan']);      // R-F_SETUP-47
+        Route::post('allocation-plan/{id}/confirm', [StockController::class, 'allocConfirm'])->whereNumber('id');
+        Route::post('allocation-plan/{id}/dismiss', [StockController::class, 'allocDismiss'])->whereNumber('id');
         Route::get('inventory-sharing', [StockController::class, 'sharing']);      // R-D-94
         Route::post('inventory-sharing', [StockController::class, 'sharingBulk']);
         Route::get('product-imports/staged/meta', [StockController::class, 'stagedMeta']);      // R-D-53
@@ -671,6 +674,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('purchase-audit/{id}', [\App\Http\Controllers\PurchaseAuditController::class, 'show'])->whereNumber('id');
         Route::post('purchase-audit/{id}/ebay', [\App\Http\Controllers\PurchaseAuditController::class, 'ebay'])->whereNumber('id');
         Route::post('purchase-audit/{id}/supplier/{vendor}', [\App\Http\Controllers\PurchaseAuditController::class, 'supplier'])->whereNumber(['id', 'vendor']);
+        Route::match(['get', 'post'], 'purchase-audit/{id}/gd-copy/{vendor}', [\App\Http\Controllers\PurchaseAuditController::class, 'gdCopy'])->whereNumber(['id', 'vendor']);      // R-G_CORE-81 (GET = preview)
+        Route::post('purchase-audit/gd-copy/undo/{job}', [\App\Http\Controllers\PurchaseAuditController::class, 'gdCopyUndo'])->whereNumber('job');
         Route::post('purchase-audit/{id}/accept/{sale}', [\App\Http\Controllers\PurchaseAuditController::class, 'accept'])->whereNumber(['id', 'sale']);
         Route::post('purchase-audit/{id}/status', [\App\Http\Controllers\PurchaseAuditController::class, 'status'])->whereNumber('id');
         Route::post('purchase-audit/{id}/delete', [\App\Http\Controllers\PurchaseAuditController::class, 'destroy'])->whereNumber('id');

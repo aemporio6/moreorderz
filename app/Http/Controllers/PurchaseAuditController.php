@@ -33,6 +33,8 @@ class PurchaseAuditController extends Controller
     {
         return $this->run(fn () => DB::table('t_vendors')->where('id', $vendor)->value('audit_profile') === 'GD' ? A::uploadGd($id, $vendor, $this->text($r), $r->user()) : A::uploadAmazon($id, $vendor, $this->text($r), $r->user()));
     }
+    public function gdCopy(Request $r, int $id, int $vendor) { return $this->run(fn () => A::gdCopy($id, $vendor, $r->isMethod('post'), $r->user())); }
+    public function gdCopyUndo(Request $r, int $job) { return $this->run(fn () => A::gdCopyUndo($job, $r->user())); }
     public function accept(Request $r, int $id, int $sale) { return $this->run(fn () => A::acceptFile($id, $sale, $r->user())); }
     public function createMissing(Request $r, int $id) { return $this->run(fn () => A::createMissing($id, (string) $r->input('order'), (string) $r->input('sku'), $r->user())); }      // R-A_SALES-62
     public function deleteExtra(Request $r, int $id, int $sale) { return $this->run(fn () => A::deleteExtra($id, $sale, (string) $r->input('reason'), $r->user())); }
