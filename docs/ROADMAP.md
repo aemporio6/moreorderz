@@ -4,7 +4,7 @@ The single list of everything: what is done, what is being built, what comes nex
 It lives in the code (docs/ROADMAP.md) and opens in the tool under Home › Plan & progress. Every batch updates it before it is deployed.
 Nothing the owner asked for may be dropped from this list. A line only leaves "Next" or "Discussed" by moving to "Done", with its date.
 
-Updated: 27 Nov 2026, 02:45 (Pakistan time)
+Updated: 27 Nov 2026, 03:30 (Pakistan time)
 
 ## The owner's standing rules (every screen, every batch is checked against these)
 1. **Everything is connected.** Stock ↔ inventory ↔ partners ↔ buying ↔ sourcing ↔ selling ↔ money. Nothing is a screen on its own: every figure comes from the one ledger and setup behind it, and every action writes there. If something is not connected, it is not finished.
@@ -64,9 +64,9 @@ The whole list is on one screen: **Home › Old tool check** – every old scree
 8. Live money formulas on every sourcing step form – MR-0807; shipments with forwarder as a party – MR-0314; supplier payment reversal – MR-0305.
 9. One-master work (people, suppliers, lists, sales, imports) – MR-1404, 1406, 1407, 1413, 1414, 1419; module / parameter framework – MR-1129.
 10. Tasks: workload vs limit, SLA per category, absence cover, delegated approval, recurring – MR-1240.
-11. Data: every old table counted against what came over (shows on Old tool check after the count on the server). Owner 27-11 01:34: every setup list of the old tool – brands, banks, companies, countries, currencies, ports and all the others – must come over completely; whatever is missing is brought to its place here.
-12. Owner 27-11 01:34: **Create** – every new thing of every module (inventory and the rest) appears in Create by itself; check that nothing is missing.
-13. Owner 27-11 01:34: **Universal search** – everything in the tool can be found: one word or three, with or without # or -, any spelling of a number or code, every record, screen, document and setting; nothing is missed.
+11. Data: every old table counted against what came over (shows on Old tool check after the count on the server). Owner 27-11 01:34: every setup list of the old tool – brands, banks, companies, countries, currencies, ports and all the others – must come over completely; whatever is missing is brought to its place here. **Counted on live 27-11:** 199 old tables have rows; 177 came over completely (brands, banks, companies and every other setup list among them), old copies and tool settings are not needed, the old stock moves are done the new way (opening lots). Still to bring: vpn_servers (8), vpn_providers (1), loc_warehouses (3), ota_lookups (23) – each gets its place here.
+12. Owner 27-11 01:34 / 01:36: **Create** – ✅ 27-11: Create is built from the root: every registry form, plus every menu screen that makes something (New …, Import …, Record …, Move …), appears by itself – a new module needs nothing added by hand. Inside Create: search, used lately, ← Back, ↶ Undo, ↷ Redo, ✕ Clear, ⟳ Refresh, Enter opens the first match; a form opened from Create has ← Back and "Switch to…" another form without leaving.
+13. Owner 27-11 01:34: **Universal search** – ✅ 27-11 (first part): a record is found however it is typed – "PO-QX-7731", "#PO-QX-7731", "poqx7731", "PO QX 7731", "qx-7731", "#7731", "PO7731"; records made by imports (not through a form) are put in the search every night, and on live once now. Still to check: documents' text, settings and every screen's own words.
 14. Owner 27-11 01:34: everything connected – nothing is made on its own, apart from the rest.
 ✅ 27-11: product certificates now get a task 60 days before they end (MR-0139, was form only).
 
@@ -87,6 +87,7 @@ The whole list is on one screen: **Home › Old tool check** – every old scree
 - Security: no secrets, no real data in the public repo; nothing is typed into password boxes for the owner.
 
 ## Done (newest first)
+- 27-11: Create from the root + navigation; search however it is typed.
 - 27-11: Old tool check (Home): old screens and old data against the new tool; certificate expiry tasks.
 - 27-11: Guide me on the new screens. Access card: "Team tasks & people" never blocks a person's own tasks.
 - 27-11: Access card by area (Edit / View only / Hidden) + "Ask the Owner" on Home.

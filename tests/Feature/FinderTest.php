@@ -142,4 +142,17 @@ class FinderTest extends TestCase
         $id = RecordService::save('src_research', ['title' => 'Bamboo cutlery travel set'])['id'];
         $this->assertContains($id, array_column($this->getJson('/api/list/src_research?q=' . urlencode('travel bamboo'))->assertOk()->json('rows'), 'id'));
     }
+
+    /** Owner 27-11 01:34: found however it is typed – with or without #, -, spaces; one word or three; records made by imports are indexed nightly. */
+    public function test_records_are_found_however_they_are_typed(): void
+    {
+        $this->actingAs($this->owner); \App\Services\Context::set(1, $this->owner->id);
+        $po = DB::table('t_src_po')->insertGetId(RecordService::fillNotNull('t_src_po', ['fk_id_ent' => 1, 'po_code' => 'PO-QX-7731', 'po_number' => 'PO-QX-7731', 'po_date' => '2026-11-01', 'po_total' => 10, 'status' => 'CONFIRMED', 'f_active' => 1]));
+        \Illuminate\Support\Facades\Artisan::call('mo:reindex', ['--missing' => true]);      // made without its form (an import): the nightly run puts it in
+        $this->assertTrue(DB::table('sys_search_index')->where('entity', 't_src_po')->where('entity_id', $po)->exists());
+        foreach (['PO-QX-7731', '#PO-QX-7731', 'poqx7731', 'PO QX 7731', 'qx-7731', '#7731', 'PO7731', 'qx 7731'] as $q) {
+            $urls = []; foreach ($this->getJson('/api/find?q=' . urlencode($q) . '&scope=records')->assertOk()->json('groups') as $g) foreach ($g['items'] as $i) $urls[] = $i['url'] ?? '';
+            $this->assertTrue((bool) array_filter($urls, fn ($u) => str_contains((string) $u, '/' . $po)), "“{$q}” finds the PO");
+        }
+    }
 }

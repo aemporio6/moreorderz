@@ -34,9 +34,13 @@ class SearchIndex
             'title' => mb_substr(trim(($code && $code !== $title ? $code . ' · ' : '') . ($title ?? "#$id")), 0, 255),
             'subtitle' => mb_substr(Registry::fields($formKey)[0]['form_title'], 0, 255),
             'search_text' => mb_substr(implode(' ', array_unique(array_merge([$code], $parts))), 0, 4000),
+            'squash' => self::squash(trim(($code && $code !== $title ? $code . ' · ' : '') . ($title ?? "#$id")) . ' ' . implode(' ', array_unique(array_merge([$code], $parts)))),
             'url' => "#/rec/$formKey/$id", 'updated_at' => now(), 'fk_id_branch' => (int) ($row['fk_id_branch'] ?? $row['fk_id_shop'] ?? ($table === 't_branches' ? $id : 0)) ?: null, 'sound_key' => Finder::sound((string) ($title ?? '')), 'amount_value' => $amount, 'phone_norm' => $phone ? mb_substr($phone, 0, 30) : null, 'email_norm' => $email ? mb_substr($email, 0, 150) : null,
         ]);
     }
+
+    /** Letters and digits only, lower case: "PO-IX 4410", "#po ix-4410" and "poix4410" all become "poix4410". */
+    public static function squash(?string $s): string { return mb_substr(mb_strtolower(preg_replace('/[^\p{L}\p{N}]+/u', '', (string) $s)), 0, 8000); }
 
     public static function find(string $q, ?int $ent, int $limit = 20): array
     {

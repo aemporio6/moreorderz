@@ -88,6 +88,7 @@ class HttpTest extends TestCase
         $this->actingAs($this->owner);
         $bad = [];
         foreach ($this->getJson('/api/boot')->json('create') as $c) {
+            if (! empty($c['screen'])) { if (! str_starts_with($c['screen'], '#/')) $bad[] = $c['key']; continue; }      // a menu screen: opened by its route
             $res = $this->getJson('/api/form/' . $c['key']);
             if ($res->status() !== 200 || ! count($res->json('sections'))) $bad[] = $c['key'] . ':' . $res->status();
         }

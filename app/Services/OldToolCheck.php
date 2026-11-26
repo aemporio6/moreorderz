@@ -14,6 +14,11 @@ use Illuminate\Support\Facades\Storage;
 class OldToolCheck
 {
     public const FILE = 'old_check.json';
+    /** Old tables that are not business data, with the reason (they stay out on purpose). */
+    public const NOT_NEEDED = ['sidebar_modules_001' => 'an old copy of the menu – the new tool has its own menu', 'icl_settings' => 'a setting of the old website plugin (WordPress), not of the business',
+        'ota_pw_log' => 'a log of passwords – passwords are never copied'];
+    /** Old tables whose job the new tool does in its own way. */
+    public const REPLACED = ['t_stock_movements' => 'the new tool keeps its own stock ledger; the old stock came in as opening lots'];
 
     /** Live count of the old database (artisan mo:old-check --from=<old db>): old rows per table, the same-name table here, the import report. Read only. */
     public static function count(string $oldDb): array
@@ -26,7 +31,8 @@ class OldToolCheck
             $n = (int) DB::selectOne("SELECT COUNT(*) AS n FROM `$oldDb`.`$t`")->n; if ($n === 0) continue;
             $here = (bool) DB::selectOne('SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = ? AND table_name = ?', [$new, $t])->n;
             $r = ($rep[$t] ?? collect())->sortBy(fn ($y) => [(int) $y->f_dry, -((int) $y->imported + (int) $y->already_there + (int) $y->merged)])->first();
-            $rows[] = ['table' => $t, 'old' => $n, 'here' => $here ? (int) DB::table($t)->count() : null, 'plan' => $r->plan ?? OldImport::plan($t),
+            $cols = array_map(fn ($c) => $c->c, DB::select('SELECT column_name AS c FROM information_schema.columns WHERE table_schema = ? AND table_name = ? ORDER BY ordinal_position', [$oldDb, $t]));
+            $rows[] = ['table' => $t, 'columns' => array_values(array_filter($cols, fn ($c) => ! preg_match(OldImport::SECRET, $c))), 'old' => $n, 'here' => $here ? (int) DB::table($t)->count() : null, 'plan' => $r->plan ?? OldImport::plan($t),
                 'imported' => $r ? (int) $r->imported + (int) $r->already_there + (int) $r->merged : null, 'failed' => $r ? (int) $r->failed : null, 'dry_only' => $r ? (bool) $r->f_dry : null, 'note' => $r->note ?? null];
         }
         $out = ['at' => now()->toDateTimeString(), 'tables' => $rows];
@@ -41,10 +47,11 @@ class OldToolCheck
         $tables = [];
         foreach ($data['tables'] ?? [] as $t) {
             $got = max((int) ($t['imported'] ?? 0), $t['plan'] === 'COPY' ? (int) ($t['here'] ?? 0) : 0);
-            $state = $t['plan'] === 'TOOL' ? 'NOT_NEEDED' : ($t['plan'] === 'RETIRED' ? 'RETIRED' : ($got >= $t['old'] ? 'CAME' : ($got > 0 ? 'PART' : 'NOT_YET')));
+            if (isset(self::NOT_NEEDED[$t['table']])) $t['note'] = self::NOT_NEEDED[$t['table']]; if (isset(self::REPLACED[$t['table']])) $t['note'] = self::REPLACED[$t['table']];
+            $state = isset(self::REPLACED[$t['table']]) ? 'REPLACED' : (isset(self::NOT_NEEDED[$t['table']]) || $t['plan'] === 'TOOL' ? 'NOT_NEEDED' : ($t['plan'] === 'RETIRED' ? 'RETIRED' : ($got >= $t['old'] ? 'CAME' : ($got > 0 ? 'PART' : 'NOT_YET'))));
             $tables[] = $t + ['got' => $got, 'state' => $state];
         }
-        $order = ['NOT_YET' => 0, 'PART' => 1, 'CAME' => 2, 'RETIRED' => 3, 'NOT_NEEDED' => 4];
+        $order = ['NOT_YET' => 0, 'PART' => 1, 'CAME' => 2, 'REPLACED' => 3, 'RETIRED' => 4, 'NOT_NEEDED' => 5];
         usort($tables, fn ($a, $b) => [$order[$a['state']], -$a['old']] <=> [$order[$b['state']], -$b['old']]);
         $ctr = $map['controllers'];
         usort($ctr, fn ($a, $b) => [-count($a['open']), $a['controller']] <=> [-count($b['open']), $b['controller']]);

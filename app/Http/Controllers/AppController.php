@@ -145,9 +145,19 @@ class AppController extends Controller
     }
 
     /** + Create: every active entry of sys_forms the role may add, grouped by department. New modules appear by themselves. */
+    /** A menu name that makes something. */
+    public const MAKES = '/^(new|add|create|import|record|book|file|move|transfer|upload|load|request|make|start|receive|raise|send|quick|enter|count|bulk|direct|old purchase|back-?dated)\b/i';
+
     public static function createCatalogue(string $role): array
     {
-        return \App\Services\FormStandard::createCatalogue($role);      // owner's form standard (f): built from the registry, every main form appears by itself
+        $out = \App\Services\FormStandard::createCatalogue($role);      // owner's form standard (f): built from the registry, every main form appears by itself
+        // owner 27-11 01:36: and every menu screen that MAKES something (New …, Add …, Import …, Record …, Book …, Move …) – from the root, so a new module is in Create by itself
+        $have = array_map(fn ($x) => mb_strtolower($x['title']), $out);
+        if (Auth::user()) foreach (self::menu($role) as $sec) foreach ($sec['items'] as $it) {
+            if ($it['soon'] || ! preg_match(self::MAKES, (string) $it['name']) || preg_match('/\b(history|progress|list|report|log)\b/i', (string) $it['name']) || preg_match('~^#/(list|create|new)/~', (string) $it['route']) || ! empty($it['new_form']) || in_array(mb_strtolower((string) $it['name']), $have, true)) continue;
+            $out[] = ['key' => 'screen:' . $it['route'], 'title' => (string) $it['name'], 'dept' => (string) $sec['name'], 'quick' => false, 'screen' => (string) $it['route']]; $have[] = mb_strtolower((string) $it['name']);
+        }
+        return $out;
     }
 
     /** Live check of one typed field while the person types (R-F_SETUP-35: ISO code "already exists", code formats). */

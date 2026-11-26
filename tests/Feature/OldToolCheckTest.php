@@ -38,4 +38,20 @@ class OldToolCheckTest extends TestCase
         ProductCerts::sweep(1);
         $this->assertSame('DONE', DB::table('tasks')->where('id', $t->id)->value('status'), 'renewed → the task closes by itself');
     }
+
+    /** Owner 27-11 01:36: Create comes from the root – every form, and every menu screen that makes something, by itself. */
+    public function test_create_is_built_from_the_root(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id);
+        $c = collect($this->getJson('/api/boot')->assertOk()->json('create'));
+        $this->assertNotNull($c->firstWhere('title', 'Import anything'), 'a menu screen that makes something is in Create');
+        $this->assertSame('#/import', $c->firstWhere('title', 'Import anything')['screen']);
+        $this->assertNull($c->firstWhere('title', 'Import history'), 'a list is not');
+        // a new menu item that makes something appears by itself
+        $sec = DB::table('sidebar_modules')->whereNotNull('parent_id')->where('url', '#/import')->value('parent_id');
+        DB::table('sidebar_modules')->insert(['module_key' => 'M_TEST_NEW_X', 'module_name' => 'New gadget order', 'url' => '#/gadget', 'parent_id' => $sec, 'sort_order' => 99, 'e_status' => 'ACTIVE', 'roles' => 'all (by rights)', 'created_at' => now()]);
+        \App\Services\Perm::flush();
+        $this->assertNotNull(collect($this->getJson('/api/boot')->json('create'))->firstWhere('title', 'New gadget order'));
+        $this->assertGreaterThan(50, $c->whereNull('screen')->count(), 'the registry forms are there too');
+    }
 }

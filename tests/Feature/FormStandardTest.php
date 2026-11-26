@@ -79,7 +79,7 @@ class FormStandardTest extends TestCase
         $this->assertSame([], array_values(array_diff($want, $c)), 'every main form appears by itself');
         foreach (['cat_brands', 'cat_company_house', 'fin_category'] as $k) $this->assertContains($k, $c);
         $this->assertNotContains('grn_line', $c, 'a child line is made inside its parent');
-        $this->assertSame(count($c), count($this->getJson('/api/boot')->assertOk()->json('create')));
+        $this->assertSame(count($c), collect($this->getJson('/api/boot')->assertOk()->json('create'))->whereNull('screen')->count(), 'every form, plus the menu screens that make something');
         $id = RecordService::save('fin_category', ['code' => 'office rent fs', 'name' => 'Office rent FS', 'direction' => 'OUT', 'profit_role' => 'FIXED'])['id'];
         $this->assertSame('OFFICE_RENT_FS', DB::table('fin_categories')->where('id', $id)->value('code'), 'saved in its own table');
         $sys = DB::table('fin_categories')->where('f_system', 1)->first();

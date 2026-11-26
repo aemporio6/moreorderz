@@ -22,6 +22,7 @@ class MoNightly extends Command
 
     private function nightly(): int
     {
+        try { \Illuminate\Support\Facades\Artisan::call('mo:reindex', ['--missing' => true]); } catch (\Throwable $e) {}      // owner 27-11: every record can be found, also the ones made by imports
         foreach (DB::table('t_enterprise')->where('f_active', 1)->pluck('id') as $ent) {
             Context::set((int) $ent, null);
             $r = StockService::selfCheck((int) $ent);

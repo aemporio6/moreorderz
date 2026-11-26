@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\DB;
 
 class MoReindex extends Command
 {
-    protected $signature = 'mo:reindex {--form= : only this form}';
+    protected $signature = 'mo:reindex {--form= : only this form} {--missing : only records not in the index yet (nightly)}';
     protected $description = 'Rebuild "search everything" for all records (run after an import)';
 
     public function handle(): int
@@ -24,7 +24,9 @@ class MoReindex extends Command
         $n = 0;
         foreach ($tables as $table => $key) {
             $pk = Registry::pk($table);
-            DB::table($table)->orderBy($pk)->select($pk)->chunk(500, function ($rows) use ($key, $table, $pk, &$n) {
+            $q = DB::table($table)->orderBy($pk)->select($pk);
+            if ($this->option('missing')) $q->whereNotIn($pk, DB::table('sys_search_index')->where('entity', $table)->select('entity_id'));
+            $q->chunk(500, function ($rows) use ($key, $table, $pk, &$n) {
                 foreach ($rows as $r) { SearchIndex::put($key, $table, (int) $r->$pk); $n++; }
             });
         }

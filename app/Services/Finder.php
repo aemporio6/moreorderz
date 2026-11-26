@@ -86,7 +86,8 @@ class Finder
         $q = trim(mb_substr($q, 0, 80)); $scope = array_key_exists($scope, self::SCOPES) ? $scope : 'all';
         if ($u === null) return ['q' => $q, 'groups' => []];
         if ($q === '') return ['q' => $q, 'groups' => self::start($u), 'scopes' => array_keys(self::SCOPES)];
-        $words = array_values(array_filter(preg_split('/\s+/u', mb_strtolower($q)), fn ($w) => $w !== ''));
+        $words = array_values(array_filter(array_map(fn ($w) => trim($w, "#.,;:()[]'\"*"), preg_split('/\s+/u', mb_strtolower($q))), fn ($w) => $w !== ''));      // "#P-12" = "P-12"
+        if (! $words) $words = [mb_strtolower($q)];
         [$alts, $direct] = self::synonyms($q, $words);
         $one = mb_strlen($q) < self::minChars();      // Settings › Choices SEARCH_MIN_CHARS                       // one letter: only names that start with it (suggestions while typing)
         $groups = [];
@@ -385,6 +386,8 @@ class Finder
                 });
             });
             if (strlen($digits) >= 5) $w->orWhere('phone_norm', 'like', "%$digits%");
+            $sq = SearchIndex::squash($q); if (mb_strlen($sq) >= 3) $w->orWhere('squash', 'like', "%$sq%");
+            if (strlen($digits) >= 4 && $digits !== $sq) $w->orWhere('squash', 'like', "%$digits%");      // "PO4410" finds "PO-IX-4410"      // owner 27-11: found with or without #, -, spaces
             if (str_contains($q, '@')) $w->orWhere('email_norm', 'like', '%' . mb_strtolower($q) . '%');
             if ($amount) $w->orWhereBetween('amount_value', $amount);
         })->orderByRaw('CASE WHEN title LIKE ? THEN 0 ELSE 1 END', [$words[0] . '%'])->orderByDesc('updated_at')->limit($limit)->get($cols)->all();
