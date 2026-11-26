@@ -245,6 +245,36 @@ class BankMatch
         Audit::log('fin_loans', (int) $loan->id, 'UPDATE', ['payment undone' => (float) $p->principal, 'balance' => [(float) $loan->balance, $bal]]);
     }
 
+    /**
+     * R-FIN-72 payment-provider profile of the account (fin_bank_accounts.fk_id_provider_profile): a line whose text matches a fee bucket's source rule (and sign rule)
+     * goes to the bucket's finance category (MPB); a payout from the provider (money out) that lands on the profile's payout bank account within the window is the
+     * OWN_TRANSFER pair (out on the provider, in on the bank). No provider name lives in the code – everything comes from the profile.
+     */
+    public static function providerProfile(int $ent, object $l): bool
+    {
+        $pid = (int) DB::table('fin_bank_accounts')->where('id', $l->bank_account_id)->value('fk_id_provider_profile'); if (! $pid) return false;
+        $prof = DB::table('payment_provider_profiles')->where('id', $pid)->where('f_active', 1)->first(); if (! $prof) return false;
+        $amt = (float) $l->amount; $text = (string) $l->description . ' ' . (string) ($l->reference_no ?? '');
+        foreach (DB::table('payment_provider_fee_buckets')->where('fk_id_provider_profile', $pid)->where('f_active', 1)->orderBy('sort_no')->orderBy('id')->get() as $b) {
+            if (($b->sign_rule === 'NEGATIVE_ONLY' && $amt >= 0) || ($b->sign_rule === 'POSITIVE_ONLY' && $amt <= 0)) continue;
+            $rule = trim((string) $b->source_rule); if ($rule === '') continue;
+            $hit = @preg_match('/' . str_replace('/', '\/', $rule) . '/i', $text); if ($hit === false) $hit = stripos($text, $rule) !== false;
+            if (! $hit) continue;
+            $code = ctype_digit((string) $b->charge_kind) ? DB::table('fin_categories')->where('id', (int) $b->charge_kind)->value('code') : $b->charge_kind;
+            if (! $code) continue;
+            MoneyService::categorise($ent, (int) $l->id, ['category' => $code, 'note' => mb_substr(($b->label ?: $b->bucket_code) . ' · ' . $l->description, 0, 200)]);
+            DB::table('fin_bank_transactions')->where('id', $l->id)->update(['match_status' => 'AUTO', 'match_rule' => 'MPB']);
+            return true;
+        }
+        if ($amt < 0 && $prof->fk_id_payout_bank_account) {
+            $days = max(1, FinanceSettings::int($ent, 'match_intercompany_days') ?: 3);
+            $in = DB::table('fin_bank_transactions')->where('bank_account_id', $prof->fk_id_payout_bank_account)->where('match_status', 'UNMATCHED')->where('amount_gbp', -1 * (float) $l->amount_gbp)
+                ->whereBetween('txn_date', [date('Y-m-d', strtotime("{$l->txn_date} -$days day")), date('Y-m-d', strtotime("{$l->txn_date} +$days day"))])->count();
+            if ($in === 1) { MoneyService::transfer($ent, (int) $l->id, (int) $prof->fk_id_payout_bank_account); return true; }
+        }
+        return false;
+    }
+
     /** Payment-provider profile: a fee line of a PROVIDER account is booked as bank fees. */
     public static function providerFee(int $ent, object $l): bool
     {

@@ -22,7 +22,7 @@ class CashForecast
         };
     }
 
-    public static function build(int $ent, int $weeks = 8): array
+    public static function build(int $ent, int $weeks = 8, array $extra = []): array
     {
         $weeks = max(1, min(26, $weeks)); $today = date('Y-m-d'); $mon = date('Y-m-d', strtotime('monday this week'));
         $slot = function (?string $date) use ($today, $mon, $weeks): int { if (! $date || $date < $today) return 0; $w = (int) floor((strtotime($date) - strtotime($mon)) / 604800); return min(max($w, 0), $weeks); };   // index $weeks = later
@@ -40,6 +40,7 @@ class CashForecast
             $add('out', $today, (float) $a->amount_gbp, ($a->action_code === 'EXPENSE' ? 'Expense waiting for approval: ' : 'Withdrawal waiting for approval: ') . mb_substr((string) ((json_decode((string) $a->change_json, true) ?: [])['category'] ?? ''), 0, 80), '#/approvals');
         foreach (DB::table('fin_withdrawals')->where('company_id', $ent)->whereIn('status', ['APPROVED'])->get(['amount', 'currency', 'd_needed_by', 'investor_id']) as $w)
             $add('out', $w->d_needed_by ?: $today, Fx::toBase((float) $w->amount, $w->currency ?: Fx::base($ent), $today, $ent), 'Partner withdrawal: ' . PartnerService::name((int) $w->investor_id), '#/partners/' . $w->investor_id);
+        foreach ($extra as $x) $add(($x['dir'] ?? 'out') === 'in' ? 'in' : 'out', $x['date'] ?? $today, abs((float) ($x['amount'] ?? 0)), 'Scenario: ' . ($x['what'] ?? 'item'));      // MR-0081 "if I place these POs …"
         $rows = []; $run = $bank;
         for ($i = 0; $i <= $weeks; $i++) {
             $run = round($run + $b['in'][$i] - $b['out'][$i], 2);

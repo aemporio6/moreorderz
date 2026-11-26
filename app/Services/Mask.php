@@ -21,6 +21,20 @@ class Mask
         return self::money($u) ? (string) $text : (string) preg_replace('/£\s?-?[\d,]+(?:\.\d+)?/u', '£•••', (string) $text);
     }
 
+    /** R-FIN-11 the money keys removed (not blanked) from every answer and export for a person without the money right. */
+    public const MONEY_KEYS = ['amount', 'amount_gbp', 'balance', 'free_cash', 'bank_balance', 'committed', 'unit_cost_gbp', 'cogs', 'cogs_fifo', 'landed_cost_per_unit'];
+
+    public static function stripMoney($d)
+    {
+        if (! is_array($d)) return $d;
+        foreach ($d as $k => $v) {
+            if (is_string($k) && in_array($k, self::MONEY_KEYS, true)) { unset($d[$k]); continue; }
+            if ($k === 'changes' && is_array($v)) { foreach ($v as $ck => $cv) if (in_array($ck, self::MONEY_KEYS, true)) $v[$ck] = [null, '(hidden)']; $d[$k] = $v; continue; }      // history keeps the line, the values read "(hidden)"
+            if (is_array($v)) $d[$k] = self::stripMoney($v);
+        }
+        return $d;
+    }
+
     /** Column names of a form the person may not see. */
     public static function hidden(string $formKey, ?object $u): array
     {

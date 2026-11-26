@@ -18,6 +18,7 @@ class RegistryLint
         foreach ($rows as $r) {
             $words = preg_split('/[\s"\[\],|]+/', trim(($r['options_sample'] ?? '') . ' ' . ($r['options_full'] ?? '')), -1, PREG_SPLIT_NO_EMPTY);
             foreach (self::SAMPLES as $set) if (! array_diff($set, $words)) { $out[] = ($r['form_key'] ?? '?') . '.' . ($r['field_name'] ?? '?') . ': placeholder option list (' . implode(' | ', $set) . ')'; break; }
+            if (preg_match('/<|>|class=|opt_tr/i', ($r['options_sample'] ?? '') . ($r['options_full'] ?? ''))) $out[] = ($r['form_key'] ?? '?') . '.' . ($r['field_name'] ?? '?') . ': option list with HTML left-overs';      // R-F_SETUP-51 / L17
             if (str_starts_with((string) ($r['default_rule'] ?? ''), 'today') && preg_match('/birth|lived_from|submitted_date|_starte_date/i', ($r['field_name'] ?? '') . ' ' . ($r['column_name'] ?? '')))
                 $out[] = ($r['form_key'] ?? '?') . '.' . ($r['field_name'] ?? '?') . ': "today" is not a default for this date';
         }

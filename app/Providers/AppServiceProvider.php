@@ -18,7 +18,9 @@ class AppServiceProvider extends ServiceProvider
     {
         // Stock arrived (GRN posted, opening stock) → orders that were short get their units, oldest dispatch date first.
         \App\Services\Approvals::handler('WITHDRAWAL', function (object $a, bool $ok) {
-            if ($ok) \App\Services\PartnerService::payWithdrawal((int) $a->entity_id);
+            if ($ok) { $w = \Illuminate\Support\Facades\DB::table('fin_withdrawals')->where('id', $a->entity_id)->first(['investor_id', 'company_id', 'amount']);
+                if ($w) \App\Services\FinanceArea::partnerMessage((int) $w->company_id, (int) $w->investor_id, 'WITHDRAWAL_APPROVED', 'Your withdrawal of ' . number_format((float) $w->amount, 2) . ' was approved.', 'wd-ok:' . $a->entity_id);      // R-FIN-10
+                \App\Services\PartnerService::payWithdrawal((int) $a->entity_id); }
             else \Illuminate\Support\Facades\DB::table('fin_withdrawals')->where('id', $a->entity_id)->where('status', 'REQUESTED')->update(['status' => 'REJECTED']);
         });
         \App\Services\Approvals::handler('PAYMENT', function (object $a, bool $ok) { if ($ok) \App\Services\BuyingService::pay(json_decode($a->change_json, true)['pay']); });
@@ -46,6 +48,8 @@ class AppServiceProvider extends ServiceProvider
         // a supplier-orders file of a shop + month was applied: its not-matched sale lines are matched again by themselves (R-A_SALES-25)
         EventBus::listen('DS_BATCH_APPLIED', function (array $e) { $p = $e['payload']; if (! empty($p['month']) && ! empty($p['year'])) \App\Services\DsMatch::afterDsBatch((int) ($p['shop'] ?? $e['entity_id']), (int) $p['month'], (int) $p['year']); });
         foreach (array_keys(\App\Services\TaskTemplates::EVENTS) as $ev) EventBus::listen($ev, fn (array $e) => \App\Services\TaskTemplates::fire($e['code'], (string) $e['entity'], (int) $e['entity_id'], (int) $e['ent']));      // R-G_CORE-25 templates fired by events
+        EventBus::listen('STOCK_CONSUMED', function (array $e) { if ((int) ($e['payload']['left'] ?? 1) === 0 && ($po = \Illuminate\Support\Facades\DB::table('fin_lots')->where('id', (int) $e['entity_id'])->first(['po_id', 'company_id'])) && $po->po_id) \App\Services\FinanceArea::poSoldOut((int) $po->company_id, (int) $po->po_id); });      // R-FIN-15 a PO sold out ends its PO agreements the same day
+        EventBus::listen('STATEMENT_READY', function (array $e) { $p = (int) ($e['payload']['partner'] ?? 0); if ($p) \App\Services\FinanceArea::partnerMessage((int) ($e['ent'] ?? 0), $p, ! empty($e['payload']['updated']) ? 'STATEMENT_UPDATED' : 'STATEMENT_READY', ! empty($e['payload']['updated']) ? 'Your statement was updated – open My Partner Account to see it.' : 'Your statement is ready – open My Partner Account to read and accept it.', 'st:' . $e['entity_id']); });      // R-FIN-10
         EventBus::listen('PRODUCT_OOS', fn (array $e) => \App\Services\ListingQty::pushZero((int) $e['entity_id']));      // R-H-20 the 0 goes out at once
         EventBus::listen('GRN_POSTED', function (array $e) {
             foreach (DB::table('fin_lots')->whereIn('id', $e['payload']['lots'] ?? [])->pluck('fk_id_product')->unique() as $pid) DispatchService::fillShorts((int) $pid);

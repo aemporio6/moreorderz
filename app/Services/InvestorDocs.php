@@ -39,8 +39,43 @@ class InvestorDocs
         return DB::table('t_inv_parties')->where('id', $id)->first();
     }
 
+    /**
+     * R-INV-14 the details as they print: blanks filled in order from the linked Company House record, then the account's own e-mail / mobile / address / bank;
+     * the bank account name defaults to the company name, else the display name. Missing bank or e-mail → the list INV_PARTY_INCOMPLETE.
+     */
+    public static function printDetails(object $p): object
+    {
+        $p = clone $p; $blank = fn ($v) => $v === null || trim((string) $v) === '';
+        if ($p->fk_id_company_house && ($c = DB::table('cat_company_house')->where('id', $p->fk_id_company_house)->first())) {
+            foreach (['company_name' => 'company_name', 'company_reg_no' => 'registration_no', 'vat_no' => 'vat_no', 'address' => 'company_address', 'phone' => 'company_telephone', 'email' => 'company_email_1'] as $mine => $theirs)
+                if ($blank($p->$mine) && ! $blank($c->$theirs ?? null)) $p->$mine = $c->$theirs;
+        }
+        if ($acc = (int) $p->fk_id_account) {
+            $first = fn (string $t, string $col) => DB::table($t)->where('fk_id_account', $acc)->where(fn ($w) => $w->whereNull('f_active')->orWhere('f_active', 1))->orderBy('id')->value($col);
+            if ($blank($p->email)) $p->email = $first('t_account_emails', 'email');
+            if ($blank($p->phone)) $p->phone = $first('t_account_mobiles', 'mobile_no');
+            if ($blank($p->address) && ($a = DB::table('t_account_addresses')->where('fk_id_account', $acc)->where('f_active', 1)->orderBy('id')->first())) $p->address = trim(implode(', ', array_filter([$a->line1, $a->line2, $a->line3, $a->post_code])));
+            $b = $p->fk_id_account_bank ? DB::table('t_account_banks')->where('id', $p->fk_id_account_bank)->first() : DB::table('t_account_banks')->where('fk_id_account', $acc)->where('f_active', 1)->orderBy('id')->first();
+            if ($b && $blank($p->bank_account_no)) { $p->bank_account_no = $b->account_no; $p->bank_sort_code = $p->bank_sort_code ?: $b->sort_branch_code; $p->bank_iban = $p->bank_iban ?: $b->iban_no; $p->bank_swift = $p->bank_swift ?: $b->swift_code;
+                $p->bank_name = $p->bank_name ?: DB::table('cat_banks')->where('id', $b->fk_bank_id)->value('bank_name'); }
+        }
+        if ($blank($p->bank_account_name)) $p->bank_account_name = $p->company_name ?: $p->display_name;
+        $p->missing = array_keys(array_filter(['bank' => $blank($p->bank_account_no) && $blank($p->bank_iban), 'e-mail' => $blank($p->email)]));
+        return $p;
+    }
+
+    /** INV_PARTY_INCOMPLETE: a party that prints without bank or e-mail gets a task (closed again when it is complete). */
+    public static function partyCheck(int $ent, object $p): array
+    {
+        $d = self::printDetails($p);
+        if ($d->missing) TaskEngine::open('INV_PARTY_INCOMPLETE', [(int) $p->id], 'Invoice party ' . ($p->display_name ?: $p->party_code) . ' has no ' . implode(' / ', $d->missing), ['ent' => $ent, 'module' => 't_inv_parties', 'record_id' => (int) $p->id, 'fix_url' => '#/rec/t_inv_party/' . $p->id]);
+        else TaskEngine::close('INV_PARTY_INCOMPLETE', [(int) $p->id], 'Complete');
+        return $d->missing;
+    }
+
     private static function snapshot(object $p): string
     {
+        $p = self::printDetails($p);
         return json_encode(['display_name' => $p->display_name, 'company' => $p->company_name, 'reg_no' => $p->company_reg_no, 'vat' => $p->vat_no, 'address' => $p->address, 'phone' => $p->phone, 'email' => $p->email,
             'bank' => ['name' => $p->bank_name, 'account_name' => $p->bank_account_name ?: ($p->company_name ?: $p->display_name), 'account_no' => $p->bank_account_no, 'sort_code' => $p->bank_sort_code, 'iban' => $p->bank_iban],
             'party_code' => $p->party_code, 'terms' => $p->payment_terms_days], JSON_UNESCAPED_UNICODE);
@@ -154,6 +189,7 @@ class InvestorDocs
             $exists = fn (string $type, ?int $inv) => DB::table('t_invoices')->where('fk_id_period', $p->id)->where('invoice_type', $type)->when($inv, fn ($q) => $q->where('fk_id_investor_account', $inv), fn ($q) => $q->where('fk_id_investor_account', 0))->whereNotIn('status', ['CANCELLED', 'CREDITED'])->exists();
             $make = function (string $type, object $issuer, object $recipient, ?int $invAccount, string $refWho, array $lines, bool $statement) use ($ent, $p, $shopNo, $ym, $mon, $shopName, $u, &$made) {
                 $lines = array_values(array_filter($lines, fn ($l) => round((float) $l[3], 2) != 0.0)); if (! $lines) return;
+                self::partyCheck($ent, $issuer); self::partyCheck($ent, $recipient);      // R-INV-14 missing bank / e-mail → INV_PARTY_INCOMPLETE
                 $total = round(array_sum(array_column($lines, 3)), 2);
                 $days = (int) ($issuer->payment_terms_days ?: Settings::get('DEFAULT_PAYMENT_TERMS_DAYS', $ent, 14) ?: 14);
                 $id = DB::table('t_invoices')->insertGetId(['fk_id_ent' => $ent, 'fk_id_period' => $p->id, 'invoice_no' => self::number($type, $issuer->party_code, $shopNo, $ym), 'invoice_type' => $type, 'fk_issuer_party' => $issuer->id, 'fk_recipient_party' => $recipient->id,

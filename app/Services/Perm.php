@@ -134,6 +134,9 @@ class Perm
 
     /** The names of the rights list in the sales rules (R-A_SALES-82) → the codes this tool checks. Old names (tiktok.*) stay as aliases. */
     public const ALIASES = [
+        /* R-FIN-1 the finance action names of the spec, onto the screen rights (one matrix, editable on the Rights screen) */
+        'fin.setup' => 'admin.owner', 'fin.import' => 'money.EDIT', 'fin.reconcile' => 'money.EDIT', 'fin.close_period' => 'close.lock', 'fin.view_bank' => 'money.SEE', 'fin.view_all_partners' => 'money.SEE',
+        'fin.approve_withdrawal' => 'money.approve', 'fin.export' => 'admin.ledger', 'fin.unlock' => 'close.lock', 'fin.alerts' => 'money.SEE', 'fin.view_ledger' => 'admin.ledger',
         'sales.export_shipping' => 'orders.fulfilExport' /* R-D-55 the rule's name of the 25-column carrier file right */, 'sale.import' => 'orders.saleImport', 'sale.edit' => 'orders.saleEdit', 'sale.carrier' => 'orders.saleCarrier', 'sale.refund' => 'orders.saleRefund', 'sale.delete' => 'orders.saleDelete', 'sale.delete_month' => 'orders.saleDeleteMonth',
         'sale.confirm' => 'orders.CONFIRM', 'sale.unlock' => 'orders.saleUnlock', 'sale.see_cost' => 'orders.MONEY', 'sale.see_investor' => 'orders.saleSeeInvestor', 'sale.export' => 'orders.saleExport',
         'ds.rematch' => 'orders.dsRematch', 'ds.link' => 'orders.dsLink', 'ds.see_contact' => 'orders.dsSeeContact',
@@ -174,6 +177,7 @@ class Perm
         foreach (ReportService::LIST as $k => $r) $c["report:$k"] = [$r[1], 'Reports', $r[3]];
         // rights that are not one-per-screen-action
         $c['money.approve'] = ['Approve or reject waiting money items', 'Money', Approvals::APPROVERS];
+        $c['tax.use'] = ['Taxation: accounts worksheet, Corporation Tax, size test and deadlines', 'Money', ['OWNER', 'ACCOUNTANT', 'FINANCE']];
         $c['people.personal_data'] = ['See and change personal data: ID numbers, documents, salary, staff bank details, employment (HR)', 'Users and system', ['OWNER']];      /* D7 / M37: give it to an HR role */
         $c['stock.countApprove'] = ['Approve and post a stock count', 'Stock', ['OWNER', 'MANAGER']];
         $c['print.testPage'] = ['Print a printer test page', 'Printing', ['OWNER', 'MANAGER', 'WAREHOUSE']];

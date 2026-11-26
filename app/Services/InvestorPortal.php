@@ -59,6 +59,41 @@ class InvestorPortal
         return ['from' => $from, 'to' => $to, 'rows' => $rows->all(), 'confirmed' => $sum('Confirmed'), 'pending' => $sum('Pending'), 'file' => "my_sales_{$from}_{$to}.csv"];
     }
 
+    /**
+     * R-INV-16 the portal exports (CSV, UTF-8 BOM). Internal columns (My landing price / My landing cost / My margin, R-INV-4) only for the roles that may see margin –
+     * never for a partner login. kind: stock | statements | invoices.
+     */
+    public static function export(int $ent, object $u, string $kind): array
+    {
+        $party = InvestorDocs::portalParty($ent, $u); $acc = (int) $party->fk_id_account; $mine = self::products($ent, $acc); $int = InvoiceReports::canMargin($ent, $u);
+        $q = fn ($v) => rtrim(rtrim(number_format((float) $v, 2, '.', ''), '0'), '.');      // R-INV-17 qty 2.000 → 2
+        if ($kind === 'stock') {
+            $sold = DB::table('t_sales')->where('fk_id_ent', $ent)->whereIn('fk_product_id', array_keys($mine) ?: [0])->where('status', 'Confirmed')->groupBy('fk_product_id')->selectRaw('fk_product_id p, SUM(qty) q')->pluck('q', 'p');
+            $head = $int ? ['SKU', 'Product', 'Units sold (confirmed)', 'In stock', 'My landing price', 'Raw price', 'Stock value'] : ['SKU', 'Product', 'Units sold (confirmed)', 'In stock', 'Raw price', 'Stock value'];
+            $rows = DB::table('t_product_vendors')->whereIn('id', array_keys($mine) ?: [0])->orderBy('SKU_VENDOR')->get(['id', 'SKU_VENDOR', 'product_name_vendor', 'stock', 'raw_price', 'landing_price'])->map(function ($p) use ($mine, $sold, $int, $q) {
+                $st = max(0, (int) $p->stock) * $mine[(int) $p->id];
+                $r = [$p->SKU_VENDOR, $p->product_name_vendor, $q(($sold[$p->id] ?? 0) * $mine[(int) $p->id]), $q($st)]; if ($int) $r[] = number_format((float) $p->landing_price, 2, '.', '');
+                return array_merge($r, [number_format((float) $p->raw_price, 2, '.', ''), number_format($st * (float) $p->raw_price, 2, '.', '')]); })->all();
+        } elseif ($kind === 'statements') {
+            $head = ['Marketplace', 'Shop', 'From', 'To', 'Units', 'Sales', 'Capital recovered'];
+            if ($int) array_push($head, 'My landing cost', 'My margin');
+            array_push($head, 'Direct costs + refunds', 'Shared costs', 'Profit from my products', 'Investor %', 'My profit share');
+            $rows = DB::table('t_inv_period_investors as x')->join('t_inv_periods as p', 'p.id', '=', 'x.fk_id_period')->leftJoin('t_branches as b', 'b.id', '=', 'p.fk_id_branch')->leftJoin('cat_marketplaces as m', 'm.id', '=', 'p.fk_id_marketplace')
+                ->where('p.fk_id_ent', $ent)->where('p.status', 'CONFIRMED')->where('x.fk_id_investor_account', $acc)->orderBy('p.d_from')
+                ->get(['m.marketplace_short', 'b.shop_name', 'p.d_from', 'p.d_to', 'x.units', 'x.revenue', 'x.capital', 'x.actual_cost', 'x.direct_costs', 'x.refund_adjustment', 'x.allocated_costs', 'x.profit_before_split', 'p.investor_pct', 'x.share_amount'])
+                ->map(function ($x) use ($int, $q) { $f = fn ($v) => number_format((float) $v, 2, '.', '');
+                    $r = [$x->marketplace_short, $x->shop_name, date('d-m-Y', strtotime((string) $x->d_from)), date('d-m-Y', strtotime((string) $x->d_to)), $q($x->units), $f($x->revenue), $f($x->capital)];
+                    if ($int) array_push($r, $f($x->actual_cost), $f((float) $x->capital - (float) $x->actual_cost));
+                    array_push($r, $f((float) $x->direct_costs + (float) $x->refund_adjustment), $f($x->allocated_costs), $f($x->profit_before_split), $f($x->investor_pct), $f($x->share_amount)); return $r; })->all();
+        } elseif ($kind === 'invoices') {
+            $head = ['No', 'Type', 'Date', 'Due', 'Billed to', 'Reference', 'Total', 'Paid', 'Balance', 'Status'];
+            $rows = array_map(fn ($d) => [$d['invoice_no'] ?? '', $d['invoice_type'] ?? '', isset($d['d_invoice']) ? date('d-m-Y', strtotime((string) $d['d_invoice'])) : '', ! empty($d['d_due']) ? date('d-m-Y', strtotime((string) $d['d_due'])) : '',
+                $d['billed_to'] ?? ($d['recipient'] ?? ''), $d['reference'] ?? '', $d['total'] ?? 0, $d['paid'] ?? 0, $d['balance'] ?? 0, $d['status'] ?? ''], array_map(fn ($x) => (array) $x, InvestorDocs::portalList($ent, $u)['docs']));
+        } else throw new \InvalidArgumentException('Unknown export.');
+        $o = fopen('php://temp', 'w+'); fwrite($o, "\xEF\xBB\xBF"); fputcsv($o, $head); foreach ($rows as $r) fputcsv($o, $r); rewind($o);
+        return ['file' => "my_{$kind}_" . date('Y-m-d') . '.csv', 'csv' => stream_get_contents($o), 'columns' => $head];
+    }
+
     public static function csv(array $r): string
     {
         $o = fopen('php://temp', 'w+'); fwrite($o, "\xEF\xBB\xBF"); fputcsv($o, self::SALES_CSV);

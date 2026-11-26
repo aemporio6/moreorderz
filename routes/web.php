@@ -53,6 +53,21 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('parties', [AppController::class, 'parties']);      // R-C-1
         Route::get('shops/{id}/kit', [AppController::class, 'shopKit'])->whereNumber('id');      // R-C-30
         Route::get('people/external', [AppController::class, 'externalList']);      // R-C-19
+        Route::get('people/{id}/audit', [\App\Http\Controllers\FinanceAreaController::class, 'accountAudit'])->whereNumber('id');      // MR-1271
+        Route::get('money/bank-cash', [\App\Http\Controllers\FinanceAreaController::class, 'bankCash']);      // R-FIN-64
+        Route::get('money/home', [\App\Http\Controllers\FinanceAreaController::class, 'home']);      // R-FIN-65
+        Route::get('money/product-period', [\App\Http\Controllers\FinanceAreaController::class, 'productPeriod']);      // R-FIN-44
+        Route::get('money/ad-spend', [\App\Http\Controllers\FinanceAreaController::class, 'adSpend']);      // MR-1264
+        Route::get('money/decisions', [\App\Http\Controllers\FinanceAreaController::class, 'decisions']);      // MR-0080
+        Route::post('money/scenario', [\App\Http\Controllers\FinanceAreaController::class, 'scenario']);      // MR-0081
+        Route::get('money/how', [\App\Http\Controllers\FinanceAreaController::class, 'sources']);      // R-FIN-12
+        Route::post('money/recode', [\App\Http\Controllers\FinanceAreaController::class, 'recode']);      // R-FIN-73
+        Route::get('sales/month-status', [\App\Http\Controllers\FinanceAreaController::class, 'monthStatus']);      // R-INV-13
+        Route::get('sales/{id}/profit', [\App\Http\Controllers\FinanceAreaController::class, 'lineProfit'])->whereNumber('id');      // MR-0079
+        Route::get('tax', [\App\Http\Controllers\FinanceAreaController::class, 'tax']);      // R-TAX-6
+        Route::get('tax/next', [\App\Http\Controllers\FinanceAreaController::class, 'taxNext']);
+        Route::get('tax/{id}', [\App\Http\Controllers\FinanceAreaController::class, 'taxPeriod'])->whereNumber('id');      // R-TAX-1 / 2 / 3 / 5
+        Route::post('tax/{id}/fill', [\App\Http\Controllers\FinanceAreaController::class, 'taxFill'])->whereNumber('id');
         Route::get('people/company-preview/{id}', [AppController::class, 'companyPreview'])->whereNumber('id');      // R-C-36
         Route::get('people/external/new', [AppController::class, 'externalForm']);
         Route::post('people/external/new', [AppController::class, 'externalSave']);
@@ -408,6 +423,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('close', [CloseController::class, 'overview']);
         Route::match(['get', 'post'], 'opening', [CloseController::class, 'opening']);      // R-G_CORE-87
         Route::post('opening/lock', [CloseController::class, 'openingLock']);
+        Route::post('opening/unlock', [CloseController::class, 'openingUnlock']);
+        Route::match(['get', 'post'], 'opening/rows', [CloseController::class, 'openingRows']);      // R-FIN-20 the cut-over wizard rows
         Route::get('close/month', [CloseController::class, 'page']);
         Route::post('close/check', [CloseController::class, 'check']);
         Route::post('close/waive', [CloseController::class, 'waive']);
@@ -727,6 +744,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('invoices/margin', [\App\Http\Controllers\InvoicesController::class, 'margin']);
         Route::get('portal/home', [\App\Http\Controllers\InvoicesController::class, 'portalHome']);
         Route::get('portal/sales', [\App\Http\Controllers\InvoicesController::class, 'portalSales']);
+        Route::get('portal/export/{kind}', [\App\Http\Controllers\InvoicesController::class, 'portalExport'])->whereIn('kind', ['stock', 'statements', 'invoices']);      // R-INV-16
         Route::get('portal/invoices', [\App\Http\Controllers\InvoicesController::class, 'portal']);
         Route::post('portal/invoices/{id}/pay', [\App\Http\Controllers\InvoicesController::class, 'portalPay'])->whereNumber('id');
         Route::post('portal/invoices/{id}/email', [\App\Http\Controllers\InvoicesController::class, 'portalEmail'])->whereNumber('id');

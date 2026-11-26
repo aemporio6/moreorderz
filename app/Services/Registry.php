@@ -190,6 +190,7 @@ class Registry
         }
         if (isset(self::GROUPS[$table])) $x->addSelect(DB::raw(self::GROUPS[$table] . ' as grp'));
         foreach ($where as $c => $v) if (is_string($c) && self::hasColumn($table, $c)) $x->where('t.' . $c, $v);
+        if ($table === 'fin_bank_accounts' && $ent) $x->where('t.company_id', $ent);      // R-FIN-5 bank accounts of the company only
         if ($table === 'cat_company_house' && ! array_key_exists('f_external', $where) && self::hasColumn($table, 'f_external')) $x->where(fn ($w) => $w->whereNull('t.f_external')->orWhere('t.f_external', 0));      // R-C-13 a supplier company (made from a contact) never shows in the own-company pickers
         if ($ent && self::hasColumn($table, 'fk_id_ent')) $x->where(fn ($w) => $w->where('t.fk_id_ent', $ent)->orWhere('t.fk_id_ent', 0)->orWhereNull('t.fk_id_ent'));
         if (self::hasColumn($table, 'f_active')) $x->where('t.f_active', 1);

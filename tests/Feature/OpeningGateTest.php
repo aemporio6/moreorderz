@@ -33,7 +33,9 @@ class OpeningGateTest extends TestCase
         $g1 = $grn('2026-10-15'); try { Buy::postGrn($g1); $this->fail('refused before the lock'); } catch (\RuntimeException $e) { $this->assertStringContainsString('Lock the opening balances first', $e->getMessage()); }
         $this->assertSame(0, DB::table('fin_lots')->where('fk_id_product', $p)->count());
         $va = $this->makeUser('MANAGER'); $this->actingAs($va)->postJson('/api/opening/lock')->assertStatus(422)->assertJsonPath('message', 'Only the Owner locks the opening balances.');
-        $this->actingAs($this->owner)->postJson('/api/opening/lock')->assertOk()->assertJsonPath('locked', true);
+        $this->actingAs($this->owner)->postJson('/api/opening/lock')->assertStatus(422)->assertJsonPath('message', 'Nothing to lock: enter the opening balances first.');      // R-FIN-20
+        $this->postJson('/api/opening/rows', ['type' => 'STOCK_VALUE', 'as_of_date' => '2026-10-01', 'amount' => 100])->assertOk();
+        $this->postJson('/api/opening/lock')->assertOk()->assertJsonPath('locked', true);
         $this->postJson('/api/opening', ['as_of' => '2026-09-01'])->assertStatus(422);
         // dated before the as-of date → posted, no lot
         $g0 = $grn('2026-09-20'); $r = Buy::postGrn($g0); $this->assertTrue($r['before_opening']); $this->assertSame('POSTED', DB::table('t_src_grn')->where('id', $g0)->value('posting_status'));

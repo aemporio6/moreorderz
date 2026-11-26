@@ -29,6 +29,7 @@ class SetContext
                             'companies' => \App\Services\AllCompanies::companies($u)->map(fn ($c) => ['id' => (int) $c->id, 'name' => $c->name])->values()], 409));
                 }
             }
+            if ($request->is('api/*') && \App\Services\FinanceRoles::locked($u) && ! \App\Services\FinanceRoles::allowed($request, $u)) abort(response()->json(['message' => 'Partner Account: this page is not available.'], 403));      // R-FIN-2
             \App\Services\SecureStep::seen($request);      // R-G_CORE-98 activity for the 2FA re-ask
             // shop scope: a person limited to some shops cannot name another shop on any screen
             foreach (['shop', 'shop_id', 'branch', 'branch_id', 'fk_id_branch', 'fk_id_shop'] as $k) {
@@ -42,6 +43,8 @@ class SetContext
                 if (! $request->isMethod('GET') && ! $request->is('api/permissions/view-as')) abort(response()->json(['message' => 'You are viewing as ' . $va[1] . ' – nothing can be changed. Press "Back to myself" first.'], 403));
             }
         }
-        return $next($request);
+        $res = $next($request);
+        if (($u = Auth::user()) && $request->is('api/*') && $res instanceof \Illuminate\Http\JsonResponse && ! \App\Services\Mask::money($u)) $res->setData(\App\Services\Mask::stripMoney($res->getData(true)));      // R-FIN-11
+        return $res;
     }
 }

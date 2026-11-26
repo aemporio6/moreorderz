@@ -144,6 +144,7 @@ class MoneyService
             if ($amt > 0 && BankMatch::capitalCall($ent, $l)) { $n++; continue; }      // R-FIN-27 MC capital call
             if (BankMatch::invoice($ent, $l)) { $n++; continue; }      // R-FIN-70 M6 invoice receipt / payment
             if ($amt < 0 && BankMatch::sum($ent, $l, $dSup)) { $n++; continue; }      // R-FIN-70 sum matching: several open payables of one payee
+            if (BankMatch::providerProfile($ent, $l)) { $n++; continue; }      // R-FIN-72 fee buckets and payouts of the provider profile
             if (BankMatch::providerFee($ent, $l)) { $n++; continue; }      // R-FIN-70 payment-provider profile: fee lines
             if (BankMatch::intercompany($ent, $l)) { $n++; continue; }      // R-FIN-27 M4 inter-company, last
         }

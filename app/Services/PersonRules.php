@@ -41,7 +41,8 @@ class PersonRules
             't_account_ipburgers' => self::ip($data, $id, $v, self::$reason),
             't_account_pc' => self::pc($data, $v),
             't_account_banks' => self::staffBank($data, $v),
-            't_account_marketplaces', 't_account_paypal', 't_account_company_houses' => self::submitted($table, $data, $old),
+            't_account_paypal' => self::paypal($data, $v) + self::submitted($table, $data, $old),
+            't_account_marketplaces', 't_account_company_houses' => self::submitted($table, $data, $old),
             default => [],
         };
     }
@@ -208,6 +209,19 @@ class PersonRules
             DB::table('t_account_employment')->where('id', $o)->update(['f_active' => 0, 'updated_at' => now(), 'updated_by' => Context::userId()]);
             Audit::log('t_account_employment', (int) $o, 'UPDATE', ['f_active' => [1, 0]], 'A newer employment row replaced it', (int) (Context::ent() ?? 0));
         }
+    }
+
+    /** R-C-32 PayPal: the sort code is read from linked debit card 1 (old read the bank by its id – wrong record); the linked cards are this person's Debit cards at that bank. */
+    private static function paypal(array &$data, callable $v): array
+    {
+        $e = []; $acc = (int) $v('fk_id_account'); $bank = (int) $v('fk_bank_id');
+        foreach ([1, 2, 3] as $i) { $c = (int) $v("linked_debit_card_id$i"); if (! $c) continue;
+            $card = DB::table('t_account_credit_cards')->where('id', $c)->first(['fk_id_account', 'fk_bank_id', 'card_type', 'sort_branch_code']);
+            if (! $card || (int) $card->fk_id_account !== $acc || ($bank && (int) $card->fk_bank_id !== $bank) || stripos((string) $card->card_type, 'debit') === false) $e["linked_debit_card_id$i"] = "Debit card $i must be one of this person's debit cards at the chosen bank.";
+            elseif ($i === 1) $data['sort_branch_code'] = $card->sort_branch_code; }
+        if (! (int) $v('linked_debit_card_id1')) $data['sort_branch_code'] = null;
+        if ($v('paypal_name') === null || $v('paypal_name') === '') { $a = DB::table('t_account')->where('id', $acc)->first(['first_name', 'sur_name']); if ($a) $data['paypal_name'] = trim($a->first_name . ' ' . $a->sur_name); }
+        return $e;
     }
 
     /** R-C-24 the module entities an address is used for (when it is not used for all). */

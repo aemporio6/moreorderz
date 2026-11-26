@@ -51,6 +51,14 @@ class Chains
     {
         if (($dp = DirectorPickers::options($formKey, (string) $f['field_name'], $parents, $q)) !== null) return $dp;      // R-F_SETUP-36: Director 1's own addresses / e-mails / mobiles
         $fields = Registry::fields($formKey); $name = $f['field_name']; $col = (string) $f['column_name'];
+        if ($formKey === 't_inv_settings' && $col === 'fk_id_account_bank') {      // R-D-95 only the banks of this company's invoice parties, invoicing admins only, last 4 digits only
+            $u = \Illuminate\Support\Facades\Auth::user(); $ent = (int) Context::ent();
+            if ($u && $u->role_code !== 'OWNER' && ! Choices::has('INVOICING_ADMIN_ROLES', $ent, $u->role_code)) { EventBus::fire('RIGHTS_DENIED', 't_inv_settings', 0, ['why' => 'investor settings bank list'], $ent); abort(response()->json(['message' => 'Only the invoicing admins choose the bank of a split.'], 403)); }
+            $accs = DB::table('t_inv_parties')->where('fk_id_ent', $ent)->where('f_active', 1)->whereNotNull('fk_id_account')->pluck('fk_id_account')->all();
+            return ['options' => DB::table('t_account_banks as b')->leftJoin('cat_banks as cb', 'cb.id', '=', 'b.fk_bank_id')->whereIn('b.fk_id_account', $accs ?: [0])->where(fn ($w) => $w->whereNull('b.f_active')->orWhere('b.f_active', 1))->orderBy('b.id')
+                ->get(['b.id', 'cb.bank_name', 'b.account_no'])->map(fn ($r) => [(string) $r->id, trim(($r->bank_name ?: 'Bank') . ' ****' . substr(preg_replace('/\D/', '', (string) $r->account_no), -4))])
+                ->filter(fn ($o) => $q === null || $q === '' || mb_stripos($o[1], $q) !== false)->values()->all(), 'narrowed_by' => []];
+        }
         $src = (string) $f['source']; [$kind, $arg] = array_pad(explode(':', $src, 2), 2, '');
         $person = self::pv($parents, $fields, 'fk_id_account');
         $map = fn ($rows) => $rows->map(fn ($r) => [(string) $r->id, (string) $r->lbl])->values()->all();

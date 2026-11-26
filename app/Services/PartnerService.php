@@ -291,6 +291,7 @@ class PartnerService
         $lid = DB::table('fin_investor_ledger')->insertGetId(['investor_id' => $w->investor_id, 'company_id' => $ent, 'entry_date' => $date, 'type' => 'WITHDRAWAL', 'amount' => -1 * (float) $w->amount, 'reference_no' => 'WD ' . $w->id, 'note' => $w->note, 'created_by' => Context::userId(), 'created_at' => now()]);
         Ledger::post($ent, $date, 'WITHDRAWAL', $lid, [['account' => '2100', 'debit' => (float) $w->amount, 'ref_id' => (int) $w->investor_id], ['account' => '1000', 'credit' => (float) $w->amount, 'ref_id' => (int) $w->fk_id_pay_to_bank, 'amount_cur' => -1 * (float) $w->amount]], ['memo' => 'Withdrawal · ' . self::name((int) $w->investor_id)]);
         DB::table('fin_withdrawals')->where('id', $id)->update(['status' => 'PAID', 'approved_by' => Context::userId(), 'approved_at' => now(), 'paid_at' => now()]);
+        FinanceArea::partnerMessage($ent, (int) $w->investor_id, 'WITHDRAWAL_PAID', 'Your withdrawal of ' . number_format((float) $w->amount, 2) . ' was paid.', 'wd-paid:' . $id);      // R-FIN-10
     }
 
     /** Partners of the company: anyone with an agreement or a ledger row. */

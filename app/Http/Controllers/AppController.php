@@ -30,6 +30,7 @@ class AppController extends Controller
             'view_as' => $va ? $va[1] : null,
             'ent' => Context::ent(), 'all_companies' => Context::all(), 'can_all' => \App\Services\AllCompanies::may($u), 'companies' => $companies, 'words' => \App\Services\SimpleWords::MAP /* owner 26-11: the one list of easy words */, 'menu' => self::menu($va ? $va[0] : $role), 'create' => self::createCatalogue($va ? $va[0] : $role),
             'setup_open' => $role === 'OWNER' && \App\Services\SetupWizard::open((int) Context::ent()),
+            'landing' => \App\Services\FinanceRoles::landing($u), 'partner_only' => \App\Services\FinanceRoles::locked($u),      // R-FIN-2 each role's first page; a partner account sees its own pages only
             'task_header' => \App\Services\TaskRoles::header($u),      // R-G_CORE-20
             'tasks_open' => DB::table('tasks')->where('owner_user_id', $u->id)->whereNotIn('status', ['DONE', 'APPROVED', 'CANCELLED'])->count(),
             'product_form' => RecordService::formOfTable('t_product_vendors'), 'person_forms' => \Illuminate\Support\Facades\DB::table('sys_registry')->where('table_name', 't_account')->distinct()->pluck('form_key')->all(), 'base_currency' => Settings::get('BASE_CURRENCY', Context::ent(), 'GBP'), 'today' => date('Y-m-d'),

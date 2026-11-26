@@ -235,6 +235,8 @@
   const ALL_ROUTES = /^(#\/?$|#\/(home|sales(\?|$)|sales-annual|sales-detailed|stock(\?|$)|stock\/lots|stock\/product\/|buying(\?|$|\/overview)|money(\?|$)|profit|reports|tasks(\?|$|\/dashboard|\/board)|list\/|rec\/))/;      // R-G_CORE-102 pages that add up every company
   async function render() { await renderPage(); afterRender(S.route); }
   async function renderPage() {
+    if (S.boot && S.boot.partner_only && !/^#\/(my-account|my-invoices|my-portal|my-sales|me)\b/.test(S.route || '')) { location.hash = '#/my-account'; return; }      // R-FIN-2 a partner account sees only its own pages
+    if (S.boot && S.boot.landing && !S.landed && (!S.route || S.route === '#/home' || S.route === '#/')) { S.landed = true; location.hash = S.boot.landing; return; }      // each finance role lands on its own page
     const m = $('#main'), r = S.route; let mt;
     drawSide();
     /* R-G_CORE-102: in All companies mode the added-up pages read every company; any other page works in ONE company – asked once when it opens */
@@ -359,6 +361,12 @@
       if (r === '#/sku-homes') return await pageSkuHomes();
       if (r.startsWith('#/close')) { const sh = (r.match(/shop=(\d+)/) || [])[1], mo = (r.match(/month=(\d{4}-\d{2})/) || [])[1]; return sh && mo ? await pageCloseMonth(+sh, mo) : await pageClose(); }
       if (r === '#/money') return await pageMoney();
+      if (r.startsWith('#/tax')) return await pageTax(+(r.split('/')[2] || 0));      // R-TAX-1 … 6
+      if (r.startsWith('#/bank-cash')) return await pageBankCash();      // R-FIN-64
+      if (r === '#/finance-home') return await pageFinanceHome();      // R-FIN-65, MR-0080
+      if (r === '#/scenario') return await pageScenario();      // MR-0081
+      if (r.startsWith('#/product-period')) return await pageProductPeriod();      // R-FIN-44, MR-1264
+      if (r === '#/money-how') return await pageMoneyHow();      // R-FIN-12
       if (r.startsWith('#/product-profit')) return await pageProductProfit(Object.fromEntries(new URLSearchParams(r.split('?')[1] || '')));
       if (r.startsWith('#/profit')) { const u = new URLSearchParams(r.split('?')[1] || ''); return await pageProfit({ by: u.get('by'), from: u.get('from'), to: u.get('to'), shop: u.get('shop') }); }
       if (r === '#/refunds') return await pageRefunds();
@@ -1333,7 +1341,15 @@
     if ($('#scSave', ov)) $('#scSave', ov).onclick = async () => { const columns = {}; $$('[data-col]', ov).forEach(i => { columns[i.dataset.col] = i.value; }); busy(true);
       try { const r = await api(`sales/columns/${mp}`, { method: 'POST', body: { set: c.set, columns } }); toast(r.message); $$('[data-col]', ov).forEach(i => { i.value = r.columns[i.dataset.col] || ''; }); } catch (e) { $('#scMsg', ov).textContent = e.message; } busy(false); };
   }
+  // R-INV-13 month status side panel: per month import, settlement, invoices and "Settle this month"
+  async function monthStatusPanel(shop, from, to) {
+    if (!shop) return toast('Choose a shop first.', 'warn');
+    let d; try { d = await api(`sales/month-status?shop=${shop}&from=${from || ''}&to=${to || ''}`); } catch (e) { return toast(e.message, 'err'); }
+    const m = modal('Months of this shop', 'Import, settlement and invoices per month.', `<div class="tbl-wrap"><table class="t"><thead><tr><th>Month</th><th>Import</th><th>Settlement</th><th class="num">Invoices</th><th></th></tr></thead><tbody>${d.rows.map(r => `<tr><td>${esc(r.month)}</td><td>${esc(r.import)}</td><td>${esc(r.settlement)}</td><td class="num">${r.invoices}</td><td>${r.can_settle ? `<a class="btn sm primary" href="${esc(r.settle_url)}">Settle this month</a>` : ''}</td></tr>`).join('')}</tbody></table></div>`, '<button class="btn" id="msX">Close</button>');
+    $('#msX', m.ov).onclick = m.close; $$('a', m.ov).forEach(a => a.addEventListener('click', () => m.close()));
+  }
   async function pageSales(batch) {
+    setTimeout(() => { const a = $('#main .page-head .actions'); if (a && !$('#slMonths')) { a.insertAdjacentHTML('afterbegin', '<button class="btn" id="slMonths">Months</button>'); $('#slMonths').onclick = () => monthStatusPanel((SL.f || {}).shop, (SL.f || {}).from, (SL.f || {}).to); } }, 0);
     busy(true); let d;
     try {
       if (!SL.f) { const first = await api('sales'); SL.f = { ...(first.scope || {}), per_page: 50, page: 1 }; if (!SL.f.marketplace) d = first; }   // the scope you used last, on any device
@@ -1587,7 +1603,7 @@
       miniForm('Copying: ' + s.sku, 'Prices, shipping, marketplace fields, visibility, investors, media and bin notes are copied. Stock, lots, movements and price history never are; each marketplace gets one "Created" price period.',
         [{ name: 'sku', label: 'New SKU', required: true, value: s.suggest }].concat(s.children ? [{ name: 'variations', label: `Also copy the ${s.children} variation(s) (same suffix after the new SKU)`, type: 'check' }] : []),
         async v => { const r = await api(`products/${id}/duplicate`, { method: 'POST', body: { sku: v.sku, variations: !!v.variations } }); go(r.edit_url); return r; }, 'Duplicate'); };
-    if (tab === 'details' && (S.boot.person_forms || []).includes(key)) { jobsCard(id); securityCard(id); shopsCard(id); accessCard(id); }
+    if (tab === 'details' && (S.boot.person_forms || []).includes(key)) { jobsCard(id); securityCard(id); shopsCard(id); accessCard(id); auditCard(id); }
     if (d.table === 't_src_cycle_products') { $('#main').insertAdjacentHTML('beforeend', '<div id="cpDocs"></div>'); docsBox('#cpDocs', `cycle-product/${id}/documents`, 'Documents of this cycle product', 'Add document', () => pageRecord(key, id)); }      // R-B_SOURCING-48
     $$('#main [data-tab]').forEach(b => b.onclick = () => { S.recTab = b.dataset.tab; pageRecord(key, id); });
   }
@@ -3046,6 +3062,93 @@
       const lk = $('#obLock', host); if (lk) lk.onclick = () => { const m = modal('Lock the opening balances?', 'This cannot be undone: the as-of date stays as it is and receipts dated on or after it make lots.', '', '<button class="btn primary" id="obYes">Lock</button>', false);
         $('#obYes', m.ov).onclick = async () => { m.close(); try { o = await api('opening/lock', { method: 'POST', body: {} }); toast(o.message); draw(); } catch (e) { toast(e.message, 'err'); } }; };
     }; draw();
+    let rows; try { rows = await api('opening/rows'); } catch (e) { return; }      // R-FIN-20 the cut-over wizard rows
+    host.insertAdjacentHTML('beforeend', `<div class="card-b" style="border-top:1px solid var(--line)"><b>Opening rows</b><div class="tbl-wrap"><table class="t"><thead><tr><th>As of</th><th>Type</th><th>Ref</th><th>SKU</th><th class="num">Qty</th><th class="num">Amount</th></tr></thead><tbody>${rows.rows.map(x => `<tr><td>${esc(x.as_of_date)}</td><td>${esc(x.type)}</td><td>${esc(x.ref_id || '')}</td><td>${esc(x.sku || '')}</td><td class="num">${esc(x.qty || '')}</td><td class="num">${money(x.amount)}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">No rows yet.</td></tr>'}</tbody></table></div>
+      ${rows.locked ? '' : '<button class="btn sm" id="obAdd">+ Add opening row</button>'}</div>`);
+    const ad = $('#obAdd', host); if (ad) ad.onclick = () => miniForm('Opening row', 'Bank, partner capital, stock value, supplier due, marketplace reserve, loan or an opening lot (SKU, qty, unit cost).',
+      [{ name: 'type', label: 'Type', type: 'select', options: rows.types.map(t => [t, t]), required: true }, { name: 'as_of_date', label: 'As of', type: 'date', required: true, value: rows.as_of || '' }, { name: 'ref_id', label: 'Ref (bank account / partner / shop id)' },
+        { name: 'amount', label: 'Amount' }, { name: 'sku', label: 'SKU (opening lot)' }, { name: 'qty', label: 'Qty (opening lot)' }, { name: 'unit_cost', label: 'Unit cost (opening lot)' }, { name: 'note', label: 'Note' }],
+      async v => { const r = await api('opening/rows', { method: 'POST', body: v }); host.remove(); openingCard(); return r; }, 'Save');
+  }
+  // MR-1271 the end audit of an account: its figures per role, its stock, its money
+  async function auditCard(id) {
+    let a; try { a = await api(`people/${id}/audit`); } catch (e) { return; }
+    const c = document.createElement('div'); c.className = 'card'; c.style.marginTop = '12px'; $('#main').appendChild(c);
+    const so = a.as_seller_owner, sp = a.as_supplier, pa = a.as_partner;
+    c.innerHTML = `<div class="card-h"><h3>Account audit · ${esc(a.from)} – ${esc(a.to)}</h3></div><div class="card-b small">
+      <div>Shops (seller / owner / handler): <b>${so.shops}</b> · ${so.lines} line(s) · sales ${money(so.sales)} · profit ${money(so.profit)}</div>
+      ${a.as_va.jobs ? `<div>VA jobs: <b>${a.as_va.jobs}</b>${a.as_va.share_pct.length ? ' · share ' + a.as_va.share_pct.join(', ') + '%' : ''}</div>` : ''}
+      ${sp ? `<div>As supplier: ${sp.orders} order(s) · bought ${money(sp.bought)} · owed ${money(sp.owed)}</div>` : ''}
+      ${pa ? `<div>As partner: capital ${money(pa.capital)} · profit ${money(pa.profit_to_date)} · withdrawn ${money(pa.withdrawn)} · balance ${money(pa.balance)}</div>` : ''}
+      <div>Stock owned: <b>${a.inventory.units}</b> unit(s) · ${money(a.inventory.value)}</div>
+      ${a.money.length ? `<div>Money in the books: ${a.money.map(m => `${esc(m.code)} ${esc(m.name)} ${money(m.balance)}`).join(' · ')}</div>` : ''}</div>`;
+  }
+  // ---------- R-TAX taxation: all periods, then one period's worksheet, Corporation Tax, size test and deadlines ----------
+  async function pageTax(id) {
+    busy(true); let d; try { d = await api(id ? `tax/${id}` : 'tax'); } catch (e) { busy(false); $('#main').innerHTML = `<div class="card"><div class="empty">${ic('alert')}<div>${esc(e.message)}</div></div></div>`; return; } busy(false);
+    if (!id) { $('#main').innerHTML = `<div class="page-head"><div><h1>Taxation</h1><div class="sub">Periods of accounts: profit, Corporation Tax and the next deadline. Entries are typed or filled from the ledger.</div></div><div class="actions"><a class="btn" href="#/list/tax_period">Periods</a><a class="btn" href="#/list/tax_entry">Entries</a><a class="btn" href="#/list/tax_rate">CT rates</a></div></div>
+      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>Company</th><th>Period</th><th>Status</th><th class="num">Turnover</th><th class="num">Net</th><th class="num">Taxable</th><th class="num">CT</th><th class="num">Balance due</th><th>Balanced</th><th>Next deadline</th></tr></thead><tbody>${d.rows.map(r => `<tr><td>${esc(r.company || '')}</td><td><a href="#/tax/${r.id}">${esc(r.label || r.from + ' – ' + r.to)}</a></td><td>${esc(r.status)}</td><td class="num">${money(r.turnover)}</td><td class="num">${money(r.net)}</td><td class="num">${money(r.taxable)}</td><td class="num">${money(r.ct)}</td><td class="num">${money(r.balance_due)}</td><td>${r.balanced ? '<span class="chip ok">Yes</span>' : '<span class="chip err">No</span>'}</td><td>${esc(r.next_deadline || '—')} <span class="small muted">${esc(r.next_what || '')}</span></td></tr>`).join('') || '<tr><td colspan="10" class="muted">No period yet – add one under Periods.</td></tr>'}</tbody></table></div></div>`; return; }
+    const W = d.worksheet, P = W.pl, B = W.bs, T = W.tax, line = (l, v, b) => `<tr><td>${b ? `<b>${l}</b>` : l}</td><td class="num">${b ? `<b>${money(v)}</b>` : money(v)}</td></tr>`;
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/tax">Taxation</a> ›</div><h1>${esc(d.period.period_label || '')}</h1><div class="sub">${esc(d.period.period_start)} – ${esc(d.period.period_end)} · ${esc(d.period.accounts_type)} · size test: <b>${esc(d.size.size)}</b></div></div><div class="actions"><button class="btn" id="txFill">Fill from the ledger</button><a class="btn" href="#/list/tax_entry?f[fk_period]=${id}">Entries</a><a class="btn" href="#/rec/tax_period/${id}">Period</a></div></div>
+      ${d.size.warnings.map(w => `<div class="card" style="margin-bottom:8px;border-left:4px solid var(--warn)"><div class="card-b">${esc(w)}</div></div>`).join('')}
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px">
+        <div class="card"><div class="card-h"><h3>Profit and loss</h3></div><table class="t">${line('Turnover', P.turnover)}${line('Cost of sales', -P.cost_of_sales)}${line('Gross profit', P.gross, 1)}${line('Other income', P.other_income)}${Object.entries(P.expense_groups).map(([g, v]) => line('Expenses ' + g, -v)).join('')}${line('Net profit', P.net, 1)}<tr><td class="small muted">Gross / net margin</td><td class="num small muted">${P.gross_margin_pct}% / ${P.net_margin_pct}%</td></tr></table></div>
+        <div class="card"><div class="card-h"><h3>Balance sheet (micro)</h3><span class="chip ${B.balanced ? 'ok' : 'err'}">${B.balanced ? 'balanced' : 'difference ' + money(B.difference)}</span></div><table class="t">${line('Fixed assets', B.fixed_assets)}${line('Net current assets', B.net_current)}${line('Total assets less current liabilities', B.total_assets_less_cl, 1)}${line('Creditors after one year', -B.creditors_long)}${line('Provisions', -B.provisions)}${line('Net assets', B.net_assets, 1)}${line('Capital and reserves', B.capital, 1)}</table></div>
+        <div class="card"><div class="card-h"><h3>Corporation Tax</h3></div><table class="t">${line('Net profit', T.net)}${line('Add-backs', T.add_backs)}${line('Deductions', -T.tax_deduct)}${line('Taxable profit', T.taxable, 1)}${T.loss_cf ? line('Loss carried forward', T.loss_cf) : ''}${d.ct.periods.map(c => c.segments.map(s => `<tr><td class="small">FY${s.fy} ${esc(s.from)} – ${esc(s.to)} (${s.days} d) · ${esc(s.band)}${s.marginal_relief ? ' · MR ' + money(s.marginal_relief) : ''}</td><td class="num small">${money(s.tax)}</td></tr>`).join('')).join('')}${line('Corporation Tax', d.ct.ct, 1)}<tr><td class="small muted">Effective rate</td><td class="num small muted">${d.ct.effective_rate}%</td></tr>${line('Balance due', d.ct.balance_due, 1)}</table></div>
+        <div class="card"><div class="card-h"><h3>Deadlines (Accountancy Hub)</h3></div><div class="card-b">${d.deadlines.map(x => `<div>${esc(x.due)} · ${esc(x.title || x.type)} <span class="chip ${x.done ? 'ok' : 'plain'}">${esc(x.status || '')}</span></div>`).join('') || '<span class="muted">No obligations for this period yet.</span>'}</div></div></div>`;
+    $('#txFill').onclick = async () => { try { toast((await api(`tax/${id}/fill`, { method: 'POST', body: {} })).message); pageTax(id); } catch (e) { toast(e.message, 'err'); } };
+  }
+  // ---------- R-FIN-64 Bank & cash ----------
+  async function pageBankCash() {
+    const m = new URLSearchParams(location.hash.split('?')[1] || '').get('month') || S.today.slice(0, 7);
+    busy(true); let d; try { d = await api('money/bank-cash?month=' + m); } finally { busy(false); }
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/money">Money</a> ›</div><h1>Bank and cash · ${esc(m)}</h1><div class="sub">Money in and out by category against the budget (${esc(d.base)}); what we owe suppliers; loans.</div></div><div class="actions"><input type="month" class="q" id="bcM" value="${esc(m)}"><a class="btn" href="#/budgets">Budgets</a></div></div>
+      <div class="kpis">${d.accounts.map(a => `<div class="card kpi"><div class="bar"></div><div class="lbl">${esc(a.label || a.bank_name || 'Account')}</div><div class="val">${money(a.books_base ?? 0)}</div><div class="foot">${esc(a.currency || '')}</div></div>`).join('')}</div>
+      <div class="card" style="margin-top:12px"><div class="tbl-wrap"><table class="t"><thead><tr><th>Category</th><th class="num">Actual</th><th class="num">Budget</th><th class="num">Difference</th></tr></thead><tbody>${d.categories.map(c => `<tr><td>${esc(c.category)}</td><td class="num">${money(c.actual)}</td><td class="num">${money(c.budget)}</td><td class="num" style="${c.over ? 'color:var(--err);font-weight:600' : ''}">${money(c.difference)}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">No money moved this month.</td></tr>'}</tbody></table></div></div>
+      <div class="card" style="margin-top:12px"><div class="card-h"><h3>What we owe suppliers</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Supplier</th><th class="num">Scheduled</th><th class="num">Paid</th><th class="num">Owed</th></tr></thead><tbody>${d.owe_suppliers.map(s => `<tr><td>${esc(s.supplier || '')}</td><td class="num">${money(s.scheduled)}</td><td class="num">${money(s.paid)}</td><td class="num">${money(s.owed)}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Nothing owed.</td></tr>'}</tbody></table></div><div class="card-b small">Supplier payments due in 30 days: <b>${d.supplier_due_30.length}</b> · Loans: <b>${d.loans.length}</b> (<a href="#/loans">open</a>)</div></div>`;
+    $('#bcM').onchange = e => go('#/bank-cash?month=' + e.target.value);
+  }
+  // ---------- R-FIN-65 Owner finance home + MR-0080 decisions ----------
+  async function pageFinanceHome() {
+    const a = new URLSearchParams(location.hash.split('?')[1] || '').get('as_of') || '';
+    busy(true); let d, x; try { [d, x] = await Promise.all([api('money/home' + (a ? '?as_of=' + a : '')), api('money/decisions')]); } finally { busy(false); }
+    const k = (l, v, href, tone) => `<a class="card kpi ${tone || ''}" href="${href}" style="text-decoration:none;color:inherit;display:block"><div class="bar"></div><div class="lbl">${l}</div><div class="val">${v}</div></a>`;
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/money">Money</a> ›</div><h1>Finance home</h1><div class="sub">As of ${esc(d.as_of)}. Every tile opens its list.</div></div><div class="actions"><input type="date" class="q" id="fhA" value="${esc(d.as_of)}"><a class="btn" href="#/scenario">Scenario</a><a class="btn" href="#/money-how">How it works</a></div></div>
+      <div class="kpis">${k('Bank (as of)', money(d.bank_as_of), d.links.bank)}${k('Marketplace reserve', money(d.reserve), '#/settlements')}${k('Committed', money(d.committed), '#/supplier-schedule')}${k('Free cash', money(d.free_cash), d.links.forecast, d.free_cash < 0 ? 'err' : '')}
+        ${k('Forecast 30 days', money(d.forecast.d30), d.links.forecast)}${k('60 days', money(d.forecast.d60), d.links.forecast)}${k('90 days', money(d.forecast.d90), d.links.forecast)}${k('Open withdrawals', d.open_withdrawals, d.links.withdrawals)}${k('Slow + dead stock', money(d.slow_stock + d.dead_stock), d.links.stock)}${k('Needs action', d.needs_action, d.links.alerts, d.needs_action ? 'warn' : '')}</div>
+      <div class="card" style="margin-top:12px"><div class="card-h"><h3>Decisions (biggest money first)</h3></div><div class="tbl-wrap"><table class="t"><tbody>${x.rows.map(r => `<tr><td>${esc(r.title)}</td><td class="num"><b>${money(r.impact)}</b><div class="small muted">${esc(r.impact_text)}</div></td><td><a class="btn sm primary" href="${esc(r.action)}">${esc(r.action_label)}</a></td></tr>`).join('') || '<tr><td class="muted">Nothing to decide right now.</td></tr>'}</tbody></table></div></div>
+      <div class="card" style="margin-top:12px"><div class="card-h"><h3>Net profit by shop · ${esc(d.profit_month)}</h3><a class="small" href="${d.links.profit}" style="margin-left:auto">Profit views ›</a></div><div class="tbl-wrap"><table class="t"><tbody>${d.profit_by_marketplace.map(r => `<tr><td>${esc(r.name || r.label || r.key || '')}</td><td class="num">${money(r.profit ?? r.net ?? 0)}</td></tr>`).join('') || '<tr><td class="muted">No locked figures yet.</td></tr>'}</tbody></table></div></div>
+      <div class="card" style="margin-top:12px"><div class="card-h"><h3>Partners</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Partner</th><th class="num">Capital</th><th class="num">Balance</th></tr></thead><tbody>${d.partners.map(p => `<tr><td><a href="#/partners/${p.id}">${esc(p.name)}</a></td><td class="num">${money(p.capital)}</td><td class="num">${money(p.balance)}</td></tr>`).join('') || '<tr><td colspan="3" class="muted">No partner with capital or balance.</td></tr>'}</tbody></table></div></div>`;
+    $('#fhA').onchange = e => go('#/finance-home?as_of=' + e.target.value);
+  }
+  // ---------- MR-0081 "if I place these POs …" ----------
+  async function pageScenario() {
+    const items = [{ what: 'New PO', amount: '', date: S.today, dir: 'out' }];
+    const draw = res => { $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/forecast">Cash forecast</a> ›</div><h1>Scenario</h1><div class="sub">Add the POs you plan to place (or money you expect) and see the bank week by week, now and with them.</div></div></div>
+      <div class="card"><div class="card-b">${items.map((it, i) => `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px"><input class="q" data-i="${i}" data-k="what" value="${esc(it.what)}" placeholder="What"><input class="q" data-i="${i}" data-k="amount" value="${esc(it.amount)}" placeholder="Amount" inputmode="decimal" style="width:110px"><input class="q" type="date" data-i="${i}" data-k="date" value="${esc(it.date)}"><select class="q" data-i="${i}" data-k="dir"><option value="out" ${it.dir === 'out' ? 'selected' : ''}>Money out</option><option value="in" ${it.dir === 'in' ? 'selected' : ''}>Money in</option></select></div>`).join('')}
+        <button class="btn sm" id="scAdd">+ Line</button> <button class="btn sm primary" id="scRun">Show</button> <button class="btn sm" id="scSave">Save scenario</button></div></div>
+      ${res ? `<div class="card" style="margin-top:12px"><div class="card-h"><h3>Bank by week</h3><span class="small muted">Lowest: ${esc(res.lowest.label)} ${money(res.lowest.balance)}${res.goes_below_limit ? ' · below the free-cash limit from ' + esc(res.goes_below_limit) : ''}</span></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Week</th><th class="num">Now</th><th class="num">With the scenario</th><th class="num">Change</th></tr></thead><tbody>${res.rows.map(r => `<tr><td>${esc(r.label)}</td><td class="num">${money(r.now)}</td><td class="num" style="${r.with < 0 ? 'color:var(--err)' : ''}">${money(r.with)}</td><td class="num">${money(r.change)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
+      $$('[data-i]').forEach(x => x.onchange = () => { items[+x.dataset.i][x.dataset.k] = x.value; });
+      $('#scAdd').onclick = () => { items.push({ what: '', amount: '', date: S.today, dir: 'out' }); draw(res); };
+      const run = async save => { try { draw(await api('money/scenario', { method: 'POST', body: { title: items[0].what, items, save } })); if (save) toast('Scenario saved'); } catch (e) { toast(e.message, 'err'); } };
+      $('#scRun').onclick = () => run(false); $('#scSave').onclick = () => run(true); };
+    draw(null);
+  }
+  // ---------- R-FIN-44 product × period, MR-1264 ad spend per product ----------
+  async function pageProductPeriod() {
+    const q = new URLSearchParams(location.hash.split('?')[1] || ''), from = q.get('from') || S.today.slice(0, 8) + '01', to = q.get('to') || S.today;
+    busy(true); let d, ad; try { [d, ad] = await Promise.all([api(`money/product-period?from=${from}&to=${to}`), api('money/ad-spend?month=' + from.slice(0, 7))]); } finally { busy(false); }
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/profit">Profit</a> ›</div><h1>Product profit by period</h1><div class="sub">Fees, PPC and costs without a SKU are spread by sales share (PPC by the ADS spend share).</div></div><div class="actions"><input type="date" class="q" id="ppF" value="${from}"><input type="date" class="q" id="ppT" value="${to}"></div></div>
+      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>SKU</th><th class="num">Units</th><th class="num">Sales</th><th class="num">Share %</th><th class="num">Refunds</th><th class="num">Fees</th><th class="num">PPC</th><th class="num">Other</th><th class="num">COGS</th><th class="num">Net profit</th><th class="num">Margin %</th><th class="num">ROI %</th></tr></thead><tbody>${d.rows.map(r => `<tr><td>${esc(r.sku)}</td><td class="num">${r.units_sold}</td><td class="num">${money(r.sales)}</td><td class="num">${r.sales_share}</td><td class="num">${money(r.refunds)}</td><td class="num">${money(r.fees)}</td><td class="num">${money(r.ppc)}</td><td class="num">${money(r.other)}</td><td class="num">${money(r.cogs)}</td><td class="num"><b>${money(r.net_profit)}</b></td><td class="num">${r.margin_pct}</td><td class="num">${r.roi_pct}</td></tr>`).join('') || '<tr><td colspan="12" class="muted">No sales in these dates.</td></tr>'}</tbody></table></div></div>
+      <div class="card" style="margin-top:12px"><div class="card-h"><h3>Ad spend per product · ${esc(ad.month)}</h3><span class="small muted">total ${money(ad.total)} · without a SKU ${money(ad.unassigned)}</span></div><div class="tbl-wrap"><table class="t"><thead><tr><th>SKU</th><th class="num">Direct</th><th class="num">Spread</th><th class="num">Total</th></tr></thead><tbody>${ad.rows.map(r => `<tr><td>${esc(r.sku)}</td><td class="num">${money(r.direct)}</td><td class="num">${money(r.spread)}</td><td class="num"><b>${money(r.total)}</b></td></tr>`).join('') || '<tr><td colspan="4" class="muted">No ads report this month.</td></tr>'}</tbody></table></div></div>`;
+    const re = () => go(`#/product-period?from=${$('#ppF').value}&to=${$('#ppT').value}`); $('#ppF').onchange = re; $('#ppT').onchange = re;
+  }
+  // ---------- R-FIN-12 How it works + where the data comes from ----------
+  async function pageMoneyHow() {
+    const d = await api('money/how');
+    $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/money">Money</a> ›</div><h1>How it works</h1></div></div>
+      <div class="card"><div class="card-b"><ol>${d.steps.map(s => `<li style="margin:4px 0">${esc(s)}</li>`).join('')}</ol></div></div>
+      <div class="card" style="margin-top:12px"><div class="card-h"><h3>Where the data comes from</h3></div><div class="tbl-wrap"><table class="t"><tbody>${d.sources.map(s => `<tr><td>${esc(s.source)}</td><td class="num">${s.n}</td><td><span class="chip ${s.state === 'connected' ? 'ok' : 'warn'}">${esc(s.state)}</span></td></tr>`).join('')}</tbody></table></div></div>`;
   }
   async function pageClose() {
     busy(true); let d; try { d = await api('close'); } finally { busy(false); } setTimeout(openingCard, 0);
@@ -4575,6 +4678,7 @@
   async function pageMyPortal() {
     busy(true); let d; try { d = await api('portal/home'); } finally { busy(false); }
     const k = (l, v, cls = '') => `<div class="card kpi ${cls}"><div class="bar"></div><div class="lbl">${l}</div><div class="val">${v}</div></div>`;
+    setTimeout(() => { const a = $('#main .page-head .actions'); if (a) a.insertAdjacentHTML('afterbegin', ['stock', 'statements', 'invoices'].map(k => `<a class="btn sm" href="/api/portal/export/${k}">${k[0].toUpperCase() + k.slice(1)} CSV</a>`).join('')); }, 0);      // R-INV-16
     $('#main').innerHTML = `<div class="page-head"><div><h1>My investor account</h1><div class="sub">${esc(d.party)} – your stock, settled months and documents.</div></div><div class="actions"><a class="btn sm" href="#/my-sales">My sales</a><a class="btn sm" href="#/my-invoices">My invoices</a></div></div>
       <div class="kpis">${k('Stock (units)', d.stock_units)}${k('Stock value (raw price)', money(d.stock_value))}${d.stock_actual !== undefined ? k('Stock at landing price (internal)', money(d.stock_actual), 'warn') : ''}${k('Sales not confirmed yet', d.unconfirmed)}</div>
       <div class="kpis" style="margin-top:10px">${k('Units sold (settled)', d.units_sold)}${k('Revenue', money(d.revenue))}${k('Capital recovered', money(d.capital_recovered))}${k('My profit share', money(d.share), 'done')}</div>

@@ -81,6 +81,12 @@ class InvoicesController extends Controller
     public function portal(Request $r) { return $this->run(fn () => Docs::portalList($this->ent(), $r->user())); }      /* R-D-84 / R-G_CORE-86: own documents only – guarded inside */
     /** R-INV-15 portal dashboard and my sales (?csv=1). */
     public function portalHome(Request $r) { return $this->run(fn () => \App\Services\InvestorPortal::dashboard($this->ent(), $r->user())); }
+    public function portalExport(Request $r, string $kind)
+    {
+        try { $x = \App\Services\InvestorPortal::export($this->ent(), $r->user(), $kind); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+        return response($x['csv'], 200, ['Content-Type' => 'text/csv; charset=UTF-8', 'Content-Disposition' => 'attachment; filename="' . $x['file'] . '"']);      // R-INV-16
+    }
+
     public function portalSales(Request $r)
     {
         try { $d = \App\Services\InvestorPortal::mySales($this->ent(), $r->user(), $r->only(['from', 'to', 'shop'])); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }

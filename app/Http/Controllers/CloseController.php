@@ -57,7 +57,10 @@ class CloseController extends Controller
     {
         $this->can($r, 'close.lock');
         $d = $r->validate(['shop' => 'required|integer', 'month' => 'required|string|size:7', 'note' => 'nullable|string|max:255']);
-        return $this->run(function () use ($d) { $x = Close::lock((int) Context::ent(), (int) $d['shop'], $d['month'], (string) ($d['note'] ?? '')); return $x + ['message' => 'Month locked' . ($x['ledger_locked_up_to'] ? '. The ledger is locked up to ' . date('M Y', strtotime($x['ledger_locked_up_to'] . '-01')) : '')]; });
+        return $this->run(function () use ($d) { $x = Close::lock((int) Context::ent(), (int) $d['shop'], $d['month'], (string) ($d['note'] ?? ''));
+            foreach (\Illuminate\Support\Facades\DB::table('t_sales')->where('fk_id_branch', (int) $d['shop'])->where('d_order', 'like', $d['month'] . '%')->where('f_locked', 1)->pluck('id') as $sid) \App\Services\FinanceArea::lineProfit((int) $sid);      // MR-0079 the month's line profits become final
+            \App\Services\FinanceArea::poSoldOut((int) Context::ent());      /* R-FIN-15 safety net at close */
+            return $x + ['message' => 'Month locked' . ($x['ledger_locked_up_to'] ? '. The ledger is locked up to ' . date('M Y', strtotime($x['ledger_locked_up_to'] . '-01')) : '')]; });
     }
 
     /** R-G_CORE-87 opening balances. */
@@ -66,6 +69,18 @@ class CloseController extends Controller
         \App\Services\Perm::need($r->user(), 'money.SEE'); $ent = (int) \App\Services\Context::ent();
         try { return $r->isMethod('post') ? \App\Services\OpeningBalances::setAsOf($ent, (string) $r->input('as_of'), $r->user()) : \App\Services\OpeningBalances::state($ent); }
         catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+    }
+
+    public function openingRows(Request $r)
+    {
+        \App\Services\Perm::need($r->user(), 'money.SEE'); $ent = (int) \App\Services\Context::ent();
+        try { return $r->isMethod('post') ? \App\Services\OpeningBalances::addRow($ent, $r->all(), $r->user()) : ['rows' => \App\Services\OpeningBalances::rows($ent), 'types' => \App\Services\OpeningBalances::TYPES] + \App\Services\OpeningBalances::state($ent); }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+    }
+
+    public function openingUnlock(Request $r)
+    {
+        try { return \App\Services\OpeningBalances::unlock((int) \App\Services\Context::ent(), $r->user(), (string) $r->input('reason')); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
     }
 
     public function openingLock(Request $r)
