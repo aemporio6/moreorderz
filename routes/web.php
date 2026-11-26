@@ -270,6 +270,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('stock/bin-code-preview', [StockController::class, 'binCodePreview']);      // R-H-4 live preview (reads only)
         Route::match(['get', 'post'], 'stock/bin-rename', [StockController::class, 'binRename']);      // GET = preview
         Route::post('stock/bin-rename/undo/{job}', [StockController::class, 'binRenameUndo'])->whereNumber('job');
+        Route::get('charts/{which}', [AdminController::class, 'charts'])->where('which', 'home|buying|money|tasks');      // R-G_CORE-103
         Route::get('inventory-sharing', [StockController::class, 'sharing']);      // R-D-94
         Route::post('inventory-sharing', [StockController::class, 'sharingBulk']);
         Route::get('product-imports/staged/template', [StockController::class, 'stagedTemplate']);      // R-G_CORE-74

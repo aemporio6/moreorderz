@@ -37,6 +37,19 @@ class AdminController extends Controller
         return ['cards' => HomeCards::for($u, (int) Context::ent()), 'recent' => $recent];
     }
 
+    /** R-G_CORE-103 the charts of a dashboard (reads only). */
+    public function charts(Request $r, string $which)
+    {
+        $u = $r->user(); $ent = (int) Context::ent(); $f = $r->only(['months', 'shop', 'person', 'supplier', 'q', 'stage', 'investor', 'from', 'to']);
+        $one = fn (string $card, string $label, callable $fn) => ($x = \App\Services\DashCards::run($ent, $card, $label, $fn))['ok'] ? $x['data'] : ['key' => $card, 'title' => $label, 'error' => $x['error']];
+        return match ($which) {
+            'home' => \App\Services\Charts::home($ent, $u, $f),
+            'buying' => (\App\Services\Perm::need($u, 'buying.SEE') ?? []) + ['charts' => [$one('chart_cycles', 'Cycles chart', fn () => \App\Services\Charts::cycles($ent, $u, array_filter($f)))]],
+            'money' => (\App\Services\Perm::need($u, 'money.SEE') ?? []) + ['charts' => array_values(array_filter([$one('chart_payouts', 'Payouts chart', fn () => \App\Services\Charts::payouts($ent, $u, (int) ($f['months'] ?? 12) ?: 12, (int) ($f['shop'] ?? 0) ?: null)), $one('chart_cash', 'Cash chart', fn () => \App\Services\Charts::cash($ent, $u))]))],
+            'tasks' => ['charts' => [$one('chart_tasks', 'Tasks chart', fn () => \App\Services\Charts::tasks($ent, $u, $f))]],
+        };
+    }
+
     // ---- users ----
     public function users(Request $r)
     {

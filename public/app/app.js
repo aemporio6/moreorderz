@@ -216,7 +216,7 @@
       if ((mt = r.match(/^#\/rec\/([\w-]+)\/(\d+)/))) return await pageRecord(mt[1], +mt[2]);
       if (r.startsWith('#/variations/')) return await pageVariations(+r.split('/')[2]);
       if (r.startsWith('#/due')) return await pageDue();
-      if (r === '#/products' || r.startsWith('#/products?')) return await pageProducts();
+      if (r === '#/products' || r.startsWith('#/products?')) { const u = new URLSearchParams(r.split('?')[1] || ''); if (u.get('icc')) PL = { ...(PL || { status: 'active', set: 'default', per: 20, hidden: [] }), icc: u.get('icc'), page: 1 }; return await pageProducts(); }
       if ((mt = r.match(/^#\/visibility\/(\d+)/))) return await pageVisibility(+mt[1]);
       if (r === '#/warehouse-mode') return await pageWhMode();
       if (r === '#/investor-map') return await pageInvestorMap();
@@ -247,7 +247,7 @@
       if ((mt = r.match(/^#\/stock\/product\/(\d+)/))) return await pageStockProduct(+mt[1]);
       if (r.startsWith('#/stock-snapshot')) return await pageStockSnapshot(Object.fromEntries(new URLSearchParams(r.split('?')[1] || '')));
       if (r.startsWith('#/stock/ledger')) return await pageStockLedger({ act: (r.match(/act=(\w+)/) || [])[1], product: (r.match(/product=(\d+)/) || [])[1] });
-      if (r.startsWith('#/stock/lots')) return await pageLots();
+      if (r.startsWith('#/stock/lots')) return await pageLots({ kind: (r.match(/kind=([A-Z_]+)/) || [])[1] || '' });
       if (r === '#/stock/pool') return await pagePool();
       if (r === '#/stock/held') return await pageHeld();
       if ((mt = r.match(/^#\/stock\/counts\/(\d+)/))) return await pageCount(+mt[1]);
@@ -335,7 +335,7 @@
       if (r.startsWith('#/bank')) { const u = new URLSearchParams(r.split('?')[1] || ''); return await pageBank({ show: u.get('show') || undefined, bank: u.get('bank') || undefined, f: Object.fromEntries(['company', 'from', 'to', 'category', 'status', 'q'].filter(k => u.get(k)).map(k => [k, u.get(k)])) }); }
       if (r.startsWith('#/expenses')) return await pageExpenses((r.match(/month=([\d-]+)/) || [])[1]);
       if (r === '#/approvals') return await pageApprovals();
-      if (r.startsWith('#/settlements')) return await pageSettlements((r.match(/shop=(\d+)/) || [])[1]);
+      if (r.startsWith('#/settlements')) return await pageSettlements((r.match(/shop=(\d+)/) || [])[1], (r.match(/month=(\d{4}-\d{2})/) || [])[1]);
       if (r === '#/printers') return await pagePrinters();
       if (r === '#/print-queue') return await pagePrintQueue();
       if (r === '#/users') return await pageUsers();
@@ -354,7 +354,7 @@
       if (r.startsWith('#/sales-annual')) return await pageSalesAnnual();
       if (r.startsWith('#/sales-detailed')) return await pageSalesDetailed();
       if (r.startsWith('#/sales-import')) return await pageSalesImport((r.match(/fix=(\d+)/) || [])[1]);
-      if (r.startsWith('#/sales')) { const u = new URLSearchParams(r.split('?')[1] || ''); if (u.has('marketplace') || u.has('created_by')) SL.f = { ...Object.fromEntries(['marketplace', 'created_by', 'from', 'to', 'status'].filter(k => u.get(k)).map(k => [k, u.get(k)])), per_page: 50, page: 1 };      // R-F_SETUP-26 drill from the Sales card
+      if (r.startsWith('#/sales')) { const u = new URLSearchParams(r.split('?')[1] || ''); if (u.has('marketplace') || u.has('created_by')) SL.f = { ...Object.fromEntries(['marketplace', 'shop', 'created_by', 'from', 'to', 'status'].filter(k => u.get(k)).map(k => [k, u.get(k)])), per_page: 50, page: 1 };      // R-F_SETUP-26 drill from the Sales card
         return await pageSales((r.match(/import=(\d+)/) || [])[1]); }
       if (r === '#/permissions') return await pagePermissions();
       if (r === '#/playbooks') return await pagePlaybooks();
@@ -385,6 +385,49 @@
   }
   function findItem(pred) { for (const s of S.boot.menu) for (const i of s.items) if (pred(i)) return [s, i]; return [null, null]; }
 
+  /* R-G_CORE-103 the ONE chart partial of the app (no chart library per module). A chart = title, unit, type bar | stacked | donut, labels, series with values and
+     the link of each bar (the filtered list it counts), an optional line, and a "View data" table. Colours come from the page's own tokens. */
+  const CH_COL = ['var(--accent)', '#e0a030', '#5b8def', '#c0504d', '#7a9a3a', '#8e6bbf', '#3aa6a6', '#d07a3c'], CH_ICC = { RED: 'var(--err)', YELLOW: '#e0a030', OK: 'var(--ok,#2a8a4a)' };
+  function chartHtml(c) {
+    if (c.error) return `<div class="card chart-card"><div class="card-h"><h3>${esc(c.title)}</h3></div><div class="card-b muted">${esc(c.error)}</div></div>`;
+    const fmt = v => v == null ? '–' : (c.unit && c.unit.length === 3 ? money(v) : (+v).toLocaleString('en-GB')), ser = c.series || [], L = c.labels || [];
+    const sum = i => ser.reduce((a, s) => a + (+s.values[i] || 0), 0), empty = !ser.length || L.every((_, i) => ser.every(s => !+s.values[i]));
+    let svg = '';
+    if (!empty && c.type === 'donut') { const v = ser[0].values, tot = v.reduce((a, b) => a + b, 0) || 1; let ang = -Math.PI / 2; const R = 70, r = 42, cx = 90, cy = 90;
+      svg = `<svg viewBox="0 0 180 180" width="180" height="180" role="img" aria-label="${esc(c.title)}">${v.map((x, i) => { if (!x) return ''; const a2 = ang + x / tot * Math.PI * 2, big = a2 - ang > Math.PI ? 1 : 0, p = (rr, a) => `${cx + rr * Math.cos(a)},${cy + rr * Math.sin(a)}`;
+        const d = x === tot ? `M${cx},${cy - R} A${R},${R} 0 1 1 ${cx - 0.01},${cy - R} L${cx - 0.01},${cy - r} A${r},${r} 0 1 0 ${cx},${cy - r} Z` : `M${p(R, ang)} A${R},${R} 0 ${big} 1 ${p(R, a2)} L${p(r, a2)} A${r},${r} 0 ${big} 0 ${p(r, ang)} Z`; ang = a2;
+        return `<path d="${d}" fill="${CH_ICC[L[i]] || CH_COL[i % 8]}" data-chlink="${esc(ser[0].links[i])}" style="cursor:pointer"><title>${esc(L[i])}: ${fmt(x)}</title></path>`; }).join('')}<text x="90" y="96" text-anchor="middle" font-size="20" font-weight="700" fill="currentColor">${tot === 1 && !v.some(Boolean) ? 0 : v.reduce((a, b) => a + b, 0)}</text></svg>`; }
+    else if (!empty) { const stacked = c.type === 'stacked', lineV = ((c.line && c.line.values) || []).filter(v => v != null).map(Number), num = v => Number.isFinite(+v) ? +v : 0;
+      const W0 = Math.max(320, L.length * 46), P = 58, step = (W0 - P) / L.length, tilt = step < 64, H = 190, B = tilt ? 46 : 16, W = W0, bw = Math.min(34, step * 0.62);
+      const hi = L.map((_, i) => stacked ? ser.reduce((a, s) => a + Math.max(0, num(s.values[i])), 0) : Math.max(0, ...ser.map(s => num(s.values[i])))), lo = L.map((_, i) => stacked ? ser.reduce((a, s) => a + Math.min(0, num(s.values[i])), 0) : Math.min(0, ...ser.map(s => num(s.values[i]))));
+      let mx = Math.max(0, ...hi, ...lineV, num(c.limit)), mn = Math.min(0, ...lo, ...lineV, c.limit ? num(c.limit) : 0); if (mx === mn) mx = mn + 1;
+      const y = v => 10 + (H - 20) * (mx - v) / (mx - mn), y0 = y(0), tick = v => esc(fmt(v).replace(/\.00$/, ''));
+      let bars = ''; L.forEach((lab, i) => { const x0 = P + i * step + (step - bw) / 2; let up = 0, down = 0;
+        ser.forEach((s, k) => { const v = num(s.values[i]); if (!v) return; const w = stacked ? bw : bw / ser.length, x = stacked ? x0 : x0 + k * w; let a, b2;
+          if (stacked) { if (v > 0) { a = y(up + v); b2 = y(up); up += v; } else { a = y(down); b2 = y(down + v); down += v; } } else { a = y(Math.max(v, 0)); b2 = y(Math.min(v, 0)); }
+          bars += `<rect x="${x.toFixed(1)}" y="${a.toFixed(1)}" width="${Math.max(1, w - 1).toFixed(1)}" height="${Math.max(1, b2 - a).toFixed(1)}" fill="${CH_COL[k % 8]}" rx="2" data-chlink="${esc(s.links[i] || '')}" style="cursor:pointer"><title>${esc(lab)} · ${esc(s.name)}: ${fmt(v)}</title></rect>`; });
+        const tx = P + i * step + step / 2; bars += `<text x="${tx.toFixed(1)}" y="${H + 12}" text-anchor="${tilt ? 'end' : 'middle'}" font-size="10" fill="currentColor" opacity=".7"${tilt ? ` transform="rotate(-35 ${tx.toFixed(1)} ${H + 12})"` : ''}>${esc(String(lab).replace(/^Week of /, '').slice(0, 14))}</text>`; });
+      const lv = (c.line && c.line.values) || [], pts = lv.map((v, i) => v == null ? null : [P + i * step + step / 2, y(+v)]), path = pts.reduce((a, p, i) => p ? a + (pts[i - 1] ? ' L' : ' M') + p[0].toFixed(1) + ',' + p[1].toFixed(1) : a, '');
+      svg = `<svg viewBox="0 0 ${W} ${H + B}" width="100%" style="max-width:${W}px;min-width:${Math.min(W, 300)}px" role="img" aria-label="${esc(c.title)}"><line x1="${P}" x2="${W}" y1="${y0.toFixed(1)}" y2="${y0.toFixed(1)}" stroke="currentColor" opacity=".25"/>
+        <text x="${P - 6}" y="${(y(mx) + 4).toFixed(1)}" text-anchor="end" font-size="10" fill="currentColor" opacity=".6">${tick(mx)}</text><text x="${P - 6}" y="${(y0 + 4).toFixed(1)}" text-anchor="end" font-size="10" fill="currentColor" opacity=".6">0</text>${mn < 0 ? `<text x="${P - 6}" y="${(y(mn) + 4).toFixed(1)}" text-anchor="end" font-size="10" fill="currentColor" opacity=".6">${tick(mn)}</text>` : ''}
+        ${c.limit ? `<line x1="${P}" x2="${W}" y1="${y(num(c.limit)).toFixed(1)}" y2="${y(num(c.limit)).toFixed(1)}" stroke="var(--err)" stroke-dasharray="4 3"><title>Alert limit ${fmt(c.limit)}</title></line>` : ''}${bars}
+        ${path ? `<path d="${path}" fill="none" stroke="currentColor" stroke-width="2"/>${pts.map(p => p ? `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" fill="currentColor"/>` : '').join('')}` : ''}</svg>`; }
+    const keys = c.type === 'donut' ? L.map((l, i) => [l, CH_ICC[l] || CH_COL[i % 8]]) : ser.map((s, k) => [s.name, CH_COL[k % 8]]).concat(c.limit ? [['Alert limit ' + fmt(c.limit), 'var(--err)']] : []).concat(c.line && c.line.values.some(v => v != null) ? [[c.line.name, 'currentColor']] : []);
+    const table = `<div class="tbl-wrap"><table class="t"><thead><tr><th></th>${c.type === 'donut' ? '<th class="num">' + esc(c.unit) + '</th>' : ser.map(s => `<th class="num">${esc(s.name)}</th>`).join('') + (c.type === 'stacked' && ser.length > 1 ? '<th class="num">Total</th>' : '') + (c.line ? `<th class="num">${esc(c.line.name)}</th>` : '')}</tr></thead><tbody>${L.map((l, i) => `<tr><td>${esc(l)}</td>${c.type === 'donut' ? `<td class="num"><a href="${esc(ser[0].links[i])}">${fmt(ser[0].values[i])}</a></td>` : ser.map(s => `<td class="num"><a href="${esc(s.links[i] || '#')}">${fmt(s.values[i])}</a></td>`).join('') + (c.type === 'stacked' && ser.length > 1 ? `<td class="num">${fmt(sum(i))}</td>` : '') + (c.line ? `<td class="num">${fmt(c.line.values[i])}</td>` : '')}</tr>`).join('')}</tbody></table></div>`;
+    return `<div class="card chart-card" data-chart="${esc(c.key)}"><div class="card-h" style="flex-wrap:wrap;gap:6px"><h3>${esc(c.title)}</h3><span class="small muted">${esc(c.unit || '')}</span><button class="btn sm" data-chtab style="margin-left:auto">View data</button></div>
+      <div class="card-b" data-chpic style="overflow-x:auto">${empty ? `<div class="empty">${esc(c.empty || 'Nothing to show.')}</div>` : svg}<div class="small" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">${keys.map(([n, col]) => `<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${col};vertical-align:middle"></span> ${esc(n)}</span>`).join('')}</div>${c.note ? `<div class="small muted" style="margin-top:4px">${esc(c.note)}</div>` : ''}</div>
+      <div class="card-b" data-chdata hidden>${table}</div></div>`;
+  }
+  /** Loads the charts of a dashboard under the page and wires "View data" and the clicks. Same filters as the page. */
+  async function dashCharts(which, params = {}, withFilters = false) {
+    const route = S.route; let d; try { d = await api('charts/' + which + '?' + new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null))); } catch (e) { return; }
+    if (S.route !== route || !d.charts || !d.charts.length) return; let box = $('#dashCharts'); if (!box) { box = document.createElement('div'); box.id = 'dashCharts'; box.style.marginTop = '16px'; $('#main').appendChild(box); }
+    const flt = withFilters ? `<div class="list-bar" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><b>Charts</b><select id="chM">${[6, 12, 24].map(m => `<option value="${m}" ${+d.months === m ? 'selected' : ''}>Last ${m} months</option>`).join('')}</select>${(d.shops || []).length > 1 ? `<select id="chS"><option value="">Every shop</option>${d.shops.map(s => `<option value="${s.id}" ${+d.shop === s.id ? 'selected' : ''}>${esc(s.label)}</option>`).join('')}</select>` : ''}</div>` : '';
+    box.innerHTML = flt + `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:12px">${d.charts.map(chartHtml).join('')}</div>`;
+    $$('[data-chtab]', box).forEach(b => b.onclick = () => { const c = b.closest('.chart-card'), t = $('[data-chdata]', c), on = t.hidden; t.hidden = !on; b.textContent = on ? 'Hide data' : 'View data'; });
+    $$('[data-chlink]', box).forEach(el => el.addEventListener('click', () => { const l = el.getAttribute('data-chlink'); if (l) go(l); }));
+    const re = () => dashCharts(which, { ...params, months: $('#chM') ? $('#chM').value : '', shop: $('#chS') ? $('#chS').value : '' }, withFilters); if ($('#chM', box)) $('#chM', box).onchange = re; if ($('#chS', box)) $('#chS', box).onchange = re;
+  }
   async function pageHome() {
     const b = S.boot; let d = { cards: [], recent: [] };
     try { d = await api('home'); } catch (e) {}
@@ -397,6 +440,7 @@
       ${b.menu.filter(s => s.name !== 'Home').map(s => `<a class="card kpi" href="${esc(s.items[0].route)}" style="text-decoration:none;color:inherit"><div class="lbl">${ic(secIcon(s.name))} ${esc(s.name)}</div><div class="foot">${s.items.length} screens</div></a>`).join('')}</div></div></div>`;
     $('#hCreate').onclick = () => openCreate();
     $$('#main [data-go]').forEach(k => k.onclick = () => k.dataset.go && go(k.dataset.go));
+    dashCharts('home', {}, true);      /* R-G_CORE-103 */
   }
   function pageScreen(no) {
     const [, it] = findItem(i => i.no === no);
@@ -2654,6 +2698,7 @@
   // R-G_CORE-38 tasks dashboard (bosses) with R-G_CORE-39 "Needs attention today"
   async function pageTaskDash() {
     const qs = new URLSearchParams(location.hash.split('?')[1] || ''); const F = {}; ['person', 'shop'].forEach(k => { if (qs.get(k)) F[k] = qs.get(k); });
+    setTimeout(() => dashCharts('tasks', F), 0);      /* R-G_CORE-103 open tasks by category, the same filters */
     busy(true); let d, base; try { [d, base] = await Promise.all([api('tasks/dashboard?' + new URLSearchParams(F).toString()), api('tasks?scope=to_approve')]); } catch (e) { busy(false); if (e.message === 'That page is for Partners and Managers.') throw e; return toast(e.message, 'err'); } busy(false);
     const t = d.tiles, tile = (l, v, chip, cls, foot) => `<a class="card kpi ${cls || ''}" href="#/tasks?scope=all&chip=${chip}" style="text-decoration:none;color:inherit"><div class="bar"></div><div class="lbl">${l}</div><div class="val">${v}</div>${foot ? `<div class="foot">${esc(foot)}</div>` : ''}</a>`;
     $('#main').innerHTML = `<div class="page-head"><div><h1>Tasks dashboard</h1><div class="sub">Every tile opens the list with that chip.</div></div><div class="actions"><div class="seg"><button type="button" data-sc="mine">Mine</button><button type="button" data-sc="all">All tasks</button><button type="button" class="on">Dashboard</button><button type="button" data-sc="team">Team</button><button type="button" data-sc="weekly">Weekly report</button></div>
@@ -2983,6 +3028,7 @@
   }
   async function pageMoney() {
     busy(true); let d; try { d = await api('money'); } finally { busy(false); }
+    setTimeout(() => dashCharts('money', {}, true), 0);      /* R-G_CORE-103 payouts vs bank, cash 90 days */
     const k = (l, v, foot, tone, href) => `<a class="card kpi ${tone || ''}" href="${href}" style="text-decoration:none;color:inherit;display:block"><div class="bar"></div><div class="lbl">${l}</div><div class="val">${v}</div><div class="foot">${foot || ''}</div></a>`;
     const todo = [[d.unmatched, 'bank line(s) to sort out', '#/bank'], [d.to_book, 'marketplace statement(s) to book', '#/settlements'], [d.approvals, 'request(s) waiting for approval', '#/approvals'], [d.refunds, 'refund proposal(s) to decide', '#/refunds'], [d.overdue, 'supplier payment(s) overdue', '#/buying']].filter(x => x[0]);
     $('#main').innerHTML = `<div class="page-head"><div><h1>Money</h1><div class="sub">Where the money is today, by the books. All amounts in ${esc(d.base)}.</div></div><div class="actions"><a class="btn" href="#/profit">Profit views</a><a class="btn" href="#/vat-return">VAT return</a><a class="btn" href="#/loans">Loans</a><a class="btn" href="#/budgets">Budgets</a><a class="btn" href="#/ledger">Ledger</a></div></div>
@@ -3195,9 +3241,9 @@
     $$('#main [data-phone]').forEach(b => b.onclick = () => miniForm('Phone check with the supplier', 'Call the supplier on a number you already know (not one from the message that asked for the change) and confirm the bank details.', [{ name: 'note', label: 'Who you spoke to, on which number', required: true }], async v => { const r = await api(`supplier-banks/${b.dataset.phone}/phone-check`, { method: 'POST', body: { note: v.note } }); again(); return r; }, 'Record'));
     $$('#main [data-no]').forEach(b => b.onclick = () => miniForm('Reject this request', 'The person who asked sees your reason.', [{ name: 'reason', label: 'Reason', required: true }], async v => { const r = await api(`approvals/${b.dataset.no}`, { method: 'POST', body: { approve: false, reason: v.reason } }); again(); return r; }, 'Reject'));
   }
-  async function pageSettlements(shop) {
-    busy(true); let d; try { d = await api('settlements' + (shop ? '?shop=' + shop : '')); } finally { busy(false); }
-    const E = d.can_edit, again = () => pageSettlements(shop), c = k => d.counts[k] || { n: 0, v: 0 }, loadedShops = [...new Set(d.rows.filter(r => r.status === 'LOADED').map(r => r.shop))];
+  async function pageSettlements(shop, month) {
+    busy(true); let d; try { d = await api('settlements?' + new URLSearchParams(Object.entries({ shop, month }).filter(([, v]) => v))); } finally { busy(false); }
+    const E = d.can_edit, again = () => pageSettlements(shop, month), c = k => d.counts[k] || { n: 0, v: 0 }, loadedShops = [...new Set(d.rows.filter(r => r.status === 'LOADED').map(r => r.shop))];
     $('#main').innerHTML = `<div class="page-head"><div><h1>Payouts & settlements</h1><div class="sub">The marketplace's money file is checked to the penny before anything is loaded. Booking a statement moves its sales out of “not settled yet” and its fees into costs; the payout is matched when it shows on the bank.</div></div>
         <div class="actions"><select class="q" id="stShop" style="min-width:0" aria-label="Shop"><option value="">All shops</option>${d.shops.map(s => `<option value="${s.id}" ${s.id == d.shop ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select>${E ? `<button class="btn primary" id="stLoad">${ic('plus')} Load money file</button>` : ''}</div></div>
       <div class="kpis"><div class="card kpi ${+c('LOADED').n ? 'warn' : 'done'}"><div class="bar"></div><div class="lbl">Loaded, not booked</div><div class="val">${c('LOADED').n}</div><div class="foot">${money(c('LOADED').v || 0)}</div></div>
@@ -3669,13 +3715,14 @@
     if (st.act) stockAction(st.act, { product: st.product }, () => again({}));
   }
   async function pageLots(st = {}) {
-    busy(true); let d; try { d = await api('stock/lots?' + new URLSearchParams({ q: st.q || '', left: st.all ? '0' : '1', nocost: st.nocost ? '1' : '0', type: st.type || '' })); } finally { busy(false); }
-    $('#main').innerHTML = `<div class="page-head"><div><h1>Lots and owners</h1><div class="sub">A lot = units received together, with their cost and owner. The oldest lot is sold first.</div></div>
+    busy(true); let d; try { d = await api('stock/lots?' + new URLSearchParams({ q: st.q || '', left: st.all ? '0' : '1', nocost: st.nocost ? '1' : '0', type: st.type || '', kind: st.kind || '' })); } finally { busy(false); }
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Lots and owners</h1><div class="sub">A lot = units received together, with their cost and owner. The oldest lot is sold first.${st.kind ? ` <span class="chip accent">Only lots on ${esc(st.kind === 'NONE' ? 'no location' : st.kind.toLowerCase().replace(/_/g, ' '))} locations <a href="#" id="lKindX" title="Show every lot">×</a></span>` : ''}</div></div>
       <div class="actions"><div class="seg"><button type="button" class="${st.all ? '' : 'on'}" data-all="0">With stock</button><button type="button" class="${st.all ? 'on' : ''}" data-all="1">All</button></div></div></div>
       ${d.no_cost && d.show_value ? `<div class="card" style="margin-bottom:12px;border-color:var(--warn)"><div class="card-b"><b>${d.no_cost.toLocaleString('en-GB')} lot(s) with stock have no cost.</b> Their units count as worth 0, and a sale of them would show too much profit. ${st.nocost ? `<a href="#" id="lNoCostOff">Show all lots</a>` : `<a href="#" id="lNoCost">Show only these</a>`}</div></div>` : ''}
       <div class="card"><div class="list-bar"><input class="q" id="lq" placeholder="SKU or lot…" value="${esc(st.q || '')}"><select id="lTy"><option value="">Every type</option>${(d.owner_types || []).map(t => `<option ${st.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Lot</th><th>SKU</th><th>Received</th><th>From</th><th>Owner</th><th>Type</th>${d.show_value ? '<th class="num">Cost</th>' : ''}<th class="num">Received</th><th class="num">Left</th><th></th></tr></thead>
       <tbody>${d.rows.map(r => `<tr><td>${esc(r.lot_code)}${r.qc ? ` <span class="chip ${r.qc.result === 'PASSED' ? 'done' : 'err'}" title="${esc(r.qc.code)} · ${esc(r.qc.date || '')} · ${esc(r.qc.inspector || '')}">QC ${r.qc.result === 'PASSED' ? 'passed' : 'failed'}</span>` : ''}</td><td><a href="#/stock/product/${r.product_id}">${esc(r.sku)}</a></td><td>${esc(r.received_date)}</td><td>${esc(r.source)}</td><td>${esc(r.owner || 'Company')}</td><td>${r.type ? `<span class="chip plain" data-lot-type title="JOINT ≥ 2 investors · HOLDING 1 · CENTRAL pool · PRIVATE">${esc(r.type)}</span> ` : ''}<span class="small muted">${esc(r.visibility || '')}</span></td>${d.show_value ? `<td class="num">${(+r.unit_cost_gbp).toFixed(4)}${r.landed_status === 'PROVISIONAL' ? ' <span class="chip warn plain">prov.</span>' : ''}</td>` : ''}<td class="num">${r.qty}</td><td class="num">${r.qty_left}</td><td>${r.qty_left > 0 && ['OWNER', 'MANAGER'].includes(S.boot.user.role) ? `<button class="btn sm" data-own="${r.id}" data-code="${esc(r.lot_code)}">Give to owner</button>` : ''}${d.can_cost && ['OPENING', 'MANUAL'].includes(r.source) ? ` <button class="btn sm ${+r.unit_cost_gbp > 0 ? '' : 'primary'}" data-cost="${r.id}">Set cost</button>` : ''}${d.can_cost && ['OPENING', 'MANUAL'].includes(r.source) && r.lot_status !== 'VOID' && +r.qty_left === +r.qty ? ` <button class="btn sm ghost" data-void="${r.id}">Void</button>` : ''}${r.lot_status === 'VOID' ? ' <span class="chip plain">VOID</span>' : ''}</td></tr>`).join('')}</tbody></table>${d.rows.length ? '' : '<div class="empty">No lots yet.</div>'}</div></div>`;
     $$('#main [data-all]').forEach(b => b.onclick = () => pageLots({ ...st, all: b.dataset.all === '1' }));
+    if ($('#lKindX')) $('#lKindX').onclick = e => { e.preventDefault(); history.replaceState(null, '', '#/stock/lots'); pageLots({ ...st, kind: '' }); };
     $('#lq').onkeydown = e => { if (e.key === 'Enter') pageLots({ ...st, q: e.target.value }); }; $('#lTy').onchange = e => pageLots({ ...st, type: e.target.value });
     if ($('#lNoCost')) $('#lNoCost').onclick = e => { e.preventDefault(); pageLots({ ...st, nocost: true }); };
     if ($('#lNoCostOff')) $('#lNoCostOff').onclick = e => { e.preventDefault(); pageLots({ ...st, nocost: false }); };
@@ -3977,6 +4024,7 @@
   }
   async function pageBuying(page = 1, flt = {}) {
     busy(true); let d; try { d = await api('buying?' + new URLSearchParams({ page, ...flt })); } finally { busy(false); }
+    setTimeout(() => dashCharts('buying', (d.stages && d.stages.filters) || {}), 0);      /* R-G_CORE-103 cycles by step, the same filters */
     const F = (d.stages && d.stages.filters) || {}, fgo = x => { const n = { supplier: F.supplier || '', q: F.q || '', stage: F.stage || '', from: F.from || '', to: F.to || '', investor: F.investor || '', ...x }; go('#/buying?' + new URLSearchParams(Object.fromEntries(Object.entries(n).filter(([, v]) => v !== '' && v !== null)))); };
     const k = d.kpi || {}, fail = (lbl, key) => `<div class="card" data-failed="${esc(lbl)}"><div class="card-b muted">${esc(lbl)}: Could not load – retry. <a href="#" data-retry="${key}">Retry</a></div></div>`, card = (lbl, val, foot, tone, goto) => `<div class="card kpi ${tone || ''}" ${goto ? `data-go="${goto}" style="cursor:pointer"` : ''}><div class="bar"></div><div class="lbl">${lbl}</div><div class="val">${val}</div><div class="foot">${foot || ''}</div></div>`;
     const qs = new URLSearchParams(Object.fromEntries(Object.entries({ supplier: F.supplier || '', q: F.q || '', stage: F.stage || '' }).filter(([, v]) => v))).toString();

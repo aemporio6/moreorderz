@@ -117,7 +117,7 @@ class ProductsList
         return $q;
     }
 
-    public const FILTERS = ['company', 'category', 'brand', 'carrier', 'investor', 'logistic', 'supplier', 'trend', 'country', 'ean', 'asin', 'mode', 'tag', 'oos'];
+    public const FILTERS = ['icc', 'company', 'category', 'brand', 'carrier', 'investor', 'logistic', 'supplier', 'trend', 'country', 'ean', 'asin', 'mode', 'tag', 'oos'];
 
     /** R-D-36 the filter bar (each is an AND; the same EXISTS rules everywhere the list is used: page, export, search). */
     public static function filters($q, array $f, int $ent): void
@@ -138,6 +138,7 @@ class ProductsList
             ->whereColumn('cv.fk_id_product', 'p.id')->where('cb.fk_id_company', $co)->where('cb.f_active', 1)); }      /* company of a shop the product is visible in */
         if (in_array($md = strtoupper((string) ($f['mode'] ?? '')), ['POOL', 'PRIVATE'], true)) $q->whereExists(fn ($x) => $x->from('t_product_visibility as mv')->whereColumn('mv.fk_id_product', 'p.id')->whereRaw('UPPER(mv.visibility_mode) = ?', [$md])->when($mp, fn ($w) => $w->where('mv.fk_id_marketplace', $mp)));      /* with a marketplace chip: that marketplace's mode; without: any */
         if (in_array($tg = (int) ($f['tag'] ?? 0), [1, 2, 3], true)) $q->where("p.f_tag$tg", 1);
+        if (in_array($ic = strtoupper((string) ($f['icc'] ?? '')), ['RED', 'YELLOW', 'OK'], true)) $q->where('p.icc_status', $ic)->whereNotNull('p.icc_run_at');      /* R-G_CORE-103 the ICC chart's slice */
         if (! empty($f['oos'])) $q->where(fn ($w) => $w->where('p.f_out_of_stock', 1)->orWhere('p.stock', '<=', 0));      /* out of stock = the flag, or nothing left */
     }
 

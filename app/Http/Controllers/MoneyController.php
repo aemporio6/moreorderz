@@ -368,8 +368,8 @@ class MoneyController extends Controller
     public function settlements(Request $r)
     {
         $this->can($r, 'money.SEE');
-        $ent = (int) Context::ent(); $shop = (int) $r->query('shop', 0);
-        $q = \App\Services\Perm::mine(DB::table('mo_settlements as s'), 's.fk_id_branch')->join('t_branches as b', 'b.id', '=', 's.fk_id_branch')->where('s.fk_id_ent', $ent)->when($shop, fn ($x) => $x->where('s.fk_id_branch', $shop));
+        $ent = (int) Context::ent(); $shop = (int) $r->query('shop', 0); $month = preg_match('/^\d{4}-\d{2}$/', (string) $r->query('month')) ? (string) $r->query('month') : null;      /* R-G_CORE-103 the payouts chart's month */
+        $q = \App\Services\Perm::mine(DB::table('mo_settlements as s'), 's.fk_id_branch')->when($month, fn ($x) => $x->whereRaw("DATE_FORMAT(s.statement_date, '%Y-%m') = ?", [$month]))->join('t_branches as b', 'b.id', '=', 's.fk_id_branch')->where('s.fk_id_ent', $ent)->when($shop, fn ($x) => $x->where('s.fk_id_branch', $shop));
         $counts = (clone $q)->groupBy('s.status')->selectRaw('s.status, COUNT(*) n, SUM(s.payable) v')->get()->keyBy('status');
         return ['rows' => $q->orderByDesc('s.statement_date')->orderByDesc('s.id')->limit(300)->get(['s.id', 'b.shop_name as shop', 's.statement_id', 's.payout_id', 's.statement_date', 's.payout_date', 's.currency', 's.total', 's.net_sales', 's.shipping', 's.fees', 's.adjustments', 's.reserve', 's.payable', 's.status', 's.rows_count', 's.f_rows_complete']),
             'counts' => $counts, 'shop' => $shop, 'balances' => Settle::shopBalances($ent), 'base' => Fx::base($ent), 'can_edit' => \App\Services\Perm::has($r->user(), 'money.EDIT'), 'shops' => $this->lists($ent)['shops'],

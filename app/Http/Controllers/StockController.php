@@ -260,6 +260,7 @@ class StockController extends Controller
         if ($r->query('left', '1') === '1') $q->where('l.qty_left', '>', 0);
         if ($v = $r->query('q')) $q->where(fn ($w) => $w->where('l.sku', 'like', "%$v%")->orWhere('l.lot_code', 'like', "%$v%"));
         if ($r->query('nocost') === '1') $q->where('l.unit_cost_gbp', '<=', 0);
+        if (($k = strtoupper((string) $r->query('kind', ''))) !== '') $q->whereExists(fn ($x) => $x->from('fin_lot_balances as fb')->leftJoin('cat_inventory_locations as fc', 'fc.id', '=', 'fb.fk_id_location')->whereColumn('fb.fk_id_lot', 'l.id')->where('fb.qty', '<>', 0)->when($k === 'NONE', fn ($w) => $w->whereNull('fc.id'), fn ($w) => $w->where('fc.kind', $k)));      // R-G_CORE-103 the stock chart's part
         $money = \App\Services\Perm::has($r->user(), 'stock.MONEY');
         $cols = ['l.id', 'l.lot_code', 'l.sku', 'p.id as product_id', 'p.product_name_vendor as name', 'l.source', 'l.received_date', 'l.qty', 'l.qty_left', 'l.visibility', 'l.landed_status', 'l.lot_status', 'l.po_id', 'l.fk_id_cycle', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as owner")];
         if ($money) $cols[] = 'l.unit_cost_gbp';
