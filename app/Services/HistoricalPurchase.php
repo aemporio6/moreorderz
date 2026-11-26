@@ -50,7 +50,8 @@ class HistoricalPurchase
             /* owner entity: chosen or found by code / name – never created silently */
             $owner = ! empty($e['owner']) ? (int) $e['owner'] : null;
             if (! $owner && trim((string) ($e['owner_name'] ?? '')) !== '') $owner = SrcNames::owner($ent, $e['owner_name'], $log);
-            if (! $owner && Choices::get('OLD_ENTRY_OWNER_REQUIRED', $ent) === 'Y') throw new \InvalidArgumentException('Owner Entity (buyer) is required – companies & persons come from Setup > Investor Master - never created silently.' . (! empty($e['owner_name']) ? " \"{$e['owner_name']}\" was not found." : ''));
+            if (! $owner && ($e['source'] ?? '') === 'MYTOOL') $log[] = 'WARN owner entity not known in MY TOOL – left empty, pick it on the cycle';      /* MY TOOL kept the buying company only */
+            elseif (! $owner && Choices::get('OLD_ENTRY_OWNER_REQUIRED', $ent) === 'Y') throw new \InvalidArgumentException('Owner Entity (buyer) is required – companies & persons come from Setup > Investor Master - never created silently.' . (! empty($e['owner_name']) ? " \"{$e['owner_name']}\" was not found." : ''));
             /* duplicate supplier + order reference (R-B_SOURCING-7) */
             if ($x = SrcDuplicate::existing($ent, (int) $sup->id, $ref)) {
                 if (trim((string) ($e['force_reason'] ?? '')) === '') throw new SrcDuplicateException($x, SrcDuplicate::message($x));

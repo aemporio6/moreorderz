@@ -72,4 +72,13 @@ class CoreExtrasController extends Controller
 
     /** MR-1539 where a record came from (file + row, old tool row, GRN / PO, journals). */
     public function lineage(Request $r, string $key, int $id) { abort_unless(\App\Services\Registry::exists($key), 404, 'Unknown form.'); Perm::need($r->user(), "form:$key:VIEW"); return \App\Services\Lineage::of((string) \App\Services\Registry::table($key), $id, $this->ent()); }
+
+    /** Owner 26-11: MY TOOL purchase history into Old purchases – check (writes nothing), then import (Owner). */
+    public function mytool(Request $r)
+    {
+        abort_unless(($r->user()->role_code ?? '') === 'OWNER', 403, 'Only the Owner loads the MY TOOL data.');
+        $r->validate(['file' => 'required|file|max:30720']); $json = (string) file_get_contents($r->file('file')->getRealPath());
+        try { return $r->boolean('apply') ? \App\Services\MyToolImport::import($this->ent(), $json, $r->user()) : \App\Services\MyToolImport::check($this->ent(), $json); }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+    }
 }

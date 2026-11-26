@@ -267,4 +267,33 @@ class CoreAreaTest extends TestCase
         $this->actingAs($this->owner); $this->assertArrayHasKey('security', $this->getJson('/api/health')->assertOk()->json());
         $this->assertFileExists(base_path('tools/loadtest.mjs'));
     }
+
+    public function test_mytool_purchase_history_import(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id); Perm::flush();
+        $json = json_encode(['format' => 'mytool', 'data' => [
+            'parties' => ['SUP-901' => ['code' => 'SUP-901', 'type' => 'supplier', 'name' => 'Test Mytool Supplier'], 'FWD-901' => ['code' => 'FWD-901', 'type' => 'forwarder', 'name' => 'Test Mytool Forwarder']],
+            'purchases' => ['PO-MT-1' => ['no' => 'PO-MT-1', 'oldRef' => 'OLD-1', 'date' => '2024-03-01', 'party' => 'SUP-901', 'cur' => 'USD', 'status' => 'closed', 'lines' => [['sku' => 'MT-SKU-1', 'p' => 'Brush', 'q' => 100, 'u' => 0.95, 'a' => 95]], 'extras' => []],
+                'PO-MT-2' => ['no' => 'PO-MT-2', 'date' => '2024-04-01', 'party' => 'SUP-901', 'cur' => 'USD', 'desc' => 'Soap order', 'lines' => [], 'extras' => []]],
+            'shipments' => ['SH-MT-1' => ['no' => 'SH-MT-1', 'date' => '2024-03-20', 'party' => 'FWD-901', 'mode' => 'air', 'goods' => 'Brushes', 'purchases' => ['PO-MT-1']], 'SH-MT-2' => ['no' => 'SH-MT-2', 'date' => '2024-05-01', 'party' => 'FWD-901', 'mode' => 'sea', 'purchases' => []]],
+            'payments' => [
+                'P1' => ['no' => 'P1', 'date' => '2024-03-02', 'type' => 'deposit', 'cur' => 'USD', 'amount' => 30, 'fxRate' => 0.79, 'direction' => 'out', 'allocations' => [['ref' => 'PO-MT-1', 'amount' => 30]]],
+                'P2' => ['no' => 'P2', 'date' => '2024-03-15', 'type' => 'balance', 'cur' => 'USD', 'amount' => 65, 'direction' => 'out', 'forRef' => 'PO-MT-1'],
+                'P3' => ['no' => 'P3', 'date' => '2024-04-02', 'type' => 'full', 'cur' => 'USD', 'amount' => 50, 'direction' => 'out', 'allocations' => [['ref' => 'PO-MT-2', 'amount' => 50]]],
+                'P4' => ['no' => 'P4', 'date' => '2024-03-21', 'type' => 'freight', 'cur' => 'USD', 'amount' => 20, 'direction' => 'out', 'forRef' => 'SH-MT-1'],
+                'P5' => ['no' => 'P5', 'date' => '2024-05-02', 'type' => 'freight', 'cur' => 'USD', 'amount' => 40, 'direction' => 'out', 'forRef' => 'SH-MT-2'],
+                'P6' => ['no' => 'P6', 'date' => '2024-05-03', 'type' => 'legacy', 'cur' => 'USD', 'amount' => 156, 'direction' => 'out', 'allocations' => [['amount' => 156, 'belongsTo' => 'other']]]]]]);
+        $c = \App\Services\MyToolImport::check(1, $json);
+        $this->assertSame(3, $c['purchases']); $this->assertSame(1, $c['freight_only']); $this->assertSame(1, $c['not_purchases']); $this->assertSame(1, $c['with_freight']);
+        $this->assertSame(0, DB::table('t_src_cycles')->where('order_ref', 'PO-MT-1')->count(), 'check writes nothing');
+        $f = function () use ($json) { $p = tempnam(sys_get_temp_dir(), 'mt'); file_put_contents($p, $json); return new \Illuminate\Http\UploadedFile($p, 'MYTOOL-DATA.json', null, null, true); };
+        $r = $this->post('/api/mytool-import', ['file' => $f(), 'apply' => 1])->assertOk()->json(); $this->assertSame(3, $r['imported'], json_encode($r['failed']));
+        $cy = DB::table('t_src_cycles')->where('order_ref', 'PO-MT-1')->first(); $this->assertSame('HISTORICAL', $cy->cycle_type);
+        $po = DB::table('t_src_po')->where('fk_id_cycle', $cy->id)->first(); $this->assertEqualsWithDelta(95.0, (float) $po->po_total, 0.01);
+        $this->assertEqualsWithDelta(95.0, (float) DB::table('t_src_payments')->where('fk_id_po', $po->id)->sum('payment_amount'), 0.01, 'deposit + balance');
+        $this->assertSame(0, (int) DB::table('fin_lots')->where('po_id', $po->id)->count(), 'nothing received – no stock counted twice');
+        $this->assertSame('FORWARDER', DB::table('t_src_suppliers')->where('supplier_code', 'MT-FWD-901')->value('supplier_type'));
+        $this->assertSame(0, $this->post('/api/mytool-import', ['file' => $f(), 'apply' => 1])->json('imported'), 'a second run adds nothing');
+        $m = $this->makeUser('MANAGER'); $this->actingAs($m); $this->post('/api/mytool-import', ['file' => $f()])->assertStatus(403);
+    }
 }
