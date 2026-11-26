@@ -43,6 +43,7 @@ class WorkController extends Controller
     {
         Rights::check('VIEW', $key);
         $page = RecordService::page($key, $id);
+        $page['dq'] = \App\Services\DqScore::chip($key, $id);      // R-G_CORE-108 completeness chip (master forms only; reads)
         // remembered for "Opened lately" in search
         $ix = DB::table('sys_search_index')->where('url', "#/rec/$key/$id")->first(['title', 'subtitle']);
         \App\Services\Finder::opened($r->user(), 'record', $ix->title ?? (\App\Services\Registry::fields($key)[0]['form_title'] . " #$id"), $ix->subtitle ?? null, "#/rec/$key/$id");
@@ -218,6 +219,9 @@ class WorkController extends Controller
     public function taskBulkUndo(Request $r, int $id) { return $this->act(fn () => \App\Services\TaskBulk::undo($id, $r->user())); }
 
     /** Approve / send back (R-G_CORE-7) and the score preview (R-G_CORE-8). */
+    public function taskBoard(Request $r) { return \App\Services\TaskBoard::data($r->user(), $r->query('ym')); }
+    public function taskBoardView(Request $r) { try { return \App\Services\TaskBoard::setView($r->user(), (string) $r->input('view')); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
+    public function taskDrop(Request $r, int $id) { try { return \App\Services\TaskBoard::drop($id, (string) $r->input('column'), $r->user(), $r->input('note'), $r->input('quality')); } catch (\InvalidArgumentException | \RuntimeException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
     public function taskApprove(Request $r, int $id) { try { return \App\Services\TaskScore::approve($id, $r->user(), $r->input('quality')); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
     public function taskRework(Request $r, int $id) { try { return \App\Services\TaskScore::rework($id, $r->user(), (string) $r->input('reason')); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
     public function taskScore(Request $r, int $id) { $t = DB::table('tasks')->where('id', $id)->first() ?? abort(404); return ['preview' => \App\Services\TaskScore::parts($t, strtoupper((string) $r->query('quality', 'GOOD'))), 'frozen' => $t->score]; }

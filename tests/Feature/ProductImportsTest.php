@@ -127,7 +127,7 @@ class ProductImportsTest extends TestCase
         $this->assertSame('DONE', DB::table('tasks')->where('id', $t[0]->id)->value('status'));
         // item note with no vendor and not bought locally
         $sale = $this->f('t_sales', ['fk_id_ent' => 1, 'order_no' => 'DQ-1', 'd_order' => '2026-11-03', 'sku' => 'DQ-C1', 'qty' => 1, 'status' => 'Pending', 'ds_note' => 'gift wrap', 'bought_local' => 0, 'created_at' => now()]);
-        $this->assertSame(1, \App\Services\DataQuality::run(1)['item_note']['opened']); $this->assertSame(1, DB::table('tasks')->where('dedupe_key', 'DQ_ITEM_NOTE:' . $sale)->count());
+        $this->assertSame(1, \App\Services\DataQuality::run(1)['item_note']['opened']); $this->assertSame(1, DB::table('tasks')->where('dedupe_key', 'DQ_ITEM_NOTE:sale:' . $sale)->count());
         DB::table('t_sales')->where('id', $sale)->update(['bought_local' => 1]); $this->assertSame(1, \App\Services\DataQuality::run(1)['item_note']['closed']);
         $va = $this->makeUser('VA'); $this->actingAs($va)->postJson('/api/data-quality/run')->assertStatus(403);
     }

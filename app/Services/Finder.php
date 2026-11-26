@@ -53,6 +53,7 @@ class Finder
         ['Products: families and parent + child file', 'product family link import parent child sku staged import csv generator import inventory', '#/product-imports', 'stock.CHANGE'],
         ['Data quality', 'data quality checks item note no vendor child active parent inactive family counts active out of stock inactive', '#/data-quality', 'stock.SEE'],
         ['Allocation plan', 'allocations incoming stock per location eta proposed transfers after grn confirm transfer fulfilment centre 3pl', '#/allocation-plan', 'buying.SEE'],
+        ['Task board', 'kanban calendar tasks board drag task columns to do in progress done approved due date calendar month', '#/tasks/board', null],
         ['Inventory sharing', 'which shop gets which sku price quantity offered stock sync push out of sync show hide on shop listing share', '#/inventory-sharing', 'stock.SEE'],
         ['Warehouse locations and SKU homes (CSV)', 'wh_locations wh_sku_homes import export locations bins sku homes csv deactivate rename bin', '#/wh-csv', 'stock.SEE'],
         ['Person sections by kind', 'managed account external contact convert person sections tabs short profile kind', '#/person-sections', 'people.convert'],

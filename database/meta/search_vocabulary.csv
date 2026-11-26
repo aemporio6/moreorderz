@@ -225,6 +225,7 @@ blind count,stock counts,VOCAB,#/stock/counts
 blind dropship,drop shipping orders,VOCAB,#/ds-orders
 blocked buyer,customers,VOCAB,#/list/crm_customer
 blocked stock,held stock,VOCAB,#/stock/held
+board view,task board,VOCAB,#/tasks/board
 bol,shipments,VOCAB,#/list/t_src_shipments
 booker,quick buy,VOCAB,#/list/quick_buy
 bookkeeping,money dashboard,VOCAB,#/money
@@ -296,6 +297,7 @@ buying missing,sale and buy match check,VOCAB,#/gen1
 c79,customs,VOCAB,#/list/t_src_customs
 c88,customs,VOCAB,#/list/t_src_customs
 calculator,marketplace calculator,VOCAB,#/calculator
+calendar view of tasks,task board,VOCAB,#/tasks/board
 call for money,capital calls,VOCAB,#/capital-calls
 came through,"case channel, priority and reply by",VOCAB,#/sale-cases
 camel,research board,VOCAB,#/list/src_research
@@ -649,6 +651,7 @@ dpd file,carrier file layouts,VOCAB,#/fulfilment
 dpd label,carrier labels,VOCAB,#/labels
 dpd local,carriers and postage rates,VOCAB,#/carriers
 dq checks,data quality checks,VOCAB,#/data-quality
+drag task,task board,VOCAB,#/tasks/board
 drawings,partners,VOCAB,#/partners
 drive,drive folders,VOCAB,#/drive
 drop ship,drop shipping orders,VOCAB,#/ds-orders
@@ -1058,6 +1061,8 @@ jobs to do,my tasks,VOCAB,#/tasks
 journal,ledger,VOCAB,#/ledger
 journals,ledger,VOCAB,#/ledger
 jungle scout,research board,VOCAB,#/list/src_research
+kanban,task board,VOCAB,#/tasks/board
+kanban board,task board,VOCAB,#/tasks/board
 keepa,research board,VOCAB,#/list/src_research
 keyword research,research board,VOCAB,#/list/src_research
 kind of person,person sections by kind,VOCAB,#/person-sections
@@ -2163,8 +2168,12 @@ tariff,customs,VOCAB,#/list/t_src_customs
 tariff code,products,VOCAB,#/list/product
 tariffs,customs,VOCAB,#/list/t_src_customs
 task,my tasks,VOCAB,#/tasks
+task board,task board,VOCAB,#/tasks/board
+task calendar,task board,VOCAB,#/tasks/board
 task rules,task rules,VOCAB,#/list/task_category
 tasks,my tasks,VOCAB,#/tasks
+tasks by due date,task board,VOCAB,#/tasks/board
+tasks calendar,task board,VOCAB,#/tasks/board
 tax,tax and filings,VOCAB,#/compliance
 tax calendar,tax and filings,VOCAB,#/compliance
 tax computation,taxation,VOCAB,#/list/tax_period

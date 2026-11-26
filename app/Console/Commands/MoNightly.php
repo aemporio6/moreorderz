@@ -50,7 +50,8 @@ class MoNightly extends Command
         $this->line("Subscriptions overdue: $subs new task(s) · task digests go every minute at each person's digest time (mo:events)");
         \App\Services\SaleLines::purgeBin();   // the recycle bin keeps deleted sale lines for 30 days
         $nd = \App\Services\DsMatch::digest(); if ($nd) $this->line("Not matched digest: $nd person(s) told");
-        \App\Services\Carriers::applyDue(); \App\Services\CarrierPresets::closeRateTasks(); foreach (\Illuminate\Support\Facades\DB::table('t_enterprise')->pluck('id') as $dqEnt) \App\Services\DataQuality::run((int) $dqEnt);      /* R-G_CORE-82 */      // carrier / packing rates whose start day has come
+        \App\Services\Carriers::applyDue(); \App\Services\CarrierPresets::closeRateTasks(); foreach (\Illuminate\Support\Facades\DB::table('t_enterprise')->pluck('id') as $dqEnt) \App\Services\DataQuality::run((int) $dqEnt);      /* R-G_CORE-82 */
+        $dq = \App\Services\DqScore::run(); $this->line("Data-quality scores: {$dq['scored']} record(s), {$dq['opened']} task(s) opened, {$dq['closed']} closed");      /* R-G_CORE-108 */      // carrier / packing rates whose start day has come
         $sr = \App\Services\ShopReminders::monthly(); if ($sr) $this->line("Shop reminders made from templates: $sr");
         $mm = \App\Services\SalesImport::missingMonths(); if ($mm) $this->line("Months without a sales import: $mm new task(s)");
         $exp = \App\Services\ListExports::runScheduled(); if ($exp) $this->line("Scheduled exports queued: $exp");

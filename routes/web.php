@@ -780,6 +780,9 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('messages/log.csv', [WorkController::class, 'messageLogCsv']);
         Route::get('tasks/{id}/messages', [WorkController::class, 'taskMessages'])->whereNumber('id');
         Route::get('rec-messages/{key}/{id}', [WorkController::class, 'recordMessages'])->whereNumber('id');
+        Route::get('tasks/board', [WorkController::class, 'taskBoard']);      // R-G_CORE-104 kanban + calendar
+        Route::post('tasks/board/view', [WorkController::class, 'taskBoardView']);
+        Route::post('tasks/{id}/drop', [WorkController::class, 'taskDrop'])->whereNumber('id');
         Route::post('tasks/bulk', [WorkController::class, 'taskBulk']);
         Route::post('tasks/bulk/{id}/undo', [WorkController::class, 'taskBulkUndo'])->whereNumber('id');
     });

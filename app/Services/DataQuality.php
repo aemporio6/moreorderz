@@ -37,7 +37,7 @@ class DataQuality
     /** Open a task per red row, close the tasks whose row is fixed. Called nightly and by "Check now". */
     public static function run(int $ent): array
     {
-        $a = TaskEngine::sync('DQ_ITEM_NOTE', array_map(fn ($r) => ['key' => [$r['id']], 'title' => "Order {$r['order']} ({$r['sku']}) has an item note but no vendor – set the vendor or mark it bought locally", 'opt' => ['module' => 't_sales', 'record_id' => $r['id']]], self::itemNotes($ent)), null, $ent);
+        $a = TaskEngine::sync('DQ_ITEM_NOTE', array_map(fn ($r) => ['key' => ['sale', $r['id']], 'title' => "Order {$r['order']} ({$r['sku']}) has an item note but no vendor – set the vendor or mark it bought locally", 'opt' => ['module' => 't_sales', 'record_id' => $r['id']]], self::itemNotes($ent)), 'sale:', $ent);      /* the code is shared with the completeness score (R-G_CORE-108), so only the sale keys are synced here */
         $b = TaskEngine::sync('DQ_PARENT_INACTIVE', array_map(fn ($r) => ['key' => [$r['id']], 'title' => "Child {$r['child']} active but parent {$r['parent']} inactive", 'opt' => ['module' => 't_product_vendors', 'record_id' => $r['id']]], self::parentInactive($ent)), null, $ent);
         return ['item_note' => $a, 'parent_inactive' => $b];
     }
