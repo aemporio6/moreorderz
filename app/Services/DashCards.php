@@ -41,15 +41,16 @@ class DashCards
         $today ??= date('Y-m-d'); $days = (int) Choices::get('SOURCING_DUE_DAYS', $ent) ?: 7; $soon = date('Y-m-d', strtotime($today . " +$days days"));      /* Settings › Choices */ $base = Fx::base($ent);
         $cy = DB::table('t_src_cycles')->where('fk_id_ent', $ent)->where('f_active', 1)->whereNotIn('status', ['CLOSED', 'Closed', 'CANCELLED', 'Cancelled', 'COMPLETED', 'Completed'])->pluck('id')->all();
         $pos = DB::table('t_src_po')->where('fk_id_ent', $ent)->where('f_active', 1)->whereIn('fk_id_cycle', $cy ?: [0])->whereNotIn('status', ['CANCELLED'])->get(['id', 'po_total', 'fk_id_currency', 'po_date', 'exchange_rate']);
-        $open = 0.0; foreach ($pos as $p) { $cur = Fx::code($p->fk_id_currency, $ent); $open += $cur === $base ? (float) $p->po_total : (float) $p->po_total * ((float) $p->exchange_rate > 0 ? (float) $p->exchange_rate : Fx::rate($cur, (string) ($p->po_date ?: $today), $ent)); }
+        $miss = []; $rate = function (string $c, string $d) use ($ent, &$miss) { try { return Fx::rate($c, $d, $ent); } catch (\RuntimeException $e) { $miss[$c] = true; return 0.0; } };      // live 26-11: a missing rate leaves that amount out and names the currency – the card still shows
+        $open = 0.0; foreach ($pos as $p) { $cur = Fx::code($p->fk_id_currency, $ent); $open += $cur === $base ? (float) $p->po_total : (float) $p->po_total * ((float) $p->exchange_rate > 0 ? (float) $p->exchange_rate : $rate($cur, (string) ($p->po_date ?: $today))); }
         $ids = $pos->pluck('id')->all(); $cur = $pos->pluck('fk_id_currency', 'id');
         $paid = (float) DB::table('t_src_payments')->whereIn('fk_id_po', $ids ?: [0])->where('f_active', 1)->sum('base_amount');
         $due = 0.0; $week = 0.0;
         foreach (DB::table('t_src_payment_terms')->whereIn('fk_id_po', $ids ?: [0])->where('f_active', 1)->where('status', '<>', 'PAID')->get(['fk_id_po', 'remaining_amount', 'due_date']) as $t) {
-            $v = (float) $t->remaining_amount * Fx::rate(Fx::code($cur[$t->fk_id_po] ?? null, $ent), $today, $ent);
+            $v = (float) $t->remaining_amount * $rate(Fx::code($cur[$t->fk_id_po] ?? null, $ent), $today);
             $due += $v; if ($t->due_date && $t->due_date <= $soon) $week += $v;
         }
-        return ['base' => $base, 'open_po_value' => round($open, 2), 'paid' => round($paid, 2), 'terms_due' => round($due, 2), 'due_7_days' => round($week, 2), 'due_days' => $days, 'link' => '#/src-outstanding', 'title' => 'Supplier payments'];
+        return ['missing_rates' => array_keys($miss), 'base' => $base, 'open_po_value' => round($open, 2), 'paid' => round($paid, 2), 'terms_due' => round($due, 2), 'due_7_days' => round($week, 2), 'due_days' => $days, 'link' => '#/src-outstanding', 'title' => 'Supplier payments'];
     }
 
     /** R-F_SETUP-30: Investors card – same sources as the investor report (R-F_SETUP-8). */
