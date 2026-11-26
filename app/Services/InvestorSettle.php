@@ -37,6 +37,13 @@ class InvestorSettle
         return $l;
     }
 
+    /** Unit cost of the lots a sale line was sold from (FIFO consumption); null when nothing was consumed yet. */
+    private static function lotCost(int $saleId): ?float
+    {
+        $r = DB::table('fin_lot_consumption')->where('fk_id_sale', $saleId)->whereNull('fk_id_reverses')->selectRaw('SUM(qty) q, SUM(qty * unit_cost_gbp) v')->first();
+        return $r && (int) $r->q > 0 ? round((float) $r->v / (int) $r->q, 4) : null;
+    }
+
     /** R-D-81 one line. */
     public static function line(int $ent, object $s, int $mp): array
     {
@@ -45,7 +52,7 @@ class InvestorSettle
         [$pf, $sf, $found] = self::fees((int) $s->fk_product_id, $mp);
         $packFee = $pf * (self::c($ent, 'PACKING_FEE_PER') === 'UNIT' ? max(1, $qty) : 1);
         $storFee = $sf * (self::c($ent, 'STORAGE_FEE_PER') === 'SALE_LINE' ? 1 : max(1, $qty));
-        $revenue = (float) $s->total_amount; $raw = (float) $s->raw_price; $land = self::landing((int) $s->fk_product_id);
+        $revenue = (float) $s->total_amount; $raw = (float) $s->raw_price; $land = self::c($ent, 'INV_LANDING_FIELD') === 'LOT_COST' && ! empty($s->id) && ($lc = self::lotCost((int) $s->id)) !== null ? $lc : self::landing((int) $s->fk_product_id);      // R-G_CORE-85 landing cost field
         if (! $ref) return ['units' => $qty, 'billed_qty' => $qty, 'revenue' => $revenue, 'capital' => round($raw * $qty, 2), 'actual' => round($land * $qty, 2), 'shipping' => (float) $s->carrier_rate,
             'packing_material' => (float) $s->packing_rate, 'packing_fee' => round($packFee, 2), 'storage_fee' => round($storFee, 2), 'refund_adj' => 0.0, 'fees_found' => $found, 'refunded' => false];
         $prod = $has('Product');
@@ -85,7 +92,7 @@ class InvestorSettle
         foreach ($sales as $s) {
             $l = self::line($ent, $s, (int) $imp->fk_id_marketplace); if (! $l['fees_found']) $noFee++;
             foreach ($tot as $k => $_) $tot[$k] += $l[$k];
-            $inv = self::investors((int) $s->fk_product_id); if (! $inv) { $noInv++; $inv = [0]; } elseif (count($inv) > 1) $multi++;
+            $inv = self::investors((int) $s->fk_product_id); if (! $inv) { $noInv++; $inv = [0]; } elseif (count($inv) > 1) { $multi++; if (self::c($ent, 'INV_MULTI_INVESTOR_SPLIT') === 'FIRST') $inv = [$inv[0]]; }      // R-G_CORE-85 setting
             $part = 1 / count($inv);
             foreach ($inv as $a) {
                 $per[$a] ??= array_fill_keys(array_keys($tot), 0.0) + ['sales' => 0];
@@ -95,7 +102,7 @@ class InvestorSettle
         }
         $tot = array_map(fn ($v) => round($v, 2), $tot);
         if ($noInv) { $m = "$noInv sale line(s) are for products with no investor in Inventory (Vendor tab > Investors)."; if (self::c($ent, 'BLOCK_UNASSIGNED_INVESTOR') !== 'N') throw new \InvalidArgumentException($m . ' Add the investor before settling.'); $warn[] = $m . ' Their investor share will not be invoiced to anyone.'; }
-        if ($multi) $warn[] = "$multi sale line(s) are for products with more than one investor. Each line is divided equally between them.";
+        if ($multi) $warn[] = "$multi sale line(s) are for products with more than one investor. " . (self::c($ent, 'INV_MULTI_INVESTOR_SPLIT') === 'FIRST' ? 'Each line goes to the first investor linked to the product.' : 'Each line is divided equally between them.');
         if ($noFee) $warn[] = "$noFee sale line(s) have no packing fee / storage fee set on the product's Shipping tab for this marketplace. They count as £0.";
         $mode = fn ($m) => strtoupper((string) $m);
         $oMode = $mode($split->owner_mode ?: 'SHARE'); $vMode = $mode($split->va_mode ?: 'SHARE'); $hMode = $mode($split->handler_mode ?: 'SHARE');

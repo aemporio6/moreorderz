@@ -404,6 +404,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('partners/{id}/reinvest', [PartnerController::class, 'reinvest'])->whereNumber('id');
         Route::post('partners/{id}/onboarding', [PartnerController::class, 'onboarding'])->whereNumber('id');
         Route::get('close', [CloseController::class, 'overview']);
+        Route::match(['get', 'post'], 'opening', [CloseController::class, 'opening']);      // R-G_CORE-87
+        Route::post('opening/lock', [CloseController::class, 'openingLock']);
         Route::get('close/month', [CloseController::class, 'page']);
         Route::post('close/check', [CloseController::class, 'check']);
         Route::post('close/waive', [CloseController::class, 'waive']);

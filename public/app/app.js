@@ -3018,8 +3018,21 @@
 
   // ---------- month close ----------
   const clChip = s => `<span class="chip ${({ OPEN: 'warn', CHECKED: 'accent', LOCKED: 'done', EMPTY: 'lock', GREEN: 'done', RED: 'err', WAIVED: 'warn', NA: 'lock', PENDING: 'pend' })[s] || 'pend'}">${esc(({ OPEN: 'Open', CHECKED: 'Checked – ready to lock', LOCKED: 'Locked', EMPTY: 'Nothing in it', GREEN: 'Pass', RED: 'Fix needed', WAIVED: 'Waived', NA: 'Does not apply', PENDING: 'Not run' })[s] || s)}</span>`;
+  /* R-G_CORE-87 opening balances: as-of date (changes until locked), the Owner locks them once; the status lists that count */
+  async function openingCard() {
+    let o; try { o = await api('opening'); } catch (e) { return; }
+    const host = document.createElement('div'); host.className = 'card'; host.style.marginTop = '12px'; host.id = 'obCard'; $('#main').appendChild(host);
+    const draw = () => { host.innerHTML = `<div class="card-h"><h3>Opening balances</h3><span class="chip ${o.locked ? 'done' : o.as_of ? 'warn' : 'plain'}">${o.locked ? 'locked' : o.as_of ? 'not locked' : 'no opening date'}</span></div><div class="card-b">
+        <div class="small muted" style="margin-bottom:8px">Old stock comes in as opening lots on the as-of date. Receipts (GRNs) make lots only after the lock, and only when dated on or after that date. ${o.opening_lots} opening lot(s), value ${(+o.opening_value).toLocaleString('en-GB', { minimumFractionDigits: 2 })}.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end"><label class="small">As-of date<br><input type="date" id="obDate" value="${esc(o.as_of || '')}" ${o.locked ? 'disabled' : ''}></label>${o.locked ? '' : '<button class="btn" id="obSave">Save the date</button><button class="btn primary" id="obLock">Lock the opening balances</button>'}</div>
+        <div class="small" style="margin-top:10px">${o.lists.map(l => `<div><b>${esc(l.name)}</b> (<a href="#/list/cat_references">${esc(l.code)}</a>): ${esc(l.values.join(', '))}</div>`).join('')}</div></div>`;
+      const sv = $('#obSave', host); if (sv) sv.onclick = async () => { try { o = await api('opening', { method: 'POST', body: { as_of: $('#obDate', host).value } }); toast(o.message); draw(); } catch (e) { toast(e.message, 'err'); } };
+      const lk = $('#obLock', host); if (lk) lk.onclick = () => { const m = modal('Lock the opening balances?', 'This cannot be undone: the as-of date stays as it is and receipts dated on or after it make lots.', '', '<button class="btn primary" id="obYes">Lock</button>', false);
+        $('#obYes', m.ov).onclick = async () => { m.close(); try { o = await api('opening/lock', { method: 'POST', body: {} }); toast(o.message); draw(); } catch (e) { toast(e.message, 'err'); } }; };
+    }; draw();
+  }
   async function pageClose() {
-    busy(true); let d; try { d = await api('close'); } finally { busy(false); }
+    busy(true); let d; try { d = await api('close'); } finally { busy(false); } setTimeout(openingCard, 0);
     $('#main').innerHTML = `<div class="page-head"><div><h1>Month close</h1><div class="sub">Each shop closes each month on its own: run the checks, fix what is red, then the Owner locks it. A locked month never changes again – later corrections are booked in the next open month.</div></div></div>
       ${d.ledger_locked_up_to ? `<div class="card" style="margin-bottom:12px"><div class="card-b">${ic('lock')} The ledger is locked up to <b>${esc(new Date(d.ledger_locked_up_to + '-01').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }))}</b>. Nothing can be booked with a date in or before that month.</div></div>` : ''}
       <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>Month</th>${d.shops.map(s => `<th>${esc(s.name)}</th>`).join('')}</tr></thead><tbody>${d.months.map(m => `<tr><td><b>${esc(m.name)}</b>${m.ended ? '' : '<div class="small muted">still running</div>'}</td>${m.cells.map(c => `<td>${c.status === 'EMPTY' ? clChip('EMPTY') : `<a href="#/close?shop=${c.shop}&month=${m.month}" style="text-decoration:none">${clChip(c.status)}</a>${c.profit !== null ? `<div class="small muted">profit ${money(c.profit)}</div>` : c.score !== null && c.status === 'OPEN' ? `<div class="small muted">${c.score}% of checks pass</div>` : ''}`}</td>`).join('')}</tr>`).join('')}</tbody></table>${d.shops.length ? '' : '<div class="empty">No shop yet.</div>'}</div></div>`;

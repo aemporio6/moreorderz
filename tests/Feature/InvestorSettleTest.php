@@ -85,6 +85,30 @@ class InvestorSettleTest extends TestCase
         DB::table('t_sale_imports')->where('id', $this->imp)->update(['status' => 'Pending']);
         try { InvestorSettle::calc(1, $this->imp); $this->fail(); } catch (\InvalidArgumentException $e) { $this->assertSame('Sales for Shop 101 - October 2026 are not confirmed yet (status: Pending). Confirm them in Sales > Imported months first.', $e->getMessage()); }
     }
+    /** R-G_CORE-85 the invoicing settings shell: typed settings with history; admin roles, split, landing field, currency. */
+    public function test_g85_invoicing_settings_with_history_and_their_effect(): void
+    {
+        $this->actingAs($this->owner);
+        Choices::set('PACKING_FEE_PER', 'UNIT', 1);
+        $h = DB::table('sys_audit_log')->where('table_name', 'sys_settings')->orderByDesc('id')->value('changes_json');
+        $this->assertStringContainsString('PACKING_FEE_PER', (string) $h); $this->assertStringContainsString('UNIT', (string) $h);
+        $this->assertSame(['OWNER,MANAGER,FINANCE', 'EQUAL', 'LANDING_PRICE', 'GBP'], [Choices::get('INVOICING_ADMIN_ROLES', 1), Choices::get('INV_MULTI_INVESTOR_SPLIT', 1), Choices::get('INV_LANDING_FIELD', 1), Choices::get('INV_CURRENCY', 1)]);
+        $this->sale(['qty' => 5, 'total_amount' => 100, 'raw_price' => 4, 'carrier_rate' => 6, 'packing_rate' => 1, 'profit' => 63]);
+        Choices::set('INV_MULTI_INVESTOR_SPLIT', 'FIRST', 1);
+        $c = InvestorSettle::calc(1, $this->imp); $this->assertSame([$this->a1], array_column($c['investors'], 'account'), 'the whole line to the first investor');
+        $this->assertContains('1 sale line(s) are for products with more than one investor. Each line goes to the first investor linked to the product.', $c['warnings']);
+        // landing cost from the lots sold (FIFO) instead of the product's landing price
+        $sid = (int) DB::table('t_sales')->where('fk_id_import', $this->imp)->value('id'); $line = DB::table('t_sales')->where('id', $sid)->first();
+        $this->assertSame(22.5, InvestorSettle::line(1, $line, $this->mp)['actual'], 'landing price 4.50 × 5');
+        DB::table('fin_lot_consumption')->insert(RecordService::fillNotNull('fin_lot_consumption', ['fk_id_sale' => $sid, 'lot_id' => 0, 'sku' => 'LAMP-01', 'qty' => 5, 'unit_cost_gbp' => 3.2, 'consumed_on' => '2026-10-31']));
+        Choices::set('INV_LANDING_FIELD', 'LOT_COST', 1); $this->assertSame(16.0, InvestorSettle::line(1, $line, $this->mp)['actual'], 'lot cost 3.20 × 5');
+        // only the invoicing admins settle
+        $fin = $this->makeUser('FINANCE'); Choices::set('INVOICING_ADMIN_ROLES', 'OWNER,MANAGER', 1);
+        $this->actingAs($fin)->postJson('/api/invoices/settle/' . $this->imp, ['checked' => true])->assertStatus(403);
+        $this->actingAs($this->owner); Choices::set('INVOICING_ADMIN_ROLES', 'OWNER,MANAGER,FINANCE', 1);
+        if (\App\Services\Perm::has($fin, 'money.approve')) $this->actingAs($fin)->postJson('/api/invoices/settle/' . $this->imp, ['checked' => true])->assertOk();
+    }
+
     /** R-D-82 / IC-11 the VA salary comes from the job-history row valid on the month end; the old method (latest row) is shown beside it. */
     public function test_r82_va_salary_from_the_row_valid_on_the_month_end(): void
     {

@@ -158,7 +158,7 @@ class InvestorDocs
                 $days = (int) ($issuer->payment_terms_days ?: Settings::get('DEFAULT_PAYMENT_TERMS_DAYS', $ent, 14) ?: 14);
                 $id = DB::table('t_invoices')->insertGetId(['fk_id_ent' => $ent, 'fk_id_period' => $p->id, 'invoice_no' => self::number($type, $issuer->party_code, $shopNo, $ym), 'invoice_type' => $type, 'fk_issuer_party' => $issuer->id, 'fk_recipient_party' => $recipient->id,
                     'fk_id_investor_account' => $invAccount ?? 0, 'issuer_json' => self::snapshot($issuer), 'recipient_json' => self::snapshot($recipient), 'd_invoice' => date('Y-m-d'), 'd_due' => $statement ? null : date('Y-m-d', strtotime("+$days days")),
-                    'reference' => "$shopName / $refWho / $mon", 'currency' => 'GBP', 'subtotal' => $total, 'total' => $total, 'amount_paid' => 0, 'status' => $statement ? 'NOT_REQUIRED' : 'UNPAID', 'created_by' => $u->id, 'created_at' => now()]);
+                    'reference' => "$shopName / $refWho / $mon", 'currency' => Choices::get('INV_CURRENCY', $ent) === 'BASE' ? Fx::base($ent) : 'GBP', 'subtotal' => $total,      /* R-G_CORE-85 */ 'total' => $total, 'amount_paid' => 0, 'status' => $statement ? 'NOT_REQUIRED' : 'UNPAID', 'created_by' => $u->id, 'created_at' => now()]);
                 foreach ($lines as $i => [$group, $desc, $qty, $amount]) DB::table('t_invoice_lines')->insert(['fk_id_invoice' => $id, 'line_no' => $i + 1, 'line_group' => $group, 'description' => $desc, 'sku' => '', 'qty' => $qty, 'unit_price' => $qty ? round($amount / $qty, 4) : $amount, 'amount' => round($amount, 2)]);
                 Audit::log('t_invoices', (int) $id, 'INSERT', ['type' => $type, 'total' => $total], 'generated from the settled month', $ent); $made++;
             };

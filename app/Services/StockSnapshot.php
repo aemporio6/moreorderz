@@ -67,11 +67,13 @@ class StockSnapshot
         }
         // pipeline: PO lines not received yet (confirmed → production, shipped → transit), valued at the line price
         $pipeCost = [];
-        $got = DB::table('t_src_grn_lines')->groupBy('fk_id_po_line')->selectRaw('fk_id_po_line, SUM(COALESCE(received_qty, accepted_qty, 0)) q')->pluck('q', 'fk_id_po_line');
-        foreach (DB::table('t_src_po_lines as l')->join('t_src_po as p', 'p.id', '=', 'l.fk_id_po')->where('l.fk_id_ent', $ent)->where('l.f_active', 1)->whereIn('p.status', ['CONFIRMED', 'SHIPPED'])->whereDate('p.created_at', '<=', $date)
+        /* R-G_CORE-87: received = GRNs whose status is in GRN_POSTED_STATUSES; in production / in transit = PO status in PO_PRODUCTION_STATUSES / TRANSIT_STATUSES (Reference Register lists) */
+        $prodSt = OpeningBalances::statuses('PO_PRODUCTION_STATUSES'); $tranSt = OpeningBalances::statuses('TRANSIT_STATUSES');
+        $got = DB::table('t_src_grn_lines as gl')->join('t_src_grn as g', 'g.id', '=', 'gl.fk_id_grn')->whereIn(DB::raw('UPPER(g.status)'), OpeningBalances::statuses('GRN_POSTED_STATUSES'))->groupBy('gl.fk_id_po_line')->selectRaw('gl.fk_id_po_line, SUM(COALESCE(gl.received_qty, gl.accepted_qty, 0)) q')->pluck('q', 'fk_id_po_line');
+        foreach (DB::table('t_src_po_lines as l')->join('t_src_po as p', 'p.id', '=', 'l.fk_id_po')->where('l.fk_id_ent', $ent)->where('l.f_active', 1)->whereIn(DB::raw("UPPER(REPLACE(p.status, ' ', '_'))"), array_merge($prodSt, $tranSt))->whereDate('p.created_at', '<=', $date)
             ->get(['l.id', 'l.sku', 'l.qty_ordered', 'l.qty_confirmed', 'l.unit_price', 'p.status', 'p.fk_id_currency']) as $l) {
             $open = (int) ($l->qty_confirmed ?: $l->qty_ordered) - (int) ($got[$l->id] ?? 0); if ($open <= 0 || ! $l->sku) continue;
-            $u[$l->sku] ??= $z; $u[$l->sku][$l->status === 'SHIPPED' ? 'transit' : 'production'] += $open;
+            $u[$l->sku] ??= $z; $u[$l->sku][in_array(strtoupper(str_replace(' ', '_', (string) $l->status)), $tranSt, true) ? 'transit' : 'production'] += $open;
             $pipeCost[$l->sku] ??= round((float) $l->unit_price * Fx::rate(Fx::code($l->fk_id_currency, $ent), $date, $ent), 4);
         }
         $w = DB::table('fin_lots')->where('company_id', $ent)->where('received_date', '<=', $date)->groupBy('sku')->selectRaw('sku, SUM(qty_left * unit_cost_gbp) v, SUM(qty_left) q')->get()->keyBy('sku');

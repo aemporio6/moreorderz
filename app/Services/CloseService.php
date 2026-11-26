@@ -152,7 +152,9 @@ class CloseService
         $inv = $sh && $sh['route'] === 'INVESTOR_INVOICING' && $sh['split'];
         if ($inv) $set('SPLIT_RULES', 'GREEN', 'Route "investor invoicing": the four-way split rule of this shop is used.', 0, '#/waterfall');
         else $set('SPLIT_RULES', $everAg && ! $sh['lines'] ? 'RED' : 'GREEN', ! $everAg ? 'The company has no partner agreement: all profit stays with the company.' : ($sh['lines'] ? count($sh['lines']) . ' agreement(s) share this month.' : 'The company has partner agreements but none covers this shop on the first day of the month.'), $everAg && ! $sh['lines'] ? 1 : 0, '#/partners');
-        $set('OPENING_LOCKED', 'NA', 'Opening balances come with the old-data import (Step 7).');
+        $ob = OpeningBalances::asOf($ent);      // R-G_CORE-87
+        if (! $ob) $set('OPENING_LOCKED', 'NA', 'No opening as-of date: the company started in this tool (no old balances).');
+        else $set('OPENING_LOCKED', OpeningBalances::locked($ent) ? 'GREEN' : 'RED', OpeningBalances::locked($ent) ? "Opening balances of $ob are locked." : "Opening balances of $ob are not locked yet – lock them (Month close › Opening balances).", 0, '#/close');
         // 16 earlier months of this shop
         $first = min(array_filter([DB::table('t_sales')->where('fk_id_ent', $ent)->where('fk_id_branch', $branchId)->where('sale_source', 'active')->whereIn('status', ['Pending', 'Confirmed'])->min('d_order'), DB::table('mo_settlements')->where('fk_id_branch', $branchId)->min('statement_date'), $from]));
         $open = [];

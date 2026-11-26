@@ -14,6 +14,9 @@ class InvoicesController extends Controller
     private function ent(): int { return (int) Context::ent(); }
 
     /** R-ACC-1 … 9 compliance calendar. */
+    /** R-G_CORE-85 the invoicing admins (Settings › Choices INVOICING_ADMIN_ROLES). */
+    private function invAdmin(Request $r): void { $u = $r->user(); if ($u->role_code !== 'OWNER' && ! \App\Services\Choices::has('INVOICING_ADMIN_ROLES', $this->ent(), $u->role_code)) abort(response()->json(['message' => 'Only the invoicing admins settle months and make, reopen or cancel investor documents (Settings › Choices).'], 403)); }
+
     public function compliance(Request $r) { Perm::need($r->user(), 'money.SEE'); return \App\Services\AccCompliance::page($this->ent(), $r->only(['company', 'tab', 'area', 'type', 'assigned', 'q', 'entity', 'from', 'to', 'ym', 'per', 'page'])); }
     public function complianceGenerate(Request $r) { Perm::need($r->user(), 'money.SEE'); $n = \App\Services\AccCompliance::generate($this->ent()); return ['added' => $n, 'message' => "$n new item(s)."]; }
     public function complianceUpdate(Request $r, int $id) { Perm::need($r->user(), 'money.EDIT'); return $this->run(fn () => \App\Services\AccCompliance::update($this->ent(), $id, $r->only(['status', 'submission_ref', 'notes', 'amount_due', 'amount_paid', 'fk_assigned', 'due_date', 'title', 'reason']), $r->user())); }
@@ -55,8 +58,8 @@ class InvoicesController extends Controller
     }
     private const IN = ['advertising', 'other_expenses', 'other_expenses_note', 'extra_3pl', 'extra_3pl_note', 'va_salary', 'owner_fixed', 'handler_fixed', 'notes', 'checked'];
     public function settlePreview(Request $r, int $import) { Perm::need($r->user(), 'money.SEE'); return $this->run(fn () => array_diff_key(\App\Services\InvestorSettle::calc($this->ent(), $import, $r->only(self::IN)), ['lines' => 1])); }
-    public function settle(Request $r, int $import) { Perm::need($r->user(), 'money.approve'); return $this->run(fn () => \App\Services\InvestorSettle::settle($this->ent(), $import, $r->only(self::IN), $r->user())); }
-    public function generate(Request $r, int $period) { Perm::need($r->user(), 'money.EDIT'); return $this->run(fn () => Docs::generate($this->ent(), $period, $r->user())); }
+    public function settle(Request $r, int $import) { Perm::need($r->user(), 'money.approve'); $this->invAdmin($r); return $this->run(fn () => \App\Services\InvestorSettle::settle($this->ent(), $import, $r->only(self::IN), $r->user())); }
+    public function generate(Request $r, int $period) { Perm::need($r->user(), 'money.EDIT'); $this->invAdmin($r); return $this->run(fn () => Docs::generate($this->ent(), $period, $r->user())); }
     public function portalGenerate(Request $r, int $period) { return $this->run(fn () => Docs::portalGenerate($this->ent(), $period, $r->user())); }      /* R-D-83: guarded inside – setting + own share */
     /** R-INV-12 who owes whom (open documents). */
     public function outstanding(Request $r) { Perm::need($r->user(), 'money.SEE'); return \App\Services\InvoiceReports::outstanding($this->ent(), $r->only(['marketplace', 'shop', 'overdue'])); }
@@ -88,7 +91,7 @@ class InvoicesController extends Controller
     public function portalEmail(Request $r, int $id) { return $this->run(fn () => Docs::portalEmail($this->ent(), $id, $r->user())); }
     public function pay(Request $r, int $id) { Perm::need($r->user(), 'money.EDIT'); return $this->run(fn () => Docs::pay($this->ent(), $id, $r->only(['amount', 'date', 'method', 'received_into', 'reference', 'notes']), $r->file('proof'), $r->user())); }
     public function unpay(Request $r, int $payment) { Perm::need($r->user(), 'money.EDIT'); return $this->run(fn () => Docs::deletePayment($this->ent(), $payment, $r->user())); }
-    public function cancel(Request $r, int $id) { Perm::need($r->user(), 'money.EDIT'); return $this->run(fn () => Docs::cancel($this->ent(), $id, (string) $r->input('reason'), $r->user())); }
-    public function reopen(Request $r, int $period) { Perm::need($r->user(), 'money.approve'); return $this->run(fn () => Docs::reopen($this->ent(), $period, $r->user())); }
+    public function cancel(Request $r, int $id) { Perm::need($r->user(), 'money.EDIT'); $this->invAdmin($r); return $this->run(fn () => Docs::cancel($this->ent(), $id, (string) $r->input('reason'), $r->user())); }
+    public function reopen(Request $r, int $period) { $this->invAdmin($r); Perm::need($r->user(), 'money.approve'); return $this->run(fn () => Docs::reopen($this->ent(), $period, $r->user())); }
     public function email(Request $r, int $id) { Perm::need($r->user(), 'money.EDIT'); return $this->run(fn () => Docs::email($this->ent(), $id, $r->input('to'), $r->user())); }
 }

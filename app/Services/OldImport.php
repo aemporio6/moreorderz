@@ -205,6 +205,7 @@ class OldImport
             }
             // 3. opening stock
             if ($has('t_product_vendors')) $report[] = self::openingStock($oldDb, $blank('t_product_vendors.stock → opening lots', 'OPENING', 0), $dry, $opt['opening_date'] ?? date('Y-m-d'));
+            if (! $dry) foreach (DB::table('t_enterprise')->pluck('id') as $e) if (! OpeningBalances::locked((int) $e)) Settings::set('OPENING_AS_OF_DATE', $opt['opening_date'] ?? date('Y-m-d'), (int) $e);      // R-G_CORE-87 the opening as-of date (the Owner locks it)
         } finally { DB::statement('SET FOREIGN_KEY_CHECKS = 1'); }
         foreach (array_chunk($report, 200) as $c) DB::table('mo_import_report')->insert($c);
         return ['run' => $run, 'rows' => $report];

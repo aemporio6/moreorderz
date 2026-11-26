@@ -59,4 +59,17 @@ class CloseController extends Controller
         $d = $r->validate(['shop' => 'required|integer', 'month' => 'required|string|size:7', 'note' => 'nullable|string|max:255']);
         return $this->run(function () use ($d) { $x = Close::lock((int) Context::ent(), (int) $d['shop'], $d['month'], (string) ($d['note'] ?? '')); return $x + ['message' => 'Month locked' . ($x['ledger_locked_up_to'] ? '. The ledger is locked up to ' . date('M Y', strtotime($x['ledger_locked_up_to'] . '-01')) : '')]; });
     }
+
+    /** R-G_CORE-87 opening balances. */
+    public function opening(Request $r)
+    {
+        \App\Services\Perm::need($r->user(), 'money.SEE'); $ent = (int) \App\Services\Context::ent();
+        try { return $r->isMethod('post') ? \App\Services\OpeningBalances::setAsOf($ent, (string) $r->input('as_of'), $r->user()) : \App\Services\OpeningBalances::state($ent); }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+    }
+
+    public function openingLock(Request $r)
+    {
+        try { return \App\Services\OpeningBalances::lock((int) \App\Services\Context::ent(), $r->user()); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+    }
 }

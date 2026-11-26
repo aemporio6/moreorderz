@@ -5,7 +5,7 @@ Every line of MASTER_REGISTER_v1.7 (1,547 lines) checked against the code. BUILT
 | Area | Lines that count | BUILT | PARTIAL | FORM ONLY | MISSING | Not judged | Not applicable | BUILT % |
 |---|---|---|---|---|---|---|---|---|
 | Core/Platform | 210 | 148 | 43 | 5 | 14 | 0 | 42 | 70 % |
-| Finance | 208 | 151 | 27 | 19 | 11 | 0 | 7 | 73 % |
+| Finance | 208 | 153 | 25 | 19 | 11 | 0 | 7 | 74 % |
 | Sourcing | 185 | 151 | 15 | 12 | 7 | 0 | 3 | 82 % |
 | Stock/Warehouse | 162 | 145 | 13 | 3 | 1 | 0 | 11 | 90 % |
 | Sales | 155 | 129 | 17 | 9 | 0 | 0 | 8 | 83 % |
@@ -17,7 +17,7 @@ Every line of MASTER_REGISTER_v1.7 (1,547 lines) checked against the code. BUILT
 | Security | 28 | 21 | 5 | 0 | 2 | 0 | 8 | 75 % |
 | Reports | 25 | 10 | 5 | 0 | 10 | 0 | 3 | 40 % |
 | Migration | 9 | 7 | 2 | 0 | 0 | 0 | 8 | 78 % |
-| **All** | **1433** | **1098** | **185** | **100** | **50** | **0** | **114** | **77 %** |
+| **All** | **1433** | **1100** | **183** | **100** | **50** | **0** | **114** | **77 %** |
 
 FORM ONLY = the form and its list exist and save (with rights and history), but the rule's own logic is not built.
 PARTIAL = part of the rule works; the note in `audit/REGISTER_AUDIT.csv` says what is missing.

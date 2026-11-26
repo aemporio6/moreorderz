@@ -409,6 +409,14 @@ class BuyingService
             if ($g->posting_status === 'POSTED') throw new \RuntimeException("GRN {$g->grn_number} is already posted. Stock is never received twice.");
             $ent = (int) $g->fk_id_ent;
             $ship = DB::table('t_src_shipments')->where('id', $g->fk_id_shipment)->first();
+            if (! in_array('POSTED', OpeningBalances::statuses('GRN_POSTED_STATUSES'), true)) throw new \RuntimeException('"Posted" is not in the list of receipts that make lots (Setup › Lists › GRN_POSTED_STATUSES).');      // R-G_CORE-87
+            if (($gate = OpeningBalances::gate($ent, (string) $g->grn_date)) === 'BEFORE') {      // dated before the opening as-of date: its goods are already in the opening balances – posted without a lot
+                DB::table('t_src_grn')->where('id', $grnId)->update(['posting_status' => 'POSTED', 'status' => 'POSTED', 'approved_by' => (string) Context::userId(), 'approved_at' => date('Y-m-d')]);
+                DB::table('t_src_shipments')->where('id', $ship->id)->update(['actual_arrival' => $g->arrival_date ?: $g->grn_date, 'status' => 'ARRIVED']);
+                Audit::log('t_src_grn', $grnId, 'APPROVE', ['posted' => true, 'lots' => 0, 'reason' => 'dated before the opening as-of date ' . OpeningBalances::asOf($ent)], null, $ent);
+                return ['lots' => [], 'value' => 0.0, 'before_opening' => true, 'message' => "GRN {$g->grn_number} is dated before the opening date – posted without a lot (its stock is in the opening balances)."];
+            }
+            if ($gate) throw new \RuntimeException($gate);
             $po = self::po((int) $ship->fk_id_po);
             $rate = (float) ($po->exchange_rate ?: Fx::rate(Fx::code($po->fk_id_currency, $ent), $po->po_date, $ent));
             $lines = []; $owner = DB::table('t_src_cycles')->where('id', $g->fk_id_cycle)->value('fk_id_owner') ?: ((int) Settings::get('DEFAULT_STOCK_OWNER', $ent, '0') ?: null);
