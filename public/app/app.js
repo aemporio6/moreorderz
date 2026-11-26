@@ -92,7 +92,7 @@
   const easyWords = () => {
     const map = (S.boot && S.boot.words) || {}, keys = Object.keys(map).sort((a, b) => b.length - a.length); if (!keys.length || easyWords.on) return; easyWords.on = true;
     const re = new RegExp('(?<![A-Za-z0-9_#/.-])(' + keys.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')(?![A-Za-z0-9_/-]|\\.[A-Za-z0-9])', 'gi');
-    const swap = t => t.replace(re, m => { const to = map[m.toLowerCase()]; return m.length > 1 && m === m.toUpperCase() ? to.toUpperCase() : (m[0] === m[0].toUpperCase() ? to[0].toUpperCase() + to.slice(1) : to); });
+    const swap = t => t.replace(re, m => { const to = map[m.toLowerCase()]; return m.length > 1 && m === m.toUpperCase() ? to.toUpperCase() : (m[0] === m[0].toUpperCase() ? to[0].toUpperCase() + to.slice(1) : to); }).replace(/\b([A-Za-z]+) ?\/ ?\1\b/gi, '$1');      /* 'Supplier / Vendor' became 'Supplier / Supplier' – said once */
     const WORDS = 'h1,h2,h3,h4,th,label,legend,summary,button,.btn,.sub,.lbl,.chip,.empty,.toast,.small.muted,.card-h,.fld > label,nav a,#side a,#side .nav-head,.modal-h,.hint,option[value=""]';
     const DATA = 'td,input,textarea,select,code,pre,.mono,[contenteditable],[data-raw]';
     const fix = el => { if (!el || el.nodeType !== 1) return; const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); let n; const todo = [];

@@ -370,4 +370,18 @@ class CoreAreaTest extends TestCase
         $this->assertNotEmpty(glob(storage_path('app/mytool-replaced-*.json')), 'a copy of the removed rows is kept');
         foreach (glob(storage_path('app/mytool-replaced-*.json')) as $f) @unlink($f);
     }
+
+    public function test_old_sourcing_suppliers_become_supplier_profiles_of_their_parties(): void
+    {
+        $a1 = $this->f('t_account', ['fk_id_ent' => 1, 'account_code' => 'VENDOR-901', 'first_name' => 'Joy', 'sur_name' => 'Old', 'f_active' => 1]);
+        $po = $this->f('t_src_po', ['fk_id_ent' => 1, 'po_code' => 'OLD-SUP-PO', 'fk_id_supplier' => $a1, 'f_active' => 1]);
+        $this->artisan('mo:suppliers-from-parties')->assertExitCode(0);
+        $this->assertSame($a1, (int) DB::table('t_src_po')->where('id', $po)->value('fk_id_supplier'), 'the count run writes nothing');
+        $this->artisan('mo:suppliers-from-parties --apply')->assertExitCode(0);
+        $sup = DB::table('t_src_suppliers')->where('fk_id_account', $a1)->first();
+        $this->assertSame('Joy Old', $sup->supplier_name); $this->assertSame((int) $sup->id, (int) DB::table('t_src_po')->where('id', $po)->value('fk_id_supplier'));
+        $this->artisan('mo:suppliers-from-parties --apply')->assertExitCode(0);
+        $this->assertSame((int) $sup->id, (int) DB::table('t_src_po')->where('id', $po)->value('fk_id_supplier'), 'a second run changes nothing');
+        $this->assertSame(1, DB::table('t_src_suppliers')->where('fk_id_account', $a1)->count());
+    }
 }
