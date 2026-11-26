@@ -50,9 +50,18 @@ class InboundShipments
             if (empty($i['product']) && trim((string) ($i['sku'] ?? '')) !== '') $d['cartons'][$n]['items'][$k]['product'] = self::resolveItem($ent, $shop, (string) $i['sku']) ?? -1;
         $cartons = array_values(array_filter((array) ($d['cartons'] ?? []), fn ($c) => array_filter((array) ($c['items'] ?? []), fn ($i) => (int) ($i['qty'] ?? 0) > 0)));
         if (! $cartons) $err['cartons'] = 'Add at least one carton with an item';
+        foreach ($cartons as $n => $c) {      // owner 27-11: an empty weight / size comes from the product's packaging (its master carton, or the units × pack weight + empty carton)
+            $its = array_values(array_filter((array) $c['items'], fn ($i) => (int) ($i['qty'] ?? 0) > 0 && (int) ($i['product'] ?? 0) > 0));
+            if ($its && (float) ($c['weight_kg'] ?? 0) <= 0) { $kg = 0.0; $tare = 0.0;
+                foreach ($its as $i) { try { $k = Packaging::product((int) $i['product']); $kg += (int) $i['qty'] * $k['pack']['kg']; $tare = max($tare, $k['carton']['tare']);
+                    if (count($its) === 1 && (int) $i['qty'] === (int) $k['carton']['per'] && $k['carton']['gross'] > 0) { $kg = $k['carton']['gross']; $tare = 0.0; } } catch (\Throwable $e) {} }
+                if ($kg > 0) $cartons[$n]['weight_kg'] = $c['weight_kg'] = round($kg + $tare, 2); }
+            if ($its && count(array_unique(array_column($its, 'product'))) === 1 && (float) ($c['length_cm'] ?? 0) <= 0) { try { $k = Packaging::product((int) $its[0]['product']);
+                if ($k['carton']['cbm'] > 0) { $cartons[$n]['length_cm'] = $k['carton']['l']; $cartons[$n]['width_cm'] = $k['carton']['w']; $cartons[$n]['height_cm'] = $k['carton']['h']; } } catch (\Throwable $e) {} }
+        }
         foreach ($cartons as $n => $c) {
             foreach ((array) $c['items'] as $i) if ((int) ($i['qty'] ?? 0) > 0 && ! DB::table('t_product_vendors')->where('id', (int) ($i['product'] ?? 0))->where('fk_id_ent', $ent)->exists()) $err['cartons'] = 'Carton ' . ($n + 1) . ': choose the product';
-            if ((float) ($c['weight_kg'] ?? 0) <= 0) $err['cartons'] = 'Carton ' . ($n + 1) . ': enter the weight (kg)';
+            if ((float) ($c['weight_kg'] ?? 0) <= 0) $err['cartons'] = 'Carton ' . ($n + 1) . ': enter the weight (kg) – or fill the product\'s packaging once and it comes by itself';
         }
         if ($err) throw new ValidationErrors($err);
         return DB::transaction(function () use ($ent, $d, $shop, $from, $cartons) {

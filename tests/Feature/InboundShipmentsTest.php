@@ -164,4 +164,15 @@ class InboundShipmentsTest extends TestCase
         $this->assertSame(['LTN4', 'MARKETPLACE_FULFILMENT', \App\Services\FcLocations::parent($this->shop, false)], [$l->location_name, $l->kind, (int) $l->fk_id_parent]);
         $this->assertContains($d1, \App\Services\FcLocations::holding($this->shop, 'MARKETPLACE_FC'));
     }
+
+    /** Owner 27-11: a carton without weight / size takes them from the product's packaging (full carton = its gross; else units × pack weight + empty carton). */
+    public function test_carton_weight_and_size_come_from_the_packaging(): void
+    {
+        DB::table('t_product_vendors')->where('id', $this->a)->update(['pack_weight_g' => 500, 'units_per_carton' => 24, 'carton_l' => 50, 'carton_w' => 40, 'carton_h' => 30, 'carton_gross_weight' => 13.1]);
+        $id = $this->postJson('/api/inbound', ['shop' => $this->shop, 'from_location' => $this->site, 'cartons' => [['items' => [['product' => $this->a, 'qty' => 24]]], ['items' => [['product' => $this->a, 'qty' => 10]]]]])->assertOk()->json('id');
+        $c = DB::table('fba_cartons')->where('fk_id_fba_shipment', $id)->orderBy('carton_no')->get();
+        $this->assertSame([13.1, 50.0], [(float) $c[0]->weight_kg, (float) $c[0]->length_cm], 'a full carton = its weighed gross and size');
+        $this->assertEqualsWithDelta(10 * 0.5 + (13.1 - 12), (float) $c[1]->weight_kg, 0.01, 'a part carton = units × pack weight + the empty carton');
+        $this->postJson('/api/inbound', ['shop' => $this->shop, 'from_location' => $this->site, 'cartons' => [['items' => [['product' => $this->b, 'qty' => 3]]]]])->assertStatus(422)->assertJsonFragment(['cartons' => ["Carton 1: enter the weight (kg) – or fill the product's packaging once and it comes by itself"]]);
+    }
 }

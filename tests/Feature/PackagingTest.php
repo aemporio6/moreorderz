@@ -39,5 +39,30 @@ class PackagingTest extends TestCase
         $d = $this->getJson("/api/packaging/po/$po")->assertOk()->json();
         $this->assertSame(10, $d["totals"]["cartons"]); $this->assertSame(1, $d['totals']['tails']); $this->assertSame(['PK-BARE'], $d['missing']);
         $this->getJson("/api/packaging/product/$kid?qty=100")->assertOk()->assertJsonPath('plan.cartons', 1);
+        // a shipment of this PO gets its cartons, CBM and kg by itself – a typed figure is kept
+        $data = ['fk_id_po' => $po, 'total_cbm' => 2.5]; \App\Services\Packaging::fillShipment($data, []);
+        $this->assertSame([10, 2.5], [$data['planned_cartons'], $data['total_cbm']]); $this->assertEqualsWithDelta($d['totals']['kg'], $data['total_gross_weight'], 0.01);
+    }
+
+    /** The supplier's packing list: its carton figures go into the products – one press, every change in the history. */
+    public function test_packing_list_fills_the_products(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('local'); $this->actingAs($this->owner); Context::set(1, $this->owner->id);
+        $a = $this->f('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'PL-KETTLE', 'product_name_vendor' => 'Kettle', 'stock' => 0, 'f_active' => 1, 'e_product_type' => 'pool']);
+        $b = $this->f('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'PL-TOASTER', 'product_name_vendor' => 'Toaster', 'stock' => 0, 'f_active' => 1, 'e_product_type' => 'pool', 'units_per_carton' => 8]);
+        $table = "PACKING LIST\nItem\tDescription\tPCS/CTN\tCTNS\tCarton size (cm)\tG.W. (kg)\nPL-KETTLE\tSteel kettle\t12\t40\t62x40x35\t18.5\nPL-TOASTER\tToaster\t8\t20\t600x400x300\t22\n";
+        $rows = Packaging::proposal(1, $table);
+        $this->assertCount(2, $rows);
+        $k = collect($rows)->firstWhere('sku', 'PL-KETTLE')['changes']; $this->assertSame([12, 62.0, 40.0, 35.0, 18.5], [$k['units_per_carton']['to'], $k['carton_l']['to'], $k['carton_w']['to'], $k['carton_h']['to'], $k['carton_gross_weight']['to']]);
+        $t = collect($rows)->firstWhere('sku', 'PL-TOASTER')['changes']; $this->assertArrayNotHasKey('units_per_carton', $t, 'only real differences'); $this->assertSame(60.0, $t['carton_l']['to'], 'mm read as cm');
+        // a text line works too
+        $this->assertSame(24, Packaging::readList(1, "Model PL-KETTLE  24 pcs/ctn  Meas: 50 x 40 x 30 cm  G.W.: 15.2 kg")[0]['units_per_carton']);
+        // through Import anything: offered, one press puts it in
+        $r = $this->post('/api/intake', ['files' => [\Illuminate\Http\UploadedFile::fake()->createWithContent('PL march.txt', $table)]])->assertOk()->json('items.0');
+        $p = collect($r['proposals'])->firstWhere('action', 'packaging'); $this->assertNotNull($p); $this->assertStringContainsString('PL-KETTLE', $p['title']);
+        $this->assertSame(0, (int) DB::table('t_product_vendors')->where('id', $a)->value('units_per_carton'), 'nothing before the yes');
+        $this->postJson('/api/intake/' . $r['id'], ['action' => 'packaging'])->assertOk()->assertJsonPath('updated', 2);
+        $x = DB::table('t_product_vendors')->where('id', $a)->first(); $this->assertSame([12, 0.0868], [(int) $x->units_per_carton, (float) $x->carton_cbm]);
+        $this->assertTrue(DB::table('sys_audit_log')->where('table_name', 't_product_vendors')->where('record_id', $a)->exists());
     }
 }

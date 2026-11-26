@@ -107,6 +107,7 @@ class FormRules
             $data['params_json'] = json_encode(array_values($p));
         }
         if (in_array($table, ['tax_periods', 'tax_line_items', 'tax_entries', 'tax_rates'], true)) return TaxService::check($table, $data, $old, $id);      // R-TAX-4 / R-TAX-6
+        if ($table === 't_src_shipments') Packaging::fillShipment($data, $old);      // owner 27-11: cartons, CBM and gross weight from the PO's packing when empty
         if ($table === 't_account_mobiles' && ($w = self::mobile($data, $old, $id))) return $w;
         if ($table === 't_account_marketplaces' && ($w = ShopKit::check($data, $old, $id))) return $w;      // R-C-30 a seller account needs its shop      // R-C-26 slot rule, SMS forward, required set
         if ($table === 'cat_inventory_locations' && ($w = WarehouseSites::check($data, $old, $id))) return $w;      // R-H-3 / 6 system bins, bins with units

@@ -146,6 +146,12 @@ class Intake
             $props[] = ['action' => 'attach', 'entity' => (string) $r->ctx_entity, 'entity_id' => (int) $r->ctx_id, 'category' => $dk, 'title' => 'Put it on ' . $lbl . ' as ' . $dk, 'why' => 'you filed it from this record; its kind is guessed from ' . ($text !== '' ? 'what it says' : 'its name'), 'score' => 99];
             $facts['from'] = $lbl;
         }
+        // owner 27-11 02:31 a supplier's packing list: its carton figures go into the products' packaging – "shall I put it in?"
+        if ($text !== '' && (($dk ?? '') === 'Packing list' || preg_match('/pcs ?\/ ?ctn|carton size|meas(urement)?|g\.?\s?w\.?/iu', $text)) && ($pk = Packaging::proposal($ent, $text))) {
+            $props[] = ['action' => 'packaging', 'rows' => $pk, 'title' => 'Put the carton figures of ' . count($pk) . ' product(s) in: ' . implode(', ', array_slice(array_column($pk, 'sku'), 0, 4)) . (count($pk) > 4 ? ' …' : ''),
+                'why' => implode('; ', array_slice(array_map(fn ($r) => $r['sku'] . ': ' . implode(', ', array_map(fn ($k, $c) => str_replace('_', ' ', $k) . ' ' . ($c['from'] ?: '—') . ' → ' . $c['to'], array_keys($r['changes']), $r['changes'])), $pk), 0, 3)), 'score' => 95];
+            $facts['packing'] = count($pk) . ' product(s) with carton figures';
+        }
         // owner 27-11 02:31 the product vault: a product file (picture, artwork, label, A+, dieline …) goes to its place in its product's vault
         $vk = ProductVault::guess((string) $r->name, $ext, $text); $ctxProd = ! empty($r->ctx_entity) && Registry::table((string) $r->ctx_entity) === 't_product_vendors' ? (int) $r->ctx_id : 0;
         $vp = $ctxProd ?: (in_array($ext, array_merge(ProductVault::IMAGE, ProductVault::VECTOR, ['pdf', 'mp4', 'mov']), true) || $vk !== 'OTHER' ? ProductVault::productOf($ent, (string) $r->name, $vk === 'OTHER' ? '' : $text) : null);
@@ -212,6 +218,9 @@ class Intake
         $act = (string) ($in['action'] ?? '');
         if ($act === 'skip') { DB::table('mo_intake')->where('id', $id)->update(['status' => 'SKIPPED', 'done_json' => json_encode(['action' => 'skip', 'by' => $u->id, 'at' => now()->toDateTimeString()]), 'updated_at' => now()]); return ['message' => 'Set aside.']; }
         if ($act === 'open') { DB::table('mo_intake')->where('id', $id)->update(['status' => 'DONE', 'done_json' => json_encode(['action' => 'open', 'screen' => (string) ($in['screen'] ?? ''), 'by' => $u->id, 'at' => now()->toDateTimeString()]), 'updated_at' => now()]); return ['message' => 'Handed to the screen.']; }
+        $packed = null; if ($act === 'packaging') {      // the packing list's carton figures into the products, then the file is kept
+            $pp = collect(json_decode((string) $r->proposals_json, true) ?: [])->firstWhere('action', 'packaging'); if (! $pp) throw new \InvalidArgumentException('Nothing to put in.');
+            $packed = Packaging::apply($ent, $pp['rows'], $u); $act = 'keep'; }
         $vault = $act === 'vault'; if ($vault) $act = 'attach';      // the vault = attached to the product + its place in the vault
         if (! in_array($act, ['attach', 'keep'], true)) throw new \InvalidArgumentException('Choose what to do with it.');
         $entity = $act === 'keep' ? 'company' : (string) ($in['entity'] ?? ''); $eid = $act === 'keep' ? $ent : (int) ($in['entity_id'] ?? 0);
@@ -232,6 +241,7 @@ class Intake
         if ($vault) { abort_unless(Registry::table($entity) === 't_product_vendors', 422, 'The vault is a product\'s.'); ProductVault::put($ent, $eid, (int) $doc, (string) ($in['kind'] ?? ProductVault::guess((string) $r->name, (string) $r->ext)), ! empty($in['marketplace']) ? (int) $in['marketplace'] : null, $u);
             DB::table('mo_intake')->where('id', $id)->update(['done_json' => json_encode(['action' => 'vault', 'entity' => $entity, 'entity_id' => $eid, 'kind' => $in['kind'] ?? null, 'by' => $u->id, 'at' => now()->toDateTimeString()])]); }
         if ($entity === 't_src_po' || $entity === RecordService::formOfTable('t_src_po')) EventBus::fire('DOC_ADDED', 't_src_po', $eid, ['via' => 'import anything', 'document' => $doc], $ent);
+        if ($packed) return ['message' => $packed['message'] . ' The list is kept in Documents.', 'document' => $doc, 'updated' => $packed['updated']];
         return ['message' => $vault ? 'Put in the product\'s vault.' : ($act === 'keep' ? 'Kept in Documents.' : 'Put on the record – it shows in its Documents.'), 'document' => $doc];
     }
 
