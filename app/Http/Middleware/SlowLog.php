@@ -19,7 +19,7 @@ class SlowLog
         if ($request->method() !== 'GET' && $request->method() !== 'HEAD' && $res->getStatusCode() < 400) \App\Services\ReadCache::bump();      // a save by anyone: cached dashboard cards are read again
         $ms = (microtime(true) - $t) * 1000;
         if ($ms > 1200 && ! app()->runningUnitTests()) {
-            arsort($shapes); $top = implode(' || ', array_map(fn ($k, $c) => "$c× $k", array_keys(array_slice($shapes, 0, 3, true)), array_slice($shapes, 0, 3, true)));
+            arsort($shapes); $top = implode(' || ', array_map(fn ($k, $c) => $c . "× " . $k, array_keys(array_slice($shapes, 0, 3, true)), array_slice($shapes, 0, 3, true)));
             @file_put_contents(storage_path('logs/slow-' . date('Y-m-d') . '.log'), sprintf("%s %s %s %dms queries=%d db=%dms worst=%dms %s ## TOP %s\n", date('H:i:s'), $request->method(), '/' . ltrim($request->path(), '/'), $ms, $n, $qms, $worst[0], $worst[1], $top), FILE_APPEND);
         }
         return $res;
