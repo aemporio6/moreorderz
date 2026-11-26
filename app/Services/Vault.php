@@ -25,6 +25,9 @@ class Vault
 
     private static array $cache = [];
 
+    /** Secrets kept in columns that no form shows (old tool data): sealed in the vault all the same (R-D-71, 27-11 sweep). */
+    public const HIDDEN = ['cat_vendors' => ['vendor_password', 'vendor_bank_details'], 't_account' => ['pass'], 't_account_bank_questions' => ['answer']];
+
     /** column → VAULT | CARD | NEVER for one table (only columns the table really has). */
     public static function columns(string $table): array
     {
@@ -36,7 +39,7 @@ class Vault
             if (preg_match('/_(enc|ref)$/', $c)) continue;   // already encrypted elsewhere, or only a pointer to a secret kept outside
             if (preg_match(self::NEVER, $c)) $out[$c] = 'NEVER';
             elseif (preg_match(self::CARD, $c)) $out[$c] = 'CARD';
-            elseif (isset($secret[$c]) || (preg_match(self::ACCOUNT, $c) && str_starts_with($table, 't_account'))) $out[$c] = 'VAULT';
+            elseif (isset($secret[$c]) || in_array($c, self::HIDDEN[$table] ?? [], true) || (preg_match(self::ACCOUNT, $c) && str_starts_with($table, 't_account'))) $out[$c] = 'VAULT';
         }
         return self::$cache[$table] = ['kinds' => $out, 'types' => $have->all()];
     }
@@ -143,7 +146,7 @@ class Vault
     {
         $tables = DB::table('sys_registry')->where('secret', 1)->whereNotNull('table_name')->distinct()->pluck('table_name')
             ->merge(collect(DB::select("SELECT DISTINCT table_name AS t FROM information_schema.columns WHERE table_schema = DATABASE() AND (column_name REGEXP '(^|_)(cvv|cvc|pin)(_|$)' OR column_name REGEXP '(^|_)card_(number|no)$' OR (table_name LIKE 't\\\\_account%' AND column_name REGEXP '(^|_)(account_no|account_number|iban_no|iban)$'))"))->pluck('t'))
-            ->unique()->filter(fn ($t) => DB::getSchemaBuilder()->hasTable($t) && (! $only || in_array($t, $only, true)))->values();
+            ->merge(array_keys(self::HIDDEN))->unique()->filter(fn ($t) => DB::getSchemaBuilder()->hasTable($t) && (! $only || in_array($t, $only, true)))->values();
         $out = [];
         foreach ($tables as $t) {
             $kinds = self::kinds($t); if (! $kinds) continue; $pk = Registry::pk($t); $n = ['table' => $t, 'sealed' => 0, 'cards' => 0, 'wiped' => 0];

@@ -34,4 +34,16 @@ class SetupListsTest extends TestCase
         $this->assertSame('Ayesha Khan 60%, Bilal Raza 40%', $row['directors']); $this->assertSame('#/tax?company=' . $co, $row['tax']);
         $this->getJson('/api/tax?company=' . $co)->assertOk()->assertJsonPath('company.name', 'Test Trading Ltd');
     }
+
+    /** R-D-71 + 27-11 sweep: secrets in columns no form showed are sealed in the vault; the record keeps only ••••; a list never shows them. */
+    public function test_d71_hidden_secrets_are_sealed(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id);
+        $v = $this->f('cat_vendors', ['fk_id_ent' => 1, 'vendor_name' => 'Local Co', 'vendor_password' => 'plain-secret-1', 'vendor_bank_details' => 'Sort 00-00-00 Acc 12345678', 'f_active' => 1]);
+        \App\Services\Vault::sealExisting(['cat_vendors']);
+        $row = DB::table('cat_vendors')->where('id', $v)->first();
+        $this->assertTrue(\App\Services\Vault::isMasked($row->vendor_password)); $this->assertTrue(\App\Services\Vault::isMasked($row->vendor_bank_details));
+        $this->assertSame(2, DB::table('sys_vault')->where('table_name', 'cat_vendors')->where('record_id', $v)->count());
+        $this->assertStringNotContainsString('plain-secret-1', json_encode(RecordService::list('cat_vendors', ['cols' => ['vendor_name', 'vendor_password']])));
+    }
 }

@@ -16,3 +16,5 @@ MR-0976,BUILT,function FormAssist::options,"27-11: product manager role → prod
 MR-1125,BUILT,function Registry::tableOptions,"27-11: every country list – pinned first (pin order 0 / 1, others 2), then name, active only; pin order is a number field; country code labelled Dial code"
 MR-0935,BUILT,function FormRules::checkForm,"27-11: product type / trend – name ≤ 50 trimmed, code required ≤ 10, upper case, unique in the company; labels Trend name / Code"
 MR-1122,BUILT,function RecordService::extraColumns,"27-11: company list column Directors (share %) and a Tax link that opens the tax dashboard of that company"
+MR-0981,BUILT,const Vault::HIDDEN,"27-11: local vendor card – company name, portal user id; portal password and bank details only in the vault (masked, reveal logged)"
+MR-0227,BUILT,const Vault::HIDDEN,"27-11: the old vendor password / bank details sealed in the vault; never in a list or JSON"

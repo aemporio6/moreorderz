@@ -234,6 +234,7 @@ class Intake
                 'sha256' => $r->sha256, 'ref_no' => isset($facts['refs'][0]) ? mb_substr((string) $facts['refs'][0], 0, 80) : null, 'd_doc' => $facts['date'] ?? null, 'amount' => $facts['amount'] ?? null,
                 'version' => 1, 'status' => 'ACTIVE', 'uploaded_by' => $u->id, 'created_at' => now(), 'notes' => 'From Import anything (' . strtolower((string) $r->source) . ')']));
             DB::table('sys_documents')->where('id', $doc)->update(['doc_no' => mb_substr(Numbering::next('DOC', $ent), 0, 30)]);
+            self::searchable((int) $doc, $r);      // owner 27-11: what a document says is found by the search too
         }
         if (! DB::table('sys_document_links')->where(['fk_id_document' => $doc, 'entity' => $entity, 'entity_id' => $eid])->exists()) DB::table('sys_document_links')->insert(['fk_id_document' => $doc, 'entity' => mb_substr($entity, 0, 60), 'entity_id' => $eid]);
         DB::table('mo_intake')->where('id', $id)->update(['status' => 'DONE', 'fk_id_document' => $doc, 'done_json' => json_encode(['action' => $act, 'entity' => $entity, 'entity_id' => $eid, 'by' => $u->id, 'at' => now()->toDateTimeString()]), 'updated_at' => now()]);
@@ -243,6 +244,18 @@ class Intake
         if ($entity === 't_src_po' || $entity === RecordService::formOfTable('t_src_po')) EventBus::fire('DOC_ADDED', 't_src_po', $eid, ['via' => 'import anything', 'document' => $doc], $ent);
         if ($packed) return ['message' => $packed['message'] . ' The list is kept in Documents.', 'document' => $doc, 'updated' => $packed['updated']];
         return ['message' => $vault ? 'Put in the product\'s vault.' : ($act === 'keep' ? 'Kept in Documents.' : 'Put on the record – it shows in its Documents.'), 'document' => $doc];
+    }
+
+    /** The document in "search everything" with its own words (the text read from it, its file name and kind), so a word inside a PDF finds it. */
+    public static function searchable(int $doc, object $r): void
+    {
+        try { $form = RecordService::formOfTable('sys_documents'); if ($form) SearchIndex::put($form, 'sys_documents', $doc, (int) $r->fk_id_ent);
+            $words = trim(preg_replace('/\s+/u', ' ', mb_substr((string) $r->text, 0, 3500))); if ($words === '') return;
+            $row = DB::table('sys_search_index')->where('entity', 'sys_documents')->where('entity_id', $doc)->first(['id', 'title', 'search_text']);
+            if (! $row) DB::table('sys_search_index')->insert(['fk_id_ent' => (int) $r->fk_id_ent, 'entity' => 'sys_documents', 'entity_id' => $doc, 'department' => $form ?: 'document', 'title' => mb_substr((string) DB::table('sys_documents')->where('id', $doc)->value('title'), 0, 255),
+                'subtitle' => 'Document', 'search_text' => mb_substr($r->name . ' ' . $words, 0, 4000), 'squash' => SearchIndex::squash($r->name . ' ' . $words), 'url' => '#/rec/' . ($form ?: 'document') . '/' . $doc, 'updated_at' => now()]);
+            else DB::table('sys_search_index')->where('id', $row->id)->update(['search_text' => mb_substr($row->search_text . ' ' . $r->name . ' ' . $words, 0, 4000), 'squash' => SearchIndex::squash($row->title . ' ' . $row->search_text . ' ' . $r->name . ' ' . $words)]);
+        } catch (\Throwable $e) { report($e); }
     }
 
     private static function docType(int $ent, string $name): int

@@ -660,9 +660,8 @@
 "functions": 1,
 "lines": 21,
 "status": {
-"BUILT": 16,
+"BUILT": 17,
 "PARTIAL": 3,
-"FORM_ONLY": 1,
 "NOT_APPLICABLE": 1
 },
 "open": [
@@ -677,12 +676,6 @@
 "status": "PARTIAL",
 "text": "Every page usable at 390 px; short links open the record after WhatsApp-code login",
 "note": "screens checked on a phone width; short links with WhatsApp-code login not built"
-},
-{
-"reg": "MR-0981",
-"status": "FORM_ONLY",
-"text": "[Partial] Local vendor (inventory vendor) card with portal login and security questions",
-"note": "R-D-71: form only"
 },
 {
 "reg": "MR-1406",
@@ -1678,22 +1671,9 @@
 "functions": 5,
 "lines": 2,
 "status": {
-"FORM_ONLY": 2
+"BUILT": 2
 },
-"open": [
-{
-"reg": "MR-0227",
-"status": "FORM_ONLY",
-"text": "T_vendors_local (6 functions) comes back as: AJAX CRUD supplier card cat_vendors. Fix: vendor_password, vendor_bank_details plain and sent in DataTables JSO…. Improved: Merge into Supplier entity; credentials in vault",
-"note": "form; secrets go to the vault"
-},
-{
-"reg": "MR-0981",
-"status": "FORM_ONLY",
-"text": "[Partial] Local vendor (inventory vendor) card with portal login and security questions",
-"note": "R-D-71: form only"
-}
-]
+"open": []
 },
 {
 "controller": "Tm_cron",

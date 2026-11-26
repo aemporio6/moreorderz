@@ -155,4 +155,14 @@ class FinderTest extends TestCase
             $this->assertTrue((bool) array_filter($urls, fn ($u) => str_contains((string) $u, '/' . $po)), "“{$q}” finds the PO");
         }
     }
+
+    /** Owner 27-11: a word inside a filed document (read from the PDF / picture) finds the document. */
+    public function test_words_inside_a_document_are_found(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('local'); $this->actingAs($this->owner); \App\Services\Context::set(1, $this->owner->id);
+        $r = $this->post('/api/intake', ['files' => [\Illuminate\Http\UploadedFile::fake()->createWithContent('scan 77.pdf', "%PDF-1.4\nx")], 'texts' => ["Fumigation certificate ZEBRAWOOD-9921 for the shipment"]])->assertOk()->json('items.0');
+        $this->postJson('/api/intake/' . $r['id'], ['action' => 'keep'])->assertOk();
+        $titles = []; foreach ($this->getJson('/api/find?q=zebrawood&scope=records')->json('groups') as $g) foreach ($g['items'] as $i) $titles[] = $i['title'];
+        $this->assertNotEmpty(array_filter($titles, fn ($t) => str_contains($t, 'scan 77')), 'found by a word inside it: ' . json_encode($titles));
+    }
 }
