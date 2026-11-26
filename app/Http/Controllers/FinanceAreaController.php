@@ -28,7 +28,7 @@ class FinanceAreaController extends Controller
     public function lineProfit(Request $r, int $id) { $this->money($r); return FinanceArea::lineProfit($id) ?? response()->json(['message' => 'Sale line not found.'], 404); }
     public function recode(Request $r) { Perm::need($r->user(), 'admin.owner'); return FinanceArea::recode($this->ent()); }
 
-    public function tax(Request $r) { Perm::need($r->user(), 'tax.use'); return TaxService::dashboard($this->ent()); }
+    public function tax(Request $r) { Perm::need($r->user(), 'tax.use'); return TaxService::dashboard($this->ent(), $r->query('company') ? (int) $r->query('company') : null); }
     public function taxPeriod(Request $r, int $id) { Perm::need($r->user(), 'tax.use'); return $this->run(fn () => TaxService::period($id)); }
     public function taxFill(Request $r, int $id) { Perm::need($r->user(), 'tax.use'); return $this->run(fn () => TaxService::fillFromFinance($id)); }
     public function taxNext(Request $r) { Perm::need($r->user(), 'tax.use'); return TaxService::nextPeriod((int) $r->query('company')); }

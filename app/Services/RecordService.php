@@ -71,7 +71,8 @@ class RecordService
         $labels = self::labels($fields, $rows);
         $col = fn ($c) => ['name' => $c, 'label' => self::fieldByCol($fields, $c)['label'], 'type' => self::fieldByCol($fields, $c)['type'], 'group' => ListFilter::group(self::fieldByCol($fields, $c)['type'])];
         $dqCol = ['name' => 'dq_score', 'label' => 'Complete %', 'type' => 'number', 'group' => 'number', 'computed' => true];
-        return [
+        $extra = self::extraColumns($table, $rows->pluck('id')->all());      // R-F_SETUP-37 a company list shows its directors (share %) and a link to its tax dashboard
+        $out = [
             'form_key' => $formKey, 'title' => Registry::fields($formKey)[0]['form_title'], 'table' => $table, 'total' => $total, 'page' => $page, 'per_page' => $per, 'all_columns' => array_merge(array_map($col, $allCols), $dq ? [$dqCol] : []),
             'columns' => array_merge($coCol ? [['name' => 'company', 'label' => 'Company', 'type' => 'text', 'group' => 'text', 'computed' => true]] : [], array_map(fn ($c) => $c === 'dq_score' ? $dqCol : $col($c), $want && $dqShow ? array_values(array_filter($asked, fn ($c) => $c === 'dq_score' || in_array($c, $cols, true))) : array_merge($cols, $dqShow ? ['dq_score'] : []))) /* the person's own order */, 'totals' => $totals, 'where' => $where, 'where_text' => ListFilter::words($where, self::byCol($fields)),
             'locked' => SystemRows::locked($table, $rows->pluck('id')->all()),      /* R-F_SETUP-42 the lock in the list */
@@ -84,6 +85,23 @@ class RecordService
                 return $a;
             })->all(),
         ];
+        if ($extra) { array_splice($out['columns'], min(2, count($out['columns'])), 0, $extra['columns']); foreach ($out['rows'] as &$row) $row += $extra['rows'][$row['id']] ?? []; unset($row); }
+        return $out;
+    }
+
+    /** Columns worked out for a list (not stored): [columns, rows by id]. */
+    private static function extraColumns(string $table, array $ids): ?array
+    {
+        if ($table !== 'cat_company_house' || ! $ids) return null;
+        $rows = DB::table('cat_company_house')->whereIn('id', $ids)->get(['id', 'fk_director_1', 'director_1_share', 'fk_director_2', 'director_2_share', 'fk_director_3', 'director_3_share']);
+        $people = DB::table('t_account')->whereIn('id', $rows->flatMap(fn ($r) => [$r->fk_director_1, $r->fk_director_2, $r->fk_director_3])->filter()->unique()->all() ?: [0])->get(['id', DB::raw("TRIM(CONCAT_WS(' ', first_name, sur_name)) n")])->pluck('n', 'id');
+        $tax = DB::table('tax_periods')->whereIn('fk_company_house', $ids)->where('f_active', 1)->groupBy('fk_company_house')->selectRaw('fk_company_house c, COUNT(*) n')->pluck('n', 'c');
+        $out = [];
+        foreach ($rows as $r) { $d = [];
+            foreach ([1, 2, 3] as $i) if ($p = (int) $r->{"fk_director_$i"}) { $sh = $r->{"director_{$i}_share"}; $d[] = trim(($people[$p] ?? "#$p") . ($sh !== null && $sh !== '' ? ' ' . rtrim(rtrim(number_format((float) $sh, 2, '.', ''), '0'), '.') . '%' : '')); }
+            $out[(int) $r->id] = ['directors' => implode(', ', $d) ?: null, 'tax' => '#/tax?company=' . $r->id, 'tax__text' => ($tax[$r->id] ?? 0) ? 'Tax dashboard (' . $tax[$r->id] . ')' : 'Tax dashboard'];
+        }
+        return ['columns' => [['name' => 'directors', 'label' => 'Directors (share %)', 'type' => 'text', 'group' => 'text', 'computed' => true], ['name' => 'tax', 'label' => 'Tax', 'type' => 'applink', 'group' => 'text', 'computed' => true]], 'rows' => $out];
     }
 
     private static function byCol(array $fields): array

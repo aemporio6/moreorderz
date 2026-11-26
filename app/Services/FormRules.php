@@ -107,6 +107,14 @@ class FormRules
             $data['params_json'] = json_encode(array_values($p));
         }
         if (in_array($table, ['tax_periods', 'tax_line_items', 'tax_entries', 'tax_rates'], true)) return TaxService::check($table, $data, $old, $id);      // R-TAX-4 / R-TAX-6
+        if (in_array($table, ['cat_product_type', 'cat_product_trends'], true)) {      // R-D-70 name ≤ 50, code ≤ 10 upper case, unique in the company
+            $nc = $table === 'cat_product_type' ? 'product_type_name' : 'product_trend_name'; $cc = $table === 'cat_product_type' ? 'iso_product_type' : 'iso_product_trend';
+            if (array_key_exists($nc, $data) || ! $id) { $n = trim(preg_replace('/\s+/', ' ', (string) ($data[$nc] ?? ''))); if ($n === '') return [$nc => 'Enter the name.']; if (mb_strlen($n) > 50) return [$nc => 'At most 50 letters.']; $data[$nc] = $n; }
+            if (array_key_exists($cc, $data) || ! $id) { $c = mb_strtoupper(preg_replace('/\s+/', '', (string) ($data[$cc] ?? ''))); if ($c === '') return [$cc => 'Enter the code (e.g. KIT).']; if (mb_strlen($c) > 10) return [$cc => 'At most 10 letters / digits.'];
+                $co = (int) ($data['fk_id_ent'] ?? $old['fk_id_ent'] ?? Context::ent() ?? 0);
+                if (DB::table($table)->whereRaw("UPPER(REPLACE($cc, ' ', '')) = ?", [$c])->where(fn ($w) => $w->where('fk_id_ent', $co)->orWhere('fk_id_ent', 0)->orWhereNull('fk_id_ent'))->when($id, fn ($w) => $w->where('id', '<>', $id))->exists()) return [$cc => "The code $c is already used in this company."];
+                $data[$cc] = $c; }
+        }
         if ($table === 't_src_shipments') Packaging::fillShipment($data, $old);      // owner 27-11: cartons, CBM and gross weight from the PO's packing when empty
         if ($table === 't_account_mobiles' && ($w = self::mobile($data, $old, $id))) return $w;
         if ($table === 't_account_marketplaces' && ($w = ShopKit::check($data, $old, $id))) return $w;      // R-C-30 a seller account needs its shop      // R-C-26 slot rule, SMS forward, required set

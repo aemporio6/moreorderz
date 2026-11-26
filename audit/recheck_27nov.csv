@@ -14,3 +14,5 @@ MR-0887,BUILT,function WarehouseSites::check,"27-11: inventory setup lists (loca
 MR-0978,BUILT,function WarehouseSites::check,"27-11: inventory setup catalogs; a location can never be its own parent or sit under its own child"
 MR-0976,BUILT,function FormAssist::options,"27-11: product manager role → product manager (active people of that role, cleared when the role changes)"
 MR-1125,BUILT,function Registry::tableOptions,"27-11: every country list – pinned first (pin order 0 / 1, others 2), then name, active only; pin order is a number field; country code labelled Dial code"
+MR-0935,BUILT,function FormRules::checkForm,"27-11: product type / trend – name ≤ 50 trimmed, code required ≤ 10, upper case, unique in the company; labels Trend name / Code"
+MR-1122,BUILT,function RecordService::extraColumns,"27-11: company list column Directors (share %) and a Tax link that opens the tax dashboard of that company"

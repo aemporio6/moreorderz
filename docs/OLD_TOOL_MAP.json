@@ -154,18 +154,10 @@
 "functions": 9,
 "lines": 11,
 "status": {
-"BUILT": 6,
-"FORM_ONLY": 1,
+"BUILT": 7,
 "NOT_APPLICABLE": 4
 },
-"open": [
-{
-"reg": "MR-1122",
-"status": "FORM_ONLY",
-"text": "[Partial] Company list shows the directors and links to Taxation",
-"note": "R-F_SETUP-37: list only"
-}
-]
+"open": []
 },
 {
 "controller": "Cat_country",
@@ -373,34 +365,18 @@
 "functions": 0,
 "lines": 2,
 "status": {
-"BUILT": 1,
-"FORM_ONLY": 1
+"BUILT": 2
 },
-"open": [
-{
-"reg": "MR-0935",
-"status": "FORM_ONLY",
-"text": "[Partial] Product type and trend need an ISO code.",
-"note": "R-D-70: forms only"
-}
-]
+"open": []
 },
 {
 "controller": "Cat_product_type",
 "functions": 0,
 "lines": 2,
 "status": {
-"BUILT": 1,
-"FORM_ONLY": 1
+"BUILT": 2
 },
-"open": [
-{
-"reg": "MR-0935",
-"status": "FORM_ONLY",
-"text": "[Partial] Product type and trend need an ISO code.",
-"note": "R-D-70: forms only"
-}
-]
+"open": []
 },
 {
 "controller": "Cat_references",

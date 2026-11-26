@@ -611,7 +611,7 @@
       if (r === '#/sku-homes') return await pageSkuHomes();
       if (r.startsWith('#/close')) { const sh = (r.match(/shop=(\d+)/) || [])[1], mo = (r.match(/month=(\d{4}-\d{2})/) || [])[1]; return sh && mo ? await pageCloseMonth(+sh, mo) : await pageClose(); }
       if (r === '#/money') return await pageMoney();
-      if (r.startsWith('#/tax')) return await pageTax(+(r.split('/')[2] || 0));      // R-TAX-1 … 6
+      if (r.startsWith('#/tax')) return await pageTax(+((r.split('?')[0]).split('/')[2] || 0), +(new URLSearchParams(r.split('?')[1] || '').get('company') || 0));      // R-TAX-1 … 6
       if (r.startsWith('#/bank-cash')) return await pageBankCash();      // R-FIN-64
       if (r === '#/finance-home') return await pageFinanceHome();      // R-FIN-65, MR-0080
       if (r === '#/scenario') return await pageScenario();      // MR-0081
@@ -748,7 +748,7 @@
   const fmtCell = (v, type, row, name) => { if (row[name + '__label'] !== undefined) return esc(row[name + '__label']);
     if (typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v) && /colou?r/i.test(name)) return `<span style="display:inline-block;width:14px;height:14px;border-radius:4px;background:${esc(v)};vertical-align:middle;margin-right:6px;border:1px solid var(--line)"></span>${esc(v)}`;      /* R-D-69 swatch in the list */ if (v === null || v === undefined || v === '') return '<span class="faint">—</span>';
     if (type === 'check') return +v ? ic('check') : '<span class="faint">—</span>'; if (type === 'money') return (+v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    if (type === 'link') return `<a href="${esc(v)}" target="_blank" rel="noopener">link</a>`; return esc(String(v).length > 60 ? String(v).slice(0, 57) + '…' : v); };
+    if (type === 'link') return `<a href="${esc(v)}" target="_blank" rel="noopener">link</a>`; if (type === 'applink') return v ? `<a href="${esc(v)}" data-nogo>${esc(row[name + '__text'] || 'Open')}</a>` : ''; return esc(String(v).length > 60 ? String(v).slice(0, 57) + '…' : v); };
   // ---------- list of any form: views, columns (order, width), filters on every column, filter builder, totals, export ----------
   let FMETA = null, DENSITY = null;
   const treeRules = w => (w && w.rules) || [];
@@ -3729,9 +3729,9 @@
       ${a.money.length ? `<div>Money in the books: ${a.money.map(m => `${esc(m.code)} ${esc(m.name)} ${money(m.balance)}`).join(' · ')}</div>` : ''}</div>`;
   }
   // ---------- R-TAX taxation: all periods, then one period's worksheet, Corporation Tax, size test and deadlines ----------
-  async function pageTax(id) {
-    busy(true); let d; try { d = await api(id ? `tax/${id}` : 'tax'); } catch (e) { busy(false); $('#main').innerHTML = `<div class="card"><div class="empty">${ic('alert')}<div>${esc(e.message)}</div></div></div>`; return; } busy(false);
-    if (!id) { $('#main').innerHTML = `<div class="page-head"><div><h1>Taxation</h1><div class="sub">Periods of accounts: profit, Corporation Tax and the next deadline. Entries are typed or filled from the ledger.</div></div><div class="actions"><a class="btn" href="#/list/tax_period">Periods</a><a class="btn" href="#/list/tax_entry">Entries</a><a class="btn" href="#/list/tax_rate">CT rates</a></div></div>
+  async function pageTax(id, company = 0) {
+    busy(true); let d; try { d = await api(id ? `tax/${id}` : 'tax' + (company ? '?company=' + company : '')); } catch (e) { busy(false); $('#main').innerHTML = `<div class="card"><div class="empty">${ic('alert')}<div>${esc(e.message)}</div></div></div>`; return; } busy(false);
+    if (!id) { $('#main').innerHTML = `<div class="page-head"><div>${d.company ? '<div class="small muted"><a href="#/tax">Taxation</a> ›</div>' : ''}<h1>Taxation${d.company ? ' · ' + esc(d.company.name || '') : ''}</h1><div class="sub">Periods of accounts: profit, Corporation Tax and the next deadline. Entries are typed or filled from the ledger.</div></div><div class="actions"><a class="btn" href="#/list/tax_period">Periods</a><a class="btn" href="#/list/tax_entry">Entries</a><a class="btn" href="#/list/tax_rate">CT rates</a></div></div>
       <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>Company</th><th>Period</th><th>Status</th><th class="num">Turnover</th><th class="num">Net</th><th class="num">Taxable</th><th class="num">CT</th><th class="num">Balance due</th><th>Balanced</th><th>Next deadline</th></tr></thead><tbody>${d.rows.map(r => `<tr><td>${esc(r.company || '')}</td><td><a href="#/tax/${r.id}">${esc(r.label || r.from + ' – ' + r.to)}</a></td><td>${esc(r.status)}</td><td class="num">${money(r.turnover)}</td><td class="num">${money(r.net)}</td><td class="num">${money(r.taxable)}</td><td class="num">${money(r.ct)}</td><td class="num">${money(r.balance_due)}</td><td>${r.balanced ? '<span class="chip ok">Yes</span>' : '<span class="chip err">No</span>'}</td><td>${esc(r.next_deadline || '—')} <span class="small muted">${esc(r.next_what || '')}</span></td></tr>`).join('') || '<tr><td colspan="10" class="muted">No period yet – add one under Periods.</td></tr>'}</tbody></table></div></div>`; return; }
     const W = d.worksheet, P = W.pl, B = W.bs, T = W.tax, line = (l, v, b) => `<tr><td>${b ? `<b>${l}</b>` : l}</td><td class="num">${b ? `<b>${money(v)}</b>` : money(v)}</td></tr>`;
     $('#main').innerHTML = `<div class="page-head"><div><div class="small muted"><a href="#/tax">Taxation</a> ›</div><h1>${esc(d.period.period_label || '')}</h1><div class="sub">${esc(d.period.period_start)} – ${esc(d.period.period_end)} · ${esc(d.period.accounts_type)} · size test: <b>${esc(d.size.size)}</b></div></div><div class="actions"><button class="btn" id="txFill">Fill from the ledger</button><a class="btn" href="#/list/tax_entry?f[fk_period]=${id}">Entries</a><a class="btn" href="#/rec/tax_period/${id}">Period</a></div></div>

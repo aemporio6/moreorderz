@@ -127,16 +127,16 @@ class TaxService
     }
 
     /** R-TAX-6 dashboard "All periods". */
-    public static function dashboard(int $ent): array
+    public static function dashboard(int $ent, ?int $company = null): array
     {
         $rows = [];
-        foreach (DB::table('tax_periods as p')->leftJoin('cat_company_house as c', 'c.id', '=', 'p.fk_company_house')->where('p.fk_id_ent', $ent)->where('p.f_active', 1)->orderByDesc('p.period_end')->get(['p.id', 'c.company_name']) as $r) {
+        foreach (DB::table('tax_periods as p')->leftJoin('cat_company_house as c', 'c.id', '=', 'p.fk_company_house')->where('p.fk_id_ent', $ent)->where('p.f_active', 1)->when($company, fn ($w) => $w->where('p.fk_company_house', $company))->orderByDesc('p.period_end')->get(['p.id', 'c.company_name']) as $r) {
             $x = self::period((int) $r->id);
             $rows[] = ['id' => (int) $r->id, 'company' => $r->company_name, 'label' => $x['period']->period_label, 'from' => $x['period']->period_start, 'to' => $x['period']->period_end, 'status' => $x['period']->status,
                 'turnover' => $x['worksheet']['pl']['turnover'], 'net' => $x['worksheet']['pl']['net'], 'taxable' => $x['worksheet']['tax']['taxable'], 'ct' => $x['ct']['ct'], 'balance_due' => $x['ct']['balance_due'],
                 'balanced' => $x['worksheet']['bs']['balanced'], 'next_deadline' => $x['next_deadline']['due'] ?? null, 'next_what' => $x['next_deadline']['title'] ?? null];
         }
-        return ['rows' => $rows];
+        return ['rows' => $rows] + ($company ? ['company' => ['id' => $company, 'name' => DB::table('cat_company_house')->where('id', $company)->value('company_name')]] : []);
     }
 
     /** R-TAX-6 the next period of a company: start = last end + 1 day, end = start + 1 year − 1 day; the first one is ticked "first accounts". */
