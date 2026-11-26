@@ -20,7 +20,7 @@ class Guide
         $form = DB::table('sys_forms')->where('form_key', $formKey)->first();
         $req = array_values(array_map(fn ($f) => $f['label'], array_filter($fields, fn ($f) => $f['required'] && ! str_starts_with((string) $f['default_rule'], 'numbering:'))));
         $numbered = collect($fields)->first(fn ($f) => str_starts_with((string) $f['default_rule'], 'numbering:'));
-        $what = trim((string) ($form->help ?? '')) ?: ('Every ' . self::lower($title) . ' of the company, one row each' . ($form && ($form->department ?: $form->module) ? ' – part of ' . ($form->department ?: $form->module) : '') . '.');
+        $what = trim((string) ($form->help ?? '')) ?: ('All ' . self::lower($title) . ' of the company, one row each' . ($form && ($form->department ?: $form->module) ? ' – part of ' . ($form->department ?: $form->module) : '') . '.');
         $can = $u && Perm::has($u, "form:$formKey:ADD");
         $add = ! $can ? 'Your role only looks at this list. To add here, press a refused button once and use "Ask the Owner".'
             : 'Press New (or + Create from any screen).' . ($req ? ' Needed: ' . implode(', ', array_slice($req, 0, 6)) . (count($req) > 6 ? ' and ' . (count($req) - 6) . ' more' : '') . '.' : ' No field is compulsory.') . ($numbered ? ' The ' . self::lower((string) $numbered['label']) . ' is given by the system.' : '');
