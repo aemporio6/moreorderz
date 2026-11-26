@@ -34,6 +34,11 @@ Route::get('/s/{token}', [\App\Http\Controllers\ShareController::class, 'page'])
 Route::get('/s/{token}/file/{id}', [\App\Http\Controllers\ShareController::class, 'file'])->where('token', '[a-f0-9]{64}')->whereNumber('id')->middleware('throttle:60,1');
 Route::post('/s/{token}/{action}', [\App\Http\Controllers\ShareController::class, 'act'])->where('token', '[a-f0-9]{64}')->whereIn('action', ['accept', 'change', 'photos', 'date'])->middleware('throttle:20,1');
 Route::get('/wa/inbound', [ConnectController::class, 'waVerify']);
+// Owner 26-11 20:08: MY TOOL direct link (Bearer link key, no session, CORS) – MY TOOL docs/moreorderz-link.md
+Route::options('/api/mytool/{any}', [\App\Http\Controllers\MyToolLinkController::class, 'preflight'])->where('any', 'hello|receive|send')->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class]);
+Route::get('/api/mytool/hello', [\App\Http\Controllers\MyToolLinkController::class, 'hello'])->middleware('throttle:60,1');
+Route::post('/api/mytool/receive', [\App\Http\Controllers\MyToolLinkController::class, 'receive'])->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class])->middleware('throttle:30,1');
+Route::get('/api/mytool/send', [\App\Http\Controllers\MyToolLinkController::class, 'send'])->middleware('throttle:30,1');
 Route::post('/wa/inbound', [ConnectController::class, 'waInbound'])->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class])->middleware('throttle:120,1');
 
 Route::middleware(['auth', SetContext::class])->group(function () {
@@ -53,6 +58,11 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('parties', [AppController::class, 'parties']);      // R-C-1
         Route::get('shops/{id}/kit', [AppController::class, 'shopKit'])->whereNumber('id');      // R-C-30
         Route::get('people/external', [AppController::class, 'externalList']);      // R-C-19
+        Route::get('mytool-link', [\App\Http\Controllers\MyToolLinkController::class, 'page']);
+        Route::post('mytool-link', [\App\Http\Controllers\MyToolLinkController::class, 'saveSettings']);
+        Route::post('mytool-link/key', [\App\Http\Controllers\MyToolLinkController::class, 'makeKey']);
+        Route::post('mytool-link/revoke', [\App\Http\Controllers\MyToolLinkController::class, 'revoke']);
+        Route::post('mytool-link/apply', [\App\Http\Controllers\MyToolLinkController::class, 'apply']);
         Route::post('mytool-import', [\App\Http\Controllers\CoreExtrasController::class, 'mytool']);      // owner 26-11 MY TOOL purchase history
         Route::get('inspect/{key}/{id}', [\App\Http\Controllers\CoreExtrasController::class, 'inspect'])->whereNumber('id');      // MR-0941
         Route::get('lineage/{key}/{id}', [\App\Http\Controllers\CoreExtrasController::class, 'lineage'])->whereNumber('id');      // MR-1539

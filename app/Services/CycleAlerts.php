@@ -135,7 +135,7 @@ class CycleAlerts
             if ($i < $from || $i >= $from + $per) continue;
             $po = DB::table('t_src_po')->where('fk_id_cycle', $c->id)->where('f_active', 1)->orderBy('id')->get(['po_number', 'po_code']);
             $prods = DB::table('t_src_cycle_products as cp')->leftJoin('t_src_suppliers as s', 's.id', '=', 'cp.fk_id_supplier')->where('cp.fk_id_cycle', $c->id)->where('cp.f_active', 1)->orderBy('cp.id')->get(['cp.product_name', 'cp.target_qty', 's.supplier_name']);
-            $needs = self::detect($ent, (int) $c->id); usort($needs, fn ($a, $b) => [$a['p'], $a['due'] ?? '9999'] <=> [$b['p'], $b['due'] ?? '9999']);
+            $needs = ($allNeeds ??= collect(self::detect($ent))->groupBy('cycle'))->get((int) $c->id, collect())->values()->all(); usort($needs, fn ($a, $b) => [$a['p'], $a['due'] ?? '9999'] <=> [$b['p'], $b['due'] ?? '9999']);
             $days = $c->sourcing_date ? max(0, (int) floor(($today->getTimestamp() - strtotime((string) $c->sourcing_date)) / 86400)) : 0;
             $rows[] = ['id' => (int) $c->id, 'code' => $c->cycle_code, 'cell' => $c->cycle_code . ' · entered ' . ($c->created_at ? date('d M', strtotime((string) $c->created_at)) : '—') . ' · ' . ($c->status ?: '—'),
                 'steps' => array_map(fn ($st) => array_intersect_key($st, array_flip(['key', 'name', 'state', 'strip', 'count', 'done', 'hint'])), $pl['steps']), 'current' => $pl['current'], 'current_name' => $pl['current_name'], 'missing_text' => $pl['missing_text'], 'progress_pct' => $pl['progress_pct'],

@@ -58,10 +58,10 @@ MR-1314|B|form:t_account|team member form as Person + Account kit tabs (sub-list
 MR-1317|B|function save|one form per record, one save path
 MR-1318|B|in_quick|Quick = the same form: every section shows its required + key fields (registry in_quick), "Show all n more" opens the rest of that section in place, the same save; seen on live (New purchase order: Basics 2 fields · Show all 3 more)
 MR-1319|B|function addOption|+ Add on every dropdown (form or in place, the new value saved to its central list and seen by every form); fixed and system-made lists keep a stated reason (FormStandard::audit, 0 left without). FormStandardTest.
-MR-1320|P|function chips|registry forms: chips, help, default tag, - / +, searchable dropdowns, cascading lists – on every field; open: the hand-made dialogs of the screens (orders, bank, stock …) do not have chips / help yet
+MR-1320|B|mf-step|suggestions, help and defaults on every field: registry forms (chips, help, default tag, − / +, searchable dropdowns, cascading) and now the hand-made dialogs too (help line on every field, default chip, − / + on numbers, search box on long lists – miniForm); central lists filled with starting values
 MR-1321|B|people.personal_data|7e-219: same as MR-0037 (Registry::visible OWNER_HR, Mask::row staff bank, RecordService list)
 MR-1322|P|function boot|clean pages
-MR-1323|P|function put|every save goes to search, history, events; not every dropdown / module
+MR-1323|B|test_nothing_stays_behind|a record saved anywhere is at once in every dropdown that reads its list (one list per thing – e.g. brand on product, listing and sourcing forms), in search (SearchIndex on save), in history and in Create; dropdowns read the lists live, nothing copied (CoreAreaTest)
 MR-1324|M||ICC not built
 MR-1325|N||working rule
 MR-1536|B|class FeeCheck|per order of the money files: fee charged against marketplace fee % + fixed (shop override), tolerance settings, overcharges listed, FEE_OVERCHARGE claim task per shop-month with a proof CSV, nightly

@@ -167,9 +167,12 @@ class MyToolImport
             'not_purchases' => count(array_filter($d['payments'] ?? [], fn ($p) => collect($p['allocations'] ?? [])->contains(fn ($a) => empty($a['ref'])))), 'new_suppliers' => array_keys($newSup), 'already_in' => $dups, 'saved_by_mytool' => count($d['purchases'] ?? [])];
     }
 
-    public static function import(int $ent, string $json, object $u): array
+    public static function import(int $ent, string $json, object $u): array { return self::importData($ent, self::read($json), $u); }
+
+    /** The same import from MY TOOL's records as an array (a data file, or the items of a direct-link package – MyToolLink). */
+    public static function importData(int $ent, array $d, object $u): array
     {
-        $d = self::read($json); $done = 0; $skip = 0; $fail = []; $log = [];
+        $d += ['parties' => [], 'purchases' => [], 'shipments' => [], 'payments' => []]; $done = 0; $skip = 0; $fail = []; $log = [];
         $asSupplier = array_unique(array_column(self::entries($d), 'supplier_code'));      // forwarders paid as the party of an entry become suppliers too (type FORWARDER)
         foreach ($d['parties'] ?? [] as $code => $p) if (in_array($p['type'] ?? '', ['supplier', 'forwarder'], true)) {
             if (($p['type'] === 'supplier' || in_array($code, $asSupplier, true)) && ! DB::table('t_src_suppliers')->where('fk_id_ent', $ent)->where(fn ($q) => $q->where('supplier_code', "MT-$code")->orWhereRaw('LOWER(TRIM(supplier_name)) = ?', [mb_strtolower(trim($p['name']))]))->exists()) {

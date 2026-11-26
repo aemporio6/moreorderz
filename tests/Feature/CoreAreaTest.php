@@ -384,4 +384,18 @@ class CoreAreaTest extends TestCase
         $this->assertSame((int) $sup->id, (int) DB::table('t_src_po')->where('id', $po)->value('fk_id_supplier'), 'a second run changes nothing');
         $this->assertSame(1, DB::table('t_src_suppliers')->where('fk_id_account', $a1)->count());
     }
+
+    public function test_nothing_stays_behind_a_new_record_is_in_every_dropdown_search_history_and_create(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id); Perm::flush();
+        $co = (int) (DB::table('cat_company_house')->value('id') ?: $this->f('cat_company_house', ['fk_id_ent' => 1]));
+        $id = $this->postJson('/api/record/brand', ['values' => ['brand_name' => 'Zephyrine Test Brand', 'fk_id_company_house' => $co]])->assertOk()->json('id');
+        foreach (['t_product_vendor', 'product', 't_src_products'] as $form) {      // MR-1323: the one brand list – every brand field offers it at once
+            $o = $this->getJson("/api/options/$form/fk_id_brand?q=Zephyrine")->assertOk()->json('options');
+            $this->assertContains((string) $id, array_map(fn ($x) => (string) $x[0], $o), "$form brand dropdown");
+        }
+        $this->assertNotEmpty(DB::table('sys_audit_log')->where('table_name', 'cat_brands')->where('record_id', $id)->get(), 'history');
+        $this->assertTrue(DB::table('sys_search_index')->where('entity', 'cat_brands')->where('entity_id', $id)->exists(), 'search');
+        $this->assertContains('brand', array_column($this->getJson('/api/boot')->json('create'), 'key'), 'Create');
+    }
 }
