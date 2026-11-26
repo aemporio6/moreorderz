@@ -114,6 +114,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('people/{id}/shops/{aid}/delete', [AppController::class, 'personShopRemove'])->whereNumber('id')->whereNumber('aid');
         Route::get('options/{key}/{field}/saved', [AppController::class, 'savedLabels']);
         Route::get('options/{key}/{field}', [AppController::class, 'options']);
+        Route::get('pick-map', fn (\Illuminate\Http\Request $r) => \App\Services\PickMap::map((string) $r->query('route', ''), (array) $r->query('names', [])));      // owner 26-11 22:28 the one dropdown on hand-built screens
         Route::post('options/{key}/{field}', [AppController::class, 'addOption']);
         Route::get('lookalike/{key}', [AppController::class, 'lookalike']);
         Route::get('suggest/{key}/{field}', [AppController::class, 'suggest']);

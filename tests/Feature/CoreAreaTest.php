@@ -440,4 +440,17 @@ class CoreAreaTest extends TestCase
         $this->assertTrue($live('po_date', date('Y-m-d'))['ok']);
         $this->assertContains('deposit_amount', $this->getJson('/api/form/t_src_po')->json('live'), 'every amount field is checked when it is left');
     }
+
+    /** Owner 26-11 22:28: a box of a hand-built screen finds its list in the central field register; a person's default is kept. */
+    public function test_pick_map_and_defaults(): void
+    {
+        $this->actingAs($this->owner); \App\Services\Context::set(1, $this->owner->id);
+        $m = $this->getJson('/api/pick-map?' . http_build_query(['route' => '#/old-entry', 'names' => ['mode', 'forwarder', 'supplier_name', 'currency', 'tracking']]))->assertOk()->json();
+        $this->assertSame(['old_entry', 'ship_mode'], [$m['mode']['form'], $m['mode']['field']]);
+        $this->assertSame('t_src_forwarders', $m['forwarder']['add']['form'] ?? null);
+        $this->assertSame('supplier', $m['supplier_name']['field']); $this->assertArrayNotHasKey('tracking', $m, 'a free text box keeps no list');
+        $this->getJson('/api/options/old_entry/ship_mode')->assertOk()->assertJsonStructure(['options']);
+        $this->postJson('/api/prefs/pick', ['defaults' => ['_old-entry:mode' => 'Sea', 'bad key!' => 'x']])->assertOk();
+        $this->assertSame(['_old-entry:mode' => 'Sea'], $this->getJson('/api/prefs/pick')->json('list.defaults'));
+    }
 }

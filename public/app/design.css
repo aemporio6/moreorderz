@@ -639,3 +639,31 @@ input:not([type=checkbox]):not([type=radio]):focus,select:focus,textarea:focus,.
 .boot-wait b{font:700 17px var(--font-head,inherit);color:var(--text,#13212B)}
 .boot-dot{width:42px;height:42px;border-radius:50%;border:4px solid color-mix(in srgb,var(--accent,#0E6E6A) 20%,transparent);border-top-color:var(--accent,#0E6E6A);animation:bootspin .9s linear infinite}
 @keyframes bootspin{to{transform:rotate(360deg)}}
+/* owner 26-11 22:28 – the one dropdown on every screen */
+.ap-wrap{display:inline-flex;gap:4px;align-items:center;vertical-align:middle;max-width:100%}
+label > .ap-wrap,.small > .ap-wrap{display:flex;margin-top:2px}
+.ap-box{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:6px 10px;border:1px solid var(--line,#d9e1e5);border-radius:10px;background:var(--surface,#fff);cursor:pointer;flex:1;min-width:120px;max-width:100%;font-size:14px}
+.ap-box:hover,.ap-box:focus{border-color:var(--accent,#0E6E6A);outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#0E6E6A) 14%,transparent)}
+.ap-v{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ap-c{color:var(--muted,#5D6B76);font-size:12px}
+.ap-def{color:#C9971C;font-size:12px}
+.ap-add,.ap-tg{flex:none;width:32px;height:34px;border-radius:9px;border:1px solid var(--line,#d9e1e5);background:var(--surface,#fff);color:var(--accent,#0E6E6A);font-weight:800;font-size:16px;cursor:pointer;line-height:1}
+.ap-tg{width:28px;font-size:12px;color:var(--muted,#5D6B76)}
+.ap-add:hover{background:color-mix(in srgb,var(--accent,#0E6E6A) 10%,transparent)}
+.ap-panel{position:fixed;z-index:400;max-width:min(440px,calc(100vw - 16px));background:var(--surface,#fff);border:1px solid var(--line,#d9e1e5);border-radius:12px;box-shadow:0 18px 40px -16px rgba(10,40,40,.35);padding:8px}
+.ap-panel .ap-q{width:100%;margin-bottom:6px}
+.ap-list{max-height:260px;overflow:auto}
+.ap-o{padding:7px 10px;border-radius:8px;cursor:pointer;font-size:14px}
+.ap-o.on,.ap-o:hover{background:color-mix(in srgb,var(--accent,#0E6E6A) 9%,transparent)}
+.ap-o.sel{font-weight:700}
+.ap-o.sel:after{content:" ✓";color:var(--accent,#0E6E6A)}
+.ap-h{font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted,#5D6B76);padding:6px 10px 2px}
+.ap-foot{display:flex;flex-direction:column;gap:4px;border-top:1px solid var(--line,#e6ecef);margin-top:6px;padding-top:6px;font-size:13px}
+.ap-foot a{padding:3px 6px}
+.ap-help{color:var(--muted,#5D6B76);font-size:12.5px;padding:2px 6px}
+.ap-wrap .ap-in{flex:1;min-width:0;width:auto}
+label .ap-wrap{display:flex;width:100%}
+/* owner 26-11 22:28: the plain boxes of hand-built screens look like the form boxes */
+#main .form input.q,#main .card-b input.q,#main td input.q,#main label > input.q,#main .ap-wrap input.q{min-height:36px;padding:6px 10px;border:1px solid var(--line,#d9e1e5);border-radius:10px;background:var(--surface,#fff);font-size:14px;box-sizing:border-box}
+#main .form input.q:focus,#main .card-b input.q:focus,#main td input.q:focus,#main label > input.q:focus{border-color:var(--accent,#0E6E6A);outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#0E6E6A) 14%,transparent)}
+#main .form label.small{display:flex;flex-direction:column;gap:3px}

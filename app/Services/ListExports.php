@@ -168,6 +168,8 @@ class ListExports
         if (isset($d['density'])) $clean['density'] = $d['density'] === 'compact' ? 'compact' : 'comfortable';
         // a remembered scope (marketplace, shop, dates): only digits and ISO dates are kept
         if (isset($d['scope']) && is_array($d['scope'])) { $sc = []; foreach ($d['scope'] as $k => $v) if (preg_match('/^[a-z_]{1,20}$/', (string) $k) && is_scalar($v) && preg_match('/^(\d{1,10}|\d{4}-\d{2}-\d{2})$/', (string) $v)) $sc[$k] = (string) $v; $clean['scope'] = $sc; }
+        // owner 26-11 22:28: the person's default of a dropdown on a screen ("screen:box" => value), up to 400 of them
+        if (isset($d['defaults']) && is_array($d['defaults'])) { $df = []; foreach (array_slice($d['defaults'], 0, 400, true) as $k => $v) if (preg_match('/^[A-Za-z0-9_:.-]{1,80}$/', (string) $k) && is_scalar($v) && mb_strlen((string) $v) <= 120) $df[$k] = (string) $v; $clean['defaults'] = $df; }
         $w = ['fk_id_user' => $u->id, 'page_key' => mb_substr($page, 0, 50)];
         $old = json_decode((string) DB::table('t_user_column_prefs')->where($w)->value('prefs_json'), true) ?: [];
         DB::table('t_user_column_prefs')->updateOrInsert($w, ['prefs_json' => json_encode(array_merge($old, $clean)), 'hidden_columns' => '', 'updated_at' => now()]);

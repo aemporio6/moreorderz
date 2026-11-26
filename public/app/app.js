@@ -157,6 +157,83 @@
     $('#gnX').onclick = () => { GN.open = false; drawGn(); };
     $$('[data-gngo]', p).forEach(b => b.onclick = () => { const g = b.dataset.gngo; if (g === 'action:new') { const n = $('#lNew'); if (n) n.click(); return; } go(g); });
   }
+
+  /* Owner 26-11 22:28: "every thing comes from behind and sits everywhere by itself". The ONE dropdown of the app reaches every screen, also the
+     screens built by hand: each plain dropdown or list box is upgraded on its own – type to search, used lately first, + Add a new one (saved to its
+     real list, so it is there everywhere at once), ★ my default for this box, the field's help. What a box holds is found in the central field
+     register (pick-map), so no screen has to add anything by hand. A box the register does not know keeps its own values and still gets search. */
+  const AP = { map: {}, asked: new Set(), defs: null, recent: {}, panel: null, obsT: null };
+  try { AP.recent = JSON.parse(localStorage.getItem('mo_ap_recent') || '{}') || {}; } catch (e) {}
+  const apWord = el => String(el.dataset.k || el.dataset.h || el.dataset.s || el.dataset.r || el.dataset.pick || el.name || '').toLowerCase().replace(/[^a-z0-9_]/g, '');
+  const apScreen = () => (S.route || '#/').split('?')[0].replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 40);
+  async function apDefaults() { if (AP.defs) return AP.defs; try { AP.defs = (((await api('prefs/pick')).list) || {}).defaults || {}; } catch (e) { AP.defs = {}; } return AP.defs; }
+  function apClose() { if (AP.panel) { AP.panel.remove(); AP.panel = null; } }
+  document.addEventListener('mousedown', e => { if (AP.panel && !AP.panel.contains(e.target) && !e.target.closest('.ap-box,.ap-tg,[data-ap-text]')) apClose(); });
+  async function autoPick(root) {
+    root = root || $('#main'); if (!root || !S.boot) return;
+    const skip = el => el.closest('.mo-dd,.seg,thead,#gnPanel,.ap-panel,[data-ap-skip]') || el.type === 'hidden' || el.disabled || el.offsetParent === null;
+    const sels = $$('select:not([data-ap]):not([multiple])', root).filter(el => !skip(el) && !el.classList.contains('btn'));
+    const texts = $$('input:not([data-ap])', root).filter(el => (el.type === 'text' || el.getAttribute('type') == null || el.type === 'search') && !skip(el) && (el.hasAttribute('list') || el.dataset.pick || apWord(el)));
+    const route = S.route || '', words = [...new Set([...sels, ...texts].map(apWord).filter(Boolean))].filter(w => !AP.asked.has(route + '|' + w));
+    if (words.length) { words.forEach(w => AP.asked.add(route + '|' + w));
+      try { const m = await api('pick-map?' + new URLSearchParams([['route', route], ...words.map(w => ['names[]', w])])); Object.entries(m).forEach(([w, x]) => { AP.map[route + '|' + w] = x; }); } catch (e) {} }
+    const defs = await apDefaults();
+    sels.forEach(el => { const real = [...el.options].filter(o => o.value !== '').length, mp = AP.map[route + '|' + apWord(el)]; if (!mp && real < 7) return; apUpgrade(el, mp, defs, false); });
+    texts.forEach(el => { const mp = AP.map[route + '|' + apWord(el)]; if (!mp && !el.hasAttribute('list')) return; apUpgrade(el, mp, defs, true); });
+  }
+  function apUpgrade(el, mp, defs, isText) {
+    el.dataset.ap = '1'; const word = apWord(el) || el.id || 'box', key = apScreen() + ':' + word;
+    const dl = isText && el.getAttribute('list') ? [...(document.getElementById(el.getAttribute('list')) || { options: [] }).options].map(o => o.value).filter(Boolean) : [];
+    if (isText) el.removeAttribute('list');
+    const w = el.offsetWidth, wrap = document.createElement('span'); wrap.className = 'ap-wrap'; el.parentNode.insertBefore(wrap, el); wrap.appendChild(el);
+    let box = null;
+    if (isText) { el.classList.add('ap-in'); wrap.insertAdjacentHTML('beforeend', `<button type="button" class="ap-tg" title="Show the list" tabindex="-1">▾</button>`); el.setAttribute('data-ap-text', '1'); el.setAttribute('autocomplete', 'off'); }
+    else { el.style.display = 'none'; box = document.createElement('span'); box.className = 'ap-box'; box.tabIndex = 0; if (w > 40) box.style.minWidth = Math.min(w, 420) + 'px'; wrap.appendChild(box); }
+    if (mp && mp.add) wrap.insertAdjacentHTML('beforeend', `<button type="button" class="ap-add" title="Add a new ${esc((mp.label || word).toLowerCase())} – it is saved to its list and chosen here">+</button>`);
+    const paint = () => { if (!box) return; const o = el.options[el.selectedIndex]; box.innerHTML = `<span class="ap-v">${esc(o ? o.text : '')}</span>${AP.defs && AP.defs[key] !== undefined && String(AP.defs[key]) === el.value && el.value !== '' ? '<span class="ap-def" title="Your default here">★</span>' : ''}<span class="ap-c">▾</span>`; };
+    const fire = () => { el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); };
+    const numericVals = () => { const v = [...(el.options || [])].map(o => o.value).filter(x => x !== ''); return v.length && v.every(x => /^\d+$/.test(x)); };
+    const setVal = (v, label) => { if (isText) el.value = label; else { if (![...el.options].some(o => o.value === String(v))) el.add(new Option(label, String(v))); el.value = String(v); }
+      const r = AP.recent[key] = [String(isText ? label : v), ...(AP.recent[key] || []).filter(x => x !== String(isText ? label : v))].slice(0, 6); try { localStorage.setItem('mo_ap_recent', JSON.stringify(AP.recent)); } catch (e) {}
+      paint(); fire(); };
+    const addNew = async typed => { apClose(); if (!mp || !mp.add) return;
+      if (mp.add.inline) { try { const r = await api(`options/${mp.form}/${mp.field}`, { method: 'POST', body: { label: typed } }); setVal(r.value, r.label); toast(r.message || 'Added'); } catch (e) { toast(e.message, 'err'); } return; }
+      openForm(mp.add.form, null, { preset: typed ? { __label: typed } : {}, onSaved: r => { const lab = r.label || typed || String(r.id); setVal(isText || !numericVals() ? lab : r.id, lab); } }); };
+    const open = async () => { apClose(); const anchor = isText ? el : box, rc = anchor.getBoundingClientRect();
+      const p = document.createElement('div'); p.className = 'ap-panel'; AP.panel = p; document.body.appendChild(p);
+      p.style.left = Math.max(8, Math.min(rc.left, innerWidth - 340)) + 'px'; p.style.top = (rc.bottom + 4 + 280 > innerHeight && rc.top > 300 ? rc.top - 4 - 300 : rc.bottom + 4) + 'px'; p.style.minWidth = Math.max(rc.width, 260) + 'px';
+      p.innerHTML = `${isText ? '' : '<input class="q ap-q" placeholder="Type to search…" autocomplete="off">'}<div class="ap-list"></div><div class="ap-foot"></div>`;
+      const q = isText ? el : $('.ap-q', p), list = $('.ap-list', p), foot = $('.ap-foot', p); let opts = [], cur = 0, seq = 0, srvRecent = [];
+      const local = () => isText ? dl.map(x => [x, x]) : [...el.options].filter(o => o.value !== '').map(o => [o.value, o.text]);
+      const load = async () => { const my = ++seq, t = q.value.trim().toLowerCase(); let o = local();
+        if (isText && mp) { try { const r = await api(`options/${mp.form}/${mp.field}?` + new URLSearchParams(t ? { q: t } : {})); if (my !== seq) return; srvRecent = (r.recent || []).map(String); const seen = new Set(o.map(x => x[1].toLowerCase()));
+          r.options.forEach(x => { if (!seen.has(String(x[1]).toLowerCase())) o.push([String(x[1]), String(x[1]), String(x[0])]); }); } catch (e) {} }
+        if (t) o = o.filter(x => String(x[1]).toLowerCase().includes(t));
+        const rec = (AP.recent[key] || []), isRec = x => rec.includes(String(x[0])) || (x[2] && srvRecent.includes(x[2]));
+        opts = o.filter(isRec).concat(o.filter(x => !isRec(x))); cur = 0; draw(t, o.filter(isRec).length); };
+      const draw = (t, nRec) => {
+        list.innerHTML = opts.length ? opts.slice(0, 300).map((x, i) => `${i === 0 && nRec ? '<div class="ap-h">Used lately</div>' : ''}${i === nRec && nRec ? '<div class="ap-h">All</div>' : ''}<div class="ap-o ${i === cur ? 'on' : ''} ${String(isText ? el.value : el.value) === String(x[0]) ? 'sel' : ''}" data-i="${i}">${esc(x[1])}</div>`).join('')
+          : `<div class="ap-h">${t ? 'Nothing called “' + esc(t) + '”' : 'Nothing in this list yet'}</div>`;
+        const curV = isText ? el.value : el.value, curL = isText ? el.value : ((el.options[el.selectedIndex] || {}).text || '');
+        foot.innerHTML = `${mp && mp.add ? `<a href="#" class="ap-new">+ Add ${t && !opts.some(x => String(x[1]).toLowerCase() === t) ? '“' + esc(q.value.trim()) + '”' : 'a new one'}</a>` : ''}${curV ? `<a href="#" class="ap-mkdef" title="Filled in by itself next time this box is empty">★ Make “${esc(String(curL).slice(0, 30))}” my default here</a>` : ''}${mp && mp.help ? `<div class="ap-help">${esc(mp.help)}</div>` : ''}`;
+        $$('.ap-o', list).forEach(d => d.onmousedown = ev => { ev.preventDefault(); const x = opts[+d.dataset.i]; apClose(); setVal(x[0], x[1]); });
+        const nw = $('.ap-new', foot); if (nw) nw.onmousedown = ev => { ev.preventDefault(); addNew(q.value.trim()); };
+        const md = $('.ap-mkdef', foot); if (md) md.onmousedown = async ev => { ev.preventDefault(); AP.defs[key] = curV; apClose(); paint(); try { await api('prefs/pick', { method: 'POST', body: { defaults: AP.defs } }); toast('Saved – it is filled in by itself next time'); } catch (e) { toast(e.message, 'err'); } };
+        const c = $('.ap-o.on', list); c && c.scrollIntoView({ block: 'nearest' }); };
+      let tm; q.oninput = () => { clearTimeout(tm); tm = setTimeout(load, 160); };
+      q.onkeydown = e => { const n = opts.length; if (e.key === 'ArrowDown') { e.preventDefault(); cur = Math.min(n - 1, cur + 1); $$('.ap-o', list).forEach((d, i) => d.classList.toggle('on', i === cur)); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); cur = Math.max(0, cur - 1); $$('.ap-o', list).forEach((d, i) => d.classList.toggle('on', i === cur)); }
+        else if (e.key === 'Enter' && AP.panel) { e.preventDefault(); const x = opts[cur]; if (x) { apClose(); setVal(x[0], x[1]); } }
+        else if (e.key === 'Escape' || e.key === 'Tab') apClose(); };
+      if (!isText) q.focus(); load(); };
+    if (box) { box.onclick = open; box.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') { e.preventDefault(); open(); } }; el.addEventListener('change', paint); }
+    else { el.addEventListener('focus', () => { if (!AP.panel) open(); }); $('.ap-tg', wrap).onclick = () => { el.focus(); open(); }; }
+    const ad = $('.ap-add', wrap); if (ad) ad.onclick = () => addNew(isText ? el.value.trim() : '');
+    if (defs[key] !== undefined && defs[key] !== '' && !el.value) { if (isText) { el.value = defs[key]; fire(); } else if ([...el.options].some(o => o.value === String(defs[key]))) { el.value = String(defs[key]); fire(); } }
+    paint();
+  }
+  new MutationObserver(() => { clearTimeout(AP.obsT); AP.obsT = setTimeout(() => autoPick(), 150); }).observe(document.getElementById('main') || document.body, { childList: true, subtree: true });
+
   /* Owner 26-11 21:59: every screen says at the top what it is. A screen with no heading gets the menu name and its one-line meaning; a screen whose heading
      differs from the menu button gets a small "Section › Button" line above it, so you always know where you are and how you got there. */
   function ensureHead(route) {
