@@ -751,6 +751,12 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('carrier-dropdown', [\App\Http\Controllers\PresetGroupController::class, 'dropdown']);      // R-D-65
         Route::get('carrier-values/review', [\App\Http\Controllers\PresetGroupController::class, 'review']);      // R-D-66
         Route::post('carrier-values/review/{id}', [\App\Http\Controllers\PresetGroupController::class, 'resolve'])->whereNumber('id');
+        Route::get('preset-groups/{id}/items', [\App\Http\Controllers\PresetGroupController::class, 'items'])->whereNumber('id');      // R-D-64
+        Route::post('preset-groups/{id}/items/{preset}/pin', [\App\Http\Controllers\PresetGroupController::class, 'itemPin'])->whereNumber('id')->whereNumber('preset');
+        Route::post('preset-groups/{id}/items/order', [\App\Http\Controllers\PresetGroupController::class, 'itemOrder'])->whereNumber('id');
+        Route::post('preset-groups/{id}/items/default', [\App\Http\Controllers\PresetGroupController::class, 'itemDefault'])->whereNumber('id');
+        Route::delete('preset-groups/{id}/items/{preset}', [\App\Http\Controllers\PresetGroupController::class, 'itemRemove'])->whereNumber('id')->whereNumber('preset');
+        Route::post('preset-groups/{id}/scope', [\App\Http\Controllers\PresetGroupController::class, 'scope'])->whereNumber('id');
         Route::get('preset-groups/{id}/history', [\App\Http\Controllers\PresetGroupController::class, 'history'])->whereNumber('id');
         Route::get('listings-qty', [\App\Http\Controllers\PurchaseAuditController::class, 'listingQty']);      // R-H-20
         Route::get('listings-qty/export', [\App\Http\Controllers\PurchaseAuditController::class, 'listingQtyCsv']);

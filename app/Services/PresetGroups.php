@@ -111,4 +111,85 @@ class PresetGroups
         Perm::need($u, 'setup.carriers'); self::group($id);
         return DB::table('car_preset_log')->where('fk_id_group', $id)->orderByDesc('id')->limit(200)->get(['action', 'detail', 'user_name', 'created_at'])->all();
     }
+
+    // ---------- R-D-64 presets inside a group ----------
+
+    /** The presets of a group: pinned first, then order; inactive badge; on open, items whose preset no longer exists are removed (CLEAN). Where it is offered. */
+    public static function items(int $id, ?object $u): array
+    {
+        Perm::need($u, 'setup.carriers'); $g = self::group($id);
+        $gone = DB::table('car_preset_group_items as i')->leftJoin('t_carrier_pkg_svc as p', 'p.id', '=', 'i.fk_id_pkg_svc')->where('i.fk_id_group', $id)->whereNull('p.id')->pluck('i.id')->all();
+        if ($gone) { DB::table('car_preset_group_items')->whereIn('id', $gone)->delete(); self::log($id, 'CLEAN', count($gone) . ' deleted preset(s) removed from the group', $u);
+            if ($g->fk_id_default_preset && ! DB::table('t_carrier_pkg_svc')->where('id', $g->fk_id_default_preset)->exists()) DB::table('car_preset_groups')->where('id', $id)->update(['fk_id_default_preset' => 0]); }
+        $rows = DB::table('car_preset_group_items as i')->join('t_carrier_pkg_svc as p', 'p.id', '=', 'i.fk_id_pkg_svc')->leftJoin('t_carriers as c', 'c.id', '=', 'p.fk_id_carrier')
+            ->leftJoin('t_carrier_packages as k', 'k.id', '=', 'p.fk_id_car_package')->leftJoin('t_carrier_services as v', 'v.id', '=', 'p.fk_id_car_service')->where('i.fk_id_group', $id)
+            ->orderByDesc('i.f_pinned')->orderBy('i.sort_order')->orderBy('i.id')
+            ->get(['i.fk_id_pkg_svc as preset', 'i.f_pinned', 'i.sort_order', 'p.pkg_svc_name', 'p.rate', 'p.f_active as p_on', 'c.carrier_name', 'c.f_active as c_on', 'k.package_name', 'k.f_active as k_on', 'v.service_name', 'v.f_active as v_on']);
+        $def = DB::table('car_preset_groups')->where('id', $id)->value('fk_id_default_preset');
+        $scope = DB::table('car_preset_group_scope')->where('fk_id_group', $id)->get(['fk_id_marketplace', 'fk_id_branch']);
+        return ['group' => ['id' => $id, 'name' => $g->group_name, 'scope' => $g->scope_mode ?: 'ALL', 'default' => $def ? (int) $def : null],
+            'items' => $rows->map(fn ($r) => ['preset' => (int) $r->preset, 'label' => CarrierPresets::label($r), 'pinned' => (bool) $r->f_pinned, 'default' => (int) $def === (int) $r->preset,
+                'inactive' => ! ((int) $r->p_on && (int) ($r->c_on ?? 1) && (int) ($r->k_on ?? 1) && (int) ($r->v_on ?? 1))])->all(),
+            'marketplaces' => $scope->where('fk_id_branch', 0)->pluck('fk_id_marketplace')->map(fn ($x) => (int) $x)->filter()->values()->all(),
+            'shops' => $scope->where('fk_id_branch', '>', 0)->pluck('fk_id_branch')->map(fn ($x) => (int) $x)->values()->all(),
+            'pick' => ['marketplaces' => DB::table('cat_marketplaces')->where(fn ($w) => $w->where('fk_id_ent', self::ent())->orWhere('fk_id_ent', 0))->orderBy('marketplace_short')->get(['id', 'marketplace_short as name'])->all(),
+                'shops' => DB::table('t_branches')->where('fk_id_ent', self::ent())->where('f_active', 1)->orderBy('shop_name')->get(['id', 'shop_name as name'])->all()]];
+    }
+
+    private static function item(int $id, int $preset): object
+    {
+        return DB::table('car_preset_group_items')->where('fk_id_group', $id)->where('fk_id_pkg_svc', $preset)->first() ?? throw new \InvalidArgumentException('It was not in the group.');
+    }
+
+    public static function pin(int $id, int $preset, ?object $u): array
+    {
+        Perm::need($u, 'setup.carriers'); self::group($id); $i = self::item($id, $preset); $on = ! (int) $i->f_pinned;
+        DB::table('car_preset_group_items')->where('id', $i->id)->update(['f_pinned' => $on ? 1 : 0]);
+        self::log($id, 'EDIT', ($on ? 'Pinned: ' : 'Unpinned: ') . (CarrierPresets::labelsOf([$preset])[$preset] ?? "#$preset"), $u);
+        return ['message' => $on ? 'Pinned – shown first in the dropdown.' : 'Unpinned.', 'pinned' => $on];
+    }
+
+    /** New order of the presets (ids in order), re-numbered ×10. */
+    public static function order(int $id, array $presets, ?object $u): array
+    {
+        Perm::need($u, 'setup.carriers'); self::group($id); $n = 0;
+        foreach (array_values(array_map('intval', $presets)) as $k => $p) $n += DB::table('car_preset_group_items')->where('fk_id_group', $id)->where('fk_id_pkg_svc', $p)->update(['sort_order' => ($k + 1) * 10]);
+        if ($n) self::log($id, 'EDIT', 'Order of the presets changed', $u);
+        return ['message' => $n ? 'Order saved.' : 'Nothing to sort.'];
+    }
+
+    /** The preset pre-selected for new products on the marketplaces / shops of this group; null clears it. */
+    public static function setDefault(int $id, ?int $preset, ?object $u): array
+    {
+        Perm::need($u, 'setup.carriers'); self::group($id);
+        if ($preset) { try { self::item($id, $preset); } catch (\InvalidArgumentException $e) { throw new \InvalidArgumentException('The default must be a preset of this group.'); } }
+        DB::table('car_preset_groups')->where('id', $id)->update(['fk_id_default_preset' => $preset ?: 0, 'updated_at' => now()]);
+        self::log($id, 'DEFAULT', $preset ? 'Default: ' . (CarrierPresets::labelsOf([$preset])[$preset] ?? "#$preset") : 'Default cleared', $u);
+        return ['message' => $preset ? 'Default preset set.' : 'Default cleared.'];
+    }
+
+    /** Take a preset out of the group (the preset itself stays); the default is cleared when it was this one. */
+    public static function remove(int $id, int $preset, ?object $u): array
+    {
+        Perm::need($u, 'setup.carriers'); $g = self::group($id); $i = self::item($id, $preset);
+        DB::table('car_preset_group_items')->where('id', $i->id)->delete();
+        self::log($id, 'REMOVE', 'Removed: ' . (CarrierPresets::labelsOf([$preset])[$preset] ?? "#$preset"), $u);
+        if ((int) $g->fk_id_default_preset === $preset) { DB::table('car_preset_groups')->where('id', $id)->update(['fk_id_default_preset' => 0]); self::log($id, 'DEFAULT', 'Default cleared (its preset was removed)', $u); }
+        return ['message' => 'Removed from the group.'];
+    }
+
+    /** Where the group is offered: Everywhere (ALL) or only on ticked marketplaces (all their shops) and / or shops. */
+    public static function scope(int $id, string $mode, array $marketplaces, array $shops, ?object $u): array
+    {
+        Perm::need($u, 'setup.carriers'); self::group($id); $mode = strtoupper($mode) === 'LIMITED' ? 'LIMITED' : 'ALL';
+        $mps = array_values(array_unique(array_filter(array_map('intval', $marketplaces)))); $sh = array_values(array_unique(array_filter(array_map('intval', $shops))));
+        if ($mode === 'LIMITED' && ! $mps && ! $sh) throw new \InvalidArgumentException('Tick at least one marketplace or shop, or choose "Everywhere".');
+        DB::transaction(function () use ($id, $mode, $mps, $sh) {
+            DB::table('car_preset_groups')->where('id', $id)->update(['scope_mode' => $mode, 'updated_at' => now()]); DB::table('car_preset_group_scope')->where('fk_id_group', $id)->delete();
+            if ($mode === 'LIMITED') { foreach ($mps as $m) DB::table('car_preset_group_scope')->insert(['fk_id_group' => $id, 'fk_id_marketplace' => $m, 'fk_id_branch' => 0]);
+                foreach ($sh as $b) DB::table('car_preset_group_scope')->insert(['fk_id_group' => $id, 'fk_id_marketplace' => (int) DB::table('t_branches')->where('id', $b)->value('fk_id_marketplace'), 'fk_id_branch' => $b]); }
+        });
+        self::log($id, 'SCOPE', $mode === 'ALL' ? 'Everywhere' : 'Only on ' . count($mps) . ' marketplace(s), ' . count($sh) . ' shop(s)', $u);
+        return ['message' => $mode === 'ALL' ? 'Offered everywhere.' : 'Offered only where ticked.'];
+    }
 }

@@ -119,4 +119,70 @@ class CarrierPresetsTest extends TestCase
         $this->actingAs($mgr)->getJson('/api/carrier-values/review')->assertStatus(422);
         try { CP::migrate('t_users', 'id', [1 => '1'], false); $this->fail(); } catch (\InvalidArgumentException $e) { $this->assertStringContainsString('does not hold carrier presets', $e->getMessage()); }
     }
+
+    /** R-D-64 presets inside a group: pin, order, default (must be in the group; cleared when removed), clean-up of deleted presets, where offered. */
+    public function test_d64_presets_inside_a_group(): void
+    {
+        $this->world(); $g = $this->x['g']; ['a' => $a, 'b' => $b, 'dead' => $dead] = $this->x;
+        foreach ([$a, $b, $dead] as $k => $p) DB::table('car_preset_group_items')->insert(['fk_id_group' => $g, 'fk_id_pkg_svc' => $p, 'f_pinned' => 0, 'sort_order' => ($k + 1) * 10]);
+        $ghost = $this->f('t_carrier_pkg_svc', ['pkg_svc_name' => 'Gone', 'fk_id_carrier' => $this->x['c'], 'fk_id_car_package' => $this->x['p1'], 'fk_id_car_service' => $this->x['s1'], 'rate' => 1, 'f_active' => 1]);
+        DB::table('car_preset_group_items')->insert(['fk_id_group' => $g, 'fk_id_pkg_svc' => $ghost, 'f_pinned' => 0, 'sort_order' => 40]); DB::table('t_carrier_pkg_svc')->where('id', $ghost)->delete();
+        $x = $this->getJson("/api/preset-groups/$g/items")->assertOk()->json();
+        $this->assertSame([$a, $b, $dead], array_column($x['items'], 'preset'), 'the deleted preset is cleaned out');
+        $this->assertSame('CLEAN', DB::table('car_preset_log')->where('fk_id_group', $g)->orderByDesc('id')->value('action'));
+        $this->assertTrue(collect($x['items'])->firstWhere('preset', $dead)['inactive']);
+        $this->postJson("/api/preset-groups/$g/items/$b/pin")->assertOk()->assertJson(['pinned' => true]);
+        $this->postJson("/api/preset-groups/$g/items/order", ['presets' => [$dead, $a, $b]])->assertOk()->assertJson(['message' => 'Order saved.']);
+        $this->assertSame([$b, $dead, $a], array_column($this->getJson("/api/preset-groups/$g/items")->json('items'), 'preset'), 'pinned first, then the order');
+        $other = $this->f('t_carrier_pkg_svc', ['pkg_svc_name' => 'Elsewhere', 'fk_id_carrier' => $this->x['c'], 'fk_id_car_package' => $this->x['p2'], 'fk_id_car_service' => $this->x['s2'], 'rate' => 2, 'f_active' => 1]);
+        $this->postJson("/api/preset-groups/$g/items/default", ['preset' => $other])->assertStatus(422)->assertJson(['message' => 'The default must be a preset of this group.']);
+        $this->postJson("/api/preset-groups/$g/items/default", ['preset' => $a])->assertOk()->assertJson(['message' => 'Default preset set.']);
+        $this->postJson("/api/preset-groups/$g/items/$a", [], [])->assertStatus(405);
+        $this->deleteJson("/api/preset-groups/$g/items/$a")->assertOk()->assertJson(['message' => 'Removed from the group.']);
+        $this->assertEmpty(DB::table('car_preset_groups')->where('id', $g)->value('fk_id_default_preset'), 'removing the default clears it');
+        $this->deleteJson("/api/preset-groups/$g/items/$a")->assertStatus(422)->assertJson(['message' => 'It was not in the group.']);
+        $this->postJson("/api/preset-groups/$g/scope", ['mode' => 'LIMITED'])->assertStatus(422);
+        $mp = (int) DB::table('cat_marketplaces')->value('id') ?: $this->f('cat_marketplaces', ['fk_id_ent' => 1]);
+        $this->postJson("/api/preset-groups/$g/scope", ['mode' => 'LIMITED', 'marketplaces' => [$mp]])->assertOk();
+        $this->assertSame(['LIMITED', [$mp]], [DB::table('car_preset_groups')->where('id', $g)->value('scope_mode'), $this->getJson("/api/preset-groups/$g/items")->json('marketplaces')]);
+        $this->assertEqualsCanonicalizing(['CLEAN', 'EDIT', 'DEFAULT', 'REMOVE', 'SCOPE'], DB::table('car_preset_log')->where('fk_id_group', $g)->distinct()->pluck('action')->all());
+    }
+
+    /** R-D-45: a location never sits under itself or under one of its own children. */
+    public function test_d45_location_parent_cannot_loop(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id);
+        $a = $this->f('cat_inventory_locations', ['fk_id_ent' => 1, 'location_name' => 'Loop A', 'f_active' => 1]);
+        $b = $this->f('cat_inventory_locations', ['fk_id_ent' => 1, 'location_name' => 'Loop B', 'fk_id_parent' => $a, 'f_active' => 1]);
+        try { \App\Services\RecordService::save('location', ['fk_id_parent' => $b], $a); $this->fail('loop'); }
+        catch (\Throwable $e) { $this->assertStringContainsString('inside this location', json_encode(method_exists($e, 'errors') ? $e->errors() : $e->getMessage())); }
+        try { \App\Services\RecordService::save('location', ['fk_id_parent' => $a], $a); $this->fail('self'); }
+        catch (\Throwable $e) { $this->assertStringContainsString('its own parent', json_encode(method_exists($e, 'errors') ? $e->errors() : $e->getMessage())); }
+        $this->assertSame(0, (int) DB::table('cat_inventory_locations')->where('id', $a)->value('fk_id_parent'));
+    }
+
+    /** R-D-12: product manager role → product manager: only the active people of that role. */
+    public function test_d12_product_manager_follows_the_role(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id);
+        $role = $this->f('cat_account_types', ['account_type_name' => 'Listing team', 'role_code' => 'LISTX', 'f_active' => 1]);
+        $p1 = $this->f('t_account', ['first_name' => 'Zara', 'sur_name' => 'Lister', 'f_active' => 1]); $p2 = $this->f('t_account', ['first_name' => 'Omar', 'sur_name' => 'Other', 'f_active' => 1]);
+        DB::table('t_account_in_types')->insert(['fk_id_account' => $p1, 'fk_id_account_type' => $role, 'f_active' => 1]);
+        $o = \App\Services\FormAssist::options('t_product_vendor', 'fk_id_role_account', null, ['fk_id_role' => $role]);
+        $this->assertSame([(string) $p1], array_column($o['options'], 0));
+        $this->assertSame('Product manager', DB::table('sys_registry')->where('form_key', 't_product_vendor')->where('column_name', 'fk_id_role_account')->value('label'));
+        $this->assertSame('fk_id_role', DB::table('sys_registry')->where('form_key', 't_product_vendor')->where('column_name', 'fk_id_role_account')->value('cascades_from'));
+    }
+
+    /** R-F_SETUP-40: pinned countries first in every country list, active only. */
+    public function test_f40_pinned_countries_first(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id);
+        DB::table('cat_country')->update(['f_order' => 2]);
+        $uk = $this->f('cat_country', ['country_name' => 'Zz Kingdom', 'iso_code' => 'ZK', 'country_code' => '44', 'f_order' => 0, 'f_active' => 1]);
+        $pk = $this->f('cat_country', ['country_name' => 'Zz Pak', 'iso_code' => 'ZP', 'country_code' => '92', 'f_order' => 1, 'f_active' => 1]);
+        $off = $this->f('cat_country', ['country_name' => 'Aa Closed', 'iso_code' => 'AQ', 'country_code' => '1', 'f_order' => 0, 'f_active' => 0]);
+        $ids = array_map(fn ($o) => (int) $o[0], \App\Services\Registry::options(['source' => 'table:cat_country', 'type' => 'select'], 1, null, 50));
+        $this->assertSame([$uk, $pk], array_slice($ids, 0, 2)); $this->assertNotContains($off, $ids);
+    }
 }

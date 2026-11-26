@@ -219,6 +219,7 @@ class Registry
             $expr = self::LABELS[$table] ?? ($alt ? "COALESCE(NULLIF(t.$lc, ''), t.$alt)" : "t.$lc");
             $x = DB::table($table . ' as t')->select('t.' . $pk . ' as id', DB::raw("$expr as lbl"));
             if ($q) $x->whereRaw("$expr like ?", ["%$q%"]);
+            if ($table === 'cat_country' && self::hasColumn($table, 'f_order')) { $x->orderByRaw('COALESCE(t.f_order, 2)'); if (self::hasColumn($table, 'f_active')) $x->where('t.f_active', 1); }      // R-F_SETUP-40 pinned countries first, active only, everywhere
             $x->orderByRaw($expr);
             if ($table === ProductScope::TABLE) ProductScope::apply($x, \Illuminate\Support\Facades\Auth::user(), 't');      // R-D-21: product dropdowns too
         }

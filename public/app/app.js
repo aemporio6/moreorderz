@@ -3064,6 +3064,28 @@
       $('#dpGo', m.ov).onclick = show; show(); };
     if ($('#pgCopy')) $('#pgCopy').onclick = async () => { try { const r = await api('preset-groups/' + g.id + '/copy', { method: 'POST' }); toast(r.message); location.hash = '#/preset-groups?id=' + r.id; } catch (e) { toast(e.message, 'err'); } };
     if ($('#pgDel')) $('#pgDel').onclick = async () => { try { toast((await api('preset-groups/' + g.id, { method: 'DELETE' })).message); location.hash = '#/preset-groups'; } catch (e) { toast(e.message, 'err'); } };
+    // R-D-64 the presets inside the group: pin, drag order, default, remove, inactive badge; where the group is offered
+    if (g) { $('#main').insertAdjacentHTML('beforeend', '<div class="card" id="pgItems" style="margin-top:12px"></div>'); const box = $('#pgItems');
+      const drawItems = async () => { let x; try { x = await api('preset-groups/' + g.id + '/items'); } catch (e) { box.innerHTML = `<div class="card-b">${esc(e.message)}</div>`; return; }
+        const ck = (arr, id) => arr.includes(+id) ? 'checked' : '';
+        box.innerHTML = `<div class="card-h"><h3>Presets in ${esc(g.name)}</h3><span class="small muted">${x.items.length} · pinned first, then your order · drag to change it</span>${x.group.default ? '<button class="btn sm" id="piNoDef" style="margin-left:auto">Clear default</button>' : ''}</div>
+          <div class="tbl-wrap"><table class="t"><thead><tr><th></th><th>Preset</th><th>Default</th><th></th></tr></thead><tbody id="piB">${x.items.map(i => `<tr draggable="true" data-p="${i.preset}"><td style="cursor:grab">⇅</td><td>${esc(i.label)}${i.inactive ? ' <span class="chip warn plain">inactive</span>' : ''}${i.pinned ? ' <span class="chip ok plain">pinned</span>' : ''}</td>
+            <td><label class="small"><input type="radio" name="piDef" value="${i.preset}" ${i.default ? 'checked' : ''}> pre-selected for new products</label></td><td style="white-space:nowrap"><button class="btn sm" data-pin="${i.preset}">${i.pinned ? 'Unpin' : 'Pin'}</button> <button class="btn sm" data-rem="${i.preset}">Remove</button></td></tr>`).join('') || '<tr><td colspan="4" class="muted">No presets yet – press Add presets.</td></tr>'}</tbody></table></div>
+          <div class="card-b"><b>Where it is offered</b><div class="seg" style="margin:6px 0"><button type="button" data-sc="ALL" class="${x.group.scope === 'ALL' ? 'on' : ''}">Everywhere</button><button type="button" data-sc="LIMITED" class="${x.group.scope === 'LIMITED' ? 'on' : ''}">Only where ticked</button></div>
+            <div id="piSc" ${x.group.scope === 'LIMITED' ? '' : 'hidden'}><div class="small muted">Marketplaces (all their shops)</div><div style="display:flex;gap:10px;flex-wrap:wrap">${x.pick.marketplaces.map(o => `<label class="small"><input type="checkbox" data-mp="${o.id}" ${ck(x.marketplaces, o.id)}> ${esc(o.name)}</label>`).join('')}</div>
+              <div class="small muted" style="margin-top:6px">Shops</div><div style="display:flex;gap:10px;flex-wrap:wrap">${x.pick.shops.map(o => `<label class="small"><input type="checkbox" data-sh="${o.id}" ${ck(x.shops, o.id)}> ${esc(o.name)}</label>`).join('')}</div></div>
+            <button class="btn sm primary" id="piScGo" style="margin-top:8px">Save where it is offered</button></div>`;
+        let mode = x.group.scope; const say = async (url, body, method = 'POST') => { try { toast((await api(url, { method, body })).message); } catch (e) { toast(e.message, 'err'); } drawItems(); };
+        $$('[data-pin]', box).forEach(b => b.onclick = () => say(`preset-groups/${g.id}/items/${b.dataset.pin}/pin`, {}));
+        $$('[data-rem]', box).forEach(b => b.onclick = () => say(`preset-groups/${g.id}/items/${b.dataset.rem}`, undefined, 'DELETE'));
+        $$('input[name=piDef]', box).forEach(r => r.onchange = () => say(`preset-groups/${g.id}/items/default`, { preset: +r.value }));
+        const nd = $('#piNoDef', box); if (nd) nd.onclick = () => say(`preset-groups/${g.id}/items/default`, { preset: null });
+        let drag = null; $$('#piB tr[draggable]', box).forEach(tr => { tr.ondragstart = () => { drag = tr; }; tr.ondragover = e => e.preventDefault();
+          tr.ondrop = e => { e.preventDefault(); if (!drag || drag === tr) return; tr.parentNode.insertBefore(drag, tr); say(`preset-groups/${g.id}/items/order`, { presets: $$('#piB tr', box).map(t => +t.dataset.p) }); }; });
+        $$('[data-sc]', box).forEach(b => b.onclick = () => { mode = b.dataset.sc; $$('[data-sc]', box).forEach(z => z.classList.toggle('on', z === b)); $('#piSc', box).hidden = mode !== 'LIMITED'; });
+        $('#piScGo', box).onclick = () => say(`preset-groups/${g.id}/scope`, { mode, marketplaces: $$('[data-mp]:checked', box).map(c => +c.dataset.mp), shops: $$('[data-sh]:checked', box).map(c => +c.dataset.sh) });
+      };
+      drawItems(); }
     if (g) { try { const h = await api('preset-groups/' + g.id + '/history'); $('#pgH').innerHTML = '<h4>History</h4>' + (h.rows.map(x => `<div>${esc(x.created_at)} · ${esc(x.action)} · ${esc(x.detail || '')}</div>`).join('') || '<div class="muted">Nothing yet.</div>'); } catch (e) { } }
   }
   async function pagePurchaseAudit() {      /* R-A_SALES-60 … 64: runs; a run = eBay file, notes, file vs sales, supplier audits */

@@ -27,5 +27,11 @@ class PresetGroupController extends Controller
         return $d; }
     public function review(Request $r) { return $this->run(fn () => ['rows' => \App\Services\CarrierPresets::reviewList($r->user())]); }
     public function resolve(Request $r, int $id) { return $this->run(fn () => \App\Services\CarrierPresets::resolve($id, (int) $r->input('preset'), $r->user())); }
+    public function items(Request $r, int $id) { return $this->run(fn () => G::items($id, $r->user())); }      // R-D-64
+    public function itemPin(Request $r, int $id, int $preset) { return $this->run(fn () => G::pin($id, $preset, $r->user())); }
+    public function itemOrder(Request $r, int $id) { return $this->run(fn () => G::order($id, (array) $r->input('presets', []), $r->user())); }
+    public function itemDefault(Request $r, int $id) { return $this->run(fn () => G::setDefault($id, $r->input('preset') ? (int) $r->input('preset') : null, $r->user())); }
+    public function itemRemove(Request $r, int $id, int $preset) { return $this->run(fn () => G::remove($id, $preset, $r->user())); }
+    public function scope(Request $r, int $id) { return $this->run(fn () => G::scope($id, (string) $r->input('mode', 'ALL'), (array) $r->input('marketplaces', []), (array) $r->input('shops', []), $r->user())); }
     public function history(Request $r, int $id) { return $this->run(fn () => ['rows' => G::history($id, $r->user())]); }
 }

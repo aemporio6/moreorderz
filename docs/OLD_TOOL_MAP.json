@@ -1,6 +1,6 @@
 {
 "made": "2026-11-27",
-"source": "old MoreOrderz controllers (138) joined with the register audit",
+"source": "old MoreOrderz controllers (138) joined with the register audit and the 27-11 recheck (audit/recheck_27nov.csv)",
 "controllers": [
 {
 "controller": "Acc_hub",
@@ -81,24 +81,9 @@
 "functions": 16,
 "lines": 5,
 "status": {
-"BUILT": 3,
-"FORM_ONLY": 1,
-"PARTIAL": 1
+"BUILT": 5
 },
-"open": [
-{
-"reg": "MR-0930",
-"status": "FORM_ONLY",
-"text": "[Missing] Presets inside a group: pin, default, order, clean-up, history.",
-"note": "R-D-64: form only"
-},
-{
-"reg": "MR-0982",
-"status": "PARTIAL",
-"text": "[Partial] Carrier Preset Groups manager",
-"note": "R-D-62: 7e-161: preset group form – name required (spaces collapsed), ≤ 100, unique; code upper case ^[A-Z0-9][A-Z0-9_-]{0,19}$; 11 colour swatches (other → default #17a2b8); description ≤ 255; active"
-}
-]
+"open": []
 },
 {
 "controller": "Card_categories",
@@ -187,17 +172,9 @@
 "functions": 0,
 "lines": 4,
 "status": {
-"BUILT": 3,
-"FORM_ONLY": 1
+"BUILT": 4
 },
-"open": [
-{
-"reg": "MR-1125",
-"status": "FORM_ONLY",
-"text": "[Partial] Country rules and pinned order",
-"note": "R-F_SETUP-40: form only; pin order rule not built"
-}
-]
+"open": []
 },
 {
 "controller": "Cat_currency",
@@ -689,8 +666,8 @@
 "functions": 4,
 "lines": 6,
 "status": {
-"FORM_ONLY": 3,
-"BUILT": 2,
+"FORM_ONLY": 1,
+"BUILT": 4,
 "NOT_APPLICABLE": 1
 },
 "open": [
@@ -699,18 +676,6 @@
 "status": "FORM_ONLY",
 "text": "Inventory_setup (6 functions) comes back as: Location types, locations, adjustment and price reasons + stock alerts + manual…. Fix: No rights; catalogs are global (no fk_id_ent); t_product_locations.qt…. Improved: Standa",
 "note": "setup lists as forms; bin generator + SKU homes built"
-},
-{
-"reg": "MR-0887",
-"status": "FORM_ONLY",
-"text": "[Missing] Inventory Setup page with 4 catalogs: location types, locations (type + parent), adjustment reasons, price change reasons.",
-"note": "R-D-45: setup lists as forms; own-descendant parent check not built"
-},
-{
-"reg": "MR-0978",
-"status": "FORM_ONLY",
-"text": "[Partial] Inventory Setup catalogs",
-"note": "R-D-45: setup lists as forms; own-descendant parent check not built"
 }
 ]
 },
@@ -892,17 +857,10 @@
 "functions": 0,
 "lines": 4,
 "status": {
-"FORM_ONLY": 1,
-"BUILT": 2,
+"BUILT": 3,
 "PARTIAL": 1
 },
 "open": [
-{
-"reg": "MR-0232",
-"status": "FORM_ONLY",
-"text": "T_amazon_orders (2 functions) comes back as: Amazon Business order CSV → raw table. Fix: Push to sales commented out; raw only; positional columns. Improved: Amazon orders through Import Center mapping",
-"note": "import not built"
-},
 {
 "reg": "MR-1413",
 "status": "PARTIAL",
@@ -953,24 +911,9 @@
 "functions": 0,
 "lines": 3,
 "status": {
-"FORM_ONLY": 1,
-"PARTIAL": 1,
-"BUILT": 1
+"BUILT": 3
 },
-"open": [
-{
-"reg": "MR-0235",
-"status": "FORM_ONLY",
-"text": "T_buy (3 functions) comes back as: Gen 1 vendor BUY CSV import (+ AliExpress). Fix: BUG: same non-blocking rights check; hard delete. Improved: Purchase-report import into Import Center (reconciliation)",
-"note": "Gen-1 import not built (old rows imported as history)"
-},
-{
-"reg": "MR-0662",
-"status": "PARTIAL",
-"text": "[Missing] Supplier purchase (BUY) file import for a shop-month",
-"note": "R-A_SALES-56: supplier orders (BUY) file per month: file name shop_BUY_<supplier code> checked (\"Valid Vendor Code should be at proper place\"), generic positional layout and AliExpress layout (kept pe"
-}
-]
+"open": []
 },
 {
 "controller": "T_carrier_packages",
@@ -1087,8 +1030,8 @@
 "lines": 51,
 "status": {
 "PARTIAL": 5,
-"BUILT": 41,
-"FORM_ONLY": 3,
+"BUILT": 43,
+"FORM_ONLY": 1,
 "NOT_APPLICABLE": 2
 },
 "open": [
@@ -1115,18 +1058,6 @@
 "status": "FORM_ONLY",
 "text": "[Partial] Supplier-tab and cost fields on the product.",
 "note": "R-D-11: supplier / cost fields on the form; landing price inherit rule partly (lot cost)"
-},
-{
-"reg": "MR-0942",
-"status": "FORM_ONLY",
-"text": "[Partial] Marketplace Fields tab: fields loaded per marketplace; on Edit each marketplace tab saves on its own.",
-"note": "R-D-15: form only"
-},
-{
-"reg": "MR-0962",
-"status": "FORM_ONLY",
-"text": "[Partial] Marketplace-specific fields tab",
-"note": "R-D-15: form only"
 },
 {
 "reg": "MR-0963",
@@ -1197,18 +1128,10 @@
 "functions": 2,
 "lines": 10,
 "status": {
-"BUILT": 8,
-"FORM_ONLY": 1,
+"BUILT": 9,
 "NOT_APPLICABLE": 1
 },
-"open": [
-{
-"reg": "MR-0976",
-"status": "FORM_ONLY",
-"text": "[Partial] Responsible user on a product (Role → User cascade)",
-"note": "R-D-12: form only"
-}
-]
+"open": []
 },
 {
 "controller": "T_products_shop_not_listed_summary",
@@ -1242,17 +1165,9 @@
 "functions": 0,
 "lines": 5,
 "status": {
-"BUILT": 4,
-"PARTIAL": 1
+"BUILT": 5
 },
-"open": [
-{
-"reg": "MR-0712",
-"status": "PARTIAL",
-"text": "[Partial] ETSY audit month (Gen 1)",
-"note": "R-A_SALES-58: month header: shop + month + year + supplier, Fee (Sale), Expenses, Expenses detail; default month by menu flag (current / previous / two months back); flags Sale loaded and Summary gene"
-}
-]
+"open": []
 },
 {
 "controller": "T_sale_order",
@@ -1345,17 +1260,9 @@
 "functions": 5,
 "lines": 3,
 "status": {
-"FORM_ONLY": 1,
-"BUILT": 2
+"BUILT": 3
 },
-"open": [
-{
-"reg": "MR-0289",
-"status": "FORM_ONLY",
-"text": "T_src_carton (6 functions) comes back as: Packing/carton calc. Fix: No rights/ent; hard delete. Improved: Standard; reuse for product dims",
-"note": "carton calculation not built"
-}
-]
+"open": []
 },
 {
 "controller": "T_src_customs",
@@ -1739,35 +1646,19 @@
 "functions": 0,
 "lines": 32,
 "status": {
-"BUILT": 29,
-"NOT_APPLICABLE": 2,
-"PARTIAL": 1
+"BUILT": 30,
+"NOT_APPLICABLE": 2
 },
-"open": [
-{
-"reg": "MR-1240",
-"status": "PARTIAL",
-"text": "[Partial] Team & Settings: workload vs limit, SLA per category, absence cover, delegated approval and recurring tasks.",
-"note": "R-G_CORE-23: categories = SLA table (task_category form, Partner only): name required, unique (\"Refused: a category with that name already exists.\"), ≤ 100; default owner = an active login or empty = "
-}
-]
+"open": []
 },
 {
 "controller": "T_taxation",
 "functions": 0,
 "lines": 3,
 "status": {
-"BUILT": 2,
-"FORM_ONLY": 1
+"BUILT": 3
 },
-"open": [
-{
-"reg": "MR-0211",
-"status": "FORM_ONLY",
-"text": "T_taxation (22 functions) comes back as: Corporation-tax worksheet per company. Fix: No rights check; tax_rates global (no fk_id_ent); entries manual only. Improved: Rights; ent-scoped rates; feed from Finance",
-"note": "worksheet calculation not built"
-}
-]
+"open": []
 },
 {
 "controller": "T_tiktok_sale",

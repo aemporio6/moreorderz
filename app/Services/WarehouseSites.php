@@ -124,6 +124,10 @@ class WarehouseSites
     /** FormRules hook for a location (R-H-3 / 6). */
     public static function check(array &$data, array $old, ?int $id): array
     {
+        /* R-D-45: a location can never sit under itself or under one of its own children (the tree would loop) */
+        $par = (int) ($data['fk_id_parent'] ?? 0);
+        if ($id && $par) { $seen = []; for ($p = $par; $p && ! isset($seen[$p]) && count($seen) < 50; $p = (int) DB::table('cat_inventory_locations')->where('id', $p)->value('fk_id_parent')) {
+            if ($p === $id) return ['fk_id_parent' => $par === $id ? 'A location cannot be its own parent.' : 'This parent is inside this location – choose a parent above it.']; $seen[$p] = 1; } }
         /* R-H-2 one tree site › zone › bin: a zone or bin takes its site from its parent; the old kind SHELF is read as BIN; a bin code is unique in its site */
         $kind = strtoupper((string) ($data['kind'] ?? $old['kind'] ?? ''));
         if ($kind === 'SHELF') { $data['kind'] = $kind = 'BIN'; }

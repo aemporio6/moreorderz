@@ -85,6 +85,13 @@ class FormAssist
         $f = self::field($formKey, $name) ?? abort(404);
         if (self::sourceTable($f) === 't_carrier_pkg_svc') return CarrierPresets::formOptions($formKey, $parents, $q) + ['more' => false, 'recent' => self::recent($formKey, $name)];      // R-D-65 one carrier dropdown for every form
         if (($c = Chains::options($formKey, $f, $parents, $q)) !== null) return $c + ['more' => false, 'recent' => self::recent($formKey, $name)];      // person chains (R-C-21)
+        if (Registry::table($formKey) === 't_product_vendors' && preg_match('/^fk_id_role_account(\d?)$/', (string) $f['column_name'], $mm)) {      // R-D-12 product manager: the active people of the chosen role
+            $role = (int) ($parents['fk_id_role' . $mm[1]] ?? 0);
+            $x = DB::table('t_account as a')->where('a.f_active', 1)->when($role, fn ($w) => $w->whereIn('a.id', DB::table('t_account_in_types')->where('fk_id_account_type', $role)->where('f_active', 1)->select('fk_id_account')))
+                ->when($q, fn ($w) => $w->whereRaw("CONCAT_WS(' ', a.first_name, a.sur_name) LIKE ?", ['%' . addcslashes((string) $q, '%_\\') . '%']))->orderBy('a.first_name')->limit($limit)
+                ->get(['a.id', DB::raw("TRIM(CONCAT_WS(' ', a.first_name, a.sur_name)) as n")]);
+            return ['options' => $x->map(fn ($r) => [(string) $r->id, (string) ($r->n ?: '#' . $r->id)])->all(), 'more' => false, 'recent' => self::recent($formKey, $name)];
+        }
         $ent = Context::ent(); $filters = []; $t = self::sourceTable($f);
         if ($t && Schema::hasTable($t)) {
             $names = array_filter(array_map('trim', explode(',', (string) $f['cascades_from'])));

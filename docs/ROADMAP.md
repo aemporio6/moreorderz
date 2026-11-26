@@ -4,7 +4,7 @@ The single list of everything: what is done, what is being built, what comes nex
 It lives in the code (docs/ROADMAP.md) and opens in the tool under Home › Plan & progress. Every batch updates it before it is deployed.
 Nothing the owner asked for may be dropped from this list. A line only leaves "Next" or "Discussed" by moving to "Done", with its date.
 
-Updated: 27 Nov 2026, 03:30 (Pakistan time)
+Updated: 27 Nov 2026, 04:15 (Pakistan time)
 
 ## The owner's standing rules (every screen, every batch is checked against these)
 1. **Everything is connected.** Stock ↔ inventory ↔ partners ↔ buying ↔ sourcing ↔ selling ↔ money. Nothing is a screen on its own: every figure comes from the one ledger and setup behind it, and every action writes there. If something is not connected, it is not finished.
@@ -14,6 +14,8 @@ Updated: 27 Nov 2026, 03:30 (Pakistan time)
 5. **Never stuck.** No error stops the work. A step shows what is still needed and offers the fix right there.
 
 ## Now being built
+- **Owner 27-11 02:31 – Packaging / cartons, smart.** Compare MY TOOL and the old MoreOrderz, take the better one and go further: from the product's size and weight the system works out carton, CBM, volumetric weight, units per carton and the best box by itself; packaging data reaches product, listing, PO, shipment and labels by itself – changed once, changed everywhere.
+- **Owner 27-11 02:31 – Product asset vault ("Vector").** Every product has its files in order: product images (main, white background, lifestyle), listing images per marketplace, Amazon A+ / A++ content, labels (FNSKU, barcode, carton), packaging files (dieline, vector artwork .ai / .pdf, carton marks), certificates, manuals. Every file that comes in (Import anything, a supplier, Drive) is recognised and put in the right place of the right product by itself; one click on a product shows the whole vault.
 - **Inventory (owner approved the design 26-11 23:14).** Six parts, built in the steps below:
   - (a) ✅ Old shop lines moved into listings (3,310 listings; 3,304 products made, each private to its shop; batch 1 can be undone).
   - (b) ✅ Inventory screen (Products & Selling › Inventory). One line per product:
@@ -53,21 +55,19 @@ Updated: 27 Nov 2026, 03:30 (Pakistan time)
 10. Decision engine: tests for REBALANCE_FBA and CAPITAL_CALL with real-shaped data.
 
 ## Old tool – still open (owner 27-11 01:30: "look inside my old MoreOrderz, put what is left in the checklist, finish it")
-The whole list is on one screen: **Home › Old tool check** – every old screen (138 controllers of the old code) with its register lines, and every old table with how much of its data came over. 79 lines in 48 old screens are still open (the rest are built or not needed). They are built in this order:
-1. Corporation-tax worksheet per company (old T_taxation, 22 functions) – MR-0211.
-2. Carton / packing calculation (old T_src_carton) – MR-0289.
+The whole list is on one screen: **Home › Old tool check** – every old screen (138 controllers of the old code) with its register lines, and every old table with how much of its data came over. 27-11 recheck against the code: many lines marked open were in fact already built (tax worksheet, carton calculation, BUY file, Amazon Business orders, Etsy month, task team settings, marketplace fields) – they are now marked built with their evidence (audit/recheck_27nov.csv). **45 lines are really open**, built in this order:
+1. ✅ Corporation-tax worksheet – already built (TaxService). ✅ Carton calculation – already built (CartonCalc).
+2. ✅ 27-11: country lists show pinned countries first (MR-1125). ✅ carrier presets inside a group – pin, drag order, default, remove, clean-up, where offered (MR-0930, 0982); location can never sit under itself (MR-0887, 0978); product manager role → product manager (MR-0976).
 3. Product page as in the old tool: Supplier / Logistics tab with purchases, Marketplace fields tab per marketplace, change history with names – MR-0220, 0882, 0897, 0940, 0942, 0962, 0963, 0989.
-4. Supplier BUY file import per shop-month and Amazon Business order file (old T_buy, T_amazon_orders) – MR-0235, 0662, 0232 (check what Supplier order history already covers).
-5. Carrier presets inside a group: pin, default, order, history – MR-0930, 0982.
-6. Masters still as forms only: investor, investment, forwarder, local vendor card, product type / trend ISO code, country pin order, company list with directors – MR-0301, 0302, 0295, 0227, 0981, 0935, 1125, 1122.
-7. Inventory setup: a location cannot be its own parent's child – MR-0887, 0978, 0219.
-8. Live money formulas on every sourcing step form – MR-0807; shipments with forwarder as a party – MR-0314; supplier payment reversal – MR-0305.
-9. One-master work (people, suppliers, lists, sales, imports) – MR-1404, 1406, 1407, 1413, 1414, 1419; module / parameter framework – MR-1129.
-10. Tasks: workload vs limit, SLA per category, absence cover, delegated approval, recurring – MR-1240.
-11. Data: every old table counted against what came over (shows on Old tool check after the count on the server). Owner 27-11 01:34: every setup list of the old tool – brands, banks, companies, countries, currencies, ports and all the others – must come over completely; whatever is missing is brought to its place here. **Counted on live 27-11:** 199 old tables have rows; 177 came over completely (brands, banks, companies and every other setup list among them), old copies and tool settings are not needed, the old stock moves are done the new way (opening lots). ✅ **Live 27-11: still to bring = 0.** The last 4 old tables now have their place (mo:old-extras: 1 provider, 8 IP servers, 3 warehouses, 23 list values): IP / VPN servers and their provider → the IP accounts list (label, place, plan, provider kept); warehouses with addresses → the warehouse list and the address on the stock location; old lookup lists → central lists "Old list: …".
-12. Owner 27-11 01:34 / 01:36: **Create** – ✅ 27-11: Create is built from the root: every registry form, plus every menu screen that makes something (New …, Import …, Record …, Move …), appears by itself – a new module needs nothing added by hand. Inside Create: search, used lately, ← Back, ↶ Undo, ↷ Redo, ✕ Clear, ⟳ Refresh, Enter opens the first match; a form opened from Create has ← Back and "Switch to…" another form without leaving.
-13. Owner 27-11 01:34: **Universal search** – ✅ 27-11 (first part): a record is found however it is typed – "PO-QX-7731", "#PO-QX-7731", "poqx7731", "PO QX 7731", "qx-7731", "#7731", "PO7731"; records made by imports (not through a form) are put in the search every night, and on live once now. On live 64,547 records that were never in the search (made by imports) were added 27-11 – SKUs, lots, orders and the rest are now found. Still to check: documents' text, settings and every screen's own words.
-14. Owner 27-11 01:34: everything connected – nothing is made on its own, apart from the rest.
+4. ✅ Supplier BUY file and Amazon Business order file – already built (BuyFile, SupplierOrders).
+5. Masters still as forms only: investor, investment, forwarder, local vendor card, product type / trend ISO code, country pin order, company list with directors – MR-0301, 0302, 0295, 0227, 0981, 0935, 1125, 1122.
+6. Live money formulas on every sourcing step form – MR-0807; shipments with forwarder as a party – MR-0314; supplier payment reversal – MR-0305.
+7. One-master work (people, suppliers, lists, sales, imports) – MR-1404, 1406, 1407, 1413, 1414, 1419; module / parameter framework – MR-1129.
+8. ✅ Tasks: workload vs limit, SLA per category, absence cover, delegated approval, recurring – already built (TaskTeam, MR-1240).
+9. Data: every old table counted against what came over (shows on Old tool check after the count on the server). Owner 27-11 01:34: every setup list of the old tool – brands, banks, companies, countries, currencies, ports and all the others – must come over completely; whatever is missing is brought to its place here. **Counted on live 27-11:** 199 old tables have rows; 177 came over completely (brands, banks, companies and every other setup list among them), old copies and tool settings are not needed, the old stock moves are done the new way (opening lots). ✅ **Live 27-11: still to bring = 0.** The last 4 old tables now have their place (mo:old-extras: 1 provider, 8 IP servers, 3 warehouses, 23 list values): IP / VPN servers and their provider → the IP accounts list (label, place, plan, provider kept); warehouses with addresses → the warehouse list and the address on the stock location; old lookup lists → central lists "Old list: …".
+10. Owner 27-11 01:34 / 01:36: **Create** – ✅ 27-11: Create is built from the root: every registry form, plus every menu screen that makes something (New …, Import …, Record …, Move …), appears by itself – a new module needs nothing added by hand. Inside Create: search, used lately, ← Back, ↶ Undo, ↷ Redo, ✕ Clear, ⟳ Refresh, Enter opens the first match; a form opened from Create has ← Back and "Switch to…" another form without leaving.
+11. Owner 27-11 01:34: **Universal search** – ✅ 27-11 (first part): a record is found however it is typed – "PO-QX-7731", "#PO-QX-7731", "poqx7731", "PO QX 7731", "qx-7731", "#7731", "PO7731"; records made by imports (not through a form) are put in the search every night, and on live once now. On live 64,547 records that were never in the search (made by imports) were added 27-11 – SKUs, lots, orders and the rest are now found. Still to check: documents' text, settings and every screen's own words.
+12. Owner 27-11 01:34: everything connected – nothing is made on its own, apart from the rest.
 ✅ 27-11: product certificates now get a task 60 days before they end (MR-0139, was form only).
 
 ## Waiting for the owner
@@ -87,6 +87,7 @@ The whole list is on one screen: **Home › Old tool check** – every old scree
 - Security: no secrets, no real data in the public repo; nothing is typed into password boxes for the owner.
 
 ## Done (newest first)
+- 27-11: Carrier presets inside a group; location loop check; product manager; old-tool lines rechecked (45 really open).
 - 27-11: Create from the root + navigation; search however it is typed.
 - 27-11: Old tool check (Home): old screens and old data against the new tool; certificate expiry tasks.
 - 27-11: Guide me on the new screens. Access card: "Team tasks & people" never blocks a person's own tasks.
