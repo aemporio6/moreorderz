@@ -497,6 +497,7 @@
       if (r === '#/inbound') return await pageInbound();
       if (r === '#/stock-alerts') return await pageStockAlerts();
       if (r === '#/roadmap') return await pageRoadmap();      // owner 26-11 23:23
+      if (r.startsWith('#/fba-check')) return await pageFbaCheck();      // inventory (d)
       if (r.startsWith('#/inventory/')) return await pageInventoryStory(+r.split('/')[2].split('?')[0]);      // owner 26-11 23:14
       if (r === '#/inventory' || r.startsWith('#/inventory?')) return await pageInventory();
       if (r.startsWith('#/decisions')) return await pageDecisions(new URLSearchParams(r.split('?')[1] || '').get('code') || '');      // MR-1443 … 1450
@@ -2123,6 +2124,25 @@
     $('#main').innerHTML = `<div class="page-head"><div><h1>Plan &amp; progress</h1><div class="sub">Everything in one place – what is done, what is being built, what comes next, what we discussed and what waits for you. Updated with every batch${d.updated ? ' · last ' + esc(d.updated) : ''}.</div></div></div><div class="rm"><div>${html}</div></div>`;
   }
 
+
+  /* Inventory (d): Amazon's last FBA report against the stock ledger, SKU by SKU – book the difference (found / lost) or move it in from a warehouse */
+  async function pageFbaCheck() {
+    busy(true); let d; try { d = await api('inventory/fba'); } finally { busy(false); }
+    const n = v => (+v || 0).toLocaleString('en-GB'), t = d.totals;
+    $('#main').innerHTML = `<div class="page-head"><div><div class="crumb"><a href="#/inventory">Inventory</a> ›</div><h1>FBA check</h1><div class="sub">Amazon's last inventory report of each shop against the stock ledger. A difference shows why; tick and <b>Book</b> to bring the ledger to Amazon's figure – as found / lost stock, or as units moved in from a warehouse.</div></div></div>
+      <div class="kpis inv-kpis"><div class="card kpi"><div class="bar"></div><div class="lbl">Amazon says</div><div class="val">${n(t.report)}</div></div><div class="card kpi"><div class="bar"></div><div class="lbl">Ledger has</div><div class="val">${n(t.ledger)}</div></div>
+        <div class="card kpi ${d.to_check ? 'warn' : ''}"><div class="bar"></div><div class="lbl">Lines to check</div><div class="val">${n(d.to_check)}</div></div><div class="card kpi ${t.unknown ? 'err' : ''}"><div class="bar"></div><div class="lbl">SKUs not known</div><div class="val">${n(t.unknown)}</div></div><div class="card kpi"><div class="bar"></div><div class="lbl">Matching</div><div class="val">${n(d.matched)}</div></div></div>
+      <div class="card inv-bar"><label class="small"><input type="checkbox" id="fbAll"> all lines to check</label><select class="q" id="fbFrom" data-ap-skip><option value="adjust">Book as found / lost stock</option></select><button class="btn primary" id="fbGo" type="button">Book the ticked lines</button><span class="small muted" id="fbN"></span></div>
+      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th></th><th>Shop</th><th>SKU</th><th>Product</th><th class="num">Amazon</th><th class="num">Ledger</th><th class="num">Difference</th><th class="num">Inbound</th><th>Why</th></tr></thead><tbody>
+        ${d.rows.length ? d.rows.map(r => `<tr><td>${r.product && r.diff ? `<input type="checkbox" data-fb="${esc(r.shop + '|' + r.sku)}">` : ''}</td><td>${esc(r.shop_name)}</td><td>${esc(r.sku)}</td><td>${r.product ? `<a href="#/inventory/${r.product}">${esc(r.name || '#' + r.product)}</a>` : '<span class="inv-bad">not known</span>'}</td>
+          <td class="num">${n(r.report)}</td><td class="num">${n(r.ledger)}</td><td class="num ${r.diff ? 'inv-bad' : 'inv-ok'}">${r.diff > 0 ? '+' : ''}${n(r.diff)}</td><td class="num">${r.inbound ? n(r.inbound) : '–'}</td><td class="small">${esc(r.why)}</td></tr>`).join('') : '<tr><td colspan="9" class="muted">No FBA report yet – load the Amazon inventory report in Import anything.</td></tr>'}</tbody></table></div></div>`;
+    try { const o = await api('inventory/' + ((d.rows.find(r => r.product) || {}).product || 0) + '/options'); o.all.filter(a => a.kind !== 'FBA' && a.kind !== 'TRANSIT').forEach(a => $('#fbFrom').insertAdjacentHTML('beforeend', `<option value="${a.id}">Units were sent from ${esc(a.name)} (move them)</option>`)); } catch (e) {}
+    const cnt = () => { $('#fbN').textContent = $$('#main [data-fb]:checked').length + ' ticked'; };
+    $$('#main [data-fb]').forEach(c => c.onchange = cnt); $('#fbAll').onchange = e => { $$('#main [data-fb]').forEach(c => c.checked = e.target.checked); cnt(); };
+    $('#fbGo').onclick = async () => { const lines = $$('#main [data-fb]:checked').map(c => c.dataset.fb); if (!lines.length) return toast('Tick the lines to book', 'warn');
+      try { busy(true); const r = await api('inventory/fba', { method: 'POST', body: { lines, from: $('#fbFrom').value } }); toast(r.message); (r.skipped || []).slice(0, 3).forEach(x => toast(x, 'warn')); pageFbaCheck(); } catch (e) { toast(e.message, 'err'); } finally { busy(false); } };
+  }
+
   /* Owner 26-11 23:14 – the Inventory screen (approved design): one line per product with every state of its stock, who owns it, where it may be
      sold, its listings, sales and cover; a product opens its whole story. Reads only – every change goes through the ledger screens. */
   const INV = { q: '', shop: '', marketplace: '', mode: '', owner: '', state: '', sort: 'stock', page: 1, children: '', open: {} };
@@ -2142,7 +2162,7 @@
       <td>${x.listings.count ? `<a href="#/list/listing?f[fk_id_product]=${x.id}">${x.listings.count} shop${x.listings.count > 1 ? 's' : ''}</a><div class="small muted">${x.listings.min != null ? money(x.listings.min) + (x.listings.max != x.listings.min ? '–' + money(x.listings.max) : '') : ''}</div>` : '<span class="muted">not listed</span>'}</td>
       <td class="num">${x.sold30 ? n(x.sold30) : '–'}</td><td class="num ${x.cover_days !== null && x.cover_days < 21 ? 'inv-bad' : ''}">${x.cover_days === null ? '–' : x.cover_days + ' d'}</td>
       <td class="num">${x.value ? money(x.value) : '–'}</td><td class="num ${x.age_days > 180 ? 'inv-bad' : ''}">${x.age_days === null ? '–' : x.age_days + ' d'}</td></tr>`;
-    $('#main').innerHTML = `<div class="page-head"><div><h1>Inventory</h1><div class="sub">Every product, where its stock is, who owns it, where it may be sold and how fast it sells – straight from the stock ledger. Open a product for its whole story.</div></div></div>
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Inventory</h1><div class="sub">Every product, where its stock is, who owns it, where it may be sold and how fast it sells – straight from the stock ledger. Open a product for its whole story.</div></div><div class="actions"><a class="btn" href="#/fba-check">FBA check</a><a class="btn" href="#/stock/ledger">Stock ledger</a><a class="btn" href="#/list/fba_shipment">Send to FBA</a></div></div>
       <div class="kpis inv-kpis">${[['Units in stock', n(sm.units), ''], ['Value at cost', money(sm.value) + ' ' + esc(sm.base || ''), ''], ['Amazon FBA', n(sm.fba), ''], ['On the way', n(sm.transit), ''], ['Out of stock', n(sm.out) + ' of ' + n(sm.products), sm.out ? 'warn' : ''], ['To order (ICC)', n(sm.to_order), sm.to_order ? 'err' : ''], ['Aged > 180 days', money(sm.aged_value), sm.aged_value ? 'warn' : ''], ['Listings', n(sm.listings), '']].map(([l, v, t]) => `<div class="card kpi ${t}"><div class="bar"></div><div class="lbl">${l}</div><div class="val">${v}</div></div>`).join('')}</div>
       <div class="card inv-bar"><input class="q" id="invQ" placeholder="Search SKU, name, ASIN, item id…" value="${esc(INV.q)}" data-ap-skip>
         <select class="q" id="invShop" data-ap-skip>${opt(F.shops, INV.shop, 'All shops')}</select><select class="q" id="invMp" data-ap-skip>${opt(F.marketplaces, INV.marketplace, 'All marketplaces')}</select>
@@ -2170,7 +2190,9 @@
     const tile = (l, v, sub) => `<div class="card kpi"><div class="bar"></div><div class="lbl">${l}</div><div class="val">${v}</div>${sub ? `<div class="foot">${sub}</div>` : ''}</div>`;
     $('#main').innerHTML = `<div class="page-head"><div><div class="crumb"><a href="#/inventory">Inventory</a> ›${d.parent ? ` <a href="#/inventory/${d.parent.id}">${esc(d.parent.sku)}</a> ›` : ''}</div><h1>${esc(x.name || x.sku)}</h1>
         <div class="sub">${esc(x.sku)}${x.asin.length ? ' · ASIN ' + esc(x.asin.join(', ')) : ''} · ${x.mode === 'private' ? 'Private' : 'Pool'} · cost ${money(x.cost)}${x.price ? ' · price ' + money(x.price) : ''}</div></div>
-        <div class="actions"><a class="btn" href="#/stock/ledger?product=${id}">Stock ledger</a><a class="btn" href="#/icc/${id}">ICC</a><a class="btn primary" href="#/rec/${S.boot.product_form || 'product'}/${id}">Open the product</a></div></div>
+        <div class="actions"><button class="btn primary" id="ivMove" type="button">Move units</button><button class="btn" id="ivOwn" type="button">Change owner</button><button class="btn" id="ivShop" type="button">Give to a shop</button>
+          <a class="btn" href="#/rec/${S.boot.product_form || 'product'}/${id}?tab=visibility">Pool / Private</a><a class="btn" href="#/stock/ledger?product=${id}">Stock ledger</a><a class="btn" href="#/icc/${id}">ICC</a></div></div>
+      ${x.fba_check ? `<div class="pf-need">Amazon's last report says <b>${x.fba_check.report}</b> at FBA, the ledger <b>${x.fba_check.ledger}</b> – <a href="#/fba-check">check and book the difference</a></div>` : ''}
       <div class="inv-story-top">${x.photo ? `<img class="inv-big" src="${esc(x.photo)}" alt="" referrerpolicy="no-referrer">` : ''}<div class="kpis" style="flex:1">${tile('Available now', n(x.stock.available), 'warehouse ' + n(x.stock.warehouse) + ' − reserved ' + n(x.stock.reserved))}${tile('Amazon FBA', n(x.stock.fba), x.fba.map(f => esc(f.shop) + ' ' + n(f.units)).join(' · '))}${tile('On the way', n(x.stock.transit + x.stock.fba_inbound), 'inbound on POs ' + n(x.stock.inbound))}
         ${tile('Value at cost', money(x.value), x.owners.map(o => esc(o.name) + ' ' + money(o.value)).join(' · '))}${tile('Sold 30 days', n(x.sold30), money(x.sales30) + (x.cover_days !== null ? ' · lasts ' + x.cover_days + ' days' : ''))}</div></div>
       <div class="inv-grid"><div class="card"><div class="card-h"><h3>Where it is now</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Location</th><th>Kind</th><th>Lot</th><th>Owner</th><th>Pool / Private</th><th>Received</th><th class="num">Cost</th><th class="num">Units</th></tr></thead><tbody>
@@ -2181,6 +2203,17 @@
       ${d.children.length ? `<div class="card" style="margin-top:14px"><div class="card-h"><h3>Variations (${d.children.length})</h3></div><div class="tbl-wrap"><table class="t"><tbody>${d.children.map(c => `<tr><td><a href="#/inventory/${c.id}">${esc(c.sku)}</a></td><td>${esc(c.name || '')}</td><td class="num">${n(c.stock)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
       <div class="card" style="margin-top:14px"><div class="card-h"><h3>Its story – every movement</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>When</th><th>What</th><th class="num">Units</th><th class="num">After</th><th>Location</th><th>Owner</th><th>From</th><th>By</th></tr></thead><tbody>
         ${d.moves.length ? d.moves.map(m => `<tr><td>${esc(String(m.at).slice(0, 16))}</td><td>${esc(m.what || '')}${m.notes ? `<div class="small muted">${esc(m.notes)}</div>` : ''}</td><td class="num ${m.qty < 0 ? 'inv-bad' : 'inv-ok'}">${m.qty > 0 ? '+' : ''}${n(m.qty)}</td><td class="num">${m.after === null ? '' : n(m.after)}</td><td>${esc(m.location || '')}</td><td>${esc(m.owner || '')}</td><td>${esc(m.source || '')}</td><td>${esc(m.by || '')}</td></tr>`).join('') : '<tr><td colspan="8" class="muted">No movement yet.</td></tr>'}</tbody></table></div></div>`;
+    let O = null; const opts = async () => O || (O = await api(`inventory/${id}/options`));
+    const again = () => pageInventoryStory(id);
+    $('#ivMove').onclick = async () => { const o = await opts(); if (!o.can) return toast('Moving stock needs the right to change stock – ask the Owner', 'err'); if (!o.here.length) return toast('No stock to move.', 'warn');
+      miniForm('Move units of ' + (x.sku || ''), 'Both lines go into the stock ledger (out of one place, into the other). The lots, their cost and owner move with the units.',
+        [{ name: 'from', label: 'From', required: true, options: o.here.map(h => [h.id, `${h.name} (${h.qty})`]) }, { name: 'to', label: 'To', required: true, options: o.all.map(a => [a.id, a.name + (a.kind ? ' · ' + a.kind.toLowerCase() : '')]) }, { name: 'qty', label: 'Units', type: 'number', required: true }, { name: 'reason', label: 'Why (optional)' }],
+        async v => { const r = await api(`inventory/${id}/transfer`, { method: 'POST', body: v }); again(); return r; }, 'Move'); };
+    $('#ivOwn').onclick = async () => { const o = await opts(); if (!o.can) return toast('Changing the owner needs the right to change stock – ask the Owner', 'err'); if (!o.lots.length) return toast('No lot with units left.', 'warn');
+      miniForm('Change the owner of units', 'The chosen units become the new owner\'s (a new lot with the same cost and date). Shares and profit follow the owner.',
+        [{ name: 'lot', label: 'From lot', required: true, options: o.lots.map(l => [l.id, `${l.lot_code || 'lot ' + l.id} · ${l.owner} · ${l.qty_left} left · ${money(l.unit_cost_gbp)}`]) }, { name: 'to', label: 'New owner', required: true, options: [[0, 'Company'], ...o.owners.map(w => [w.id, w.name])] }, { name: 'qty', label: 'Units', type: 'number', required: true }],
+        async v => { const r = await api(`inventory/${id}/owner`, { method: 'POST', body: v }); again(); return r; }, 'Change'); };
+    $('#ivShop').onclick = () => openForm('listing', null, { preset: { fk_id_product: id, listing_title: x.name || '' }, onSaved: again });
   }
 
   /* MR-1443 … 1450 the decision engine: what to do next, the money each is worth, one click to the form that does it */

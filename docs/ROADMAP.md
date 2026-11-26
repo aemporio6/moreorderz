@@ -4,7 +4,14 @@ The single list of everything: what is done, what is being built, what comes nex
 It lives in the code (docs/ROADMAP.md) and opens in the tool under Home › Plan & progress. Every batch updates it before it is deployed.
 Nothing the owner asked for may be dropped from this list. A line only leaves "Next" or "Discussed" by moving to "Done", with its date.
 
-Updated: 26 Nov 2026, 23:30 (Pakistan time)
+Updated: 26 Nov 2026, 23:45 (Pakistan time)
+
+## The owner's standing rules (every screen, every batch is checked against these)
+1. **Everything is connected.** Stock ↔ inventory ↔ partners ↔ buying ↔ sourcing ↔ selling ↔ money. Nothing is a screen on its own: every figure comes from the one ledger and setup behind it, and every action writes there. If something is not connected, it is not finished.
+2. **Everything comes from the centre (setup).** Every list, value and default lives once in the central setup and reaches every place that needs it by itself. Nothing is added screen by screen.
+3. **Every dropdown:** search, suggestions, used lately first, All, multiple, Other / + Add (saved to the central list), a default, and help.
+4. **Automatic first, manual least.** The system fills what it knows, with suggestions. Where it can do a step, it asks "shall I do it?" – one press, and it is done (import, create, book, link).
+5. **Never stuck.** No error stops the work. A step shows what is still needed and offers the fix right there.
 
 ## Now being built
 - **Inventory (owner approved the design 26-11 23:14).** Six parts, built in the steps below:
@@ -15,10 +22,10 @@ Updated: 26 Nov 2026, 23:30 (Pakistan time)
     - owner, Pool / Private, listings and prices
     - sold in 30 days · cover · value · age
     - opening a product shows its whole story
-  - (c) FBA as one location per country (UK, France, Canada, USA). "In transit" as a location. Transfer orders: pick → ship → in transit → receive.
-  - (d) Daily reconciliation: the FBA report against the ledger, and each shop's quantity against what is available. Every difference has a reason and a fix.
-  - (e) Changes from the screen (always through the ledger): transfer, pool ↔ private, give to a shop or take back, change the owner.
-  - (f) Who sees what: the owner sees everything; a partner sees his own lots and shops; a VA sees only his own shop(s). The inventory list and the story are already limited this way; it still has to be checked on every other stock screen.
+  - (c) ✅ FBA is a ledger location per Amazon shop (= per country), made by itself. FBA units are sold only by that shop, never counted as merchant stock. The two-step transfer to an FC already existed (reserve → pick → ship into in transit → receive at the FC).
+  - (d) ✅ FBA check (Inventory › FBA check): Amazon's last report against the ledger, SKU by SKU, with the reason. "Book" brings the ledger to Amazon's figure – as found / lost stock, or as units moved in from a warehouse. Still to do: each shop's quantity against what is available.
+  - (e) ✅ From a product's story: Move units, Change owner, Give to a shop, Pool / Private. Everything goes through the ledger.
+  - (f) ✅ Who sees what: a person limited to shops sees only those shops' products – on Inventory, the product story, the stock list, the stock ledger, lots and a product's stock page (Inventory sharing already did this). Still to do: a partner sees his own lots and shares, which comes with the partner work below.
 
 ## Next (in this order)
 1. **Partner / finance for each partner**, as in the old tool. For every partner:

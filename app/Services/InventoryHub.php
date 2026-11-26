@@ -17,7 +17,7 @@ class InventoryHub
     public const SELLABLE_NOT = ['TRANSIT', 'SHIPPED', 'DAMAGED', 'DISPATCH'];
 
     /** The products the person may see (null = all of the company). */
-    private static function scope(object $u, int $ent): ?array
+    public static function scope(object $u, int $ent): ?array
     {
         $shops = Perm::shops($u); if ($shops === null) return null;
         if (! $shops) return [];
@@ -74,19 +74,20 @@ class InventoryHub
         $owners = [];
         $out = [];
         foreach ($rows as $r) {
-            $b = $bal[$r->id] ?? collect(); $sell = 0; $tr = 0; $dmg = 0; $val = 0.0; $own = []; $oldest = null;
+            $b = $bal[$r->id] ?? collect(); $fbaL = 0; $sell = 0; $tr = 0; $dmg = 0; $val = 0.0; $own = []; $oldest = null;
             foreach ($b as $x) { $k = strtoupper((string) $x->kind); $qn = (float) $x->qty; $val += $qn * (float) $x->cost;
-                if (in_array($k, ['TRANSIT', 'SHIPPED'], true)) $tr += $qn; elseif ($k === 'DAMAGED' || (string) $x->f_sellable === '0') $dmg += $qn; else $sell += $qn;
+                if ($k === 'FBA') $fbaL += $qn; elseif (in_array($k, ['TRANSIT', 'SHIPPED'], true)) $tr += $qn; elseif ($k === 'DAMAGED' || (string) $x->f_sellable === '0') $dmg += $qn; else $sell += $qn;
                 $ok = $x->owner ? (int) $x->owner : 0; $own[$ok] = ['units' => ($own[$ok]['units'] ?? 0) + $qn, 'value' => round(($own[$ok]['value'] ?? 0) + $qn * (float) $x->cost, 2)];
                 if ($qn > 0 && $x->received_date && (! $oldest || $x->received_date < $oldest)) $oldest = $x->received_date; }
             foreach (array_keys($own) as $ok) $owners[$ok] ??= $ok ? PartnerService::name($ok) : 'Company';
             $reserved = (float) ($res[$r->id] ?? 0); $ic = $icc[$r->id] ?? null; $s = $sold[$r->id] ?? null; $daily = $s ? (float) $s->n / 30 : 0;
-            $fb = $fbaBy[$r->id] ?? []; $fbaUnits = array_sum(array_map(fn ($x) => (int) $x->fulfillable, $fb)); $fbaIn = array_sum(array_map(fn ($x) => (int) $x->inbound_working + (int) $x->inbound_shipped + (int) $x->inbound_receiving, $fb));
+            $fb = $fbaBy[$r->id] ?? []; $fbaRep = array_sum(array_map(fn ($x) => (int) $x->fulfillable, $fb)); $fbaUnits = $fbaL > 0 ? (int) $fbaL : $fbaRep;      /* the ledger once FBA is booked, else the last Amazon report */ $fbaIn = array_sum(array_map(fn ($x) => (int) $x->inbound_working + (int) $x->inbound_shipped + (int) $x->inbound_receiving, $fb));
             $ls = $lst[$r->id] ?? collect(); $vs = $vis[$r->id] ?? collect(); $avail = max(0, $sell - $reserved);
             $im = $img[$r->id][0] ?? null; $photo = $im ? ($im->thumb_url ?: $im->image_url) : (preg_match('~^https?://~', (string) $r->product_img) ? $r->product_img : null);
             $out[] = ['id' => (int) $r->id, 'sku' => $r->sku, 'name' => $r->name, 'photo' => $photo, 'parent' => (int) $r->f_parent === 2 || ($kids[$r->id] ?? 0) > 0, 'children' => (int) ($kids[$r->id] ?? 0), 'child_of' => (int) $r->f_id_parent ?: null,
                 'asin' => $ls->pluck('asin')->filter()->unique()->values()->all(), 'mode' => $r->mode,
-                'stock' => ['warehouse' => $sell, 'available' => $avail, 'reserved' => $reserved, 'transit' => $tr + ($ic ? (int) $ic->transit : 0), 'inbound' => $ic ? (int) $ic->ordered + (int) $ic->production : 0, 'damaged' => $dmg, 'fba' => $fbaUnits, 'fba_inbound' => $fbaIn, 'total' => $sell + $tr + $dmg + $fbaUnits],
+                'fba_check' => $fbaL > 0 && $fb && (int) $fbaL !== $fbaRep ? ['ledger' => (int) $fbaL, 'report' => $fbaRep] : null,
+                'stock' => ['warehouse' => $sell, 'available' => $avail, 'reserved' => $reserved, 'transit' => $tr + ($ic ? (int) $ic->transit : 0), 'inbound' => $ic ? (int) $ic->ordered + (int) $ic->production : 0, 'damaged' => $dmg, 'fba' => $fbaUnits, 'fba_inbound' => $fbaIn, 'total' => $sell + $tr + $dmg + $fbaUnits, 'fba_source' => $fbaL > 0 ? 'ledger' : ($fb ? 'report' : null)],
                 'fba' => array_map(fn ($x) => ['shop' => $x->shop_name, 'units' => (int) $x->fulfillable, 'inbound' => (int) $x->inbound_working + (int) $x->inbound_shipped + (int) $x->inbound_receiving, 'reserved' => (int) $x->reserved, 'unsellable' => (int) $x->unfulfillable, 'date' => $x->snapshot_date], $fb),
                 'owners' => array_map(fn ($ok, $o) => ['id' => $ok, 'name' => $owners[$ok], 'units' => $o['units'], 'value' => $o['value']], array_keys($own), $own),
                 'value' => round($val, 2), 'pool' => $vs->where('mode', 'pool')->pluck('mp')->filter()->unique()->values()->all(), 'private' => $vs->where('mode', 'private')->pluck('shop_name')->filter()->unique()->values()->all(),

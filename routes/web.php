@@ -84,6 +84,11 @@ Route::middleware(['auth', SetContext::class])->group(function () {
             $f = base_path('docs/ROADMAP.md'); return ['text' => is_file($f) ? (string) file_get_contents($f) : '', 'updated' => is_file($f) ? date('Y-m-d H:i', filemtime($f)) : null];
         });
         Route::get('inventory', [\App\Http\Controllers\InventoryController::class, 'index']);      // owner 26-11 23:14 the inventory screen
+        Route::get('inventory/fba', [\App\Http\Controllers\InventoryController::class, 'fbaRecon']);      // inventory (d) FBA report vs ledger
+        Route::post('inventory/fba', [\App\Http\Controllers\InventoryController::class, 'fbaBook']);
+        Route::get('inventory/{id}/options', [\App\Http\Controllers\InventoryController::class, 'options'])->whereNumber('id');      // inventory (e) actions
+        Route::post('inventory/{id}/transfer', [\App\Http\Controllers\InventoryController::class, 'transfer'])->whereNumber('id');
+        Route::post('inventory/{id}/owner', [\App\Http\Controllers\InventoryController::class, 'owner'])->whereNumber('id');
         Route::get('inventory/{id}', [\App\Http\Controllers\InventoryController::class, 'story'])->whereNumber('id');
         Route::get('decisions', function (\Illuminate\Http\Request $r) {      // MR-1443 … 1450 decision engine (reads only)
             $u = $r->user(); if (! \App\Services\Perm::has($u, 'money.SEE') && ! \App\Services\Perm::has($u, 'buying.SEE')) return response()->json(['message' => 'You do not have the right to open this page – ask the Owner.'], 403);

@@ -12,6 +12,38 @@ class InventoryController extends Controller
 {
     public function index(Request $r) { Perm::need($r->user(), 'stock.SEE'); return InventoryHub::page((int) Context::ent(), $r->user(), $r->only(['q', 'shop', 'marketplace', 'mode', 'owner', 'state', 'children', 'sort', 'page'])); }
 
+    private function run(callable $fn) { try { return $fn(); } catch (\InvalidArgumentException|\RuntimeException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
+
+    /** What the action windows of a product offer: its places with stock, every place, its lots, the owners. */
+    public function options(Request $r, int $id)
+    {
+        Perm::need($r->user(), 'stock.SEE'); $ent = (int) Context::ent(); \App\Services\FbaLedger::locations($ent);
+        $here = \Illuminate\Support\Facades\DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->join('cat_inventory_locations as c', 'c.id', '=', 'b.fk_id_location')->where('l.fk_id_product', $id)->where('b.qty', '>', 0)
+            ->groupBy('c.id', 'c.location_name')->selectRaw('c.id, c.location_name name, SUM(b.qty) qty')->get();
+        $all = \Illuminate\Support\Facades\DB::table('cat_inventory_locations')->where('fk_id_ent', $ent)->where('f_active', 1)->whereIn('kind', ['WAREHOUSE', 'SHELF', 'BIN', 'FBA', 'THREE_PL', 'TRANSIT'])->orWhere(fn ($q) => $q->where('fk_id_ent', $ent)->where('f_active', 1)->whereNull('kind'))
+            ->orderByRaw("FIELD(kind,'WAREHOUSE','FBA','THREE_PL','SHELF','BIN','TRANSIT')")->orderBy('location_name')->limit(400)->get(['id', 'location_name as name', 'kind']);
+        $lots = \Illuminate\Support\Facades\DB::table('fin_lots')->where('fk_id_product', $id)->where('company_id', $ent)->where('qty_left', '>', 0)->orderBy('received_date')->get(['id', 'lot_code', 'qty_left', 'fk_id_owner', 'unit_cost_gbp', 'received_date'])
+            ->map(fn ($l) => (array) $l + ['owner' => $l->fk_id_owner ? \App\Services\PartnerService::name((int) $l->fk_id_owner) : 'Company']);
+        $owners = \Illuminate\Support\Facades\DB::table('fin_investor_agreements')->where('company_id', $ent)->distinct()->pluck('investor_id')->filter()->map(fn ($o) => ['id' => (int) $o, 'name' => \App\Services\PartnerService::name((int) $o)])->values();
+        return ['here' => $here, 'all' => $all, 'lots' => $lots, 'owners' => $owners, 'can' => Perm::has($r->user(), 'stock.CHANGE')];
+    }
+
+    public function transfer(Request $r, int $id)
+    {
+        Perm::need($r->user(), 'stock.CHANGE'); $d = $r->validate(['from' => 'required|integer', 'to' => 'required|integer', 'qty' => 'required|integer|min:1', 'reason' => 'nullable|string|max:200']);
+        return $this->run(fn () => ['rows' => \App\Services\StockService::transfer((int) Context::ent(), $id, (int) $d['qty'], (int) $d['from'], (int) $d['to'], $d['reason'] ?? 'Moved from Inventory', ['source_type' => 'INVENTORY']), 'message' => 'Moved – the ledger has both lines.']);
+    }
+
+    public function owner(Request $r, int $id)
+    {
+        Perm::need($r->user(), 'stock.CHANGE'); $d = $r->validate(['lot' => 'required|integer', 'qty' => 'required|integer|min:1', 'to' => 'required|integer|min:0']);
+        abort_unless(\Illuminate\Support\Facades\DB::table('fin_lots')->where('id', $d['lot'])->where('fk_id_product', $id)->exists(), 404);
+        return $this->run(fn () => ['lot' => \App\Services\StockService::transferOwnership((int) Context::ent(), (int) $d['lot'], (int) $d['qty'], (int) $d['to']), 'message' => 'The owner is changed for those units (a new lot keeps the cost and date).']);
+    }
+
+    public function fbaRecon(Request $r) { Perm::need($r->user(), 'stock.SEE'); $s = Perm::shops($r->user()); return \App\Services\FbaLedger::recon((int) Context::ent(), $r->query('shop') ? (int) $r->query('shop') : null, $s); }
+    public function fbaBook(Request $r) { return $this->run(fn () => \App\Services\FbaLedger::book((int) Context::ent(), $r->user(), (array) $r->input('lines', []), $r->input('from', 'adjust'))); }
+
     public function story(Request $r, int $id)
     {
         Perm::need($r->user(), 'stock.SEE');

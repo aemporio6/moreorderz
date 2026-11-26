@@ -222,6 +222,7 @@ class StockController extends Controller
         $this->can($r, 'stock.SEE');
         $ent = (int) Context::ent(); $money = \App\Services\Perm::has($r->user(), 'stock.MONEY');
         $rows = StockService::onHand($ent, $r->query('q'));
+        $sc = \App\Services\InventoryHub::scope($r->user(), $ent); if ($sc !== null) $rows = array_values(array_filter($rows, fn ($x) => in_array((int) ($x['id'] ?? $x['product_id'] ?? 0), $sc, true)));      // inventory (f): only the products of his shops
         if (! $money) foreach ($rows as &$x) unset($x['value']);
         return ['rows' => $rows, 'show_value' => $money, 'total_value' => $money ? StockService::value($ent) : null, 'total_units' => (int) \Illuminate\Support\Facades\DB::table('fin_lot_balances as b')->join('fin_lots as l', 'l.id', '=', 'b.fk_id_lot')->where('l.company_id', $ent)->sum('b.qty'),   // the whole company, not only the rows shown
             'low' => \Illuminate\Support\Facades\DB::table('t_product_vendors')->where('fk_id_ent', $ent)->where('min_level', '>', 0)->whereColumn('stock', '<=', 'min_level')->count(),
@@ -232,6 +233,7 @@ class StockController extends Controller
     {
         $this->can($r, 'stock.SEE');
         abort_unless(DB::table('t_product_vendors')->where('id', $id)->whereIn('fk_id_ent', Context::ents())->exists(), 404);      // R-G_CORE-102 any company in All companies mode
+        $sc = \App\Services\InventoryHub::scope($r->user(), (int) Context::ent()); abort_if($sc !== null && ! in_array($id, $sc, true), 403, 'This product is not on your shops.');
         $d = StockService::productStock($id);
         if (! \App\Services\Perm::has($r->user(), 'stock.MONEY')) foreach ($d['rows'] as $row) unset($row->unit_cost_gbp);
         return $d;
@@ -245,6 +247,7 @@ class StockController extends Controller
         $this->can($r, 'stock.SEE');
         $q = DB::table('t_stock_movements as m')->join('t_product_vendors as p', 'p.id', '=', 'm.fk_id_product')->leftJoin('cat_inventory_locations as c', 'c.id', '=', 'm.fk_id_location')
             ->leftJoin('fin_lots as l', 'l.id', '=', 'm.fk_id_lot')->leftJoin('t_users as u', 'u.id', '=', 'm.created_by')->where('m.fk_id_ent', Context::ent());
+        $sc = \App\Services\InventoryHub::scope($r->user(), (int) Context::ent()); if ($sc !== null) $q->whereIn('m.fk_id_product', $sc ?: [0]);
         if ($v = $r->query('product')) $q->where('m.fk_id_product', (int) $v);
         if ($v = $r->query('type')) $q->where('m.movement_type', $v);
         if ($v = $r->query('q')) $q->where(fn ($w) => $w->where('p.SKU_VENDOR', 'like', "%$v%")->orWhere('l.lot_code', 'like', "%$v%"));
@@ -258,6 +261,7 @@ class StockController extends Controller
     {
         $this->can($r, 'stock.SEE');
         $q = DB::table('fin_lots as l')->join('t_product_vendors as p', 'p.id', '=', 'l.fk_id_product')->leftJoin('t_account as a', 'a.id', '=', 'l.fk_id_owner')->where('l.company_id', Context::ent());
+        $sc = \App\Services\InventoryHub::scope($r->user(), (int) Context::ent()); if ($sc !== null) $q->whereIn('l.fk_id_product', $sc ?: [0]);
         if ($r->query('left', '1') === '1') $q->where('l.qty_left', '>', 0);
         if ($v = $r->query('q')) $q->where(fn ($w) => $w->where('l.sku', 'like', "%$v%")->orWhere('l.lot_code', 'like', "%$v%"));
         if ($r->query('nocost') === '1') $q->where('l.unit_cost_gbp', '<=', 0);

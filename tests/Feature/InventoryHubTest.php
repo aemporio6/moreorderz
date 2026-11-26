@@ -44,4 +44,46 @@ class InventoryHubTest extends TestCase
             $this->getJson("/api/inventory/$p")->assertStatus(403);
         } else $this->getJson('/api/inventory')->assertStatus(403);
     }
+
+    /** Inventory (c)(d)(e): FBA is a ledger location per Amazon shop; the FBA report is checked against it and booked; move units and change owner from the inventory. */
+    public function test_fba_locations_check_book_and_actions(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id);
+        $mp = $this->f('cat_marketplaces', ['fk_id_ent' => 0, 'marketplace_short' => 'AMAZON-FR', 'f_active' => 1]);
+        $fr = $this->f('t_branches', ['fk_id_ent' => 1, 'fk_id_marketplace' => $mp, 'shop_no' => 'FR' . substr(uniqid(), -4), 'iso_branch' => 'FR', 'shop_name' => 'Amazon France', 'f_active' => 1]);
+        $p = $this->f('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'FBA-1', 'product_name_vendor' => 'FBA mug', 'stock' => 0, 'f_active' => 1, 'e_product_type' => 'pool', 'landing_price' => 2.5]);
+        $wh = $this->f('cat_inventory_locations', ['fk_id_ent' => 1, 'location_name' => 'Main WH', 'kind' => 'WAREHOUSE', 'f_active' => 1]);
+        \App\Services\StockService::adjust(1, $p, $wh, 50, 'opening', ['unit_cost' => 2.5]);
+        $this->f('t_product_listings', ['fk_id_ent' => 1, 'fk_id_product' => $p, 'fk_id_branch' => $fr, 'fk_id_marketplace' => $mp, 'marketplace_sku' => 'FR-FBA-1', 'price' => 12, 'status' => 'ACTIVE', 'f_active' => 1]);
+        DB::table('fin_fba_stock_snapshots')->insert([['batch_id' => 1, 'branch_id' => $fr, 'snapshot_date' => now()->toDateString(), 'sku' => 'FR-FBA-1', 'fulfillable' => 18, 'reserved' => 2], ['batch_id' => 1, 'branch_id' => $fr, 'snapshot_date' => now()->toDateString(), 'sku' => 'NOT-OURS', 'fulfillable' => 5, 'reserved' => 0]]);
+        $c = $this->getJson('/api/inventory/fba')->assertOk()->json();
+        $line = collect($c['rows'])->firstWhere('sku', 'FR-FBA-1'); $this->assertSame([20, 0, 20], [$line['report'], $line['ledger'], $line['diff']]);
+        $this->assertNull(collect($c['rows'])->firstWhere('sku', 'NOT-OURS')['product']); $this->assertSame(1, $c['totals']['unknown']);
+        $loc = (int) DB::table('cat_inventory_locations')->where('kind', 'FBA')->where('fk_id_branch', $fr)->value('id'); $this->assertGreaterThan(0, $loc, 'the FBA location of the shop');
+        // the 20 units were sent from the warehouse and not booked → move them
+        $this->postJson('/api/inventory/fba', ['lines' => [$fr . '|FR-FBA-1'], 'from' => $wh])->assertOk()->assertJsonPath('booked', 1);
+        $this->assertSame([30, 20], [\App\Services\StockService::balance($p, $wh), \App\Services\StockService::balance($p, $loc)]);
+        $this->assertSame(30, \App\Services\StockService::available($p), 'FBA units are not merchant stock');
+        $x = collect($this->getJson('/api/inventory?q=FBA-1')->json('rows'))->firstWhere('id', $p); $this->assertSame([20, 'ledger'], [$x['stock']['fba'], $x['stock']['fba_source']]);
+        // Amazon now reports 17 → a loss of 3 is booked
+        DB::table('fin_fba_stock_snapshots')->insert(['batch_id' => 2, 'branch_id' => $fr, 'snapshot_date' => now()->addDay()->toDateString(), 'sku' => 'FR-FBA-1', 'fulfillable' => 17, 'reserved' => 0]);
+        $this->assertSame(-3, collect($this->getJson('/api/inventory/fba')->json('rows'))->firstWhere('sku', 'FR-FBA-1')['diff']);
+        $this->postJson('/api/inventory/fba', ['lines' => [$fr . '|FR-FBA-1']])->assertOk(); $this->assertSame(17, \App\Services\StockService::balance($p, $loc));
+        // move units and change owner from the inventory
+        $o = $this->getJson("/api/inventory/$p/options")->assertOk()->json(); $this->assertTrue($o['can']); $this->assertNotEmpty($o['lots']);
+        $tr = $this->f('cat_inventory_locations', ['fk_id_ent' => 1, 'location_name' => 'Second WH', 'kind' => 'WAREHOUSE', 'f_active' => 1]);
+        $this->postJson("/api/inventory/$p/transfer", ['from' => $wh, 'to' => $tr, 'qty' => 5])->assertOk(); $this->assertSame(5, \App\Services\StockService::balance($p, $tr));
+        $this->postJson("/api/inventory/$p/transfer", ['from' => $wh, 'to' => $tr, 'qty' => 999])->assertStatus(422);
+        $partner = $this->f('t_account', ['fk_id_ent' => 1, 'account_code' => 'OW' . random_int(100, 999), 'first_name' => 'Omar', 'f_active' => 1]);
+        $this->postJson("/api/inventory/$p/owner", ['lot' => $o['lots'][0]['id'], 'qty' => 4, 'to' => $partner])->assertOk();
+        $this->assertSame(4, (int) DB::table('fin_lots')->where('fk_id_product', $p)->where('fk_id_owner', $partner)->sum('qty_left'));
+        $va = $this->makeUser('VA'); $this->actingAs($va); \App\Services\Perm::flush(); $this->postJson("/api/inventory/$p/transfer", ['from' => $wh, 'to' => $tr, 'qty' => 1])->assertStatus(403);
+        // (f) a stock person limited to another shop does not see this product in the ledger, the lots or its stock page
+        $other = $this->f('t_branches', ['fk_id_ent' => 1, 'fk_id_marketplace' => $mp, 'shop_no' => 'OT' . substr(uniqid(), -4), 'iso_branch' => 'OT', 'shop_name' => 'Other shop', 'f_active' => 1]);
+        $wk = $this->makeUser('WAREHOUSE'); \App\Services\Perm::setScope($wk->id, 'SHOP', [$other], $this->owner->id); $this->actingAs($wk); \App\Services\Perm::flush();
+        if (\App\Services\Perm::has($wk, 'stock.SEE')) {
+            $this->assertNotContains($p, array_column($this->getJson('/api/stock/ledger?product=' . $p)->assertOk()->json('rows'), 'product_id'));
+            $this->getJson("/api/stock/product/$p")->assertStatus(403);
+        }
+    }
 }
