@@ -51,7 +51,8 @@ class PartnerView
         $ag = DB::table('fin_investor_agreements')->where('company_id', $ent)->where('investor_id', $acc)->where('status', 'ACTIVE')->get(['scope', 'profit_share_pct', 'capital_amount']);
         $from = now()->subDays(30)->toDateString(); $sold = 0.0; $soldVal = 0.0;
         if ($mine) foreach (DB::table('t_sales')->whereIn('fk_product_id', array_keys($mine))->where('d_order', '>=', $from)->whereIn('status', ['Confirmed', 'Pending'])->groupBy('fk_product_id')->selectRaw('fk_product_id p, SUM(qty) q, SUM(COALESCE(total_amount_gbp,total_amount)) v')->get() as $s) { $sold += (float) $s->q * $mine[(int) $s->p]; $soldVal += (float) $s->v * $mine[(int) $s->p]; }
-        return ['account' => $acc, 'name' => PartnerService::name($acc), 'products' => count($mine), 'units' => $inv['units'], 'fba' => $inv['fba'], 'on_the_way' => $inv['on_the_way'], 'inbound' => $inv['inbound'],
+        $nm = PartnerService::name($acc); if (str_starts_with($nm, 'Partner ')) $nm = (string) (DB::table('t_inv_parties')->where('fk_id_account', $acc)->value('display_name') ?: $nm);      // the investor's name is on his party when the person record is missing
+        return ['account' => $acc, 'name' => $nm, 'products' => count($mine), 'units' => $inv['units'], 'fba' => $inv['fba'], 'on_the_way' => $inv['on_the_way'], 'inbound' => $inv['inbound'],
             'stock_value' => $inv['value_raw'], 'stock_cost' => $inv['value_cost'], 'sold30' => round($sold, 1), 'sales30' => round($soldVal, 2),
             'revenue' => round((float) $per->rev, 2), 'profit' => round((float) $per->pbs, 2), 'share' => round((float) $per->sh, 2), 'units_sold' => (int) $per->un, 'capital_recovered' => round((float) $per->cap, 2),
             'billed' => round((float) $doc->t, 2), 'paid' => round((float) $doc->p, 2), 'owed' => round((float) $doc->t - (float) $doc->p, 2),
