@@ -31,7 +31,8 @@ class FbaLedger
     private static function productOf(int $ent, int $shop, string $sku): ?int
     {
         $id = DB::table('t_product_listings')->where('fk_id_ent', $ent)->where('fk_id_branch', $shop)->where('marketplace_sku', $sku)->value('fk_id_product')
-            ?: DB::table('t_product_vendors')->where('fk_id_ent', $ent)->where('SKU_VENDOR', $sku)->value('id');
+            ?: DB::table('t_product_vendors')->where('fk_id_ent', $ent)->where('SKU_VENDOR', $sku)->value('id')
+            ?: DB::table('t_product_listings')->where('fk_id_ent', $ent)->where(fn ($w) => $w->where('asin', $sku)->orWhere('item_id', $sku))->orderByRaw('fk_id_branch = ? DESC', [$shop])->value('fk_id_product');      // live reports carry the ASIN
         return $id ? (int) $id : null;
     }
 

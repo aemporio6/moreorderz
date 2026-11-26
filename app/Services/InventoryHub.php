@@ -67,7 +67,7 @@ class InventoryHub
         $from = now()->subDays(30)->toDateString();
         $sold = DB::table('t_sales')->whereIn('fk_product_id', $ids)->where('d_order', '>=', $from)->where(fn ($w) => $w->whereNull('status')->orWhereNotIn('status', ['Cancelled', 'CANCELLED']))->when($shops, fn ($q) => $q->whereIn('fk_id_branch', $shops))
             ->groupBy('fk_product_id')->selectRaw('fk_product_id p, SUM(qty) n, SUM(COALESCE(total_amount_gbp, total_amount)) v')->get()->keyBy('p');
-        $skuMap = []; foreach ($rows as $r) { $skuMap[mb_strtoupper((string) $r->sku)] = (int) $r->id; foreach ($lst[$r->id] ?? [] as $l) if ($l->marketplace_sku) $skuMap[mb_strtoupper($l->marketplace_sku)] = (int) $r->id; }
+        $skuMap = []; foreach ($rows as $r) { $skuMap[mb_strtoupper((string) $r->sku)] = (int) $r->id; foreach ($lst[$r->id] ?? [] as $l) { if ($l->marketplace_sku) $skuMap[mb_strtoupper($l->marketplace_sku)] = (int) $r->id; foreach ([$l->asin, $l->item_id] as $a) if ($a && preg_match('/^B0[A-Z0-9]{8}$/i', $a)) $skuMap[mb_strtoupper($a)] = (int) $r->id; } }
         $fba = $skuMap ? DB::table('fin_fba_stock_snapshots as s')->join('t_branches as b', 'b.id', '=', 's.branch_id')->whereIn('s.id', DB::table('fin_fba_stock_snapshots')->whereIn('sku', array_keys($skuMap))->selectRaw('MAX(id)')->groupBy('branch_id', 'sku'))
             ->when($shops, fn ($q) => $q->whereIn('s.branch_id', $shops))->get(['s.sku', 's.fulfillable', 's.reserved', 's.inbound_working', 's.inbound_shipped', 's.inbound_receiving', 's.unfulfillable', 'b.shop_name', 's.snapshot_date']) : collect();
         $fbaBy = []; foreach ($fba as $x) { $pid = $skuMap[mb_strtoupper($x->sku)] ?? null; if ($pid) $fbaBy[$pid][] = $x; }

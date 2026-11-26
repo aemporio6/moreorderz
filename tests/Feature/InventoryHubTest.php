@@ -59,6 +59,10 @@ class InventoryHubTest extends TestCase
         $c = $this->getJson('/api/inventory/fba')->assertOk()->json();
         $line = collect($c['rows'])->firstWhere('sku', 'FR-FBA-1'); $this->assertSame([20, 0, 20], [$line['report'], $line['ledger'], $line['diff']]);
         $this->assertNull(collect($c['rows'])->firstWhere('sku', 'NOT-OURS')['product']); $this->assertSame(1, $c['totals']['unknown']);
+        DB::table('t_product_listings')->where('fk_id_product', $p)->update(['asin' => 'B0FBA00001']);
+        DB::table('fin_fba_stock_snapshots')->insert(['batch_id' => 1, 'branch_id' => $fr, 'snapshot_date' => now()->toDateString(), 'sku' => 'B0FBA00001', 'fulfillable' => 0, 'reserved' => 0]);
+        $this->assertSame($p, collect($this->getJson('/api/inventory/fba')->json('rows'))->firstWhere('sku', 'B0FBA00001')['product'], 'a report line with the ASIN finds its product');
+        DB::table('fin_fba_stock_snapshots')->where('sku', 'B0FBA00001')->delete();
         $loc = (int) DB::table('cat_inventory_locations')->where('kind', 'FBA')->where('fk_id_branch', $fr)->value('id'); $this->assertGreaterThan(0, $loc, 'the FBA location of the shop');
         // the 20 units were sent from the warehouse and not booked → move them
         $this->postJson('/api/inventory/fba', ['lines' => [$fr . '|FR-FBA-1'], 'from' => $wh])->assertOk()->assertJsonPath('booked', 1);
