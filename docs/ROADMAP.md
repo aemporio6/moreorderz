@@ -23,18 +23,19 @@ Updated: 26 Nov 2026, 23:45 (Pakistan time)
     - sold in 30 days · cover · value · age
     - opening a product shows its whole story
   - (c) ✅ FBA is a ledger location per Amazon shop (= per country), made by itself. FBA units are sold only by that shop, never counted as merchant stock. The two-step transfer to an FC already existed (reserve → pick → ship into in transit → receive at the FC).
+  - FBA check: Amazon's report on live uses ASINs, and 31 ASINs are not linked to any product yet. Link each one once in FBA check (search the product → it becomes the Amazon listing); after that, "Book" fills FBA in the ledger.
   - (d) ✅ FBA check (Inventory › FBA check): Amazon's last report against the ledger, SKU by SKU, with the reason. "Book" brings the ledger to Amazon's figure – as found / lost stock, or as units moved in from a warehouse. Still to do: each shop's quantity against what is available.
   - (e) ✅ From a product's story: Move units, Change owner, Give to a shop, Pool / Private. Everything goes through the ledger.
   - (f) ✅ Who sees what: a person limited to shops sees only those shops' products – on Inventory, the product story, the stock list, the stock ledger, lots and a product's stock page (Inventory sharing already did this). Still to do: a partner sees his own lots and shares, which comes with the partner work below.
 
 ## Next (in this order)
-1. **Partner / finance for each partner**, as in the old tool. For every partner:
+1. **Partner / finance for each partner**, as in the old tool. Found 26-11 23:55: on live there are 0 partner agreements, 0 capital entries and 0 withdrawals, and every stock lot shows "Company". The old tool's product ↔ investor links (t_product_investors, 85 lines) were kept only as history. Its partner settings must be read from the old database and turned into agreements, lot owners and opening balances. For every partner:
    - share %
    - profit and loss
    - payments both ways (what he gave and what he took)
    - his inventory: on hand, his share, coming in, going out, and its value
    - a statement
-2. **Task management.** Check that the old tool's tasks came in, and that the task screens are complete and easy to use (as in the old tool).
+2. **Task management.** The old tasks did come in (2,321 on live, 3 templates). Still to check: the task screens are complete and as easy as in the old tool.
 3. Documents: "File a document" from anywhere. Its kind and its record are guessed, with the reason shown (reuses Import anything).
 4. Access card: Edit / View only / Hidden for each area; a blocked person gets an "Ask the Owner" button on Home.
 5. Guide me: steps for more screens.

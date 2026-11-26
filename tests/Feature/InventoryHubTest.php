@@ -63,6 +63,9 @@ class InventoryHubTest extends TestCase
         DB::table('fin_fba_stock_snapshots')->insert(['batch_id' => 1, 'branch_id' => $fr, 'snapshot_date' => now()->toDateString(), 'sku' => 'B0FBA00001', 'fulfillable' => 0, 'reserved' => 0]);
         $this->assertSame($p, collect($this->getJson('/api/inventory/fba')->json('rows'))->firstWhere('sku', 'B0FBA00001')['product'], 'a report line with the ASIN finds its product');
         DB::table('fin_fba_stock_snapshots')->where('sku', 'B0FBA00001')->delete();
+        $q2 = $this->f('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'NOT-OURS-NOW', 'product_name_vendor' => 'Linked later', 'stock' => 0, 'f_active' => 1, 'e_product_type' => 'pool']);
+        $this->postJson('/api/inventory/fba/link', ['shop' => $fr, 'sku' => 'NOT-OURS', 'product' => $q2])->assertOk();
+        $this->assertSame($q2, collect($this->getJson('/api/inventory/fba')->json('rows'))->firstWhere('sku', 'NOT-OURS')['product'], 'linked once, known from then on');
         $loc = (int) DB::table('cat_inventory_locations')->where('kind', 'FBA')->where('fk_id_branch', $fr)->value('id'); $this->assertGreaterThan(0, $loc, 'the FBA location of the shop');
         // the 20 units were sent from the warehouse and not booked → move them
         $this->postJson('/api/inventory/fba', ['lines' => [$fr . '|FR-FBA-1'], 'from' => $wh])->assertOk()->assertJsonPath('booked', 1);

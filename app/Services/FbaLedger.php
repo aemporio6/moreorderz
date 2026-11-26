@@ -80,4 +80,21 @@ class FbaLedger
         Audit::log('cat_inventory_locations', 0, 'UPDATE', ['fba_booked' => [null, $done]], 'FBA reconciliation', $ent);
         return ['booked' => $done, 'skipped' => $skipped, 'value' => round($value, 2), 'message' => "$done line(s) booked into the ledger" . ($skipped ? ', ' . count($skipped) . ' skipped' : '') . '.'];
     }
+
+    /** An unknown FBA SKU / ASIN is linked to its product once: it becomes the shop's listing (ASIN kept), so every next report finds it. */
+    public static function link(int $ent, object $u, int $shop, string $sku, int $product): array
+    {
+        Perm::need($u, 'stock.CHANGE');
+        $b = DB::table('t_branches')->where('id', $shop)->where('fk_id_ent', $ent)->first() ?? throw new \InvalidArgumentException('Shop not found.');
+        DB::table('t_product_vendors')->where('id', $product)->where('fk_id_ent', $ent)->exists() || throw new \InvalidArgumentException('Product not found.');
+        $sku = mb_substr(trim($sku), 0, 100); if ($sku === '') throw new \InvalidArgumentException('No SKU.');
+        $isAsin = (bool) preg_match('/^B0[A-Z0-9]{8}$/i', $sku);
+        $have = DB::table('t_product_listings')->where('fk_id_ent', $ent)->where('fk_id_branch', $shop)->where(fn ($w) => $w->where('marketplace_sku', $sku)->orWhere('asin', $sku))->first();
+        if ($have) { DB::table('t_product_listings')->where('id', $have->id)->update(['fk_id_product' => $product, 'updated_at' => now()]); $id = (int) $have->id; }
+        else $id = (int) DB::table('t_product_listings')->insertGetId(RecordService::fillNotNull('t_product_listings', ['fk_id_ent' => $ent, 'fk_id_product' => $product, 'fk_id_branch' => $shop, 'fk_id_marketplace' => (int) $b->fk_id_marketplace,
+            'marketplace_sku' => $sku, 'asin' => $isAsin ? strtoupper($sku) : null, 'item_id' => $isAsin ? strtoupper($sku) : null, 'listing_title' => (string) DB::table('t_product_vendors')->where('id', $product)->value('product_name_vendor'),
+            'fulfilment' => 'FBA', 'status' => 'ACTIVE', 'f_active' => 1, 'created_by' => $u->id, 'created_at' => now()]));
+        Audit::log('t_product_listings', $id, $have ? 'UPDATE' : 'INSERT', ['fba_link' => [null, "$sku → product $product"]], 'FBA check: linked', $ent);
+        return ['listing' => $id, 'message' => "$sku is linked – it is now a listing of {$b->shop_name}."];
+    }
 }
