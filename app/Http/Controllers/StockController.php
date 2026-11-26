@@ -82,7 +82,8 @@ class StockController extends Controller
     public function legacyListingsUndo(Request $r, int $job) { return $this->wh(fn () => \App\Services\LegacyListings::undo($job, $r->user())); }
 
     /** R-D-51 products bulk upload, old 34-column layout. */
-    public function oldBulkStage(Request $r) { return $this->wh(fn () => \App\Services\OldBulkProducts::stage((int) Context::ent(), $r->hasFile('file') ? $r->file('file')->getClientOriginalName() : null, $r->hasFile('file') ? (string) file_get_contents($r->file('file')->getRealPath()) : null, $r->user())); }
+    public function oldBulkStage(Request $r) { if ($r->filled('mapping') && $r->input('mapping') !== \App\Services\OldBulkProducts::NAME) return response()->json(['message' => 'Choose a mapping of the Products report type.'], 422);      // R-D-51 built-in mapping "Old bulk products"
+        return $this->wh(fn () => \App\Services\OldBulkProducts::stage((int) Context::ent(), $r->hasFile('file') ? $r->file('file')->getClientOriginalName() : null, $r->hasFile('file') ? (string) file_get_contents($r->file('file')->getRealPath()) : null, $r->user())); }
     public function oldBulkConfirm(Request $r, int $job) { return $this->wh(fn () => \App\Services\OldBulkProducts::confirm((int) Context::ent(), $job, $r->user())); }
     public function oldBulkUndo(Request $r, int $job) { return $this->wh(fn () => \App\Services\OldBulkProducts::undo((int) Context::ent(), $job, $r->user())); }
 

@@ -69,6 +69,14 @@ class AdminController extends Controller
     }
 
     /** R-C-45 action "Reset password": a one-time link goes to the person's own e-mail (and WhatsApp) on record – the administrator never sees a password or the link. */
+    /** R-C-44 the Access section of a person. */
+    public function personAccess(Request $r, int $id)
+    {
+        \App\Services\Perm::need($r->user(), 'admin.users');
+        try { return $r->isMethod('post') ? \App\Services\PersonAccess::save($id, $r->all(), $r->user(), $r->ip()) + \App\Services\PersonAccess::get($id, $r->user()) : \App\Services\PersonAccess::get($id, $r->user()); }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage(), 'errors' => ['_form' => [$e->getMessage()]]], 422); }
+    }
+
     public function userReset(Request $r, int $id)
     {
         \App\Services\Perm::need($r->user(), 'admin.users');
@@ -90,7 +98,7 @@ class AdminController extends Controller
             'login_id' => ['required', 'string', 'max:100', Rule::unique('t_users', 'login_id')->ignore($id)],
             'display_name' => 'required|string|max:120', 'role_code' => ['required', Rule::in(array_keys(\App\Services\Perm::roles()))],
             'fk_id_ent' => 'required|integer|exists:t_enterprise,id', 'f_active' => 'boolean',
-            'password' => [$id ? 'nullable' : 'required', 'string', 'min:10', 'max:200'],
+            'password' => ['nullable', 'string', 'min:10', 'max:200'],      // R-C-44: no password field on the screens – kept for set-up scripts only
         ], ['password.min' => 'The password needs at least 10 characters.', 'login_id.unique' => 'This login is already used.']);
         $u = $id ? User::findOrFail($id) : new User();
         if ($id && $u->id === $r->user()->id && (($d['role_code'] ?? 'OWNER') !== 'OWNER' || ! ($d['f_active'] ?? true))) {
@@ -105,7 +113,9 @@ class AdminController extends Controller
         foreach ($before as $k => $v) if ((string) $v !== (string) $u->$k) $changes[$k] = [$v, $u->$k];
         if (! empty($d['password'])) $changes['password'] = ['***', '***'];
         Audit::log('t_users', $u->id, $id ? 'UPDATE' : 'INSERT', $changes);
-        return ['id' => $u->id, 'message' => $id ? 'User updated' : 'User created'];
+        $msg = $id ? 'User updated' : 'User created';
+        if (! $id && empty($d['password']) && $u->f_active) { try { $msg .= '. ' . \App\Services\PasswordReset::byAdmin((int) $u->id, $r->user(), $r->ip())['message']; } catch (\InvalidArgumentException $e) { $msg .= '. No password yet: ' . $e->getMessage() . ' Then press "Reset password".'; } }
+        return ['id' => $u->id, 'message' => $msg];
     }
 
     // ---- my security ----

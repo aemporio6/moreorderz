@@ -49,6 +49,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('form/{key}/calc', [AppController::class, 'formCalc']);
         Route::get('people/{id}/jobs', [AppController::class, 'jobs'])->whereNumber('id');
         Route::get('people/{id}/security-questions', [AppController::class, 'securityHealth'])->whereNumber('id');
+        Route::match(['get', 'post'], 'people/{id}/access', [AdminController::class, 'personAccess'])->whereNumber('id');      // R-C-44
         Route::get('parties', [AppController::class, 'parties']);      // R-C-1
         Route::get('shops/{id}/kit', [AppController::class, 'shopKit'])->whereNumber('id');      // R-C-30
         Route::get('people/external/new', [AppController::class, 'externalForm']);
@@ -452,6 +453,8 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('printers', [PrintController::class, 'printers']);
         Route::post('printers', [PrintController::class, 'savePrinter']);
         Route::post('printers/{id}/status', [PrintController::class, 'status'])->whereNumber('id');
+        Route::get('printers/media', [PrintController::class, 'mediaBoard']);      // R-G_CORE-114
+        Route::post('printers/{id}/media', [PrintController::class, 'switchMedia'])->whereNumber('id');
         Route::post('printers/{id}/test', [PrintController::class, 'test'])->whereNumber('id');
         Route::post('printers/{id}/test-result', [PrintController::class, 'testResult'])->whereNumber('id');
         Route::post('printers/{id}/replace', [PrintController::class, 'replace'])->whereNumber('id');
@@ -536,6 +539,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('csv-convert/download', [OrdersController::class, 'csvConvertDownload']);
         Route::post('csv-convert/queue', [OrdersController::class, 'csvConvertQueue']);
         Route::post('csv-convert/update', [OrdersController::class, 'csvConvertUpdate']);
+        Route::post('csv-convert/update/undo', [OrdersController::class, 'csvConvertUndo']);
         Route::post('fulfilment/{id}', [OrdersController::class, 'fulfilmentSave'])->whereNumber('id');
         Route::get('sale-cases', [OrdersController::class, 'saleCases']);
         Route::get('sale-cases/types', [OrdersController::class, 'saleCaseTypes']);

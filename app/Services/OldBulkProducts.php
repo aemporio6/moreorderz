@@ -27,7 +27,9 @@ class OldBulkProducts
         return ['vendor' => $mk($own(DB::table('t_vendors')->where('f_active', 1))->get(['id', 'vendor_name as name'])), 'type' => $mk($own(DB::table('cat_product_type')->where('f_active', 1))->get(['id', 'product_type_name as name'])),
             'trend' => $mk($own(DB::table('cat_product_trends')->where('f_active', 1))->get(['id', 'product_trend_name as name'])), 'country' => $mk($own(DB::table('cat_country')->where('f_active', 1))->get(['id', 'country_name as name'])),
             'packing' => $mk($own(DB::table('t_packings')->where('f_active', 1))->get(['id', 'packing_name as name'])),
-            'carrier service' => $mk(DB::table('t_carrier_pkg_svc')->where('f_active', 1)->get(['id', 'pkg_svc_name as name']))];
+            'carrier service' => $mk(DB::table('t_carrier_pkg_svc')->where('f_active', 1)->get(['id', 'pkg_svc_name as name'])),
+            'tag' => $mk($own(DB::table('cat_tags')->where('f_active', 1))->get(['id', 'tag_name as name'])), 'role' => $mk($own(DB::table('cat_account_types')->where('f_active', 1))->get(['id', 'account_type_name as name'])),
+            'role account' => $mk(DB::table('t_account')->where('fk_id_ent', $ent)->where('f_active', 1)->get(['id', DB::raw("TRIM(CONCAT_WS(' ', first_name, sur_name)) as name")]))];      // R-D-51 names (or ids) for tags, role and role account too
     }
 
     /** id for a name or an id; else the reason with the closest name. */
@@ -66,6 +68,8 @@ class OldBulkProducts
             $id = [];
             foreach (['vendor' => 1, 'country' => 10, 'carrier service' => 11, 'packing' => 12, 'type' => 13, 'trend' => 14] as $what => $k) { $p = self::pick($c($k), $L[$what], $what); isset($p['error']) ? $bad[] = $p['error'] : $id[$what] = $p['id']; }
             $vi = self::pick($c(30), $L['vendor'], 'vendor inventory'); isset($vi['error']) ? $bad[] = $vi['error'] : $id['vendor inventory'] = $vi['id'];
+            foreach ([25 => 'tag 1', 26 => 'tag 2', 27 => 'tag 3'] as $k => $what) { $t = self::pick($c($k), $L['tag'], $what); isset($t['error']) ? $bad[] = $t['error'] : $id[$what] = $t['id']; }
+            foreach (['role' => 28, 'role account' => 29] as $what => $k) { $t = self::pick($c($k), $L[$what], $what); isset($t['error']) ? $bad[] = $t['error'] : $id[$what] = $t['id']; }
             if (! $bad && ! $id['vendor']) $bad[] = 'Vendor is required.';
             $num = []; foreach (['sale price' => 15, 'list price' => 16, 'eBay fee' => 22] as $what => $k) { $v = $c($k); if ($v === '') $num[$what] = 0.0; elseif (is_numeric($v) && (float) $v >= 0) $num[$what] = round((float) $v, 2); else $bad[] = ucfirst($what) . " \"$v\" is not a number."; }
             $int = []; foreach (['stock' => 18, 'min level' => 19] as $what => $k) { $v = $c($k); if ($v === '') $int[$what] = 0; elseif (ctype_digit($v)) $int[$what] = (int) $v; else $bad[] = ucfirst($what) . " \"$v\" is not a whole number."; }
@@ -76,7 +80,7 @@ class OldBulkProducts
             $ok[] = ['row' => $n, 'sku' => mb_substr($sku, 0, 50), 'name' => mb_substr($c(3) !== '' ? $c(3) : $sku, 0, 250), 'parent' => $parent, 'vendor' => $id['vendor'], 'expiry' => $exp, 'variant' => mb_substr($c(5), 0, 70), 'hs' => mb_substr($c(6), 0, 255), 'ean' => mb_substr($c(7), 0, 20),
                 'alert' => $flag(8), 'country' => $id['country'], 'preset' => $id['carrier service'], 'packing' => $id['packing'], 'type' => $id['type'], 'trend' => $id['trend'], 'sale' => $num['sale price'], 'list' => $num['list price'], 'oos' => $flag(17),
                 'stock' => $int['stock'], 'min' => $int['min level'], 'weight' => mb_substr($c(20), 0, 50), 'dimensions' => mb_substr($c(21), 0, 15), 'fee' => $num['eBay fee'], 'upc' => mb_substr($c(23), 0, 50), 'opc' => mb_substr($c(24), 0, 50),
-                'tags' => [$flag(25), $flag(26), $flag(27)], 'role' => ctype_digit($c(28)) ? (int) $c(28) : 0, 'role_account' => ctype_digit($c(29)) ? (int) $c(29) : 0, 'vendor_inventory' => $id['vendor inventory'], 'url' => mb_substr($c(31), 0, 500), 'href' => mb_substr($c(32), 0, 255), 'description' => $c(33)];
+                'tags' => [(int) $id['tag 1'], (int) $id['tag 2'], (int) $id['tag 3']], 'role' => (int) $id['role'], 'role_account' => (int) $id['role account'], 'vendor_inventory' => $id['vendor inventory'], 'url' => mb_substr($c(31), 0, 500), 'href' => mb_substr($c(32), 0, 255), 'description' => $c(33)];
         }
         DB::table('bulk_jobs')->where('list_key', self::KEY)->where('fk_id_account', $u->id)->where('status', 'PREVIEW')->delete();
         if (! $ok) return ['job' => null, 'ready' => 0, 'log' => $log, 'rows' => [], 'message' => 'No row can be loaded – see the list.'];
@@ -102,7 +106,7 @@ class OldBulkProducts
                 $id = (int) DB::table('t_product_vendors')->insertGetId(RecordService::fillNotNull('t_product_vendors', array_filter(['fk_id_vendor' => $x['vendor'], 'fk_id_country_make' => $x['country'], 'fk_id_car_pkg_svc' => $x['preset'], 'carrier' => $carrier, 'fk_id_packing' => $x['packing'],
                     'fk_id_product_type' => $x['type'], 'fk_id_product_trend' => $x['trend'], 'fk_id_vendor_inventory' => $x['vendor_inventory'], 'd_product_expiry_date' => $x['expiry'], 'fk_id_role' => $x['role'] ?: null, 'fk_id_role_account' => $x['role_account'] ?: null], fn ($v) => $v !== null)
                     + ['fk_id_ent' => $ent, 'SKU_VENDOR' => $x['sku'], 'product_name_vendor' => $x['name'], 'variant' => $x['variant'], 'hs_code' => $x['hs'], 'ean' => $x['ean'], 'f_alert_min_level' => $x['alert'], 'f_active' => 1, 'sale_price' => $x['sale'], 'list_price' => $x['list'], 'ebay_fee' => $x['fee'],
-                        'f_out_of_stock' => $x['oos'], 'stock' => 0, 'min_level' => $x['min'], 'weight' => $x['weight'], 'dimensions' => $x['dimensions'], 'upc' => $x['upc'], 'opc' => $x['opc'], 'f_tag1' => $x['tags'][0], 'f_tag2' => $x['tags'][1], 'f_tag3' => $x['tags'][2],
+                        'f_out_of_stock' => $x['oos'], 'stock' => 0, 'min_level' => $x['min'], 'weight' => $x['weight'], 'dimensions' => $x['dimensions'], 'upc' => $x['upc'], 'opc' => $x['opc'], 'f_tag1' => $x['tags'][0], 'f_tag2' => $x['tags'][1], 'f_tag3' => $x['tags'][2], 'tag_ids' => implode(',', array_values(array_unique(array_filter($x['tags'])))),
                         'url_ebay' => $x['url'], 'href_product' => $x['href'], 'product_description' => $x['description'], 'f_parent' => $x['parent'] ? 2 : 1, 'e_product_type' => 'pool', 'created_by' => $u->id, 'd_created' => date('Y-m-d')]));
                 $ids[] = $id; ProductFamily::created($id, $ent); Audit::log('t_product_vendors', $id, 'INSERT', ['import' => self::NAME, 'sku' => $x['sku']], null, $ent);
                 if ($mp) {      /* the product's creation may already have made its marketplace rows */

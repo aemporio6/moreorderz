@@ -111,7 +111,7 @@
 111|B|class PrintService|printer profiles as capabilities, statuses, add / edit
 112|B|function fit|template is a size; fit check, turn 90 degrees, refuse with reason
 113|B|class PrintAdapters|adapters DRIVER_PDF, IPP, RAW TSPL / ZPL / EPL, print helper, cloud
-114|P|function fit|loaded media checked at print; "switch media on the Work screen" not built
+114|B|function switchMedia|what is loaded per printer (printer_profiles.fk_id_loaded_media); Work screen tab Printers: one tap per label size that fits the printer; a job whose route media is not loaded waits (status WAITING, "Load 96 × 136 labels in Thermal printer 1"), switching to that media prints the waiting jobs, the others keep waiting; labels that do not fit are refused; MediaSwitchTest
 115|B|function testPage|test page + calibration per printer x media, required before live jobs
 116|B|function replace|routes most-specific-wins, backup printer, replace printer in one step
 121|B|class ErrorPages|one error page for 403 (names the right, audit row DENIED), 404 (search + Home, also an unknown address inside the app), 500 ("logged as E-id"; message, file, SQL only in sys_error_log; API calls get the same short text); the command line prints the same short text + id (App\\Exceptions\\Handler); ErrorPagesTest

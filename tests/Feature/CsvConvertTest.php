@@ -74,6 +74,25 @@ class CsvConvertTest extends TestCase
         $this->assertSame(20, DB::table('t_sales')->whereIn('id', $ids)->where('tracking_no', 'like', 'TRK%')->count()); $this->assertSame(20, DB::table('t_sales')->whereIn('id', $ids)->where('cust_name', 'Jo')->count());      // only order_tracking changes
         $this->assertSame(20, DB::table('t_sale_change_log')->whereIn('fk_id_sale', $ids)->where('action', 'FILE_UPDATE')->count()); $this->assertNull(DB::table('t_sales')->where('order_no', 'U-21')->value('tracking_no'));      // 20 history rows; the confirmed line untouched
     }
+    /** R-D-54: TikTok update = find order no → tracking + status 1; the batch keeps a copy for undo (30 days); formats kept as imp_mappings rows; shop required. */
+    public function test_d54_tiktok_update_status_undo_copy_and_mappings(): void
+    {
+        $this->world(); DB::table('cat_marketplaces')->where('id', DB::table('t_branches')->where('id', $this->shop)->value('fk_id_marketplace'))->update(['marketplace_short' => 'TikTok']);
+        $sale = DB::table('t_sales')->insertGetId(RecordService::fillNotNull('t_sales', ['fk_id_ent' => 1, 'fk_id_branch' => $this->shop, 'order_no' => 'TT-1', 'd_order' => '2026-11-03', 'cust_name' => 'Jo', 'sku' => 'T1', 'qty' => 1, 'total_amount' => 5, 'status' => 'Pending', 'sale_source' => 'active']));
+        DB::table('mo_sale_fulfilment')->insert(RecordService::fillNotNull('mo_sale_fulfilment', ['fk_id_sale' => $sale, 'fk_id_ent' => 1, 'f_done' => 0, 'created_by' => $this->owner->id, 'created_at' => now()]));
+        $s = $this->up($this->file(['TT-1,TRK-TT,x'], 'Order,Tracking,Note'));
+        try { C::update($s['token'], 0, ['key' => ['order_no' => 0], 'fields' => ['tracking_no' => 1]], $this->owner, false); $this->fail(); } catch (\InvalidArgumentException $e) { $this->assertSame('Select what shop these orders belong to.', $e->getMessage()); }
+        $r = C::update($s['token'], $this->shop, ['key' => ['order_no' => 0], 'fields' => ['tracking_no' => 1]], $this->owner, true);
+        $this->assertSame('TRK-TT', DB::table('t_sales')->where('id', $sale)->value('tracking_no')); $this->assertSame(1, (int) DB::table('mo_sale_fulfilment')->where('fk_id_sale', $sale)->value('f_done'), 'status 1');
+        $this->assertFileExists(storage_path('app/' . $r['copy'])); $this->assertFileDoesNotExist(storage_path('app/csv_convert/' . $s['token'] . '.csv'), 'the upload is removed after the run');
+        $u = C::undoUpdate($r['undo_key'], $this->owner); $this->assertStringContainsString('2 value(s) put back', $u['message']);
+        $this->assertSame('', (string) DB::table('t_sales')->where('id', $sale)->value('tracking_no')); $this->assertSame(0, (int) DB::table('mo_sale_fulfilment')->where('fk_id_sale', $sale)->value('f_done'));
+        touch(storage_path('app/' . $r['copy']), time() - 31 * 86400); $this->assertGreaterThanOrEqual(1, C::cleanBatches()); $this->assertFileDoesNotExist(storage_path('app/' . $r['copy']), 'kept 30 days');
+        $f = C::saveFormat('Mirror', self::MAP, $this->owner)['id'];
+        $this->assertSame(count(C::COLUMNS), DB::table('imp_mappings')->where('report_type', 'CSV_FORMAT:' . $f)->whereNotNull('confirmed_by')->count());
+        C::deleteFormat($f, $this->owner); $this->assertSame(0, DB::table('imp_mappings')->where('report_type', 'CSV_FORMAT:' . $f)->count());
+    }
+
     /** R-D-54: named mappings carry "approved / shared"; others pick from the approved ones; match and target column must differ. */
     public function test_d54_approved_formats_and_the_mapping_right(): void
     {

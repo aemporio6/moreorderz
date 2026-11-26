@@ -31,6 +31,7 @@ class PrintController extends Controller
     private function answer(array $x)
     {
         if (isset($x['ask'])) return response()->json(['ask' => $x['ask'], 'message' => "{$x['ask']['printer']} is {$x['ask']['state']}. Print on {$x['ask']['backup']} instead?"], 409);
+        if ($x['status'] === 'WAITING') return response()->json($x + ['waiting' => true], 202);      // R-G_CORE-114 waits for its labels
         if ($x['status'] === 'FAILED') return response()->json(['message' => $x['error'], 'job' => $x['job'], 'errors' => ['_form' => [$x['error']]]], 422);
         return $x + ['url' => "/api/print-jobs/{$x['job']}/pdf", 'message' => "Sent to {$x['printer']}" . (! empty($x['note']) ? " ({$x['note']})" : '')];
     }
@@ -42,6 +43,16 @@ class PrintController extends Controller
             'reason' => 'nullable|string|max:30', 'use_backup' => 'boolean', 'printer' => 'nullable|integer', 'start_cell' => 'nullable|integer|min:1|max:200', 'workstation' => 'nullable|string|max:80']);
         $this->can($r, 'print.kind_' . $d['kind']);
         return $this->run(fn () => $this->answer(Prints::print((int) Context::ent(), $d['kind'], $d['ids'], array_filter($d, fn ($v) => $v !== null))));
+    }
+
+    // ---- R-G_CORE-114 labels loaded (Work screen) ----
+    public function mediaBoard(Request $r) { $this->can($r, 'print.QUEUE'); return ['printers' => Prints::mediaBoard((int) Context::ent())]; }
+
+    public function switchMedia(Request $r, int $id)
+    {
+        $this->can($r, 'print.QUEUE');
+        $d = $r->validate(['media' => 'required|integer']);
+        return $this->run(fn () => Prints::switchMedia((int) Context::ent(), $id, (int) $d['media']) + ['printers' => Prints::mediaBoard((int) Context::ent())]);
     }
 
     // ---- queue ----

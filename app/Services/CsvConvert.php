@@ -60,7 +60,7 @@ class CsvConvert
         $ok = Perm::has($u, 'import.mapping.manage'); $row += ['f_approved' => $ok ? 1 : 0, 'approved_by' => $ok ? $u->id : null, 'approved_at' => $ok ? now() : null];      /* R-D-54 a format saved by someone else waits for approval */
         $id = DB::table('csv_generator_history')->where('import_controller_name', 'standard_sheet')->where('import_name', $name)->value('id');
         if ($id && ! $ok && (int) DB::table('csv_generator_history')->where('id', $id)->value('created_by') !== (int) $u->id) throw new \InvalidArgumentException("A format named \"$name\" already exists – choose another name.");
-        if ($id) DB::table('csv_generator_history')->where('id', $id)->update($row); else $id = DB::table('csv_generator_history')->insertGetId($row); Audit::log('csv_generator_history', (int) $id, $id ? 'UPDATE' : 'INSERT', ['name' => $name]);
+        if ($id) DB::table('csv_generator_history')->where('id', $id)->update($row); else $id = DB::table('csv_generator_history')->insertGetId($row); self::mirror((int) $id); Audit::log('csv_generator_history', (int) $id, $id ? 'UPDATE' : 'INSERT', ['name' => $name]);
         $tpl = self::asExportTemplate($name, $u);      /* R-A_SALES-78 the format is also an export template of the sales list (List Standard) */
         return ['message' => "Format \"$name\" saved" . ($ok ? '' : ' – others see it once it is approved') . ($tpl ? ' – also an export template of the sales list.' : '.'), 'id' => (int) $id, 'template_id' => $tpl, 'formats' => self::formats($u)];
     }
@@ -78,7 +78,7 @@ class CsvConvert
     public static function deleteFormat(int $id, ?object $u): array
     {
         if (! Perm::has($u, 'import.mapping.manage')) throw new \InvalidArgumentException('Only the Owner can delete a format.');
-        $f = DB::table('csv_generator_history')->where('id', $id)->where('import_controller_name', 'standard_sheet')->first() ?? throw new \InvalidArgumentException('Format not found.'); DB::table('csv_generator_history')->where('id', $id)->delete(); Audit::log('csv_generator_history', $id, 'DELETE', ['name' => $f->import_name]); DB::table('mo_export_templates')->where('list_key', 'sale_line')->where('name', self::TEMPLATE_PREFIX . $f->import_name)->delete();
+        $f = DB::table('csv_generator_history')->where('id', $id)->where('import_controller_name', 'standard_sheet')->first() ?? throw new \InvalidArgumentException('Format not found.'); DB::table('csv_generator_history')->where('id', $id)->delete(); self::mirror($id); Audit::log('csv_generator_history', $id, 'DELETE', ['name' => $f->import_name]); DB::table('mo_export_templates')->where('list_key', 'sale_line')->where('name', self::TEMPLATE_PREFIX . $f->import_name)->delete();
         return ['message' => "Format \"{$f->import_name}\" deleted.", 'formats' => self::formats($u)];
     }
 
@@ -87,9 +87,64 @@ class CsvConvert
     {
         Perm::need($u, 'import.mapping.manage');
         $f = DB::table('csv_generator_history')->where('id', $id)->where('import_controller_name', 'standard_sheet')->first() ?? throw new \InvalidArgumentException('Format not found.');
-        DB::table('csv_generator_history')->where('id', $id)->update(['f_approved' => $approved ? 1 : 0, 'approved_by' => $approved ? $u->id : null, 'approved_at' => $approved ? now() : null]);
+        DB::table('csv_generator_history')->where('id', $id)->update(['f_approved' => $approved ? 1 : 0, 'approved_by' => $approved ? $u->id : null, 'approved_at' => $approved ? now() : null]); self::mirror($id);
         Audit::log('csv_generator_history', $id, $approved ? 'APPROVE' : 'REJECT', ['f_approved' => [(int) $f->f_approved, $approved ? 1 : 0]], $f->import_name);
         return ['message' => "Format \"{$f->import_name}\" " . ($approved ? 'approved – everyone can pick it now.' : 'is no longer shared.'), 'formats' => self::formats($u)];
+    }
+
+    public const BATCH_DAYS = 30;
+    private static function batchDir(): string { $d = storage_path('app/import_batches'); if (! is_dir($d)) mkdir($d, 0775, true); return $d; }
+
+    /** R-D-54: the uploaded file is removed after each run; the batch keeps a copy for undo for 30 days (removed by the nightly clean-up). */
+    private static function keepCopy(string $token, string $name): ?string
+    {
+        $src = self::dir() . "/$token.csv"; if (! is_file($src)) return null; self::batchDir();
+        $dst = 'import_batches/' . date('Ymd_His') . '_' . substr($token, -8) . '_' . preg_replace('/[^A-Za-z0-9._-]+/', '_', mb_substr($name, 0, 60));
+        copy($src, storage_path('app/' . $dst)) ?: null; return $dst;
+    }
+
+    public static function cleanBatches(): int
+    {
+        $n = 0; foreach (glob(self::batchDir() . '/*') ?: [] as $f) if (is_file($f) && filemtime($f) < time() - self::BATCH_DAYS * 86400) { @unlink($f); $n++; }
+        return $n;
+    }
+
+    private static function isTikTok(int $shopId): bool
+    {
+        $m = DB::table('t_branches as b')->join('cat_marketplaces as m', 'm.id', '=', 'b.fk_id_marketplace')->where('b.id', $shopId)->first(['m.marketplace_short', 'm.marketplace_descr']);
+        return $m && preg_match('/tik\s*tok/i', $m->marketplace_short . ' ' . $m->marketplace_descr) === 1;
+    }
+
+    /** Undo an "Update existing data" run: every field goes back to its old value while nobody changed it since; lines confirmed since are left alone and listed. */
+    public static function undoUpdate(string $key, ?object $u): array
+    {
+        Perm::need($u, 'orders.importUpdate');
+        $rows = DB::table('t_sale_change_log as l')->join('t_sales as s', 's.id', '=', 'l.fk_id_sale')->where('l.save_key', $key)->where('l.action', 'FILE_UPDATE')->where('s.fk_id_ent', Context::ent())->get(['l.*', 's.status', 's.f_locked']);
+        if ($rows->isEmpty()) throw new \InvalidArgumentException('Nothing to undo for this run.');
+        $done = 0; $kept = [];
+        DB::transaction(function () use ($rows, $u, $key, &$done, &$kept) {
+            foreach ($rows as $r) {
+                if ($r->field_name === 'mo_sale_fulfilment.f_done') { DB::table('mo_sale_fulfilment')->where('fk_id_sale', $r->fk_id_sale)->where('f_done', (int) $r->new_value)->update(['f_done' => (int) $r->old_value]); $done++; continue; }
+                if ($r->status !== 'Pending' || (int) $r->f_locked) { $kept[] = "line {$r->fk_id_sale}: {$r->status}"; continue; }
+                $n = DB::table('t_sales')->where('id', $r->fk_id_sale)->where($r->field_name, $r->new_value)->update([$r->field_name => $r->old_value, 'updated_at' => now()]);
+                if ($n) { $done++; DB::table('t_sale_change_log')->insert(['fk_id_sale' => $r->fk_id_sale, 'save_key' => mb_substr('undo:' . $key, 0, 40), 'action' => 'FILE_UNDO', 'field_name' => $r->field_name, 'field_label' => $r->field_label, 'old_value' => $r->new_value, 'new_value' => $r->old_value, 'fk_id_user' => $u->id, 'changed_by' => mb_substr((string) ($u->display_name ?: $u->login_id), 0, 150), 'changed_at' => now()]); }
+                else $kept[] = "line {$r->fk_id_sale}: {$r->field_label} changed again since";
+            }
+            Audit::log('t_sales', null, 'UPDATE', ['undo' => $key, 'fields' => $done], 'Update existing data – undo');
+        });
+        return ['message' => "$done value(s) put back" . ($kept ? ', ' . count($kept) . ' left as they are' : '') . '.', 'kept' => $kept];
+    }
+
+    /** R-D-54: the saved formats are also kept as column mappings (imp_mappings: one row per system column; confirmed_by / confirmed_at = approved, empty = waiting). */
+    private static function mirror(int $id): void
+    {
+        DB::table('imp_mappings')->where('report_type', 'CSV_FORMAT:' . $id)->delete();
+        $f = DB::table('csv_generator_history')->where('id', $id)->first(); if (! $f) return;
+        $sys = json_decode((string) $f->system_columns, true) ?: []; $csv = json_decode((string) $f->csv_columns, true) ?: [];
+        $seen = [];
+        foreach (array_values($sys) as $i => $col) { $src = is_int($csv[$i] ?? null) ? self::letter($csv[$i]) : (string) ($csv[$i] ?? ''); if (isset($seen[$src])) $src .= ' → ' . $col; $seen[$src] = 1;      // one row per source column (an empty part names its target)
+          DB::table('imp_mappings')->insert(['fk_id_ent' => (int) Context::ent(), 'report_type' => 'CSV_FORMAT:' . $id, 'fk_id_branch' => 0, 'source_column' => $src,
+            'decision' => 'MAP', 'target' => (string) $col, 'transform' => null, 'confirmed_by' => (int) $f->f_approved ? $f->approved_by : null, 'confirmed_at' => (int) $f->f_approved ? $f->approved_at : null]); }
     }
 
     private static function mapOf(array $o, ?object $u): array
@@ -125,13 +180,14 @@ class CsvConvert
     /** Straight into the daily fulfilment queue of a shop (no download step): one order per row; rows with a problem are listed, the others saved. */
     public static function intoQueue(string $token, array $o, int $shopId, ?object $u): array
     {
-        Perm::need($u, 'orders.fulfilAdd'); $x = self::rows($token, $o, $u); $saved = 0; $errors = [];
+        Perm::need($u, 'orders.fulfilAdd'); if (! $shopId) throw new \InvalidArgumentException('Select what shop these orders belong to.');      // R-D-54 shop required
+        $x = self::rows($token, $o, $u); $saved = 0; $errors = [];
         foreach ($x['rows'] as $r) { $a = $r['address_parts'];
             try { Fulfilment::save(['shop' => $shopId, 'order_no' => $r['order_id'], 'd_order' => $r['iso_date'] ?? '', 'item_name' => $r['item_title'], 'sku' => $r['sku'], 'qty' => $r['quantity'], 'buyer_first_name' => $r['first_name'], 'buyer_last_name' => $r['last_name'], 'recipient_first_name' => $r['first_name'], 'recipient_last_name' => $r['last_name'],
                 'address_1' => $a[0] ?? '', 'address_2' => $a[1] ?? '', 'address_3' => implode(', ', array_slice($a, 2))], null, $u); $saved++; }
             catch (\Illuminate\Validation\ValidationException $e) { $errors[] = ['line' => $r['line'], 'order' => $r['order_id'], 'reason' => implode(' ', array_map(fn ($m) => (array) $m === $m ? implode(' ', $m) : $m, $e->errors()))]; }
             catch (\Throwable $e) { $errors[] = ['line' => $r['line'], 'order' => $r['order_id'], 'reason' => $e->getMessage()]; } }
-        if (! $errors) foreach (['csv', 'json'] as $e) @unlink(self::dir() . "/$token.$e");
+        if (! $errors) { self::keepCopy($token, $x['file']); foreach (['csv', 'json'] as $e) @unlink(self::dir() . "/$token.$e"); }
         return ['message' => "$saved order(s) added to the fulfilment queue" . ($errors ? ', ' . count($errors) . ' row(s) not saved' : '') . '.', 'saved' => $saved, 'errors' => $errors];
     }
 
@@ -141,7 +197,8 @@ class CsvConvert
      */
     public static function update(string $token, int $shopId, array $o, ?object $u, bool $apply): array
     {
-        Perm::need($u, 'orders.importUpdate'); $meta = self::held($token, $u); $h = $meta['csv']['headers']; if (! Perm::shopAllowed($u, $shopId) || ! DB::table('t_branches')->where('id', $shopId)->where('fk_id_ent', Context::ent())->exists()) abort(403, "You don't have rights for this shop.");
+        Perm::need($u, 'orders.importUpdate'); if (! $shopId) throw new \InvalidArgumentException('Select what shop these orders belong to.');      // R-D-54 shop required
+        $meta = self::held($token, $u); $h = $meta['csv']['headers']; if (! Perm::shopAllowed($u, $shopId) || ! DB::table('t_branches')->where('id', $shopId)->where('fk_id_ent', Context::ent())->exists()) abort(403, "You don't have rights for this shop.");
         $col = fn ($v) => $v === null || $v === '' ? null : ($h[(int) $v] ?? throw new \InvalidArgumentException('A mapped column is not in this file.'));
         $kOrder = $col($o['key']['order_no'] ?? null) ?? throw new \InvalidArgumentException('Map the Order number column (the key).'); $kSku = $col($o['key']['sku'] ?? null);
         $fields = []; foreach ((array) ($o['fields'] ?? []) as $f => $c) if (isset(self::UPDATABLE[$f]) && ($c = $col($c))) $fields[$f] = $c; if (! $fields) throw new \InvalidArgumentException('Map at least one column to change.');
@@ -161,12 +218,16 @@ class CsvConvert
             'message' => count($changes) . ' line(s) will change' . ($refused ? ', ' . count($refused) . ' refused (confirmed)' : '') . ($notFound ? ', ' . count($notFound) . ' not found' : '') . ($same ? ", $same already the same" : '') . '.'];
         if (! $apply) return $res;
         $key = 'file:' . substr($token, -8); $by = (string) ($u->display_name ?: $u->login_id);
-        DB::transaction(function () use ($changes, $key, $by, $u, $meta) {
+        $tiktok = isset($fields['tracking_no']) && self::isTikTok($shopId);      // R-D-54: a TikTok update sets the tracking and status 1 (the fulfilment order is Done)
+        DB::transaction(function () use ($changes, $key, $by, $u, $meta, $tiktok) {
             foreach ($changes as $c) { DB::table('t_sales')->where('id', $c['id'])->where('status', 'Pending')->update(array_column($c['diff'], 'new', 'column') + ['f_edited' => 1, 'updated_at' => now()]);
+                if ($tiktok && in_array('tracking_no', array_column($c['diff'], 'column'), true) && ($fx = DB::table('mo_sale_fulfilment')->where('fk_id_sale', $c['id'])->first()) && ! (int) $fx->f_done) {
+                    DB::table('mo_sale_fulfilment')->where('fk_id_sale', $c['id'])->update(['f_done' => 1]);
+                    DB::table('t_sale_change_log')->insert(['fk_id_sale' => $c['id'], 'save_key' => mb_substr($key, 0, 40), 'action' => 'FILE_UPDATE', 'field_name' => 'mo_sale_fulfilment.f_done', 'field_label' => 'Status', 'old_value' => '0', 'new_value' => '1', 'fk_id_user' => $u->id, 'changed_by' => mb_substr($by, 0, 150), 'changed_at' => now()]); }
                 foreach ($c['diff'] as $d) DB::table('t_sale_change_log')->insert(['fk_id_sale' => $c['id'], 'save_key' => mb_substr($key, 0, 40), 'action' => 'FILE_UPDATE', 'field_name' => $d['column'], 'field_label' => $d['label'], 'old_value' => $d['old'], 'new_value' => $d['new'], 'fk_id_user' => $u->id, 'changed_by' => mb_substr($by, 0, 150), 'changed_at' => now()]); }
             Audit::log('t_sales', null, 'UPDATE', ['file' => $meta['name'], 'lines' => count($changes)], 'Update existing data');
         });
-        foreach (['csv', 'json'] as $e) @unlink(self::dir() . "/$token.$e");
-        return ['message' => count($changes) . ' line(s) changed' . ($refused ? ', ' . count($refused) . ' refused (confirmed)' : '') . ($notFound ? ', ' . count($notFound) . ' not found' : '') . '.'] + $res;
+        $copy = self::keepCopy($token, $meta['name']); foreach (['csv', 'json'] as $e) @unlink(self::dir() . "/$token.$e");
+        return ['undo_key' => $key, 'copy' => $copy, 'message' => count($changes) . ' line(s) changed' . ($refused ? ', ' . count($refused) . ' refused (confirmed)' : '') . ($notFound ? ', ' . count($notFound) . ' not found' : '') . '.'] + $res;
     }
 }

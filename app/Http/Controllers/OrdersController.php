@@ -626,6 +626,8 @@ class OrdersController extends Controller
     public function csvConvertQueue(Request $r) { return $this->run(fn () => \App\Services\CsvConvert::intoQueue((string) $r->input('token'), $this->convOpt($r), (int) $r->input('shop'), $r->user())); }
     public function csvConvertUpdate(Request $r) { return $this->run(fn () => \App\Services\CsvConvert::update((string) $r->input('token'), (int) $r->input('shop'), ['key' => (array) $r->input('key', []), 'fields' => (array) $r->input('fields', [])], $r->user(), $r->boolean('apply'))); }
 
+    public function csvConvertUndo(Request $r) { return $this->run(fn () => \App\Services\CsvConvert::undoUpdate((string) $r->input('key'), $r->user())); }      // R-D-54
+
     public function hubFigures(Request $r) { return $this->run(fn () => \App\Services\SalesWatch::saveHub((int) $r->input('shop'), (string) $r->input('month'), (array) $r->input('figures', []), $r->user())); }
     public function fulfilmentCloseDaily(Request $r) { return $this->run(fn () => \App\Services\Fulfilment::closeDaily((int) $r->input('shop'), (int) $r->input('month'), (int) $r->input('year'), $r->user(), $r->boolean('overwrite'))); }
     public function fulfilmentImport(Request $r) { return $this->run(function () use ($r) { $f = $r->file('file') ?? throw new \InvalidArgumentException('Choose the daily orders report.'); return \App\Services\Fulfilment::importReport((int) $r->input('shop'), $f->getRealPath(), $f->getClientOriginalName(), $r->user()); }); }

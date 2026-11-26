@@ -170,6 +170,8 @@ class PrintService
             }
         }
         $adapter = DB::table('print_adapters')->where('id', $printer->fk_id_adapter)->value('code') ?: 'DRIVER_PDF';
+        // R-G_CORE-114: the printer has other labels loaded (switched on the Work screen) → the job waits until its media is loaded again
+        if ($kind !== 'TEST' && $printer->fk_id_loaded_media && (int) $printer->fk_id_loaded_media !== (int) $media->id) return self::wait($ent, $kind, $entityType, $ids, $printer, $media, $copies, $opt);
 
         // 2. template + fit check
         [$tpl, [$w, $h, $rot]] = self::template($ent, $kind, $printer, $media);
@@ -253,6 +255,60 @@ class PrintService
         if ($fits($media) && self::tested($printer->id, $media->id)) return $media;
         $all = DB::table('label_media')->whereIn('fk_id_ent', [0, $ent])->where('f_active', 1)->orderBy('id')->get()->filter($fits);
         return $all->first(fn ($m) => self::tested($printer->id, $m->id)) ?? ($fits($media) ? $media : ($all->first() ?? $media));
+    }
+
+    /** "Load 100 × 150 labels in Thermal printer 1" – the job is kept with what it needs and prints when that media is loaded. */
+    public static function loadText(object $media, object $printer): string
+    {
+        $mm = fn ($v) => rtrim(rtrim(number_format((float) $v, 1, '.', ''), '0'), '.');
+        return 'Load ' . $mm($media->width_mm) . ' × ' . $mm($media->height_mm) . ' ' . ($media->media_kind === 'SHEET' ? 'sheets' : 'labels') . " in {$printer->name}";
+    }
+
+    private static function wait(int $ent, string $kind, string $entityType, array $ids, object $printer, object $media, int $copies, array $opt): array
+    {
+        $tpl = DB::table('label_templates')->where('label_kind', $kind)->where('f_active', 1)->value('id') ?? 0; $msg = self::loadText($media, $printer);
+        $keep = array_intersect_key($opt, array_flip(['copies', 'reason', 'trigger', 'start_cell', 'workstation']));
+        $job = DB::table('print_jobs')->insertGetId(['fk_id_ent' => $ent, 'job_code' => Numbering::next('PJ', $ent), 'entity_type' => $entityType, 'entity_ids' => json_encode($ids), 'fk_id_label_template' => $tpl,
+            'fk_id_printer_profile' => $printer->id, 'fk_id_label_media' => $media->id, 'params_json' => json_encode(['kind' => $kind, 'ids' => $ids, 'opt' => $keep]), 'copies' => $copies, 'print_trigger' => $opt['trigger'] ?? 'MANUAL',
+            'status' => 'WAITING', 'error_text' => $msg, 'workstation' => $opt['workstation'] ?? null, 'requested_by' => (int) (Context::userId() ?? 0), 'requested_at' => now()]);
+        return ['job' => $job, 'job_code' => DB::table('print_jobs')->where('id', $job)->value('job_code'), 'status' => 'WAITING', 'printer' => $printer->name, 'media' => $media->name, 'note' => $msg, 'message' => "Waiting: $msg"];
+    }
+
+    /** R-G_CORE-114 one tap on the Work screen: the labels now loaded in a printer. Jobs waiting for this media print now; the others keep waiting. */
+    public static function switchMedia(int $ent, int $printerId, int $mediaId): array
+    {
+        $p = DB::table('printer_profiles')->where('id', $printerId)->whereIn('fk_id_ent', [0, $ent])->where('f_active', 1)->first() ?? throw new \InvalidArgumentException('Printer not found.');
+        $m = DB::table('label_media')->where('id', $mediaId)->whereIn('fk_id_ent', [0, $ent])->where('f_active', 1)->first() ?? throw new \InvalidArgumentException('Choose labels from the list.');
+        if (($p->min_media_width_mm && $m->width_mm < $p->min_media_width_mm - 0.5) || ($p->max_media_width_mm && $m->width_mm > $p->max_media_width_mm + 0.5)) throw new \InvalidArgumentException("{$m->name} ({$m->width_mm} mm wide) does not fit {$p->name}.");
+        $old = $p->fk_id_loaded_media;
+        DB::table('printer_profiles')->where('id', $p->id)->update(['fk_id_loaded_media' => $m->id]);
+        Audit::log('printer_profiles', $p->id, 'UPDATE', ['loaded_media' => [$old ? DB::table('label_media')->where('id', $old)->value('name') : null, $m->name]], 'Labels switched on the Work screen', $ent);
+        $printed = []; $failed = [];
+        foreach (DB::table('print_jobs')->where('fk_id_ent', $ent)->where('fk_id_printer_profile', $p->id)->where('status', 'WAITING')->where('fk_id_label_media', $m->id)->orderBy('id')->get() as $j) {
+            $x = json_decode((string) $j->params_json, true) ?: [];
+            try {
+                $r = self::print($ent, $x['kind'], $x['ids'], ($x['opt'] ?? []) + ['printer' => $p->id, 'media' => $m->id, 'use_backup' => false]);
+                if (($r['status'] ?? '') === 'FAILED') throw new \RuntimeException($r['error'] ?? 'Print failed.');
+                DB::table('print_jobs')->where('id', $j->id)->update(['status' => 'RELEASED', 'error_text' => mb_substr('Printed as ' . ($r['job_code'] ?? ''), 0, 255), 'printed_at' => now()]);
+                $printed[] = ['waited' => $j->job_code, 'job' => $r['job'] ?? null, 'job_code' => $r['job_code'] ?? null];
+            } catch (\Throwable $e) { DB::table('print_jobs')->where('id', $j->id)->update(['error_text' => mb_substr(self::loadText($m, $p) . ' – ' . $e->getMessage(), 0, 255)]); $failed[] = ['job_code' => $j->job_code, 'error' => $e->getMessage()]; }
+        }
+        $still = DB::table('print_jobs')->where('fk_id_ent', $ent)->where('fk_id_printer_profile', $p->id)->where('status', 'WAITING')->count();
+        return ['printer' => $p->name, 'loaded' => $m->name, 'printed' => $printed, 'failed' => $failed, 'still_waiting' => $still,
+            'message' => "{$p->name}: {$m->name} loaded" . ($printed ? ' – ' . count($printed) . ' waiting job(s) printed' : '') . ($still ? " – $still job(s) wait for other labels" : '')];
+    }
+
+    /** The Work screen card: every printer with the labels loaded, the labels it can take and the jobs that wait. */
+    public static function mediaBoard(int $ent): array
+    {
+        $media = DB::table('label_media')->whereIn('fk_id_ent', [0, $ent])->where('f_active', 1)->orderBy('media_kind')->orderBy('width_mm')->orderBy('height_mm')->get(['id', 'name', 'media_kind', 'width_mm', 'height_mm']);
+        return DB::table('printer_profiles')->whereIn('fk_id_ent', [0, $ent])->where('f_active', 1)->where('printer_status', 'ACTIVE')->where('code', 'not like', 'EX\_%')->orderBy('name')->get()
+            ->map(function ($p) use ($media, $ent) {
+                $fits = $media->filter(fn ($m) => (! $p->min_media_width_mm || $m->width_mm >= $p->min_media_width_mm - 0.5) && (! $p->max_media_width_mm || $m->width_mm <= $p->max_media_width_mm + 0.5))->values();
+                $wait = DB::table('print_jobs')->where('fk_id_ent', $ent)->where('fk_id_printer_profile', $p->id)->where('status', 'WAITING')->groupBy('fk_id_label_media')->selectRaw('fk_id_label_media m, COUNT(*) n')->pluck('n', 'm');
+                return ['id' => $p->id, 'name' => $p->name, 'loaded' => $p->fk_id_loaded_media ? (int) $p->fk_id_loaded_media : null, 'media' => $fits,
+                    'waiting' => $wait->map(fn ($n, $m) => ['media' => (int) $m, 'count' => (int) $n, 'text' => ($x = $media->firstWhere('id', (int) $m)) ? self::loadText($x, $p) : 'Load other labels'])->values()];
+            })->all();
     }
 
     private static function fail(int $ent, string $kind, string $entityType, array $ids, object $printer, int $copies, array $opt, string $why): array

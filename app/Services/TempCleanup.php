@@ -35,6 +35,7 @@ class TempCleanup
                 foreach (glob($path . '/*') ?: [] as $f) if (is_file($f) && filemtime($f) < $cut && @unlink($f)) $out[$kind === 'import' ? 'uploads' : 'generator']++;
             }
             $out['uploads'] += BankImportCheck::sweep();      // R-FIN-24: checked bank files waiting under a token, older than 24 h
+            $out['uploads'] += CsvConvert::cleanBatches();      // R-D-54: batch copies kept 30 days for undo
             foreach (['t_import_options' => 'import', 'csv_generator_options' => 'generator'] as $t => $kind)
                 if (\Illuminate\Support\Facades\Schema::hasTable($t)) $out['rows'] += DB::table($t)->where('created_at', '<', date('Y-m-d H:i:s', self::cutoff($days[$kind], $now)))->delete();
             $text = "deleted {$out['uploads']} uploads, {$out['generator']} generator files" . ($out['rows'] ? ", {$out['rows']} old rows" : '');
