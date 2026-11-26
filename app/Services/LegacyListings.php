@@ -28,17 +28,17 @@ class LegacyListings
         if (! $p) {      // owner 26-11 23:14: the old shop line IS the shop's product (vendor item sold by that shop) – it becomes a product, private to that shop
             $sku = trim((string) ($o->sku_vendor ?? '')) ?: trim((string) $o->sku_ebay);
             if ($sku === '' || trim((string) $o->product_name_local) === '') return ['error' => 'No product for SKU ' . $o->sku_ebay . ' and no name to make one'];
-            $make = ['fk_id_ent' => $ent, 'SKU_VENDOR' => mb_substr($sku, 0, 100), 'product_name_vendor' => mb_substr(trim((string) $o->product_name_local), 0, 255), 'fk_id_vendor' => (int) $o->fk_id_vendor ?: null,
-                'fk_id_product_type' => (int) $o->fk_id_product_type ?: null, 'raw_price' => round((float) $o->pur_price, 2), 'sale_price' => round((float) $o->sale_price_ebay, 2), 'href_product' => trim((string) ($o->url_vendor_product ?? '')) ?: null,
-                'url_ebay' => trim((string) ($o->url_ebay_product ?? '')) ?: null, 'vendor_reference' => trim((string) ($o->ref_vendor_product ?? '')) ?: null, 'e_product_type' => 'private', 'stock' => 0, 'f_active' => (int) ($o->f_active ?? 1) === 1 ? 1 : 0,
+            $make = ['fk_id_ent' => $ent, 'SKU_VENDOR' => mb_substr($sku, 0, 50), 'product_name_vendor' => mb_substr(trim((string) $o->product_name_local), 0, 255), 'fk_id_vendor' => (int) $o->fk_id_vendor ?: null,
+                'fk_id_product_type' => (int) $o->fk_id_product_type ?: null, 'raw_price' => round((float) $o->pur_price, 2), 'sale_price' => round((float) $o->sale_price_ebay, 2), 'href_product' => mb_substr(trim((string) ($o->url_vendor_product ?? '')), 0, 255) ?: null,
+                'url_ebay' => mb_substr(trim((string) ($o->url_ebay_product ?? '')), 0, 500) ?: null, 'vendor_reference' => mb_substr(trim((string) ($o->ref_vendor_product ?? '')), 0, 100) ?: null, 'e_product_type' => 'private', 'stock' => 0, 'f_active' => (int) ($o->f_active ?? 1) === 1 ? 1 : 0,
                 'fk_id_branch' => (int) $shop->id, 'd_created' => now()];
             $p = 0;
         }
         $asin = trim((string) ($o->asin_amazon ?? ''));
-        return ['row' => ['fk_id_ent' => $ent, 'fk_id_product' => (int) $p, 'fk_id_branch' => (int) $shop->id, 'fk_id_marketplace' => (int) $shop->fk_id_marketplace, 'marketplace_sku' => trim((string) $o->sku_ebay),
+        return ['row' => ['fk_id_ent' => $ent, 'fk_id_product' => (int) $p, 'fk_id_branch' => (int) $shop->id, 'fk_id_marketplace' => (int) $shop->fk_id_marketplace, 'marketplace_sku' => mb_substr(trim((string) $o->sku_ebay), 0, 100),
             'listing_title' => mb_substr(trim((string) $o->product_name_local), 0, 255), 'item_id' => $asin !== '' ? mb_substr($asin, 0, 60) : null, 'asin' => $asin !== '' && mb_strlen($asin) <= 20 ? $asin : null,
-            'listing_url' => trim((string) ($o->url_ebay_product ?? '')) ?: null, 'fk_id_product_type' => (int) $o->fk_id_product_type, 'price' => round((float) $o->sale_price_ebay, 2), 'expected_cost' => round((float) $o->pur_price, 2),
-            'fk_id_vendor' => (int) $o->fk_id_vendor, 'vendor_sku' => trim((string) ($o->sku_vendor ?? '')) ?: null, 'vendor_url' => trim((string) ($o->url_vendor_product ?? '')) ?: null, 'vendor_ref' => trim((string) ($o->ref_vendor_product ?? '')) ?: null,
+            'listing_url' => mb_substr(trim((string) ($o->url_ebay_product ?? '')), 0, 500) ?: null, 'fk_id_product_type' => (int) $o->fk_id_product_type, 'price' => round((float) $o->sale_price_ebay, 2), 'expected_cost' => round((float) $o->pur_price, 2),
+            'fk_id_vendor' => (int) $o->fk_id_vendor, 'vendor_sku' => mb_substr(trim((string) ($o->sku_vendor ?? '')), 0, 100) ?: null, 'vendor_url' => mb_substr(trim((string) ($o->url_vendor_product ?? '')), 0, 500) ?: null, 'vendor_ref' => mb_substr(trim((string) ($o->ref_vendor_product ?? '')), 0, 100) ?: null,
             'fk_id_carrier' => (int) ($o->fk_id_carrier ?? 0) ?: null, 'status' => (int) ($o->f_active ?? 1) === 1 ? 'ACTIVE' : 'INACTIVE', 'f_active' => (int) ($o->f_active ?? 1) === 1 ? 1 : 0, 'legacy_branch_row' => (int) $o->id], 'make' => $make];
     }
 
