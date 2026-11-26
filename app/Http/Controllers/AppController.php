@@ -23,7 +23,7 @@ class AppController extends Controller
     {
         $u = Auth::user();
         $role = $u->role_code; $va = \App\Services\Perm::viewing();
-        $companies = DB::table('t_enterprise')->where('f_active', 1)->orderBy('id')->get(['id', 'ent_name as name', 'ent_short as short']);
+        $companies = DB::table('t_enterprise')->where('f_active', 1)->orderBy('id')->get(\Illuminate\Support\Facades\Schema::hasColumn('t_enterprise', 'f_sandbox') ? ['id', 'ent_name as name', 'ent_short as short', 'f_sandbox as practice'] : ['id', 'ent_name as name', 'ent_short as short']);
         if ($role !== 'OWNER') $companies = $companies->where('id', $u->fk_id_ent)->values();
         return [
             'user' => ['id' => $u->id, 'name' => $u->display_name ?: $u->login_id, 'role' => $va ? $va[0] : $role, 'role_name' => $va ? $va[1] : ($u->custom_role ?: $role)],
@@ -32,6 +32,7 @@ class AppController extends Controller
             'setup_open' => $role === 'OWNER' && \App\Services\SetupWizard::open((int) Context::ent()),
             'landing' => \App\Services\FinanceRoles::landing($u), 'partner_only' => \App\Services\FinanceRoles::locked($u),      // R-FIN-2 each role's first page; a partner account sees its own pages only
             'task_header' => \App\Services\TaskRoles::header($u),      // R-G_CORE-20
+            'whats_new' => \App\Services\Features::unseen($u),      // MR-1542
             'tasks_open' => DB::table('tasks')->where('owner_user_id', $u->id)->whereNotIn('status', ['DONE', 'APPROVED', 'CANCELLED'])->count(),
             'product_form' => RecordService::formOfTable('t_product_vendors'), 'person_forms' => \Illuminate\Support\Facades\DB::table('sys_registry')->where('table_name', 't_account')->distinct()->pluck('form_key')->all(), 'base_currency' => Settings::get('BASE_CURRENCY', Context::ent(), 'GBP'), 'today' => date('Y-m-d'),
         ];

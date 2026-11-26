@@ -47,6 +47,28 @@ class Icc
         return ['ordered' => $o, 'production' => $pr, 'transit' => $t, 'po_ids' => array_values(array_unique($pos))];
     }
 
+    /**
+     * MR-1537 demand forecast from the product's own sales: season = how this calendar month sold last year against the last 12 months,
+     * divided by how the last 3 months sold (the recent rate already holds their season); trend = growth per month of the last 90 days
+     * against the 90 days before. Needs sales on at least 300 days back; else null (the calendar default is used). Choice ICC_FORECAST.
+     */
+    public static function forecast(int $pid, ?string $today = null): ?array
+    {
+        $today ??= now()->toDateString(); $t = strtotime($today);
+        $first = DB::table('t_sales')->where('fk_product_id', $pid)->min('d_order');
+        if (! $first || (strtotime(substr((string) $first, 0, 10)) > $t - 300 * 86400)) return null;
+        $q = fn (string $a, string $b) => (float) DB::table('t_sales')->where('fk_product_id', $pid)->where('d_order', '>=', $a)->where('d_order', '<', $b)
+            ->where(fn ($w) => $w->whereNull('line_status')->orWhere('line_status', '<>', 'CANCELLED'))->where(fn ($w) => $w->whereNull('status')->orWhereNotIn('status', ['Cancelled', 'CANCELLED']))->sum('qty');
+        $mStart = fn (int $back) => date('Y-m-01', strtotime(date('Y-m-01', $t) . " -$back months"));
+        $avg12 = $q(date('Y-m-d', strtotime("$today -365 days")), $today) / 12; if ($avg12 <= 0) return null;
+        $idx = function (int $back) use ($q, $mStart, $avg12) { $a = $mStart($back); $b = date('Y-m-01', strtotime("$a +1 month")); return max(0.3, min(3.0, $q($a, $b) / $avg12)); };
+        $now = $idx(12); $recent = ($idx(13) + $idx(14) + $idx(15)) / 3;
+        $season = round(max(0.3, min(3.0, $now / max(0.3, $recent))), 2);
+        $r1 = $q(date('Y-m-d', strtotime("$today -90 days")), $today); $r0 = $q(date('Y-m-d', strtotime("$today -180 days")), date('Y-m-d', strtotime("$today -90 days")));
+        $trend = $r0 > 0 ? round(max(-20, min(20, (($r1 / $r0) - 1) * 100 / 3)), 1) : 0.0;
+        return ['season' => $season, 'growth' => $trend, 'basis' => 'season ×' . $season . ' from ' . date('M Y', strtotime($mStart(12))) . ' against the year; trend ' . ($trend >= 0 ? '+' : '') . $trend . ' % a month (last 90 days against the 90 before)'];
+    }
+
     /** Season factor of a calendar month (07_ICC §2). */
     public static function season(int $month): float { return in_array($month, [10, 11, 12, 1], true) ? 1.5 : (in_array($month, [6, 7, 8], true) ? 0.9 : 1.0); }
 
@@ -77,8 +99,11 @@ class Icc
         $in = ['product_id' => $pid, 'ent' => (int) $p->fk_id_ent, 'sku' => $p->SKU_VENDOR, 'name' => $p->product_name_vendor];
         $in['monthly'] = (int) $pick('monthly', [$s['monthly_sales'] ?? null, $hist], 0, 'Sales per month (no sales in the last 90 days)');
         $in['monthly_source'] = ! empty($s['monthly_sales']) ? 'typed' : ($hist ? 'sales of the last 90 days' : 'none');
-        $in['season'] = (float) ($s['season_factor'] ?? 0) ?: self::season((int) date('n', strtotime($today)));
-        $in['growth'] = (float) ($s['growth_pct'] ?? 0);
+        $fc = Choices::get('ICC_FORECAST', (int) $p->fk_id_ent) === 'CALENDAR' ? null : self::forecast($pid, $today);      // MR-1537
+        $in['forecast'] = $fc;
+        $in['season'] = (float) ($s['season_factor'] ?? 0) ?: ($fc['season'] ?? self::season((int) date('n', strtotime($today))));
+        $in['growth'] = ($s['growth_pct'] ?? null) !== null && $s['growth_pct'] !== '' ? (float) $s['growth_pct'] : (float) ($fc['growth'] ?? 0);
+        if ($fc && empty($s['season_factor'])) $assumed[] = 'Demand forecast: ' . $fc['basis'];
         $in['mode'] = strtoupper((string) $pick('mode', [$s['ship_mode'] ?? null], 'SEA', 'Shipping mode'));
         $in['safety_days'] = (int) $pick('safety', [$s['safety_days'] ?? null, $p->safety_days ?? null], $in['mode'] === 'SEA' ? 21 : 14, 'Safety stock days');
         $in['fulfil'] = $s['fulfil'] ?? 'FBM';

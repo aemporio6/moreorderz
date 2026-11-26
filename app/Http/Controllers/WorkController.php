@@ -97,6 +97,8 @@ class WorkController extends Controller
     public function alertThreshold(Request $r, string $key) { return $this->alertTry(fn () => \App\Services\AlertRules::setThreshold($r->user(), $key, (string) $r->input('value'))); }
     private function alertTry(\Closure $f) { try { return $f(); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
     public function due(Request $r) { return \App\Services\DueEngine::list((int) Context::ent(), $r->user(), $r->only(['chip', 'status'])); }
+    public function deadlines(Request $r) { return \App\Services\ComplianceCalendar::month((int) Context::ent(), $r->user(), $r->query('ym')); }      // MR-1545
+    public function deadlinesIcs(Request $r) { return response(\App\Services\ComplianceCalendar::ics((int) Context::ent(), $r->user(), (int) ($r->query('months') ?: 12)), 200, ['Content-Type' => 'text/calendar; charset=utf-8', 'Content-Disposition' => 'attachment; filename="moreorderz-deadlines.ics"']); }
     public function dueDone(Request $r, int $id) { try { return \App\Services\DueEngine::done((int) Context::ent(), $id, $r->user()); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
 
     /** Tasks: scope mine (R-G_CORE-36), all (R-G_CORE-37 chips / filters / pages), stuck_on_me, to_approve. */

@@ -102,11 +102,12 @@ class HomeCards
             return ['label' => 'Low stock', 'value' => $n, 'foot' => $n ? 'products at or under their minimum' : 'every product above its minimum', 'tone' => $n ? 'warn' : 'done', 'go' => '#/stock?low=1'];
         }, true);
         self::register(['OWNER', 'MANAGER', 'SOURCING', 'STOCK', 'PARTNER'], function ($ent, $u) {      // MR-0031 ICC on Home: products to order now / this week
-            if (! Perm::has($u, 'stock.SEE')) return null;
+            if (! Perm::has($u, 'stock.SEE') || ! Features::on('ICC', $ent)) return null;
             $c = Icc::board($ent)['counts']; $n = $c['order_now'] + $c['this_week'];
             return ['label' => 'Stock cover (ICC)', 'value' => $n, 'foot' => "order now {$c['order_now']} · this week {$c['this_week']} · covered {$c['covered']}", 'tone' => $c['order_now'] ? 'err' : ($n ? 'warn' : 'done'), 'go' => $c['order_now'] ? '#/icc?status=RED' : '#/icc'];
         }, true);
         self::register(['OWNER', 'MANAGER', 'FINANCE'], function ($ent) {      // MR-1538 data health score per company
+            if (! Features::on('DATA_HEALTH', $ent)) return null;
             $h = DataHealth::score($ent); $w = $h['parts'][0];
             return ['label' => 'Data health', 'value' => $h['score'] . ' %', 'foot' => $w['score'] < 100 ? 'weakest: ' . $w['text'] : 'costs, bank, imports, duplicates and records all clean', 'tone' => $h['tone'], 'go' => $w['score'] < 100 ? $w['go'] : '#/data-quality'];
         }, true);

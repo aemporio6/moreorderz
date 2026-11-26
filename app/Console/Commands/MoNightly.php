@@ -41,7 +41,9 @@ class MoNightly extends Command
             \App\Services\SkuHomes::tasks((int) $ent);
             \App\Services\ThreePlTariff::missingTasks((int) $ent);
             \App\Services\NotListed::closeDone((int) $ent);      // LST_CREATE closes when the listing exists (R-D-58)      // PRD_FEE_MISSING (R-D-23)
-            $icc = \App\Services\Icc::recalcAll((int) $ent); if ($icc['run']) $this->line("ICC: {$icc['run']} product(s) – order now {$icc['RED']}, this week {$icc['YELLOW']}, covered {$icc['GREEN']}");      /* 07_ICC §6 (MR-0031) */
+            $icc = \App\Services\Features::on('ICC', (int) $ent) ? \App\Services\Icc::recalcAll((int) $ent) : ['run' => 0]; if ($icc['run']) $this->line("ICC: {$icc['run']} product(s) – order now {$icc['RED']}, this week {$icc['YELLOW']}, covered {$icc['GREEN']}");      /* 07_ICC §6 (MR-0031) */
+            if (\App\Services\Features::on('FEE_CHECK', (int) $ent)) \App\Services\FeeCheck::tasks((int) $ent);      /* MR-1536 last month's money files */
+            if (\App\Services\Features::on('RETURN_ABUSE', (int) $ent)) \App\Services\ReturnAbuse::tasks((int) $ent);      /* MR-1544 */
             \App\Services\SalesWatch::nightly((int) $ent);      // SAL_NO_COST, LST_STATUS, IMP_WAITING
             $this->line("Company $ent: stock mismatches {$r['mismatch']}, negative balances {$r['negative_balances']}, value = ledger: " . ($r['value_matches_ledger'] ? 'yes' : 'NO') . ", low stock tasks open {$low['open']}");
         }

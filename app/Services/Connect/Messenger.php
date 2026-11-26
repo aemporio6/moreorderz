@@ -51,7 +51,8 @@ class Messenger
         $later = $quiet && $accountId ? \App\Services\PersonChannels::quietUntil(DB::table('t_account')->where('id', $accountId)->first(['id', 'fk_id_ent', 'timezone', 'quiet_from', 'quiet_to'])) : null;
         $key = mb_substr($eventKey ?? ('Q:' . ($code ?: $channel) . ':' . bin2hex(random_bytes(8))), 0, 120);
         DB::table('tm_messages')->insertOrIgnore($more + ['fk_id_ent' => $ent, 'fk_id_account' => $accountId, 'user_id' => $user, 'channel' => $channel, 'direction' => 'OUT', 'to_address' => mb_substr($to, 0, 200),
-            'template_key' => $code, 'rule_code' => $code ? mb_substr($code, 0, 40) : null, 'text' => $text, 'event_key' => $key, 'status' => 'QUEUED', 'send_after' => $later[0] ?? null, 'note' => $later[1] ?? null, 'retry_count' => 0, 'created_at' => now()]);
+            'template_key' => $code, 'rule_code' => $code ? mb_substr($code, 0, 40) : null, 'text' => $text, 'event_key' => $key, 'status' => \App\Services\Sandbox::is($ent) && $channel !== 'INAPP' ? 'IGNORED' : 'QUEUED', 'send_after' => $later[0] ?? null,
+            'note' => \App\Services\Sandbox::is($ent) && $channel !== 'INAPP' ? 'Practice company – nothing leaves the tool (MR-1541)' : ($later[1] ?? null), 'retry_count' => 0, 'created_at' => now()]);
         return (int) DB::table('tm_messages')->where('event_key', $key)->where('channel', $channel)->value('id');
     }
 

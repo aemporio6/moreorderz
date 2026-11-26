@@ -53,6 +53,11 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('parties', [AppController::class, 'parties']);      // R-C-1
         Route::get('shops/{id}/kit', [AppController::class, 'shopKit'])->whereNumber('id');      // R-C-30
         Route::get('people/external', [AppController::class, 'externalList']);      // R-C-19
+        Route::post('practice-company', [\App\Http\Controllers\CoreExtrasController::class, 'sandbox']);      // MR-1541
+        Route::post('import/recommend', [\App\Http\Controllers\CoreExtrasController::class, 'importRecommend']);      // MR-1262
+        Route::get('fee-check', [\App\Http\Controllers\CoreExtrasController::class, 'feeCheck']); Route::get('fee-check/proof', [\App\Http\Controllers\CoreExtrasController::class, 'feeProof']);      // MR-1536
+        Route::get('whats-new', [\App\Http\Controllers\CoreExtrasController::class, 'whatsNew']); Route::post('whats-new/flag', [\App\Http\Controllers\CoreExtrasController::class, 'featureSet']);      // MR-1542
+        Route::get('return-abuse', [\App\Http\Controllers\CoreExtrasController::class, 'returnAbuse']); Route::get('return-abuse/check/{sale}', [\App\Http\Controllers\CoreExtrasController::class, 'returnAbuseCheck'])->whereNumber('sale');      // MR-1544
         Route::get('icc', [\App\Http\Controllers\IccController::class, 'board']);      // MR-0031 07_ICC
         Route::get('icc/{id}', [\App\Http\Controllers\IccController::class, 'show'])->whereNumber('id');
         Route::post('icc/{id}', [\App\Http\Controllers\IccController::class, 'save'])->whereNumber('id');
@@ -797,6 +802,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('alerts/texts/{key}/{lang}', [WorkController::class, 'alertText'])->where(['key' => '[a-z_]+', 'lang' => '[a-z]{2}']);
         Route::post('alerts/thresholds/{key}', [WorkController::class, 'alertThreshold'])->where('key', '[a-z_]+');
         Route::get('due', [WorkController::class, 'due']);
+        Route::get('deadlines', [WorkController::class, 'deadlines']); Route::get('deadlines/ics', [WorkController::class, 'deadlinesIcs']);      // MR-1545
         Route::post('due/{id}/done', [WorkController::class, 'dueDone'])->whereNumber('id');
         Route::post('tasks/{id}/status', [WorkController::class, 'taskStatus'])->whereNumber('id');
         Route::post('tasks/{id}/approve', [WorkController::class, 'taskApprove'])->whereNumber('id');

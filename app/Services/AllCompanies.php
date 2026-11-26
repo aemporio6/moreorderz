@@ -25,7 +25,7 @@ class AllCompanies
     /** The companies the person may see (active ones). */
     public static function companies(object $u)
     {
-        $q = DB::table('t_enterprise')->where('f_active', 1)->orderBy('id');
+        $q = DB::table('t_enterprise')->where('f_active', 1)->when(\Illuminate\Support\Facades\Schema::hasColumn('t_enterprise', 'f_sandbox'), fn ($w) => $w->where('f_sandbox', 0))->orderBy('id');      // MR-1541 the practice company is never added up
         if (! Perm::has($u, 'app.company_owner')) $q->where('id', (int) $u->fk_id_ent);
         return $q->get(['id', 'ent_name as name', 'ent_short as short'])->map(function ($c) { $c->base = Fx::base((int) $c->id); return $c; });
     }

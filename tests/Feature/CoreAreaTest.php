@@ -125,4 +125,102 @@ class CoreAreaTest extends TestCase
         $id = \App\Services\EventBus::fire('ICC_OK', 't_product_vendors', 1); DB::table('sys_events')->where('id', $id)->update(['attempts' => 4]);
         $this->assertFalse(\App\Services\EventBus::process($id)); $this->assertTrue(\App\Services\TaskEngine::isOpen('SYS_ERROR', ['listener', 'ICC_OK']));
     }
+
+    public function test_demand_forecast_season_and_trend(): void
+    {
+        Context::set(1, $this->owner->id);
+        $p = $this->f('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'FC-1', 'product_name_vendor' => 'Forecast', 'f_active' => 1, 'e_product_type' => 'pool']);
+        $sale = function (string $d, int $q) use ($p) { static $n = 0; $n++; $this->f('t_sales', ['fk_id_ent' => 1, 'fk_product_id' => $p, 'qty' => $q, 'order_no' => 'FC-' . $n, 'sku' => 'FC-1', 'd_order' => $d, 'status' => 'Confirmed']); };
+        // a year of 30 units a month, last November 90 (a Christmas month); the last 90 days 40 a month against 30 before
+        for ($m = 1; $m <= 15; $m++) $sale(date('Y-m-15', strtotime("2026-11-26 -$m months")), date('m', strtotime("2026-11-26 -$m months")) === '11' ? 90 : 30);
+        $this->assertNull(Icc::forecast($p, '2026-01-10'), 'less than 300 days of sales → no forecast');
+        $f = Icc::forecast($p, '2026-11-26');
+        $this->assertNotNull($f); $this->assertGreaterThan(2.0, $f['season'], 'November sold 3 × the usual month last year');
+        $in = Icc::inputs($p, [], '2026-11-26'); $this->assertSame($f['season'], $in['season']); $this->assertStringContainsString('Demand forecast', implode(' ', $in['assumed']));
+        \App\Services\Choices::set('ICC_FORECAST', 'CALENDAR', 1); $this->assertSame(1.5, Icc::inputs($p, [], '2026-11-26')['season'], 'calendar choice → Oct–Jan ×1.5');
+    }
+
+    public function test_deadline_calendar_and_ics(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id); Perm::flush();
+        $ym = date('Y-m');
+        $this->f('acc_obligations', ['fk_id_ent' => 1, 'entity_type' => 'COMPANY', 'entity_id' => 1, 'type_code' => 'VAT', 'area' => 'VAT', 'due_date' => "$ym-20", 'status' => 'PENDING', 'f_done' => 0, 'title' => 'VAT return Q3', 'gen_key' => uniqid()]);
+        $d = $this->getJson("/api/deadlines?ym=$ym")->assertOk()->json();
+        $this->assertSame('VAT return Q3', $d['days']["$ym-20"][0]['title']); $this->assertSame('#/compliance', $d['days']["$ym-20"][0]['go']);
+        $ics = $this->get('/api/deadlines/ics')->assertOk(); $this->assertStringContainsString('text/calendar', $ics->headers->get('Content-Type'));
+        $this->assertStringContainsString('SUMMARY:VAT return Q3', $ics->getContent()); $this->assertStringContainsString('DTSTART;VALUE=DATE:' . str_replace('-', '', $ym) . '20', $ics->getContent());
+        $va = $this->makeUser('VA'); $this->actingAs($va); Perm::flush(); $this->assertArrayNotHasKey("$ym-20", $this->getJson("/api/deadlines?ym=$ym")->json('days'), 'filings only with money.SEE');
+    }
+
+    public function test_return_abuse_list_task_and_warning(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id); Perm::flush();
+        $ids = [];
+        foreach ([1, 2, 3, 4] as $i) $ids[] = $this->f('t_sales', ['fk_id_ent' => 1, 'qty' => 1, 'order_no' => "RA-$i", 'sku' => 'RA', 'd_order' => now()->subDays(10 * $i)->toDateString(), 'status' => 'Confirmed', 'total_amount' => 20,
+            'ship_to_name' => 'Jane  Doe', 'ship_to_postcode' => 'AB1 2CD', 'ship_to_address' => '1 High St, Town']);
+        foreach (array_slice($ids, 0, 3) as $sid) $this->f('t_sale_returns', ['fk_id_ent' => 1, 'fk_id_sale' => $sid, 'qty' => 1, 'created_at' => now()]);
+        $d = \App\Services\ReturnAbuse::scan(1); $buyer = collect($d['rows'])->firstWhere('kind', 'Buyer');
+        $this->assertSame(3, $buyer['claims']); $this->assertSame(4, $buyer['orders']); $this->assertSame(75.0, (float) $buyer['rate']);
+        $this->assertSame(2, \App\Services\ReturnAbuse::tasks(1), 'one task for the buyer, one for the address'); $this->assertSame(0, \App\Services\ReturnAbuse::tasks(1), 'once');
+        $this->assertStringContainsString('3 returns', \App\Services\ReturnAbuse::warning(1, $ids[3])['text']);
+        $this->assertNotNull($this->getJson("/api/sales/{$ids[3]}/details")->json('buyer_warning'));
+        $tl = $this->makeUser('TL'); $this->actingAs($tl); Perm::flush(); $row = $this->getJson('/api/return-abuse')->assertOk()->json('rows.0');
+        if (! Perm::has($tl, 'orders.dsSeeContact')) $this->assertSame('J•••', $row['name']);
+    }
+
+    public function test_fee_check_overcharge_task_and_proof(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id); Perm::flush();
+        $mp = $this->f('cat_marketplaces', ['fk_id_ent' => 1, 'marketplace_short' => 'FEEMP', 'marketplace_descr' => 'Fee MP', 'f_active' => 1, 'fee_pct' => 10, 'fee_value' => 0.30]);
+        $shop = $this->f('t_branches', ['fk_id_ent' => 1, 'shop_no' => 'FEE1', 'fk_id_marketplace' => $mp, 'f_active' => 1]);
+        $ym = '2026-10'; $n = 0;
+        $line = function (string $order, string $bucket, float $amt) use ($shop, &$n) { $n++; $this->f('fin_settlement_lines', ['batch_id' => 1, 'company_id' => 1, 'branch_id' => $shop, 'settlement_id' => 'S1', 'transaction_type' => 'Order', 'order_id' => $order, 'sku' => 'X', 'quantity' => 1,
+            'amount_type' => $bucket, 'amount_description' => $bucket, 'amount' => $amt, 'posted_date' => '2026-10-05', 'bucket' => $bucket, 'row_hash' => sha1('fee' . $n . uniqid())]); };
+        $line('O-OK', 'SALE', 50); $line('O-OK', 'FEE', -5.30);      // 10 % + 0.30 = 5.30 expected
+        $line('O-OVER', 'SALE', 50); $line('O-OVER', 'FEE', -9.00);   // 3.70 over
+        $d = \App\Services\FeeCheck::month(1, $ym, $shop);
+        $this->assertSame(2, $d['orders']); $this->assertSame(1, $d['overcharged']); $this->assertSame(3.7, $d['over_total']); $this->assertSame('O-OVER', $d['rows'][0]['order_id']);
+        $this->assertSame(1, \App\Services\FeeCheck::tasks(1, $ym)); $t = DB::table('tasks')->where('dedupe_key', "FEE_OVERCHARGE:$shop:$ym")->first(); $this->assertStringContainsString('£3.7', $t->title);
+        $csv = $this->get("/api/fee-check/proof?ym=$ym&shop=$shop")->assertOk()->getContent(); $this->assertStringContainsString('O-OVER', $csv); $this->assertStringNotContainsString('O-OK', $csv);
+        $this->assertSame(1, $this->getJson("/api/fee-check?ym=$ym&shop=$shop")->assertOk()->json('overcharged'));
+        $va = $this->makeUser('VA'); $this->actingAs($va); Perm::flush(); $this->getJson("/api/fee-check?ym=$ym")->assertStatus(403);
+    }
+
+    public function test_feature_flags_and_release_notes(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id); Perm::flush(); \App\Services\Features::forget();
+        $this->assertSame(config('releases.0.version'), $this->getJson('/api/boot')->json('whats_new'));
+        $p = $this->getJson('/api/whats-new')->assertOk()->json(); $this->assertTrue($p['was_new']); $this->assertNull($this->getJson('/api/boot')->json('whats_new'), 'seen once the page is opened');
+        $this->postJson('/api/whats-new/flag', ['code' => 'DATA_HEALTH', 'on' => false])->assertOk(); \App\Services\Features::forget();
+        $this->assertFalse(\App\Services\Features::on('DATA_HEALTH', 1)); $this->assertNull(collect(\App\Services\HomeCards::for($this->owner, 1))->firstWhere('label', 'Data health'));
+        $this->assertTrue(\App\Services\Features::on('DATA_HEALTH', 2), 'per company');
+        $m = $this->makeUser('MANAGER'); $this->actingAs($m); Perm::flush(); $this->postJson('/api/whats-new/flag', ['code' => 'ICC', 'on' => false])->assertStatus(422);
+    }
+
+    public function test_importer_recommends_where_a_file_goes(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id);
+        $file = function (string $name, string $body) { $p = tempnam(sys_get_temp_dir(), 'rec'); file_put_contents($p, $body); return new \Illuminate\Http\UploadedFile($p, $name, null, null, true); };
+        $bank = $this->post('/api/import/recommend', ['file' => $file('statement.csv', "Date,Description,Amount,Balance\n01/10/2026,CARD PAYMENT,-12.50,100.00\n")])->assertOk()->json();
+        $this->assertSame('BANK', $bank['best']['target']); $this->assertStringContainsString('date', $bank['best']['why']);
+        $ebay = $this->post('/api/import/recommend', ['file' => $file('orders.csv', "\n\"Sales record number\",\"Order number\",\"Buyer username\",\"Custom label\",\"Quantity\",\"Sold for\"\n1,12-34,bob,SKU1,1,9.99\n")])->assertOk()->json();
+        $this->assertSame('ORDERS', $ebay['best']['target']); $this->assertSame(95, $ebay['best']['score']);
+        $this->assertContains('SALES', array_column($ebay['others'], 'target'), 'it could also be a monthly sales file');
+        $this->assertSame('LABELS', $this->post('/api/import/recommend', ['file' => $file('labels.pdf', '%PDF-1.4')])->json('best.target'));
+        $this->post('/api/import/recommend', ['file' => $file('x.csv', "a,b,c\n1,2,3\n")])->assertStatus(422);
+        $this->post('/api/import/recommend', ['file' => $file('x.doc', 'x')])->assertStatus(422);
+    }
+
+    public function test_practice_company_is_apart(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id); Perm::flush();
+        $x = $this->postJson('/api/practice-company')->assertOk()->json(); $ent = $x['id']; $this->assertTrue($x['created']);
+        $this->assertFalse($this->postJson('/api/practice-company')->json('created'), 'only one');
+        $this->assertSame(3, DB::table('t_product_vendors')->where('fk_id_ent', $ent)->count()); $this->assertSame(73, (int) DB::table('fin_lots as l')->join('fin_lot_balances as b', 'b.fk_id_lot', '=', 'l.id')->where('l.company_id', $ent)->sum('b.qty'));
+        $this->assertNotContains($ent, \App\Services\AllCompanies::companies($this->owner)->pluck('id')->map(fn ($v) => (int) $v)->all(), 'never added up');
+        $this->assertTrue(collect($this->getJson('/api/boot')->json('companies'))->firstWhere('id', $ent)['practice'] == 1);
+        $id = \App\Services\Connect\Messenger::queueWaNow($ent, null, '+447700900000', 'LOGIN_CODE', ['code' => '123456']);
+        $this->assertSame('IGNORED', DB::table('tm_messages')->where('id', $id)->value('status'), 'nothing leaves the tool');
+        $m = $this->makeUser('MANAGER'); $this->actingAs($m); $this->postJson('/api/practice-company')->assertStatus(422);
+    }
 }

@@ -192,6 +192,7 @@
       <button class="tb-btn icon hide-m" id="btnFav" title="Make this page a favourite">${ic('star')}</button>
       <button class="tb-btn icon ${HELP ? 'primary' : ''}" id="btnHelp" title="Help: show the guidance of every screen (press ? for the keyboard shortcuts)">${ic('help')}</button>
       <button class="tb-btn icon" id="btnRefresh" title="Refresh data (keeps filters)">${ic('refresh')}</button>
+      ${b.whats_new ? `<a class="tb-btn" id="btnNews" href="#/whats-new" title="See what changed in release ${esc(b.whats_new)}" style="font-size:12px;padding:0 8px">New</a>` : ''}
       <button class="tb-btn icon hide-m" id="btnNewTab" title="Open this page in a new tab (Ctrl + click on any menu item does the same)">⧉</button>
       <button class="tb-btn icon hide-m" id="btnFull" title="Full screen">⛶</button>
       <button class="tb-btn icon bell" id="btnBell" title="My tasks">${ic('bell')}<span class="dot" id="bellDot" style="display:${b.tasks_open ? 'flex' : 'none'}">${b.tasks_open}</span></button>
@@ -252,6 +253,10 @@
         return await pageList(mt[1], Object.keys(f).length ? { ...u, filter: f, _url: 1 } : { ...u, ...(Object.keys(u).length ? { _url: 1 } : {}) }); }      // R-G_CORE-101: the list state lives in the address, so Back returns with its filters
       if ((mt = r.match(/^#\/rec\/([\w-]+)\/(\d+)/))) return await pageRecord(mt[1], +mt[2]);
       if (r.startsWith('#/variations/')) return await pageVariations(+r.split('/')[2]);
+      if (r.startsWith('#/fee-check')) { const u = new URLSearchParams(r.split('?')[1] || ''); return await pageFeeCheck(u.get('ym') || '', u.get('shop') || ''); }
+      if (r === '#/whats-new') return await pageWhatsNew();
+      if (r === '#/return-abuse') return await pageReturnAbuse();
+      if (r.startsWith('#/deadlines')) return await pageDeadlines(new URLSearchParams(r.split('?')[1] || '').get('ym') || '');
       if (r.startsWith('#/due')) return await pageDue();
       if (r === '#/products' || r.startsWith('#/products?')) { const u = new URLSearchParams(r.split('?')[1] || ''); if (u.get('icc')) PL = { ...(PL || { status: 'active', set: 'default', per: 20, hidden: [] }), icc: u.get('icc'), page: 1 }; return await pageProducts(); }
       if ((mt = r.match(/^#\/visibility\/(\d+)/))) return await pageVisibility(+mt[1]);
@@ -1479,7 +1484,7 @@
       document.body.appendChild(m); const rc = b.getBoundingClientRect(), h = m.offsetHeight; m.style.left = Math.max(8, Math.min(rc.right - m.offsetWidth, innerWidth - m.offsetWidth - 8)) + 'px'; m.style.top = (rc.bottom + h + 8 > innerHeight ? rc.top - h - 4 : rc.bottom + 4) + 'px';
       $('[data-sdet]', m).onclick = async () => { closeMenu(); let x; try { x = await api(`sales/${r.id}/details`); } catch (er) { return toast(er.message, 'err'); } const b = x.bought, n = x.named, kv = (l, v) => v === null || v === undefined || v === '' ? '' : `<tr><td class="muted">${esc(l)}</td><td>${esc(String(v))}</td></tr>`;
         const dm = modal(`Order ${r.order_no} · ${r.sku}`, 'What the buy note says this line was bought for, and the named fields of the marketplace file. The note stays as evidence.',
-          `<b>Bought from</b><table class="tbl small">${b.local ? kv('Stock', 'Own stock – the cost comes from the lot at Confirm') : ''}${kv('Supplier', b.supplier)}${kv('Order ref', b.ref)}${kv('Hold ref', b.hold_ref)}${kv('Date', b.date)}${kv('Qty', b.qty)}${kv('Unit cost', b.rate)}${kv('Total', b.total)}${kv('Reason (VA)', b.reason)}${kv('Buy note', b.note)}</table>${!b.local && !b.supplier ? '<div class="small muted">The buy note is not a purchase record (SUPPLIER : order ref : dd-mm-yy : qty : rate).</div>' : ''}
+          `${x.buyer_warning ? `<div class="chip err" style="display:block;margin-bottom:8px;white-space:normal">${esc(x.buyer_warning.text)} <a href="#/return-abuse">See the list</a></div>` : ''}<b>Bought from</b><table class="tbl small">${b.local ? kv('Stock', 'Own stock – the cost comes from the lot at Confirm') : ''}${kv('Supplier', b.supplier)}${kv('Order ref', b.ref)}${kv('Hold ref', b.hold_ref)}${kv('Date', b.date)}${kv('Qty', b.qty)}${kv('Unit cost', b.rate)}${kv('Total', b.total)}${kv('Reason (VA)', b.reason)}${kv('Buy note', b.note)}</table>${!b.local && !b.supplier ? '<div class="small muted">The buy note is not a purchase record (SUPPLIER : order ref : dd-mm-yy : qty : rate).</div>' : ''}
            <b style="display:block;margin-top:10px">From the file</b><table class="tbl small">${kv('Promoted listing', n.promoted ? 'Yes' : '')}${kv('Postage charged', n.postage_charged)}${kv('VAT', n.vat)}${kv('Marketplace collected tax', n.marketplace_tax)}${kv('Tax status', n.tax_status)}${kv('Dispatched on', n.dispatched_on)}${kv('Tracking', n.tracking)}</table>
            ${Object.keys(x.file_row).length ? `<details style="margin-top:10px"><summary>All ${Object.keys(x.file_row).length} columns of the file row</summary><table class="tbl small">${Object.entries(x.file_row).map(([k, v]) => kv(k, v)).join('')}</table></details>` : ''}`, '<button class="btn" data-close>Close</button>'); $('[data-close]', dm.ov).onclick = dm.close; };
       if ($('[data-dsmargin]', m)) $('[data-dsmargin]', m).onclick = () => { closeMenu(); miniForm('Accept the margin of this line', `Order ${r.order_no}: sale ${gbp(r.total_amount)}${money ? `, cost ${gbp(r.buy_amount)}, profit ${gbp(r.profit)}` : ''}. The warning task closes; the note stays on the line.`, [{ name: 'note', label: 'Note', required: true }], async v => { const x = await api(`sales/${r.id}/margin-accept`, { method: 'POST', body: { note: v.note } }); again(); return x; }, 'Accept'); };
@@ -1615,6 +1620,49 @@
 
   // ---------- Due soon (R-C-46): every stored renewal / expiry / payment date, with its source chip ----------
   const DUE = { chip: '', status: '' };
+  // ---------- marketplace fee check (MR-1536) ----------
+  async function pageFeeCheck(ym, shop) {
+    busy(true); let d; try { d = await api('fee-check?ym=' + ym + (shop ? '&shop=' + shop : '')); } finally { busy(false); }
+    const n2 = v => (+v).toFixed(2), sh = id => d.shops[id] || ('#' + id);
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Marketplace fee check</h1><div class="sub">Per order of the money files: the fee charged against the marketplace's typical fee % + fixed fee (Marketplaces). An overcharge above the tolerance is a claim task with a proof file.</div></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap"><input type="month" id="fcYm" value="${esc(d.ym)}"><select id="fcShop"><option value="">Every shop</option>${Object.entries(d.shops).map(([i, n]) => `<option value="${i}" ${+shop === +i ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>${shop ? `<a class="btn" href="/api/fee-check/proof?ym=${esc(d.ym)}&shop=${esc(shop)}">Proof file (CSV)</a>` : ''}</div></div>
+      <div class="card" style="padding:12px 16px">${d.orders} order(s) · <b>${d.overcharged}</b> overcharged · £${n2(d.over_total)} more than expected${d.no_rate.length ? ` · <span class="chip warn">no typical fee % set for ${d.no_rate.map(esc).join(', ')} – set it under Marketplaces</span>` : ''}</div>
+      <div class="card" style="padding:12px 16px"><div class="tbl-wrap"><table class="t"><thead><tr><th>Shop</th><th>Order</th><th class="num">Sale</th><th class="num">Fee charged</th><th class="num">Expected</th><th class="num">Difference</th><th>Settlement</th></tr></thead><tbody>
+      ${d.rows.slice(0, 500).map(r => `<tr><td>${esc(sh(r.shop))}</td><td>${esc(r.order_id)}</td><td class="num">${n2(r.sale)}</td><td class="num">${n2(r.fee)}</td><td class="num">${n2(r.expected)} <span class="sub">(${r.pct} %)</span></td><td class="num">${r.over ? `<span class="chip err">+${n2(r.diff)}</span>` : n2(r.diff)}</td><td class="small">${esc(r.settlements)}</td></tr>`).join('') || '<tr><td colspan="7" class="sub">No order lines in the money files of this month.</td></tr>'}</tbody></table></div></div>`;
+    const go = () => { const s = $('#fcShop').value; location.hash = '#/fee-check?ym=' + $('#fcYm').value + (s ? '&shop=' + s : ''); };
+    $('#fcYm').onchange = go; $('#fcShop').onchange = go;
+  }
+  // ---------- release notes + feature switches (MR-1542) ----------
+  async function pageWhatsNew() {
+    busy(true); let d; try { d = await api('whats-new'); } finally { busy(false); }
+    const nb = $('#btnNews'); if (nb) nb.remove();
+    $('#main').innerHTML = `<div class="page-head"><div><h1>What's new</h1><div class="sub">What changed in each release. New parts can be switched on or off for this company${d.can_switch ? '' : ' by the Owner'}.</div></div></div>
+      <div class="card" style="padding:12px 16px"><h3>Parts of the tool</h3><table class="t"><tbody>${d.flags.map(f => `<tr><td>${esc(f.label)}</td><td>${d.can_switch ? `<label class="chk"><input type="checkbox" data-ff="${f.code}" ${f.on ? 'checked' : ''}> On</label>` : `<span class="chip ${f.on ? 'ok' : ''}">${f.on ? 'On' : 'Off'}</span>`}</td></tr>`).join('')}</tbody></table></div>
+      ${d.can_switch ? `<div class="card" style="padding:12px 16px"><h3>Practice company (training)</h3><div class="sub">A company with demo products and stock to learn on. Nothing of the real companies is touched, its messages never leave the tool and it is not added up in All companies.</div><button class="btn" id="wnPrac" style="margin-top:8px">${d.practice ? 'Open the practice company' : 'Make the practice company'}</button></div>` : ''}
+      ${d.releases.map(r => `<div class="card" style="padding:12px 16px"><h3>${esc(r.title)} <span class="sub">${esc(r.version)} · ${esc(r.date)}</span></h3><ul>${r.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul></div>`).join('')}`;
+    if ($('#wnPrac')) $('#wnPrac').onclick = async () => { try { const x = await api('practice-company', { method: 'POST', body: {} }); toast(x.message); await api('company', { method: 'POST', body: { ent: x.id } }).catch(() => {}); location.hash = '#/'; location.reload(); } catch (e) { toast(e.message, 'err'); } };
+    $$('[data-ff]').forEach(c => c.onchange = async () => { try { toast((await api('whats-new/flag', { method: 'POST', body: { code: c.dataset.ff, on: c.checked } })).message); } catch (e) { toast(e.message, 'err'); c.checked = !c.checked; } });
+  }
+  // ---------- buyer / return-abuse records (MR-1544) ----------
+  async function pageReturnAbuse() {
+    busy(true); let d; try { d = await api('return-abuse'); } finally { busy(false); }
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Repeated returns</h1><div class="sub">Buyers and delivery addresses with ${d.min} or more returns or refund claims in the last ${d.days} days (Settings RETURN_ABUSE_MIN / RETURN_ABUSE_DAYS). Each one is a task; an order of such a buyer shows a warning.${d.can_see_contact ? '' : ' Names and postcodes are hidden without the right to see buyer contacts.'}</div></div></div>
+      <div class="card" style="padding:12px 16px"><div class="tbl-wrap"><table class="t"><thead><tr><th>Kind</th><th>Buyer</th><th>Postcode</th><th class="num">Returns / claims</th><th class="num">Orders</th><th class="num">Rate %</th><th class="num">Shops</th><th class="num">Value</th><th>Last</th></tr></thead><tbody>
+      ${d.rows.length ? d.rows.map(r => `<tr><td>${esc(r.kind)}</td><td>${esc(r.name)}</td><td>${esc(r.postcode)}</td><td class="num"><b>${r.claims}</b></td><td class="num">${r.orders}</td><td class="num">${r.rate}</td><td class="num">${r.shops}</td><td class="num">${(+r.value).toFixed(2)}</td><td>${esc((r.last || '').slice(0, 10))}</td></tr>`).join('')
+        : '<tr><td colspan="9" class="sub">No buyer or address has repeated returns.</td></tr>'}</tbody></table></div></div>`;
+  }
+  // ---------- deadline calendar (MR-1545): filings + renewals + due dates in one month, .ics download ----------
+  async function pageDeadlines(ym) {
+    busy(true); let d; try { d = await api('deadlines' + (ym ? '?ym=' + ym : '')); } finally { busy(false); }
+    const cells = []; for (let i = 1; i < d.first_weekday; i++) cells.push('<div class="dl-c dl-e"></div>');
+    for (let n = 1; n <= d.days_in_month; n++) { const day = d.ym + '-' + String(n).padStart(2, '0'), its = d.days[day] || [];
+      cells.push(`<div class="dl-c${day === d.today ? ' dl-t' : ''}"><div class="small muted">${n}</div>${its.map(i => `<a href="${esc(i.go)}" class="chip ${i.done ? 'ok' : i.late ? 'err' : ''}" style="display:block;margin:2px 0;white-space:normal" title="${esc(i.kind)}">${esc(i.title)}</a>`).join('')}</div>`); }
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Deadline calendar</h1><div class="sub">Every filing (Tax & filings), renewal and due date (Due dates) in one month. Download the file to add them to Google Calendar or Outlook (Import) – a later download replaces the same events.</div></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap"><a class="btn ghost" href="#/deadlines?ym=${d.prev}">‹ ${esc(d.prev)}</a><b style="align-self:center">${esc(d.ym)}</b><a class="btn ghost" href="#/deadlines?ym=${d.next}">${esc(d.next)} ›</a><a class="btn" href="/api/deadlines/ics?months=12">Download for Google Calendar (.ics)</a></div></div>
+      <div class="card" style="padding:12px 16px"><b>${d.total}</b> date(s) this month${d.late ? ` · <span class="chip err">${d.late} late</span>` : ''} ${Object.entries(d.kinds).map(([k, n]) => `<span class="chip">${esc(k)} ${n}</span>`).join(' ')}</div>
+      <div class="card" style="padding:8px;overflow-x:auto"><div style="display:grid;grid-template-columns:repeat(7,minmax(90px,1fr));gap:4px;min-width:640px">${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(x => `<div class="small muted" style="text-align:center">${x}</div>`).join('')}${cells.join('')}</div></div>
+      <style>.dl-c{border:1px solid var(--line);border-radius:6px;min-height:78px;padding:4px;font-size:12px}.dl-e{border:none}.dl-t{outline:2px solid var(--accent)}</style>`;
+  }
   async function pageDue() {
     busy(true); let d; try { d = await api('due?' + new URLSearchParams(DUE)); } finally { busy(false); }
     const late = r => r.due_date < d.today;
@@ -4392,7 +4440,12 @@
     const tiles = [['#/orders', 'Orders', 'eBay orders report, Temu order list, any order table – Orders › Load order file.'], ['#/settlements', 'Marketplace money files', 'TikTok workbook, Amazon settlement (date range and flat file V2), eBay transaction report, OnBuy / Temu tables.'],
       ['#/bank', 'Bank statements', 'CSV or Excel from the bank, in the layout of that bank.'], ['#/labels', 'Carrier label PDFs', 'Labels downloaded from the carrier, linked to their orders.'], ['#/supplier-orders', 'Supplier order history', 'Amazon Business order report of a buying supplier (file named by shop no., e.g. 1.csv) – kept with its VAT evidence.'], ['#/product-imports', 'Products: families, parent + child file, bulk upload', 'Report type PRODUCT_FAMILY (parent SKU, child SKU), the parent + child staged import and report type Products with the built-in mapping "Old bulk products" (34 columns): check or preview first, then save; undo.'], ['#/wh-csv', 'Warehouse locations and SKU homes (CSV)', 'Report types WH_LOCATIONS and WH_SKU_HOMES: export, change in Excel, check first (changes nothing), then load; look-alike codes are held back; undo by batch.'], ['#/tasks?scope=all&import=1', 'Tasks (CSV)', 'New tasks from a CSV file: check first (changes nothing), then all or nothing; undo by batch. Partner / Manager.'], ['#/import-history', 'Everything loaded so far', 'Every file, when, by whom, new / already there / problems; and the old-tool import, table by table.']];
     $('#main').innerHTML = `<div class="page-head"><div><h1>Import a file</h1><div class="sub">Each kind of file is loaded where its work is done. The tool finds the layout from the file itself; a file loaded twice adds nothing.</div></div></div>
+      <div class="card" style="padding:14px 16px;margin-bottom:12px"><b>Not sure where a file goes?</b> <span class="small muted">Choose it here – the tool reads its columns (saves nothing) and recommends the place.</span><div style="margin-top:8px"><input type="file" id="impRec" accept=".csv,.tsv,.txt,.xlsx,.xls,.pdf"></div><div id="impRecOut" style="margin-top:8px"></div></div>
       <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">${tiles.map(([h, t, w]) => `<a class="card" href="${h}" style="display:block;padding:14px;text-decoration:none;color:inherit"><b>${esc(t)}</b><div class="small muted" style="margin-top:4px">${esc(w)}</div></a>`).join('')}</div>`;
+    $('#impRec').onchange = async e => { const f = e.target.files[0]; if (!f) return; const fd = new FormData(); fd.append('file', f); $('#impRecOut').innerHTML = '<span class="muted">Reading…</span>';
+      try { const r = await api('import/recommend', { method: 'POST', body: fd }); const b = r.best;
+        $('#impRecOut').innerHTML = `<div>This goes to <b>${esc(b.title)}</b> <span class="chip ok">best · ${b.score}</span> <a class="btn sm primary" href="${esc(b.screen)}">Open</a><div class="small muted">${esc(b.why)}</div></div>${r.others.length ? `<div class="small" style="margin-top:6px">It could also go to: ${r.others.map(o => `<a href="${esc(o.screen)}">${esc(o.title)}</a> (${o.score})`).join(' · ')}</div>` : ''}<div class="small muted" style="margin-top:4px">Choose the file again on that screen – it checks the file before anything is saved.</div>`; }
+      catch (er) { $('#impRecOut').innerHTML = `<span class="err">${esc(er.message)}</span>`; } };
   }
   // ---------- Settings: which person sections / tabs each kind shows (R-C-2) ----------
   async function pagePersonSections() {
