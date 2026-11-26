@@ -422,11 +422,12 @@
       (one ? g.secs[0].items.map(i => itemLink(i, cur)).join('')
         : g.secs.map((s, k) => `<div class="mn-s ${s.items.some(i => i.id === cur) ? 'cur' : ''}" data-k="${k}" tabindex="0"><span><b>${esc(s.name)}</b><small>${esc(s.about || s.items.length + ' screens')}</small></span><span class="mn-n">${s.items.length}</span><span class="mn-tri">▸</span></div>`).join('')) + `</div></div>`;
     document.body.appendChild(FLY); const p1 = FLY.firstChild; flyPlace(p1, row, row.getBoundingClientRect().right + 8);
-    FLY.onmouseenter = flyKeep; FLY.addEventListener('click', e => { if (e.target.closest('.mn-tri')) return; if (e.target.closest('a.mn-i') && !e.ctrlKey && !e.metaKey && !e.shiftKey) flyClose(); });
+    FLY.onmouseenter = flyKeep; FLY.onmouseleave = () => { FLYT = setTimeout(flyClose, 450); };      // owner 26-11 23:07: the mouse leaves the windows → they go
+    FLY.addEventListener('click', e => { if (e.target.closest('.mn-tri')) return; if (e.target.closest('a.mn-i') && !e.ctrlKey && !e.metaKey && !e.shiftKey) flyClose(); });
     const sub = el => { const s = g.secs[+el.dataset.k]; $$('.mn-s.on', FLY).forEach(x => x.classList.remove('on')); el.classList.add('on'); let p2 = $('.mn-p2', FLY); if (p2) p2.remove(); const p3x = $('.mn-p3', FLY); if (p3x) p3x.remove();
       p2 = document.createElement('div'); p2.className = 'mn-p mn-p2'; p2.innerHTML = `<div class="mn-ph"><b>${esc(s.name)}</b><small>${esc(s.about || '')}</small></div><div class="mn-pb">${s.items.map(i => itemLink(i, cur)).join('')}</div>`;
       FLY.appendChild(p2); flyPlace(p2, el, p1.getBoundingClientRect().right + 8); };
-    $$('.mn-s', FLY).forEach(el => { el.onclick = () => sub(el); el.onkeydown = e => { if (e.key === 'Enter' || e.key === 'ArrowRight') { sub(el); const a = $('.mn-p2 a', FLY); if (a) a.focus(); } }; });
+    $$('.mn-s', FLY).forEach(el => { el.onclick = () => sub(el); let ht; el.onmouseenter = () => { clearTimeout(ht); ht = setTimeout(() => { if (FLY && !el.classList.contains('on')) sub(el); }, 140); }; el.onmouseleave = () => clearTimeout(ht); el.onkeydown = e => { if (e.key === 'Enter' || e.key === 'ArrowRight') { sub(el); const a = $('.mn-p2 a', FLY); if (a) a.focus(); } }; });
     const first = $('.mn-s.cur', FLY) || null; if (first) sub(first);
     /* the next window of a screen that has several lists (▸): hover the screen → its lists beside it; the window closes when the mouse leaves */
     const items = g.secs.flatMap(s => s.items);
@@ -448,7 +449,9 @@
         <span class="mn-ic">${ic(g.icon || 'file')}</span><span class="mn-t"><b>${esc(g.name)}</b><small>${esc(g.about || '')}</small></span><span class="mn-tri">▸</span></div>`).join('') +
       `<div class="mn-foot small faint">Click a group to open it · ▸ shows more · right-click a screen to open it in a new tab</div>`;
     $$('#side .mn-g').forEach(row => { const g = G[+row.dataset.g];
-      row.onclick = () => { if (FLY && FLY.dataset.g === row.dataset.g) flyClose(); else flyOpen(row, g); };      /* owner 26-11 21:02: opens on a click only (not when the mouse passes); a second click, a click outside or Esc closes it */
+      row.onclick = () => { if (FLY && FLY.dataset.g === row.dataset.g) flyClose(); else flyOpen(row, g); };
+      row.onmouseenter = () => { if (FLY) { flyKeep(); if (FLY.dataset.g !== row.dataset.g) flyOpen(row, g); } };      /* once a window is open, pointing at another group shows that one */
+      row.onmouseleave = () => { if (FLY) FLYT = setTimeout(flyClose, 450); };      /* owner 26-11 21:02: opens on a click only (not when the mouse passes); a second click, a click outside or Esc closes it */
       row.onkeydown = e => { if (e.key === 'Enter' || e.key === 'ArrowRight') { flyOpen(row, g); const f = $('.mn-s, a.mn-i', FLY); if (f) f.focus(); } }; });
   }
   function drawSideFold() {

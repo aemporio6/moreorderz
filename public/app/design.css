@@ -702,3 +702,10 @@ label .ap-wrap{display:flex;width:100%}
 .pf-hide{display:none!important}
 .pf-qf{margin-left:6px}
 .page-head .pf-act{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:flex-end}
+/* owner 26-11 23:07: everything that opens something is soft blue, not only links – clickable cells, rows, summaries, list entries */
+#main td.click,#main summary,#main tr[data-go] > td:first-child,#main tr[data-go] > td:first-child b,
+#main [data-go]:not(.card):not(.kpi):not(tr):not(.btn):not(.chip),#main td[data-cell],
+#main [style*="cursor:pointer"]:not(.card):not(.kpi):not(button):not(.chip):not(path):not(rect):not(tr):not(div[data-pi]):not(.ap-box),
+.overlay [style*="cursor:pointer"]:not(.card):not(button):not(.chip):not(path):not(rect):not(tr),#main .is-link{color:var(--link)}
+#main tr[data-go]:hover > td:first-child,#main td.click:hover,#main summary:hover{color:var(--link-hover);text-decoration:underline;text-underline-offset:3px}
+#main th [data-sort],#main thead [style*="cursor:pointer"]{color:inherit}
