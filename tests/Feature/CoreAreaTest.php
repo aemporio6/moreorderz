@@ -398,4 +398,20 @@ class CoreAreaTest extends TestCase
         $this->assertTrue(DB::table('sys_search_index')->where('entity', 'cat_brands')->where('entity_id', $id)->exists(), 'search');
         $this->assertContains('brand', array_column($this->getJson('/api/boot')->json('create'), 'key'), 'Create');
     }
+
+    public function test_guide_me_where_next_and_wrong_with_fix_buttons(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id); Perm::flush();
+        $cur = (int) DB::table('cat_currency')->insertGetId(['fk_id_ent' => 0, 'currency_code' => 'ZZQ', 'currency_name' => 'Test money', 'f_active' => 1]);
+        $this->f('t_src_po', ['fk_id_ent' => 1, 'po_code' => 'GN-PO', 'fk_id_currency' => $cur, 'f_active' => 1]);
+        $d = $this->getJson('/api/guide-now?route=' . urlencode('#/list/t_src_po'))->assertOk()->json();
+        $this->assertSame('Purchase orders', $d['where']['title']);
+        $fx = collect($d['items'])->first(fn ($i) => str_contains($i['text'], 'ZZQ'));
+        $this->assertSame(['err', '#/list/fin_fx_rate'], [$fx['tone'], $fx['go']], 'wrong → at once, with the button to the place that fixes it');
+        $this->assertGreaterThanOrEqual(1, $d['wrong']);
+        $this->assertNotNull(collect($d['items'])->first(fn ($i) => $i['go'] === 'action:new'), 'next step on a list: how to add');
+        DB::table('fin_fx_rates')->insert(['rate_date' => '2026-01-01', 'currency' => 'ZZQ', 'rate_to_gbp' => 0.5, 'source' => 'TEST']);
+        $this->assertNull(collect($this->getJson('/api/guide-now?route=' . urlencode('#/list/t_src_po'))->json('items'))->first(fn ($i) => str_contains($i['text'], 'ZZQ')), 'gone once put right');
+        $this->assertStringContainsString('guideNow', file_get_contents(public_path('app/app.js')));
+    }
 }

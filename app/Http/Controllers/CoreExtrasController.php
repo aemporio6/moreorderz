@@ -92,4 +92,10 @@ class CoreExtrasController extends Controller
         foreach ($row as $k => $v) if (preg_match('/pass(word)?|secret|token|api_?key|pin\b|cvv/i', $k) && $v !== null && $v !== '') $row[$k] = '••••••';
         return ['table' => $t, 'columns' => array_map(fn ($k, $v) => ['column' => $k, 'value' => is_string($v) && mb_strlen($v) > 500 ? mb_substr($v, 0, 500) . '…' : $v], array_keys($row), array_values($row))];
     }
+
+    /** Owner 26-11 20:14: the guide of the screen – where you are, what to do now, what is wrong with its Fix button. */
+    public function guideNow(Request $r)
+    {
+        return \App\Services\GuideNow::for($r->user(), (int) \App\Services\Context::ent(), (string) $r->query('route', '#/home'), $r->query('key') ?: null, $r->query('id') ? (int) $r->query('id') : null);
+    }
 }

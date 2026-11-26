@@ -137,7 +137,27 @@
   // after every page: remember it (recent pages), paint the star, show the playbooks
   /** R-G_CORE-20 the header line of every task screen: "Company · Task Management · Sunday 22 November 2026 · viewing as Manager (Sajjad)". */
   function taskHead(route) { if (!/^#\/(tasks|task\/|task-templates|help\/tasks)/.test(route) || !S.boot.task_header || $('#tkHead')) return; const h = $('#main .page-head'); if (h) h.insertAdjacentHTML('beforebegin', `<div id="tkHead" class="small muted" style="margin-bottom:4px">${esc(S.boot.task_header)}</div>`); }
-  let navTimer; function afterRender(route) { taskHead(route); paintFav(); playbookBar(route); stepPager(route); clearTimeout(navTimer);
+  /* Owner 26-11 20:14: "Guide me" – the guide of every screen: where you are, what to do now, what is wrong (each with its Fix button). It opens by itself when something is wrong on a screen (once per screen and visit). */
+  let GN = { open: false, seen: {} };
+  async function guideNow(route) {
+    let btn = $('#gnBtn'); if (!btn) { document.body.insertAdjacentHTML('beforeend', `<button id="gnBtn" class="gn-btn" title="What to do on this screen">${ic('help')}<span>Guide me</span><b id="gnCnt" hidden></b></button><aside id="gnPanel" class="gn-panel" hidden></aside>`); btn = $('#gnBtn'); btn.onclick = () => { GN.open = !GN.open; drawGn(); }; }
+    const m = route.match(/^#\/rec\/([\w-]+)\/(\d+)/); let d;
+    try { d = await api('guide-now?route=' + encodeURIComponent(route) + (m ? `&key=${m[1]}&id=${m[2]}` : '')); } catch (e) { return; }
+    if (S.route !== route) return; GN.d = d;
+    const c = $('#gnCnt'); c.hidden = !d.wrong; c.textContent = d.wrong;
+    if (d.wrong && !GN.seen[route]) { GN.seen[route] = 1; GN.open = true; }
+    drawGn();
+  }
+  function drawGn() {
+    const p = $('#gnPanel'), d = GN.d; if (!p || !d) return; p.hidden = !GN.open; $('#gnBtn').classList.toggle('on', GN.open); if (!GN.open) return;
+    const tone = { err: ['Wrong – fix now', 'err'], warn: ['Do soon', 'warn'], todo: ['Next step', 'done'], info: ['Good to know', 'plain'] };
+    p.innerHTML = `<div class="gn-h"><div><div class="small muted">${esc(d.where ? d.where.section : 'MoreOrderz')}</div><b>${esc(d.where ? d.where.title : ($('#main h1') || {}).textContent || 'This screen')}</b>${d.where && d.where.about ? `<div class="small muted">${esc(d.where.about)}</div>` : ''}</div><button class="btn sm ghost" id="gnX" title="Close">×</button></div>
+      <div class="gn-b">${d.items.length ? d.items.map((x, i) => `<div class="gn-i gn-${x.tone}"><div class="gn-n">${i + 1}</div><div style="flex:1;min-width:0"><span class="chip ${tone[x.tone][1]}" style="font-size:10px">${tone[x.tone][0]}</span><div class="gn-t">${esc(x.text)}</div>${x.why ? `<div class="small muted">${esc(x.why)}</div>` : ''}${x.go ? `<button class="btn sm ${x.tone === 'err' ? 'primary' : ''}" data-gngo="${esc(x.go)}" style="margin-top:6px">${esc(x.label || 'Open')} →</button>` : ''}</div></div>`).join('') : '<div class="empty">All good here – nothing to do on this screen.</div>'}</div>
+      <div class="gn-f small muted">The guide follows every screen. Press <span class="kbd">?</span> for help on each field.</div>`;
+    $('#gnX').onclick = () => { GN.open = false; drawGn(); };
+    $$('[data-gngo]', p).forEach(b => b.onclick = () => { const g = b.dataset.gngo; if (g === 'action:new') { const n = $('#lNew'); if (n) n.click(); return; } go(g); });
+  }
+  let navTimer; function afterRender(route) { taskHead(route); paintFav(); playbookBar(route); stepPager(route); guideNow(route); clearTimeout(navTimer);
     navTimer = setTimeout(async () => { if (S.route !== route || route === '#/home') return; const h = $('#main h1'); if (!h) return; try { NAV = await api('nav', { method: 'POST', body: { title: h.textContent.trim().slice(0, 150), url: route } }); paintFav(); } catch (e) {} }, 1500); }
   // R-B_SOURCING-20: floating Previous / Next on every step place of a cycle record (cycle page sections, Samples · QC · Customs, the step lists of the cycle); skipped steps are jumped
   async function stepPager(route) {

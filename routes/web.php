@@ -64,6 +64,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('mytool-link/revoke', [\App\Http\Controllers\MyToolLinkController::class, 'revoke']);
         Route::post('mytool-link/apply', [\App\Http\Controllers\MyToolLinkController::class, 'apply']);
         Route::post('mytool-import', [\App\Http\Controllers\CoreExtrasController::class, 'mytool']);      // owner 26-11 MY TOOL purchase history
+        Route::get('guide-now', [\App\Http\Controllers\CoreExtrasController::class, 'guideNow']);      // owner 26-11 20:14
         Route::get('inspect/{key}/{id}', [\App\Http\Controllers\CoreExtrasController::class, 'inspect'])->whereNumber('id');      // MR-0941
         Route::get('lineage/{key}/{id}', [\App\Http\Controllers\CoreExtrasController::class, 'lineage'])->whereNumber('id');      // MR-1539
         Route::get('docs/{key}/{id}', [\App\Http\Controllers\CoreExtrasController::class, 'docs'])->whereNumber('id'); Route::post('docs/{key}/{id}', [\App\Http\Controllers\CoreExtrasController::class, 'docAdd'])->whereNumber('id');      // MR-1266 / MR-1418
