@@ -46,9 +46,32 @@ class CycleAlerts
     private static function poIds(array $cycleIds): array { return DB::table('t_src_po')->whereIn('fk_id_cycle', $cycleIds ?: [0])->where('f_active', 1)->pluck('fk_id_cycle', 'id')->all(); }
 
     /** Counts of active rows per group, and the state of the pipeline (R-17). */
+    /** Live 26-11 'slow': the counts of many cycles read in one GROUP BY per table (the dashboard had ~14 queries per cycle). */
+    private static array $pre = [];
+
+    public static function preload(array $ids): void
+    {
+        self::$pre = []; if (! $ids) return;
+        $g = fn (string $t, string $col, array $in) => $in ? DB::table($t)->where('f_active', 1)->whereIn($col, $in)->groupBy($col)->selectRaw("$col k, COUNT(*) n")->pluck('n', 'k')->map(fn ($x) => (int) $x)->all() : [];
+        $poOf = []; foreach (self::poIds($ids) as $po => $cy) $poOf[(int) $cy][] = (int) $po;
+        $byCy = []; foreach (['t_src_rfq', 't_src_samples', 't_src_payments', 't_src_production', 't_src_qc', 't_src_allocations', 't_src_freight', 't_src_customs', 't_src_grn', 't_src_inventory_receipts'] as $t) $byCy[$t] = $g($t, 'fk_id_cycle', $ids);
+        $allPo = array_merge([], ...array_values($poOf)); $byPo = ['t_src_payment_terms' => $g('t_src_payment_terms', 'fk_id_po', $allPo), 't_src_landed_cost' => $g('t_src_landed_cost', 'fk_id_po', $allPo)];
+        $ship = DB::table('t_src_shipments')->where('f_active', 1)->where(fn ($q) => $q->whereIn('fk_id_cycle', $ids)->orWhereIn('fk_id_po', $allPo ?: [0]))->get(['id', 'fk_id_cycle', 'fk_id_po']);
+        $poCy = []; foreach ($poOf as $cy => $ps) foreach ($ps as $p) $poCy[$p] = $cy;
+        foreach ($ids as $id) {
+            $ps = $poOf[$id] ?? []; $sum = fn (string $t) => array_sum(array_map(fn ($p) => $byPo[$t][$p] ?? 0, $ps));
+            self::$pre[$id] = ['po' => $ps, 'rfq' => $byCy['t_src_rfq'][$id] ?? 0, 'samples' => $byCy['t_src_samples'][$id] ?? 0, 'pay' => $sum('t_src_payment_terms') + ($byCy['t_src_payments'][$id] ?? 0),
+                'production' => $byCy['t_src_production'][$id] ?? 0, 'qc' => $byCy['t_src_qc'][$id] ?? 0, 'allocation' => $byCy['t_src_allocations'][$id] ?? 0,
+                'shipment' => $ship->filter(fn ($x) => (int) $x->fk_id_cycle === (int) $id || isset($poCy[(int) $x->fk_id_po]) && $poCy[(int) $x->fk_id_po] === (int) $id)->count(),
+                'freight' => $byCy['t_src_freight'][$id] ?? 0, 'customs' => $byCy['t_src_customs'][$id] ?? 0, 'grn' => $byCy['t_src_grn'][$id] ?? 0,
+                'landed_cost' => ($byCy['t_src_inventory_receipts'][$id] ?? 0) + $sum('t_src_landed_cost')];
+        }
+    }
+
     public static function pipeline(object $c): array
     {
-        $id = $c->id; $po = array_keys(self::poIds([$id])); $n = fn (string $t, string $col = 'fk_id_cycle', ?array $in = null) => (int) DB::table($t)->where('f_active', 1)->when($in === null, fn ($q) => $q->where($col, $id), fn ($q) => $q->whereIn($col, $in ?: [0]))->count();
+        $id = $c->id; $pre = self::$pre[(int) $id] ?? null; $po = $pre ? $pre['po'] : array_keys(self::poIds([$id])); $n = fn (string $t, string $col = 'fk_id_cycle', ?array $in = null) => (int) DB::table($t)->where('f_active', 1)->when($in === null, fn ($q) => $q->where($col, $id), fn ($q) => $q->whereIn($col, $in ?: [0]))->count();
+        if ($pre) { $cnt = $pre; $cnt['po'] = count($pre['po']); } else
         $cnt = ['rfq' => $n('t_src_rfq'), 'samples' => $n('t_src_samples'), 'po' => count($po), 'pay' => $n('t_src_payment_terms', 'fk_id_po', $po) + $n('t_src_payments'), 'production' => $n('t_src_production'), 'qc' => $n('t_src_qc'),
             'allocation' => $n('t_src_allocations'), 'shipment' => (int) DB::table('t_src_shipments')->where('f_active', 1)->where(fn ($q) => $q->where('fk_id_cycle', $id)->orWhereIn('fk_id_po', $po ?: [0]))->count(), 'freight' => $n('t_src_freight'), 'customs' => $n('t_src_customs'),
             'grn' => $n('t_src_grn'), 'landed_cost' => $n('t_src_inventory_receipts') + $n('t_src_landed_cost', 'fk_id_po', $po)];
@@ -94,7 +117,7 @@ class CycleAlerts
             if (DB::table('t_src_cycle_products')->where('fk_id_cycle', $c->id)->where('f_active', 1)->where(fn ($w) => $w->whereRaw('LOWER(product_name) LIKE ?', ["%$q%"])->orWhereRaw('LOWER(sku) LIKE ?', ["%$q%"]))->exists()) return true;
             return DB::table('t_src_po_lines as l')->join('t_product_vendors as p', 'p.id', '=', 'l.fk_id_product')->where('l.fk_id_cycle', $c->id)->where('l.f_active', 1)->where(fn ($w) => $w->whereRaw('LOWER(p.product_name_vendor) LIKE ?', ["%$q%"])->orWhereRaw('LOWER(p.SKU_VENDOR) LIKE ?', ["%$q%"]))->exists();
         };
-        $supCount = []; $pls = []; $tiles = array_fill_keys(array_keys(self::GROUPS), 0); $keep = [];
+        $supCount = []; $pls = []; $tiles = array_fill_keys(array_keys(self::GROUPS), 0); $keep = []; self::preload($all->pluck('id')->map(fn ($x) => (int) $x)->all());
         foreach ($all as $c) {
             $sups = $supOf((int) $c->id); $okQ = $hit($c);
             if ($okQ) foreach ($sups as $s) $supCount[$s] = ($supCount[$s] ?? 0) + 1;
