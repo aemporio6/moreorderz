@@ -36,7 +36,7 @@ class Guide
             'import' => $u && Perm::has($u, 'menu:M_15_1_IMPORT_A_FILE') ? '#/import' : null];
     }
 
-    private static function lower(string $s): string { return preg_match('/^[A-Z]{2,}/', $s) ? $s : lcfirst($s); }
+    private static function lower(string $s): string { return implode(' ', array_map(fn ($w) => preg_match('/^[A-Z0-9]{2,}\b/', $w) ? $w : mb_strtolower($w), explode(' ', $s))); }      // 'Purchase Orders' → 'purchase orders', 'GRN lines' stays
 
     private static ?array $addMap = null;
     /** form → [[title of the form that has the dropdown, label of the dropdown], …] */
