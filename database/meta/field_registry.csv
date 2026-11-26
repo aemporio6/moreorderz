@@ -2688,6 +2688,7 @@ t_src_investors,Investors,module,Details,1,6,phone,Phone,phone,,,,,,,all,,,,,,"W
 t_src_investors,Investors,module,Details,1,7,email,Email,email,,,,,,,all,,,,,,Lower-case e-mail; checked for duplicates.,,,t_src_investors,email,,Y,,,,
 t_src_investors,Investors,module,Details,1,8,status,Status,select,ref:INVESTOR_STATUS,,,,,,all,,,,,,Choose from the list. Press + to add a new value – it is saved to the list and selected here.,,,t_src_investors,status,reference_value,Y,,,,
 t_src_investors,Investors,module,Details,1,9,notes,Notes,textarea,,,,,,,all,,,,,,Free text – shown on the record and searchable.,,,t_src_investors,notes,,Y,,,,
+t_src_investors,Investors,module,Details,1,10,fk_id_account,Partner account,select,table:t_account,,,Y,,,all,,,,,,The partner this investor is – his sourcing investments count as his capital in Partners › Each partner. Found by name the first time.,,,t_src_investors,fk_id_account,,,,,,
 t_src_landed_cost,Landed Cost,module,Basics,1,1,f_active,Active,check,,,,Y,1,,all,,,,,,Yes / No.,const:1,,t_src_landed_cost,f_active,,Y,,,,
 t_src_landed_cost,Landed Cost,module,Basics,1,2,freight_method,Freight Allocation Method,text,,,,Y,,,all,,,,,,Short text. Auto-corrected for spaces and case where it matters.,,,t_src_landed_cost,freight_method,,Y,,,,
 t_src_landed_cost,Landed Cost,module,Basics,1,3,duty_method,Duty Allocation Method,text,,,,,,,all,,,,,,Short text. Auto-corrected for spaces and case where it matters.,,,t_src_landed_cost,duty_method,,Y,,,,

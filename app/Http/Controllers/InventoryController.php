@@ -42,6 +42,11 @@ class InventoryController extends Controller
     }
 
     public function fbaRecon(Request $r) { Perm::need($r->user(), 'stock.SEE'); $s = Perm::shops($r->user()); return \App\Services\FbaLedger::recon((int) Context::ent(), $r->query('shop') ? (int) $r->query('shop') : null, $s); }
+    /** R-D-42 the product's purchases (PO lines + lots). */
+    public function purchases(Request $r, int $id) { abort_unless(Perm::has($r->user(), 'stock.SEE') || Perm::has($r->user(), 'buying.SEE'), 403); $x = \App\Services\ProductHub::purchases((int) Context::ent(), $id);
+        if (! \App\Services\InvoiceReports::canMargin((int) Context::ent(), $r->user())) { foreach ($x['lots'] as &$l) $l['unit_cost'] = null; unset($l); foreach ($x['pos'] as &$p) { $p['unit_price'] = null; $p['total'] = null; } unset($p); $x['summary']['avg_cost'] = null; $x['summary']['last_price'] = null; }
+        return $x; }
+
     /** Owner 27-11 02:31: the product's vault. */
     public function vault(Request $r, int $id) { Perm::need($r->user(), 'stock.SEE'); return $this->run(fn () => \App\Services\ProductVault::page((int) Context::ent(), $id)); }
     public function vaultAsset(Request $r, int $id) { Perm::need($r->user(), 'form:' . (\App\Services\RecordService::formOfTable('t_product_vendors') ?: 't_product_vendor') . ':EDIT'); return $this->run(fn () => \App\Services\ProductVault::change((int) Context::ent(), $id, $r->only(['kind', 'marketplace', 'main', 'remove']), $r->user())); }

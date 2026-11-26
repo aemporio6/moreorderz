@@ -332,17 +332,10 @@
 "functions": 5,
 "lines": 4,
 "status": {
-"BUILT": 2,
-"PARTIAL": 1,
+"BUILT": 3,
 "FORM_ONLY": 1
 },
 "open": [
-{
-"reg": "MR-0314",
-"status": "PARTIAL",
-"text": "T_src_shipment (6 functions) comes back as: Shipments. Fix: fk_id_supplier holds supplier (form) or forwarder (historical); overd…. Improved: Separate forwarder FK; status machine; Standard",
-"note": "shipments with lines; forwarder as a party partly"
-},
 {
 "reg": "MR-1130",
 "status": "FORM_ONLY",
@@ -729,18 +722,12 @@
 "functions": 102,
 "lines": 42,
 "status": {
-"BUILT": 33,
-"FORM_ONLY": 2,
+"BUILT": 34,
+"FORM_ONLY": 1,
 "PARTIAL": 3,
 "NOT_APPLICABLE": 4
 },
 "open": [
-{
-"reg": "MR-0302",
-"status": "FORM_ONLY",
-"text": "T_src_investor (6 functions) comes back as: Investor master. Fix: Third partner identity (vs t_account, fin_partner_users); code from C…. Improved: One Partner entity shared with Finance",
-"note": "form"
-},
 {
 "reg": "MR-0377",
 "status": "FORM_ONLY",
@@ -998,47 +985,16 @@
 "functions": 27,
 "lines": 51,
 "status": {
-"PARTIAL": 5,
-"BUILT": 43,
+"BUILT": 48,
 "FORM_ONLY": 1,
 "NOT_APPLICABLE": 2
 },
 "open": [
 {
-"reg": "MR-0220",
-"status": "PARTIAL",
-"text": "T_product_vendor (42 functions) comes back as: Product master, variations, purchases, stock, price periods, marketplace fields. Fix: BUG: edit rights check commented out (L489); .php image upload accept…. Improved: One P",
-"note": "stock, purchases (quick buy), price periods built; product master tabs, variations, duplicate not built"
-},
-{
-"reg": "MR-0882",
-"status": "PARTIAL",
-"text": "[Partial] Product \"Logistics / Supplier\" tab: record purchases (batches) and optionally add them to stock.",
-"note": "R-D-42: purchase booked with lot and payment (Quick buy); the product Logistics tab form not built"
-},
-{
-"reg": "MR-0897",
-"status": "PARTIAL",
-"text": "[Partial] Log History popup (field changes) and the price-period history table.",
-"note": "R-D-16: history tab per record (field old -> new); labels instead of ids partly"
-},
-{
 "reg": "MR-0940",
 "status": "FORM_ONLY",
 "text": "[Partial] Supplier-tab and cost fields on the product.",
 "note": "R-D-11: supplier / cost fields on the form; landing price inherit rule partly (lot cost)"
-},
-{
-"reg": "MR-0963",
-"status": "PARTIAL",
-"text": "[Partial] Purchases / invoices booked on the product",
-"note": "R-D-42: purchase booked with lot and payment (Quick buy); the product Logistics tab form not built"
-},
-{
-"reg": "MR-0989",
-"status": "PARTIAL",
-"text": "[Partial] Product form structure and safety confirms",
-"note": "R-D-14: product record with Stock and Prices buttons; the 11 tabs / deep links not built"
 }
 ]
 },
@@ -1238,17 +1194,9 @@
 "functions": 5,
 "lines": 2,
 "status": {
-"BUILT": 1,
-"PARTIAL": 1
+"BUILT": 2
 },
-"open": [
-{
-"reg": "MR-0807",
-"status": "PARTIAL",
-"text": "[Partial] Live money formulas on step forms",
-"note": "R-B_SOURCING-33: live formulas of the step forms, recomputed on the server on every save that touches their inputs (a posted value is replaced): GRN shortage = expected − received, damage % = damaged "
-}
-]
+"open": []
 },
 {
 "controller": "T_src_cycle",
@@ -1309,33 +1257,18 @@
 "functions": 5,
 "lines": 1,
 "status": {
-"FORM_ONLY": 1
+"BUILT": 1
 },
-"open": [
-{
-"reg": "MR-0295",
-"status": "FORM_ONLY",
-"text": "T_src_forwarder (6 functions) comes back as: Forwarder list. Fix: BUG: table does not exist. Improved: Forwarder = Supplier entity with type",
-"note": "form"
-}
-]
+"open": []
 },
 {
 "controller": "T_src_freight",
 "functions": 5,
 "lines": 3,
 "status": {
-"BUILT": 2,
-"PARTIAL": 1
+"BUILT": 3
 },
-"open": [
-{
-"reg": "MR-0807",
-"status": "PARTIAL",
-"text": "[Partial] Live money formulas on step forms",
-"note": "R-B_SOURCING-33: live formulas of the step forms, recomputed on the server on every save that touches their inputs (a posted value is replaced): GRN shortage = expected − received, damage % = damaged "
-}
-]
+"open": []
 },
 {
 "controller": "T_src_grn",
@@ -1369,66 +1302,36 @@
 "functions": 5,
 "lines": 3,
 "status": {
-"BUILT": 2,
-"PARTIAL": 1
+"BUILT": 3
 },
-"open": [
-{
-"reg": "MR-0807",
-"status": "PARTIAL",
-"text": "[Partial] Live money formulas on step forms",
-"note": "R-B_SOURCING-33: live formulas of the step forms, recomputed on the server on every save that touches their inputs (a posted value is replaced): GRN shortage = expected − received, damage % = damaged "
-}
-]
+"open": []
 },
 {
 "controller": "T_src_investment",
 "functions": 5,
 "lines": 1,
 "status": {
-"FORM_ONLY": 1
+"BUILT": 1
 },
-"open": [
-{
-"reg": "MR-0301",
-"status": "FORM_ONLY",
-"text": "T_src_investment (6 functions) comes back as: Capital in per cycle/PO. Fix: Prefix INV- clash; migrated once by Finance_legacy, later rows lost. Improved: Investment = ledger entry in Finance",
-"note": "form"
-}
-]
+"open": []
 },
 {
 "controller": "T_src_investor",
 "functions": 5,
 "lines": 1,
 "status": {
-"FORM_ONLY": 1
+"BUILT": 1
 },
-"open": [
-{
-"reg": "MR-0302",
-"status": "FORM_ONLY",
-"text": "T_src_investor (6 functions) comes back as: Investor master. Fix: Third partner identity (vs t_account, fin_partner_users); code from C…. Improved: One Partner entity shared with Finance",
-"note": "form"
-}
-]
+"open": []
 },
 {
 "controller": "T_src_landed_cost",
 "functions": 6,
 "lines": 4,
 "status": {
-"BUILT": 3,
-"PARTIAL": 1
+"BUILT": 4
 },
-"open": [
-{
-"reg": "MR-0807",
-"status": "PARTIAL",
-"text": "[Partial] Live money formulas on step forms",
-"note": "R-B_SOURCING-33: live formulas of the step forms, recomputed on the server on every save that touches their inputs (a posted value is replaced): GRN shortage = expected − received, damage % = damaged "
-}
-]
+"open": []
 },
 {
 "controller": "T_src_ownership",
@@ -1444,23 +1347,9 @@
 "functions": 5,
 "lines": 3,
 "status": {
-"PARTIAL": 2,
-"BUILT": 1
+"BUILT": 3
 },
-"open": [
-{
-"reg": "MR-0305",
-"status": "PARTIAL",
-"text": "T_src_payment (6 functions) comes back as: Supplier payments. Fix: No approval; hard delete re-syncs but no history; no ent filter. Improved: Payment with approval, event PaymentPosted, ledger link",
-"note": "supplier payments with approval over a limit; reversal partly"
-},
-{
-"reg": "MR-0807",
-"status": "PARTIAL",
-"text": "[Partial] Live money formulas on step forms",
-"note": "R-B_SOURCING-33: live formulas of the step forms, recomputed on the server on every save that touches their inputs (a posted value is replaced): GRN shortage = expected − received, damage % = damaged "
-}
-]
+"open": []
 },
 {
 "controller": "T_src_payment_term",
@@ -1485,34 +1374,18 @@
 "functions": 5,
 "lines": 7,
 "status": {
-"BUILT": 6,
-"PARTIAL": 1
+"BUILT": 7
 },
-"open": [
-{
-"reg": "MR-0807",
-"status": "PARTIAL",
-"text": "[Partial] Live money formulas on step forms",
-"note": "R-B_SOURCING-33: live formulas of the step forms, recomputed on the server on every save that touches their inputs (a posted value is replaced): GRN shortage = expected − received, damage % = damaged "
-}
-]
+"open": []
 },
 {
 "controller": "T_src_po_line",
 "functions": 5,
 "lines": 3,
 "status": {
-"BUILT": 2,
-"PARTIAL": 1
+"BUILT": 3
 },
-"open": [
-{
-"reg": "MR-0807",
-"status": "PARTIAL",
-"text": "[Partial] Live money formulas on step forms",
-"note": "R-B_SOURCING-33: live formulas of the step forms, recomputed on the server on every save that touches their inputs (a posted value is replaced): GRN shortage = expected − received, damage % = damaged "
-}
-]
+"open": []
 },
 {
 "controller": "T_src_production",
@@ -1565,17 +1438,9 @@
 "functions": 5,
 "lines": 3,
 "status": {
-"PARTIAL": 1,
-"BUILT": 2
+"BUILT": 3
 },
-"open": [
-{
-"reg": "MR-0314",
-"status": "PARTIAL",
-"text": "T_src_shipment (6 functions) comes back as: Shipments. Fix: fk_id_supplier holds supplier (form) or forwarder (historical); overd…. Improved: Separate forwarder FK; status machine; Standard",
-"note": "shipments with lines; forwarder as a party partly"
-}
-]
+"open": []
 },
 {
 "controller": "T_src_supplier",

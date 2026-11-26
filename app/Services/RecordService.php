@@ -309,6 +309,8 @@ class RecordService
             FormAssist::remember($formKey, $data);   // for the "you used this last time" chips
             if ($table === 't_src_po_lines') PoLines::sync((int) $id);
             if ($table === 't_account_banks') SupplierBanks::afterSave((int) $id);
+            if ($table === 't_src_investments') SourcingCapital::sync((int) $id);      // MR-0301 capital into a cycle = the partner's CAPITAL_IN
+            if ($table === 't_src_investors') foreach (DB::table('t_src_investments')->where('fk_id_investor', $id)->pluck('id') as $iv) SourcingCapital::sync((int) $iv);
             if ($table === 'cat_inventory_locations' && ! $created) WarehouseSites::afterSave((int) $id, (array) $old);      // R-H-6 rename → one shelf label
             if ($table === 't_src_payments') { PaymentTerms::sync((int) DB::table($table)->where($pk, $id)->value('fk_id_term')); if (! empty($old['fk_id_term']) && (int) $old['fk_id_term'] !== (int) ($data['fk_id_term'] ?? $old['fk_id_term'])) PaymentTerms::sync((int) $old['fk_id_term']); }      /* R-B_SOURCING-30 both terms of a moved payment */
             if ($table === 't_src_payment_terms' && $id) PaymentTerms::sync((int) $id);
@@ -358,7 +360,7 @@ class RecordService
         $tasks = DB::table('tasks')->where('linked_module', $table)->where('linked_record_id', $id)->orderByDesc('id')->limit(20)->get(['id', 'title', 'status', 'priority', 'due_at', 'rule_code', 'depends_on_task_id'])->map(fn ($t) => (object) ((array) $t + ['health' => TaskHealth::of($t)]))->all();      // R-G_CORE-21
         $hist = DB::table('sys_audit_log as a')->leftJoin('t_users as u', 'u.id', '=', 'a.user_id')->where('a.table_name', $table)->where('a.record_id', $id)
             ->orderByDesc('a.id')->limit(50)->get(['a.action', 'a.changes_json', 'a.reason', 'a.created_at', 'u.display_name'])
-            ->map(fn ($h) => ['action' => $h->action, 'at' => $h->created_at, 'by' => $h->display_name ?: 'System', 'reason' => $h->reason, 'changes' => $h->action === 'UPDATE' ? Mask::history($formKey, json_decode($h->changes_json ?: '[]', true), \Illuminate\Support\Facades\Auth::user()) : null])->all();      // R-G_CORE-62 hidden fields read "(hidden)"
+            ->map(fn ($h) => ['action' => $h->action, 'at' => $h->created_at, 'by' => $h->display_name ?: 'System', 'reason' => $h->reason, 'changes' => $h->action === 'UPDATE' ? self::labelChanges($formKey, Mask::history($formKey, json_decode($h->changes_json ?: '[]', true), \Illuminate\Support\Facades\Auth::user())) : null])->all();      // R-G_CORE-62 hidden fields read "(hidden)"
         /* R-G_CORE-122 one time line: audit rows + field changes of sys_history (old-tool rows marked) */
         $hist = collect($hist)->merge(History::forRecord($table, $id))->sortByDesc(fn ($h) => (string) $h['at'])->take(80)->values()->all();
         if ($table === 'crm_customers') {      /* R-A_SALES-90 the customer's open cases; a passed reply-by date shows red */
@@ -374,7 +376,24 @@ class RecordService
         }
         $lc = Registry::labelColumn($table);
         return ['form_key' => $formKey, 'table' => $table, 'id' => $id, 'form_title' => Registry::fields($formKey)[0]['form_title'], 'title' => (string) ($row[$lc] ?? "#$id"),
-            'sections' => $sections, 'parents' => $parents, 'children' => array_values($children), 'tasks' => $tasks, 'history' => $hist];
+            'sections' => $sections, 'parents' => $parents, 'children' => array_values($children), 'tasks' => $tasks, 'history' => $hist,
+            'field_labels' => collect(Registry::fields($formKey))->filter(fn ($f) => $f['column_name'])->mapWithKeys(fn ($f) => [$f['column_name'] => $f['label']])->all()];
+    }
+
+    /** R-D-16 history in words: a changed field shows its label, a chosen record its name (not its id). */
+    public static function labelChanges(string $formKey, ?array $changes): ?array
+    {
+        if (! $changes) return $changes; $out = [];
+        $by = []; foreach (Registry::fields($formKey) as $f) if ($f['column_name']) $by[$f['column_name']] ??= $f;
+        foreach ($changes as $k => $v) {
+            $f = $by[$k] ?? null; $label = $f['label'] ?? $k;
+            if ($f && is_array($v) && in_array($f['type'], ['select'], true) && str_starts_with((string) $f['source'], 'table:')) {
+                $t = explode('?', substr((string) $f['source'], 6))[0]; $lc = Registry::hasColumn($t, 'id') ? Registry::labelColumn($t) : null;
+                if ($lc && $lc !== 'id') $v = array_map(fn ($x) => is_numeric($x) && (int) $x > 0 ? (string) (DB::table($t)->where('id', (int) $x)->value($lc) ?? $x) : $x, $v);
+            }
+            $out[$k] = $v;      // the key stays the column; the page sends field_labels for the words
+        }
+        return $out;
     }
 
     /** The form that owns a table (the master form with the most fields on it). */

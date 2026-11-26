@@ -40,4 +40,18 @@ class PartnerViewTest extends TestCase
             $this->assertArrayNotHasKey('stock_cost', $this->getJson("/api/partner-view/$b")->assertOk()->json('summary'), 'never the cost to a partner');
         } else $this->getJson("/api/partner-view/$a")->assertOk();
     }
+
+    /** MR-0301 / 0302: a sourcing investment is the partner's capital – once; cancelled = out again. */
+    public function test_sourcing_investment_is_partner_capital(): void
+    {
+        $this->actingAs($this->owner); \App\Services\Context::set(1, $this->owner->id);
+        $acc = (int) DB::table('t_account')->insertGetId(\App\Services\RecordService::fillNotNull('t_account', ['first_name' => 'Capital', 'sur_name' => 'Partner', 'f_active' => 1]));
+        $inv = (int) DB::table('t_src_investors')->insertGetId(\App\Services\RecordService::fillNotNull('t_src_investors', ['fk_id_ent' => 1, 'investor_code' => 'INVM-1', 'investor_name' => 'Capital Partner', 'fk_id_account' => $acc, 'f_active' => 1]));
+        $cy = (int) DB::table('t_src_cycles')->insertGetId(\App\Services\RecordService::fillNotNull('t_src_cycles', ['fk_id_ent' => 1, 'cycle_code' => 'CYC-CAP', 'product_name' => 'Lamp', 'status' => 'OPEN', 'f_active' => 1]));
+        $v = (int) DB::table('t_src_investments')->insertGetId(\App\Services\RecordService::fillNotNull('t_src_investments', ['fk_id_ent' => 1, 'invest_code' => 'INV-1', 'fk_id_cycle' => $cy, 'fk_id_investor' => $inv, 'invest_amount' => 1000, 'base_amount' => 1000, 'invest_date' => '2026-11-01', 'status' => 'Received', 'f_active' => 1]));
+        $this->assertSame('added', \App\Services\SourcingCapital::sync($v)); $this->assertSame('updated', \App\Services\SourcingCapital::sync($v));
+        $this->assertSame(1000.0, \App\Services\PartnerService::account(1, $acc)['capital']);
+        DB::table('t_src_investments')->where('id', $v)->update(['status' => 'Cancelled']);
+        $this->assertSame('removed', \App\Services\SourcingCapital::sync($v)); $this->assertSame(0.0, (float) \App\Services\PartnerService::account(1, $acc)['capital']);
+    }
 }

@@ -46,4 +46,20 @@ class SetupListsTest extends TestCase
         $this->assertSame(2, DB::table('sys_vault')->where('table_name', 'cat_vendors')->where('record_id', $v)->count());
         $this->assertStringNotContainsString('plain-secret-1', json_encode(RecordService::list('cat_vendors', ['cols' => ['vendor_name', 'vendor_password']])));
     }
+
+    /** R-D-16 history in words (a chosen record by its name) and R-D-42 the product's purchases. */
+    public function test_history_names_and_product_purchases(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id);
+        $ty = $this->f('cat_product_type', ['fk_id_ent' => 1, 'product_type_name' => 'Lighting', 'iso_product_type' => 'LGT', 'f_active' => 1]);
+        $ch = RecordService::labelChanges('t_product_vendor', ['fk_id_product_type' => [null, (string) $ty]]);
+        $this->assertSame([null, 'Lighting'], $ch['fk_id_product_type']);
+        $p = $this->f('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'PH-1', 'product_name_vendor' => 'Lamp', 'stock' => 0, 'f_active' => 1, 'e_product_type' => 'pool']);
+        $po = $this->f('t_src_po', ['fk_id_ent' => 1, 'po_code' => 'PO-PH-1', 'po_number' => 'PO-PH-1', 'po_date' => '2026-11-01', 'po_total' => 50, 'status' => 'CONFIRMED', 'f_active' => 1]);
+        $this->f('t_src_po_lines', ['fk_id_ent' => 1, 'fk_id_po' => $po, 'fk_id_product' => $p, 'sku' => 'PH-1', 'qty_ordered' => 20, 'unit_price' => 2.5, 'line_total' => 50, 'f_active' => 1]);
+        $this->f('fin_lots', ['company_id' => 1, 'fk_id_product' => $p, 'sku' => 'PH-1', 'source' => 'OPENING', 'received_date' => '2026-11-02', 'qty' => 10, 'qty_left' => 10, 'unit_cost_gbp' => 3, 'lot_code' => 'LOT-PH-1']);
+        $x = $this->getJson("/api/product/$p/purchases")->assertOk()->json();
+        $this->assertSame(['PO-PH-1', 20], [$x['pos'][0]['no'], (int) $x['pos'][0]['qty']]); $this->assertSame('LOT-PH-1', $x['lots'][0]['lot']); $this->assertEquals(3, $x['summary']['avg_cost']);
+        $this->assertArrayHasKey('field_labels', $this->getJson('/api/page/t_product_vendor/' . $p)->assertOk()->json());
+    }
 }
