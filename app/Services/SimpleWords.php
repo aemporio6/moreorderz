@@ -3,7 +3,7 @@
 namespace App\Services;
 
 /**
- * Owner 26-11: easy everyday words on every screen – a person with little schooling must understand them.
+ * Owner 26-11: the old tool's wrong words (Vendor …) are shown as the right word on every screen; normal trade words are not changed.
  * ONE list. It changes only what is SHOWN (labels, headings, buttons, menu names, messages); database names, codes and stored data stay as they are.
  * The same list goes to the browser in boot ('words') and is applied there to the words of the screen – never to typed data or to table cells.
  * Longer phrases first; the first letter keeps its case.
@@ -11,20 +11,9 @@ namespace App\Services;
 class SimpleWords
 {
     public const MAP = [
-        'vendor inventory' => 'supplier stock', 'vendors' => 'suppliers', 'vendor' => 'supplier',
-        'marketplaces' => 'selling sites', 'marketplace' => 'selling site',
-        'inventory' => 'stock', 'enterprise' => 'company', 'entity' => 'company', 'branches' => 'shops', 'branch' => 'shop',
-        'carrier presets' => 'courier options', 'carrier preset' => 'courier option', 'carriers' => 'couriers', 'carrier' => 'courier', 'presets' => 'options', 'preset' => 'option', 'matrix' => 'table',
-        'purchase price' => 'buying price', 'sale price' => 'selling price', 'list price' => 'full price', 'sourcing' => 'buying', 'procurement' => 'buying',
-        'quantity' => 'how many', 'dimensions' => 'size', 'expiry' => 'end date', 'remarks' => 'notes', 'description' => 'details',
-        'pending' => 'waiting', 'inactive' => 'switched off', 'deactivate' => 'switch off', 'mandatory' => 'needed', 'required' => 'needed', 'optional' => 'not needed',
-        'insufficient' => 'not enough', 'invalid' => 'wrong', 'discrepancy' => 'difference', 'variance' => 'difference', 'threshold' => 'limit',
-        'reconciliation' => 'matching', 'reconcile' => 'match', 'allocations' => 'shares', 'allocation' => 'share', 'allocate' => 'share out',
-        'fulfilment' => 'sending orders', 'dispatch' => 'send out', 'dispatched' => 'sent out', 'consignment' => 'parcel batch',
-        'evidence' => 'proof', 'acknowledge' => 'confirm seen', 'acknowledged' => 'seen', 'reassign' => 'give to someone else', 'dashboard' => 'overview',
-        'estimated' => 'expected', 'outstanding' => 'still to pay', 'overdue' => 'late', 'duplicate' => 'same twice', 'visibility' => 'shown or hidden',
-        'configuration' => 'settings', 'parameters' => 'settings', 'retrieve' => 'get', 'utilise' => 'use', 'commence' => 'start', 'terminate' => 'end',
-        'obsolete' => 'no longer used', 'forwarder' => 'shipping agent', 'incoterm' => 'delivery terms', 'incoterms' => 'delivery terms',
+        /* Owner 26-11 (09:54): ONLY the old tool's wrong words change. Marketplace, Inventory, Stock, Carrier, Courier, Pending, Waiting, Required … are right and stay as written. */
+        'vendors' => 'suppliers', 'vendor' => 'supplier',
+        'enterprise' => 'company', 'entity' => 'company', 'branches' => 'shops', 'branch' => 'shop',
     ];
 
     public static function apply(?string $text): string

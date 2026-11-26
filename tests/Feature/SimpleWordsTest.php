@@ -10,10 +10,10 @@ class SimpleWordsTest extends TestCase
 {
     public function test_hard_words_become_easy_words_and_codes_stay(): void
     {
-        $this->assertSame('Supplier is needed.', W::apply('Vendor is required.'));
-        $this->assertSame('Supplier stock', W::apply('Vendor Inventory')); $this->assertSame('SELLING SITE', W::apply('MARKETPLACE'));
-        $this->assertSame('Courier option', W::apply('Carrier preset')); $this->assertSame('Waiting approval', W::apply('Pending approval'));
-        $this->assertSame('Buying price / selling price', W::apply('Purchase price / sale price'));
+        $this->assertSame('Supplier is required.', W::apply('Vendor is required.')); $this->assertSame('Supplier Inventory', W::apply('Vendor Inventory')); $this->assertSame('SUPPLIERS', W::apply('VENDORS'));
+        $this->assertSame('Shop of the company', W::apply('Branch of the enterprise'));
+        // owner 26-11 09:54: these words are right and stay exactly as written
+        foreach (['Marketplace', 'Inventory', 'Stock', 'Carrier', 'Courier', 'Carrier preset', 'Pending', 'Waiting', 'Required', 'Purchase price', 'Quantity', 'Dispatch', 'Allocation'] as $keep) $this->assertSame($keep, W::apply($keep));
         // names of columns, links and parts of other words are not touched
         foreach (['marketplace_fee', '#/carriers', 'fk_id_vendor', 'sub-inventory', 'vendors.csv', 'Subvendor'] as $keep) $this->assertSame($keep, W::apply($keep));
         $this->assertSame('', W::apply(null));
