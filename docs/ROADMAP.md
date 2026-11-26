@@ -7,6 +7,7 @@ Nothing the owner asked for may be dropped from this list. A line only leaves "N
 Updated: 27 Nov 2026, 04:15 (Pakistan time)
 
 ## The owner's standing rules (every screen, every batch is checked against these)
+0. **Better than the source (owner 27-11 02:42).** Whatever comes from the old tool or MY TOOL is not just copied: it becomes easier, dynamic, smart and improved – and it fits inside this system, connected to the rest, never something apart.
 1. **Everything is connected.** Stock ↔ inventory ↔ partners ↔ buying ↔ sourcing ↔ selling ↔ money. Nothing is a screen on its own: every figure comes from the one ledger and setup behind it, and every action writes there. If something is not connected, it is not finished.
 2. **Everything comes from the centre (setup).** Every list, value and default lives once in the central setup and reaches every place that needs it by itself. Nothing is added screen by screen.
 3. **Every dropdown:** search, suggestions, used lately first, All, multiple, Other / + Add (saved to the central list), a default, and help.

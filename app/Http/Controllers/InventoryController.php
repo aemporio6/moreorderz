@@ -42,6 +42,10 @@ class InventoryController extends Controller
     }
 
     public function fbaRecon(Request $r) { Perm::need($r->user(), 'stock.SEE'); $s = Perm::shops($r->user()); return \App\Services\FbaLedger::recon((int) Context::ent(), $r->query('shop') ? (int) $r->query('shop') : null, $s); }
+    /** Owner 27-11 02:31: packaging worked out – a product (with ?qty=) or a whole PO. */
+    public function packaging(Request $r, int $id) { Perm::need($r->user(), 'stock.SEE'); return $this->run(fn () => \App\Services\Packaging::product($id, $r->query('qty') !== null ? (float) $r->query('qty') : null)); }
+    public function packagingPo(Request $r, int $id) { abort_unless(Perm::has($r->user(), 'buying.SEE') || Perm::has($r->user(), 'stock.SEE'), 403); return $this->run(fn () => \App\Services\Packaging::po((int) Context::ent(), $id)); }
+
     /** Inventory (d) rest: each shop's quantity against what we can sell. */
     public function shopCheck(Request $r) { Perm::need($r->user(), 'stock.SEE'); return \App\Services\ShopStockCheck::rows((int) Context::ent(), $r->user(), $r->query('shop') ? (int) $r->query('shop') : null, strtoupper((string) $r->query('state', ''))); }
     public function fbaLink(Request $r) { $d = $r->validate(['shop' => 'required|integer', 'sku' => 'required|string|max:100', 'product' => 'required|integer']); return $this->run(fn () => \App\Services\FbaLedger::link((int) Context::ent(), $r->user(), (int) $d['shop'], $d['sku'], (int) $d['product'])); }

@@ -2289,6 +2289,33 @@
         [{ name: 'lot', label: 'From lot', required: true, options: o.lots.map(l => [l.id, `${l.lot_code || 'lot ' + l.id} · ${l.owner} · ${l.qty_left} left · ${money(l.unit_cost_gbp)}`]) }, { name: 'to', label: 'New owner', required: true, options: [[0, 'Company'], ...o.owners.map(w => [w.id, w.name])] }, { name: 'qty', label: 'Units', type: 'number', required: true }],
         async v => { const r = await api(`inventory/${id}/owner`, { method: 'POST', body: v }); again(); return r; }, 'Change'); };
     $('#ivShop').onclick = () => openForm('listing', null, { preset: { fk_id_product: id, listing_title: x.name || '' }, onSaved: again });
+    $('#main').insertAdjacentHTML('beforeend', '<div class="card" id="ivPack" style="margin-top:12px"></div>'); packCard($('#ivPack'), id, again);
+  }
+  // Owner 27-11 02:31: packaging worked out – item, retail pack, master carton; the best carrier box; how many cartons for a quantity; what is missing, with Fill in
+  async function packCard(box, id, again) {
+    let k; try { k = await api('packaging/product/' + id); } catch (e) { box.innerHTML = `<div class="card-b muted">${esc(e.message)}</div>`; return; }
+    const n = (v, d = 2) => v ? (+v).toLocaleString('en-GB', { maximumFractionDigits: d }) : '—', sz = (o, u) => o.l ? `${n(o.l, 1)}×${n(o.w, 1)}×${n(o.h, 1)} ${u}` : '—', c = k.carton;
+    const cell = (t, b, s) => `<div class="pk-c"><small>${t}</small><b>${b}</b><small>${s || ''}</small></div>`;
+    box.innerHTML = `<div class="card-h"><h3>📦 Packaging</h3><span class="small muted">worked out by itself${k.from_parent.length ? ' · ' + k.from_parent.length + ' value(s) from the parent' : ''}</span><button class="btn sm" id="pkEdit" style="margin-left:auto">Fill in / change</button></div>
+      <div class="card-b"><div class="pk-grid">${cell('Item alone', sz(k.item, 'mm'), k.item.kg ? n(k.item.kg, 3) + ' kg' : '')}${cell('In its pack', sz(k.pack, 'mm'), (k.pack.kg ? n(k.pack.kg, 3) + ' kg' : '') + (k.pack.courier_kg ? ' · courier vol. ' + n(k.pack.courier_kg, 2) + ' kg' : ''))}
+        ${cell('Master carton', sz(c, 'cm'), c.per ? c.per + ' per carton' : '')}${cell('Carton net / gross', `${n(c.net)} / ${n(c.gross)} kg`, c.gross_estimated ? 'gross estimated' : (c.gross ? 'weighed' : ''))}
+        ${cell('CBM per carton', c.cbm ? n(c.cbm, 4) : '—', c.cbm_per_unit ? n(c.cbm_per_unit, 6) + ' per unit' : '')}${cell('Air / courier volumetric', c.air_kg ? `${n(c.air_kg, 1)} / ${n(c.courier_kg, 1)} kg` : '—', 'L×W×H ÷ 6000 / 5000')}
+        ${c.fill_pct ? cell('Carton filled', c.fill_pct + ' %', c.fill_pct > 100 ? 'packs do not fit' : '') : ''}${k.material || k.hs_code ? cell('Material · HS code', esc(k.material || '—'), esc(k.hs_code || '')) : ''}</div>
+        ${k.best_box.length ? `<div class="small" style="margin-top:8px"><b>Best carrier box:</b> ${k.best_box.map(b => esc(b.name) + ' <span class="muted">(' + esc(b.size) + (b.max_kg ? ', up to ' + b.max_kg + ' kg' : '') + ')</span>').join(' · ')}</div>` : ''}
+        ${(k.warnings || []).map(w => `<div class="small" style="color:var(--err)">${esc(w)}</div>`).join('')}
+        ${k.missing.length ? `<div class="small" style="margin-top:8px">Still needed for the carton figures: ${k.missing.map(m => `<a href="#" data-pkf="${m.field}">${esc(m.label)}</a>`).join(', ')}</div>` : ''}
+        <div style="display:flex;gap:8px;align-items:center;margin-top:10px"><label class="small">How many units? <input class="q" type="number" id="pkQ" min="1" style="width:110px"></label><span class="small" id="pkPlan"></span></div></div>`;
+    const edit = () => openForm(S.boot.product_form || 't_product_vendor', id, { onSaved: () => packCard(box, id, again) }); $('#pkEdit', box).onclick = edit; $$('[data-pkf]', box).forEach(a => a.onclick = e => { e.preventDefault(); edit(); });
+    let tm; $('#pkQ', box).oninput = () => { clearTimeout(tm); tm = setTimeout(async () => { const q = +$('#pkQ', box).value; if (!q) return ($('#pkPlan', box).textContent = '');
+      try { const x = await api('packaging/product/' + id + '?qty=' + q); const p = x.plan; $('#pkPlan', box).innerHTML = p.cartons ? `<b>${p.cartons} cartons</b> (${p.full} full${p.tail ? ' + 1 tail of ' + p.tail : ''}) · ${n(p.cbm, 3)} CBM · ${n(p.kg, 1)} kg` : 'Fill in the carton first.'; } catch (e) {} }, 300); };
+  }
+  async function poPackCard(box, id) {
+    let d; try { d = await api('packaging/po/' + id); } catch (e) { return; } if (!d.rows.length) return; const n = (v, k = 2) => (+v || 0).toLocaleString('en-GB', { maximumFractionDigits: k }), t = d.totals;
+    box.innerHTML = `<div class="card" style="margin-top:12px"><details ${d.missing.length ? 'open' : ''}><summary class="card-h" style="cursor:pointer"><h3 style="display:inline">📦 Packing – ${n(t.cartons, 0)} cartons${t.tails ? ` (incl. ${t.tails} tail)` : ''} · ${n(t.cbm, 3)} CBM · ${n(t.kg, 1)} kg · air volumetric ${n(t.air_kg, 0)} kg</h3>${d.missing.length ? ` <span class="chip warn plain">${d.missing.length} product(s) without carton sizes</span>` : ''}</summary>
+      <div class="tbl-wrap"><table class="t"><thead><tr><th>Product</th><th class="num">Qty</th><th class="num">Per carton</th><th class="num">Full</th><th class="num">Tail</th><th>Carton</th><th class="num">Gross kg / carton</th><th class="num">CBM</th><th class="num">kg</th></tr></thead><tbody>
+      ${d.rows.map(r => r.missing.length ? `<tr><td>${r.product ? `<a href="#/inventory/${r.product}">${esc(r.sku)}</a>` : esc(r.sku || '')}</td><td class="num">${n(r.qty, 0)}</td><td colspan="7"><span class="chip warn plain">missing</span> <span class="small">${esc(r.missing.join(', '))}</span></td></tr>`
+        : `<tr><td><a href="#/inventory/${r.product}">${esc(r.sku)}</a> <span class="small muted">${esc(String(r.name || '').slice(0, 40))}</span></td><td class="num">${n(r.qty, 0)}</td><td class="num">${r.per}</td><td class="num">${r.full}</td><td class="num">${r.tail || ''}</td><td class="small">${esc(r.size)}</td><td class="num">${n(r.gross)}${r.gross_estimated ? '*' : ''}</td><td class="num">${n(r.cbm, 3)}</td><td class="num">${n(r.kg, 1)}</td></tr>`).join('')}</tbody></table></div>
+      <div class="card-b small muted">${esc(d.note)} * gross estimated (not weighed).</div></details></div>`;
   }
 
   /* MR-1443 … 1450 the decision engine: what to do next, the money each is worth, one click to the form that does it */
@@ -5985,6 +6012,7 @@
     buyButtons([p], again);
     if (M) poPosition(id, R, again);
     poShare(id);
+    $('#main').insertAdjacentHTML('beforeend', '<div id="poPack"></div>'); poPackCard($('#poPack'), id);
     $('#main').insertAdjacentHTML('beforeend', '<div id="poDocs"></div>'); docsBox('#poDocs', `po/${id}/documents`, 'Documents of this PO', 'Add document for this PO', again);      // R-F_SETUP-10
     if ($('#poPrint')) $('#poPrint').onclick = () => printNow('PO', [id]);
     if ($('#poSend')) $('#poSend').onclick = () => miniForm('Send to supplier', 'The latest PO PDF goes through the message queue and is logged on the PO.', [{ name: 'via', label: 'How', required: true, value: 'EMAIL', options: [['EMAIL', 'E-mail (PDF attached)'], ['WHATSAPP', 'WhatsApp']] }],
