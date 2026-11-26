@@ -414,4 +414,30 @@ class CoreAreaTest extends TestCase
         $this->assertNull(collect($this->getJson('/api/guide-now?route=' . urlencode('#/list/t_src_po'))->json('items'))->first(fn ($i) => str_contains($i['text'], 'ZZQ')), 'gone once put right');
         $this->assertStringContainsString('guideNow', file_get_contents(public_path('app/app.js')));
     }
+
+    public function test_guide_me_area_steps_stock_and_money(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id); Perm::flush();
+        $this->f('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => 'GN-NOCOST', 'product_name_vendor' => 'No cost', 'f_active' => 1, 'e_product_type' => 'pool', 'landing_price' => 0]);
+        $st = collect($this->getJson('/api/guide-now?route=' . urlencode('#/stock'))->assertOk()->json('items'));
+        $this->assertNotNull($st->first(fn ($i) => str_starts_with((string) $i['go'], '#/stock/health?c=')), 'stock checks with the list behind them');
+        $bank = (int) DB::table('fin_bank_accounts')->value('id');
+        if ($bank) {
+            DB::table('fin_bank_transactions')->insert(\App\Services\RecordService::fillNotNull('fin_bank_transactions', ['company_id' => 1, 'bank_account_id' => $bank, 'txn_date' => date('Y-m-d'), 'amount' => 12.5, 'match_status' => 'UNMATCHED', 'description' => 'guide test']));
+            $m = collect($this->getJson('/api/guide-now?route=' . urlencode('#/money'))->json('items'));
+            $this->assertNotNull($m->first(fn ($i) => str_contains($i['text'], 'bank line') && $i['go'] === '#/money'));
+        }
+    }
+
+    public function test_field_coach_says_what_is_wrong_and_the_right_value(): void
+    {
+        $this->actingAs($this->owner); Context::set(1, $this->owner->id); Perm::flush();
+        $live = fn (string $f, string $v) => $this->getJson('/api/form/t_src_po/live?' . http_build_query(['field' => $f, 'value' => $v]))->assertOk()->json();
+        $this->assertSame([false, '100'], [($x = $live('deposit_pct', '130'))['ok'], $x['suggest']], 'above the field maximum → the maximum, one click');
+        $this->assertSame('30', $live('deposit_pct', '-30')['suggest'] ?? null);
+        $this->assertSame('1250.50', $live('deposit_amount', '£1,250.50')['suggest'], 'currency sign and commas taken out');
+        $y = $live('po_date', '2016-03-01'); $this->assertSame('warn', $y['level']); $this->assertSame(date('Y') . '-03-01', $y['suggest'], 'is the year right?');
+        $this->assertTrue($live('po_date', date('Y-m-d'))['ok']);
+        $this->assertContains('deposit_amount', $this->getJson('/api/form/t_src_po')->json('live'), 'every amount field is checked when it is left');
+    }
 }

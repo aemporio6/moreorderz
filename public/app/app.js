@@ -5963,7 +5963,8 @@
         const fix = r.suggest ? ` <a href="#" data-fix="${esc(r.suggest)}" title="Put this value into the field">Use “${esc(r.suggest)}”</a>` : '';      // form standard (d): click-to-fix
         if (!r.ok) { w.classList.add('has-err'); w.insertAdjacentHTML('beforeend', `<div class="errtext live">${esc(r.message)}${fix}${link}</div>`);
           const fa = $('[data-fix]', w); if (fa) fa.onclick = e => { e.preventDefault(); el.value = fa.dataset.fix; change(name, fa.dataset.fix); typed.add(name); liveCheck(el, name, false); }; }
-        else if (r.level === 'warn') w.insertAdjacentHTML('beforeend', `<div class="small live" data-live-warn style="color:#b7791f">${esc(r.message)}${link}</div>`);
+        else if (r.level === 'warn') { w.insertAdjacentHTML('beforeend', `<div class="small live" data-live-warn style="color:#b7791f">${esc(r.message)}${fix}${link}</div>`);
+          const fa = $('[data-fix]', w); if (fa) fa.onclick = e => { e.preventDefault(); el.value = fa.dataset.fix; change(name, fa.dataset.fix); typed.add(name); liveCheck(el, name, false); }; }
         else if (r.level === 'ok' && typing) w.insertAdjacentHTML('beforeend', `<div class="small live" data-live-ok style="color:var(--ok,#1e7e34)">${esc(r.message)}</div>`); }
       catch (x) { if (typing && w) w.insertAdjacentHTML('beforeend', '<div class="small muted live">Will verify on save</div>'); } };
     const liveTimers = {};
@@ -5972,6 +5973,10 @@
     $('#fBody', ov).addEventListener('focusout', e => { const el = e.target; if (!el.dataset || !('my' in el.dataset)) return; const d = el.value.replace(/\D/g, '');
       if (d.length === 4) { el.value = d.slice(0, 2) + '/20' + d.slice(2); el.dispatchEvent(new Event('change', { bubbles: true })); } });
     $('#fBody', ov).addEventListener('input', e => { const el = e.target, name = el.dataset.f; if (!name || !(def.live_typing || []).includes(name)) return; clearTimeout(liveTimers[name]); liveTimers[name] = setTimeout(() => liveCheck(el, name, true), 500); });
+    /* owner 26-11 20:31: the field coach – the field you are in says what goes in it (its help), and when you leave it, what is wrong and the right value (one click) */
+    $('#fBody', ov).addEventListener('focusin', e => { const el = e.target, name = el.dataset.f; $$('.coach', ov).forEach(c => c.remove()); if (!name) return; const f = flds.find(x => x.name === name); const w = el.closest('.fld'); if (!f || !w) return;
+      const say = f.help || (f.type === 'money' ? 'An amount – numbers only, no currency sign.' : f.type === 'number' ? 'A number – type it or use − / +.' : f.type === 'date' ? 'Pick the date from the calendar.' : f.required ? 'Needed to save.' : '');
+      if (say && !$('.helptext', w)) w.insertAdjacentHTML('beforeend', `<div class="small coach" style="color:var(--accent-ink);margin-top:3px">✎ ${esc(say)}</div>`); });
     $('#fBody', ov).addEventListener('focusout', async e => { const el = e.target, name = el.dataset.f; if (!name) return; const f = flds.find(x => x.name === name); if (!f || el.type === 'checkbox' || el.type === 'password') return;
       if (['text', 'email', 'tel'].includes(el.type) && el.value) { const fx = fixOf(f, el.value); if (fx !== el.value && !fixes['!' + name]) { fixes[name] = el.value; el.value = fx; change(name, fx); drawUnder(f); } }
       if ((def.live || []).includes(name)) await liveCheck(el, name, (def.live_typing || []).includes(name));

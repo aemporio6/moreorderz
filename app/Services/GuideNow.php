@@ -56,6 +56,24 @@ class GuideNow
                 foreach ($needs as $n) $add($n['p'] === 'P1' ? 'err' : 'warn', $n['title'] . ($n['detail'] ? ' – ' . $n['detail'] : ''), 'Cycle ' . ($n['cycle'] ?? '') . ' · ' . $n['chip'], 'Open', $n['opt']['fix_url'] ?? ($n['cycle'] ? '#/cycle/' . $n['cycle'] : '#/buying'));
             } catch (\Throwable $e) {}
         }
+        // stock and product screens: the inventory checks (no location, no cost, below reorder …) – each opens the product list behind it
+        if (preg_match('~^#/(stock|products|stock-alerts|sku-homes|putaway|inbound|icc|list/(t_product|product|location))~', $base)) {
+            try { foreach (ReadCache::remember('guide:stock:' . $ent, 300, fn () => StockHealth::card($ent)['rows']) as $r) if (! empty($r['count']) && ! in_array($r['key'], ['private', 'pool', 'total'], true))
+                $add(in_array($r['key'], ['nocost', 'mismatch', 'oos'], true) ? 'err' : 'warn', $r['label'] . ': ' . $r['figure'] . '.', 'Open the list and put each one right.', 'Show them', $r['link']); } catch (\Throwable $e) {}
+        }
+        // sales screens: shops whose sales are not loaded for more than 35 days
+        if (preg_match('~^#/(sales|fulfilment|orders|sales-import|marketplaces|settlements)~', $base)) {
+            try {
+                $last = DB::table('t_sale_imports as i')->join('t_branches as b', 'b.id', '=', 'i.fk_id_branch')->where('i.fk_id_ent', $ent)->groupBy('i.fk_id_branch', 'b.shop_name')->selectRaw('b.shop_name n, MAX(COALESCE(i.confirmed_at, i.imported_at)) last')->get();
+                $old = $last->filter(fn ($x) => ! $x->last || substr((string) $x->last, 0, 10) < date('Y-m-d', strtotime('-35 days')))->pluck('n')->take(5)->all();
+                if ($old) $add('warn', 'Sales not loaded for over 35 days: ' . implode(', ', $old) . (count($old) === 5 ? ' …' : '') . '.', 'Load the marketplace order / money file of each shop.', 'Import sales', '#/sales-import');
+            } catch (\Throwable $e) {}
+        }
+        // money screens: bank lines not matched yet
+        if (preg_match('~^#/(money|bank|reconcil|forecast|ledger|list/fin_)~', $base)) {
+            try { $n = (int) DB::table('fin_bank_transactions')->where('company_id', $ent)->where('match_status', 'UNMATCHED')->count();
+                if ($n) $add('warn', "$n bank line(s) not matched to a sale, bill or payment.", 'Match each line (the tool suggests the match) so the books agree with the bank.', 'Match them', '#/money'); } catch (\Throwable $e) {}
+        }
         // my tasks: late first
         try {
             $t = TaskLists::tiles($u);

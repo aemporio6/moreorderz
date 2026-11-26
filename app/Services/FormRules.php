@@ -309,7 +309,49 @@ class FormRules
     }
 
     /** Fields checked live while the person types. */
-    public static function liveFields(string $formKey): array { return array_values(array_unique(array_merge(self::liveOwn($formKey), self::liveTyped($formKey)))); }
+    public static function liveFields(string $formKey): array { return array_values(array_unique(array_merge(self::liveOwn($formKey), self::liveTyped($formKey), self::coached($formKey)))); }
+
+    /** Owner 26-11 20:31: every number, amount, date and phone field is checked when it is left – what is wrong and the right value with one click. */
+    private static function coached(string $formKey): array
+    {
+        return array_values(array_map(fn ($f) => $f['field_name'], array_filter(Registry::fields($formKey), fn ($f) => in_array($f['type'], ['number', 'money', 'date', 'phone'], true) && ! $f['secret'] && ! $f['readonly'])));
+    }
+
+    /**
+     * The field coach: [ok, level, message, suggest]. Numbers / amounts: below the field's minimum or above its maximum → the limit; far from what this
+     * field usually holds (10× the usual) → "usually about x" with x to use; dates more than two years away → "is the year right?"; phones: 00 → +, spaces out.
+     */
+    public static function coach(string $formKey, array $f, string $value): array
+    {
+        $v = trim($value); if ($v === '') return ['ok' => true];
+        if (in_array($f['type'], ['number', 'money'], true)) {
+            $clean = preg_replace('/[^0-9.\-]/', '', str_replace(',', '', $v));
+            if (! is_numeric($v)) return is_numeric($clean) ? ['ok' => false, 'message' => 'Numbers only.', 'suggest' => $clean] : ['ok' => false, 'message' => 'Numbers only – for example 12.50.'];
+            $n = (float) $v;
+            if ($f['min'] !== null && $f['min'] !== '' && $n < (float) $f['min']) return ['ok' => false, 'message' => 'At least ' . $f['min'] . ' here.', 'suggest' => $n < 0 && abs($n) >= (float) $f['min'] && ($f['max'] === null || $f['max'] === '' || abs($n) <= (float) $f['max']) ? (string) abs($n) : (string) $f['min']];      // a minus typed by mistake → the same number without it
+            if ($f['max'] !== null && $f['max'] !== '' && $n > (float) $f['max']) return ['ok' => false, 'message' => 'At most ' . $f['max'] . ' here.', 'suggest' => (string) $f['max']];
+            if ($n < 0 && ! preg_match('/(adjust|diff|variance|balance|profit|margin|change)/i', $f['column_name'])) return ['ok' => false, 'message' => 'A minus amount is not expected here.', 'suggest' => (string) abs($n)];
+            $t = Registry::table($formKey); $col = (string) $f['column_name'];
+            if ($n > 0 && $t && \Illuminate\Support\Facades\Schema::hasColumn($t, $col)) {
+                $usual = ReadCache::remember("usual:$t:$col", 900, function () use ($t, $col) { $q = \Illuminate\Support\Facades\DB::table($t)->where($col, '>', 0); $n = (clone $q)->count(); if ($n < 5) return null;
+                    return (float) (clone $q)->orderBy($col)->offset((int) floor($n / 2))->limit(1)->value($col); });
+                if ($usual && ($n > $usual * 10 || $n < $usual / 10)) { $u = rtrim(rtrim(number_format($usual, 4, '.', ''), '0'), '.');
+                    return ['ok' => true, 'level' => 'warn', 'message' => "Please check: this field is usually about $u – $v is " . ($n > $usual ? 'much higher' : 'much lower') . '.', 'suggest' => $u]; }
+            }
+            return ['ok' => true];
+        }
+        if ($f['type'] === 'date') {
+            $ts = strtotime($v); if (! $ts) return ['ok' => false, 'message' => 'Not a date – pick it from the calendar.'];
+            if (abs($ts - time()) > 2 * 366 * 86400) return ['ok' => true, 'level' => 'warn', 'message' => 'Is the year right? ' . date('d M Y', $ts) . ' is more than two years ' . ($ts > time() ? 'ahead' : 'ago') . '.', 'suggest' => date('Y') . substr(date('Y-m-d', $ts), 4)];
+            return ['ok' => true];
+        }
+        if ($f['type'] === 'phone') {
+            $p = preg_replace('/[^0-9+]/', '', $v); if (str_starts_with($p, '00')) $p = '+' . substr($p, 2);
+            if (strlen(preg_replace('/\D/', '', $p)) < 7) return ['ok' => false, 'message' => 'Too short for a phone number.'];
+            return $p !== $v ? ['ok' => true, 'level' => 'warn', 'message' => 'Written the standard way: ' . $p, 'suggest' => $p] : ['ok' => true];
+        }
+        return ['ok' => true];
+    }
     private static function liveOwn(string $formKey): array { $t = Registry::table($formKey); if (isset(MasterCodes::RULES[$t])) return array_values(array_filter(array_map(fn ($f) => in_array($f['column_name'], MasterCodes::fields($t), true) ? $f['field_name'] : null, Registry::fields($formKey)))); if ($t === 't_account') return ['account_code']; return $formKey === 'cat_company_house' ? array_keys(self::COMPANY) : ($t === 't_product_vendors' ? ['hs_code', 'sku_vendor'] : ($t === 't_src_products' ? ['hs_code'] : ($t === 'cat_ip_burgers' ? ['isp_code'] : ($t === 't_src_cycles' ? ['order_ref'] : [])))); }
 
     /** Live fields checked 500 ms after the last key (not only when the field is left). */
@@ -353,7 +395,7 @@ class FormRules
         if ($field === 'order_ref' && Registry::table($formKey) === 't_src_cycles') return SrcDuplicate::live((int) Context::ent(), null, $value, $id) + ['value' => SrcDuplicate::clean($value)];
         $tf = collect(Registry::fields($formKey))->firstWhere('field_name', $field);
         if ($tf && in_array($tf['type'], ['email', 'link'], true) && ! ($formKey === 'cat_company_house' && isset(self::COMPANY[$field]))) return self::typed($tf['type'], $value);
-        if ($formKey !== 'cat_company_house') return ['ok' => true];
+        if ($formKey !== 'cat_company_house') return $tf ? self::coach($formKey, $tf, $value) : ['ok' => true];      // the field coach for every other field
         if ($field === 'iso_code' && self::strict($formKey)) { $taken = trim($value) !== '' && self::isoTaken($value, $id); return ['ok' => ! $taken, 'message' => $taken ? 'This ISO code already exists. Please add another' : null]; }
         $d = [$field => $value]; $e = isset(self::COMPANY[$field]) ? self::check($formKey, $d, [], $id, array_fill_keys(self::COMPANY_REQUIRED, 1)) : [];
         return ['ok' => ! isset($e[$field]), 'message' => $e[$field] ?? null, 'value' => $d[$field] ?? $value];

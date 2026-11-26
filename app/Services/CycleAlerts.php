@@ -58,6 +58,7 @@ class CycleAlerts
         $allPo = array_merge([], ...array_values($poOf)); $byPo = ['t_src_payment_terms' => $g('t_src_payment_terms', 'fk_id_po', $allPo), 't_src_landed_cost' => $g('t_src_landed_cost', 'fk_id_po', $allPo)];
         $ship = DB::table('t_src_shipments')->where('f_active', 1)->where(fn ($q) => $q->whereIn('fk_id_cycle', $ids)->orWhereIn('fk_id_po', $allPo ?: [0]))->get(['id', 'fk_id_cycle', 'fk_id_po']);
         $poCy = []; foreach ($poOf as $cy => $ps) foreach ($ps as $p) $poCy[$p] = $cy;
+        StepColours::preload($ids, $allPo);
         foreach ($ids as $id) {
             $ps = $poOf[$id] ?? []; $sum = fn (string $t) => array_sum(array_map(fn ($p) => $byPo[$t][$p] ?? 0, $ps));
             self::$pre[$id] = ['po' => $ps, 'rfq' => $byCy['t_src_rfq'][$id] ?? 0, 'samples' => $byCy['t_src_samples'][$id] ?? 0, 'pay' => $sum('t_src_payment_terms') + ($byCy['t_src_payments'][$id] ?? 0),
@@ -143,6 +144,7 @@ class CycleAlerts
                 'pos' => $po->map(fn ($p) => $p->po_number ?: $p->po_code)->filter()->values()->all(), 'next_action' => $needs[0]['title'] ?? '—', 'days_open' => $days];
         }
         $supNames = $supCount ? DB::table('t_src_suppliers')->whereIn('id', array_keys($supCount))->orderBy('supplier_name')->pluck('supplier_name', 'id') : collect();
+        self::$pre = []; StepColours::forget();      // the preloaded counts are only for this page
         return ['tiles' => array_map(fn ($k) => ['key' => $k, 'name' => self::GROUPS[$k], 'open' => $tiles[$k]], array_keys(self::GROUPS)), 'rows' => $rows, 'total' => count($keep), 'page' => $page, 'per_page' => $per,
             'filters' => ['supplier' => $sup ?: null, 'q' => $f['q'] ?? '', 'stage' => $stage ?: null, 'investor' => $f['investor'] ?? null, 'from' => $f['from'] ?? null, 'to' => $f['to'] ?? null, 'stage_name' => self::GROUPS[$stage] ?? null], 'empty' => 'No open cycles match the filter.',
             'suppliers' => $supNames->map(fn ($n, $id) => ['id' => (int) $id, 'name' => $n, 'count' => $supCount[$id]])->values()->all(),
