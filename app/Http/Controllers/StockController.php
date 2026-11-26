@@ -76,6 +76,11 @@ class StockController extends Controller
     public function whCsvUndo(Request $r, int $job) { \App\Services\Perm::need($r->user(), 'stock.CHANGE'); return $this->wh(fn () => \App\Services\WarehouseCsv::undo((int) Context::ent(), $job)); }
     /** R-D-52 family links (check / import / undo) and R-D-53 parent + child staged import (meta, clear, stage, preview, confirm). */
     public function familyLinks(Request $r, string $step) { return $this->wh(function () use ($r, $step) { if (! $r->hasFile('file')) throw new \InvalidArgumentException('Please select a file to upload.'); return \App\Services\ProductImports::familyLinks((int) Context::ent(), (string) file_get_contents($r->file('file')->getRealPath()), $step === 'import', $r->user()); }); }
+    /** R-D-60 old per-shop product rows → listings. GET = dry run. */
+    public function legacyListings(Request $r) { return $this->wh(fn () => \App\Services\LegacyListings::run(false, $r->user())); }
+    public function legacyListingsApply(Request $r) { return $this->wh(fn () => \App\Services\LegacyListings::run(true, $r->user())); }
+    public function legacyListingsUndo(Request $r, int $job) { return $this->wh(fn () => \App\Services\LegacyListings::undo($job, $r->user())); }
+
     public function familyUndo(Request $r, int $job) { return $this->wh(fn () => \App\Services\ProductImports::familyUndo($job, $r->user())); }
     public function stagedMeta(Request $r) { return \App\Services\ProductImports::stagedMeta((int) Context::ent(), $r->user()); }
     public function stagedClear(Request $r) { \App\Services\Perm::need($r->user(), 'stock.CHANGE'); return \App\Services\ProductImports::stagedClear($r->user()); }

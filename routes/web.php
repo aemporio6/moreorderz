@@ -249,6 +249,9 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('variations/{id}', [StockController::class, 'variations'])->whereNumber('id');
         Route::post('product-imports/family/{step}', [StockController::class, 'familyLinks'])->whereIn('step', ['check', 'import']);      // R-D-52
         Route::post('product-imports/family/undo/{job}', [StockController::class, 'familyUndo'])->whereNumber('job');
+        Route::get('product-imports/legacy-listings', [StockController::class, 'legacyListings']);      // R-D-60 (dry run, writes nothing)
+        Route::post('product-imports/legacy-listings', [StockController::class, 'legacyListingsApply']);
+        Route::post('product-imports/legacy-listings/undo/{job}', [StockController::class, 'legacyListingsUndo'])->whereNumber('job');
         Route::get('product-imports/staged/meta', [StockController::class, 'stagedMeta']);      // R-D-53
         Route::post('product-imports/staged/clear', [StockController::class, 'stagedClear']);
         Route::post('product-imports/staged', [StockController::class, 'stagedStage']);
@@ -638,6 +641,11 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('preset-groups/{id}/star', [\App\Http\Controllers\PresetGroupController::class, 'star'])->whereNumber('id');
         Route::post('preset-groups/{id}/copy', [\App\Http\Controllers\PresetGroupController::class, 'copy'])->whereNumber('id');
         Route::delete('preset-groups/{id}', [\App\Http\Controllers\PresetGroupController::class, 'destroy'])->whereNumber('id');
+        Route::get('preset-groups/{id}/combos', [\App\Http\Controllers\PresetGroupController::class, 'combos'])->whereNumber('id');      // R-D-63
+        Route::post('preset-groups/{id}/presets', [\App\Http\Controllers\PresetGroupController::class, 'addPresets'])->whereNumber('id');
+        Route::get('carrier-dropdown', [\App\Http\Controllers\PresetGroupController::class, 'dropdown']);      // R-D-65
+        Route::get('carrier-values/review', [\App\Http\Controllers\PresetGroupController::class, 'review']);      // R-D-66
+        Route::post('carrier-values/review/{id}', [\App\Http\Controllers\PresetGroupController::class, 'resolve'])->whereNumber('id');
         Route::get('preset-groups/{id}/history', [\App\Http\Controllers\PresetGroupController::class, 'history'])->whereNumber('id');
         Route::get('listings-qty', [\App\Http\Controllers\PurchaseAuditController::class, 'listingQty']);      // R-H-20
         Route::get('listings-qty/export', [\App\Http\Controllers\PurchaseAuditController::class, 'listingQtyCsv']);

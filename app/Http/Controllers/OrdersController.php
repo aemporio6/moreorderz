@@ -549,9 +549,11 @@ class OrdersController extends Controller
     public function carrierMatrix(Request $r) { $this->can($r, 'orders.SEE'); return \App\Services\Carriers::matrix($r->user(), $r->only(['carrier'])); }
     public function carrierSave(Request $r, string $what)
     {
-        return $this->run(function () use ($r, $what) { $id = (int) $r->input('id') ?: null; $d = $r->except(['id']); $u = $r->user();
+        $out = $this->run(function () use ($r, $what) { $id = (int) $r->input('id') ?: null; $d = $r->except(['id']); $u = $r->user();
             return match ($what) { 'carrier' => \App\Services\Carriers::saveCarrier($d, $id, $u), 'package' => \App\Services\Carriers::savePackage($d, $id, $u), 'service' => \App\Services\Carriers::saveService($d, $id, $u), 'packing' => \App\Services\Carriers::savePacking($d, $id, $u),
                 'preset' => \App\Services\Carriers::savePreset($d, $id, $u), 'preset-delete' => \App\Services\Carriers::deletePreset((int) $id, $u), 'rate' => \App\Services\Carriers::setRate(strtoupper((string) $r->input('kind')), (int) $id, $r->input('rate'), $r->input('valid_from'), $u) }; });
+        if (in_array($what, ['preset', 'rate'], true)) \App\Services\CarrierPresets::closeRateTasks();      /* R-D-63 CAR_RATE_MISSING closes when the rate is set */
+        return $out;
     }
     public function carrierRateHistory(Request $r, string $kind, int $id) { $this->can($r, 'orders.SEE'); return ['rows' => \App\Services\Carriers::history(strtoupper($kind), $id)]; }
     public function carrierCheapest(Request $r) { $this->can($r, 'orders.SEE'); return ['best' => \App\Services\Carriers::cheapest((float) $r->query('weight', 0), (float) $r->query('l', 0), (float) $r->query('w', 0), (float) $r->query('h', 0), (int) $r->query('marketplace') ?: null)]; }
