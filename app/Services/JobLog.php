@@ -78,11 +78,15 @@ class JobLog
     /** Hourly finance jobs (minute 0): auto-match every bank account, the unmatched / stale tasks, rates that answer FX tasks. */
     public static function financeHourly(int $ent): int
     {
-        $n = 0;
-        foreach (DB::table('fin_bank_accounts')->where('company_id', $ent)->where('is_active', 1)->pluck('id') as $b) $n += MoneyService::autoMatch($ent, (int) $b);
-        $n += FinanceMonthly::missingTasks($ent);      // R-FIN-50 FIN_REPORT_MISSING per shop (before the general stale check, so a shop gets one task)
-        MoneyService::unmatchedTasks($ent); MoneyService::staleTasks($ent); $n += FxMissing::sweep();
-        $a = FinanceAlerts::run($ent); $n += $a['raised'] + $a['resolved'];      // R-FIN-66 the ten finance alerts
+        // Rule 5 "never stuck" (found on live 27-11: one missing CNY rate stopped every hourly step): each step runs on its own; a step that fails is named
+        // in the run log while the others still do their work; a missing exchange rate becomes the FX task (FxMissing) instead of a stop.
+        $n = 0; $err = [];
+        $step = function (string $name, callable $fn) use (&$n, &$err) { try { $n += (int) $fn(); } catch (\Throwable $e) { $err[] = "$name: " . mb_substr($e->getMessage(), 0, 200); } };
+        foreach (DB::table('fin_bank_accounts')->where('company_id', $ent)->where('is_active', 1)->pluck('id') as $b) $step('bank match #' . $b, fn () => MoneyService::autoMatch($ent, (int) $b));
+        $step('missing reports', fn () => FinanceMonthly::missingTasks($ent));      // R-FIN-50 FIN_REPORT_MISSING per shop (before the general stale check, so a shop gets one task)
+        $step('unmatched tasks', fn () => MoneyService::unmatchedTasks($ent) && 0); $step('stale tasks', fn () => MoneyService::staleTasks($ent) && 0); $step('missing rates', fn () => FxMissing::sweep());
+        $step('finance alerts', function () use ($ent) { $a = FinanceAlerts::run($ent); return $a['raised'] + $a['resolved']; });      // R-FIN-66 the ten finance alerts
+        if ($err) throw new \RuntimeException(count($err) . ' step(s) could not finish (the others ran): ' . implode(' · ', $err));
         return $n;
     }
 }

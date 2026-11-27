@@ -101,5 +101,11 @@ class FinanceBatchTest extends TestCase
         $bad = JobLog::run('FB_FAIL', 1, function () { throw new \RuntimeException('boom'); }); $this->assertSame(['FAILED', 'boom'], [$bad['status'], DB::table('sys_job_runs')->where('id', $bad['id'])->value('error_text')]);
         Artisan::call('mo:finance-hourly');
         $this->assertTrue(DB::table('sys_job_runs')->where('job_code', 'FIN_HOURLY')->where('fk_id_ent', 1)->whereIn('run_status', ['OK'])->exists(), 'the hourly finance plan runs and logs');
+        // live 27-11: one step that cannot finish (a missing exchange rate) no longer stops the others – the run names it
+        DB::table('fin_alert_rules')->update(['is_active' => 1]);
+        $b = (int) DB::table('fin_bank_accounts')->insertGetId(['company_id' => 1, 'bank_name' => 'Yuan bank', 'account_label' => 'CNY', 'currency' => 'XQZ', 'is_active' => 1, 'opening_balance' => 100]);
+        try { JobLog::financeHourly(1); $msg = null; } catch (\RuntimeException $e) { $msg = $e->getMessage(); }
+        if ($msg !== null) $this->assertStringContainsString('(the others ran)', $msg);
+        DB::table('fin_bank_accounts')->where('id', $b)->delete();
     }
 }
