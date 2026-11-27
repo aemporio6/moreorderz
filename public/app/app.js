@@ -116,6 +116,7 @@
     if (S.route !== '#/home') go('#/home');
   }
   MO.back = appBack;
+  window.MO_BOOT = () => S.boot;      // the guide's picture maker reads the menu
   document.addEventListener('click', e => { if (e.defaultPrevented || e.button !== 0) return; const a = e.target.closest && e.target.closest('a[href^="#/"]'); if (!a) return; e.preventDefault(); go(a.getAttribute('href')); });
   document.addEventListener('click', e => { if (!document.body.classList.contains('side-open')) return; if (e.target.closest('#side') || e.target.closest('#btnSide')) return; document.body.classList.remove('side-open'); }, true);
 
@@ -267,6 +268,7 @@
     const left = head.firstElementChild; let act = head.querySelector('.actions') || (head.children.length > 1 ? head.lastElementChild : null); if (!act) { act = document.createElement('div'); act.className = 'actions'; head.appendChild(act); } act.classList.add('pf-act');
     if (route && route !== '#/home' && !/^#\/?$/.test(route) && left) left.insertAdjacentHTML('afterbegin', `<a href="#" class="ph-back" title="Back to where you were (Alt + ←)">← Back</a>`);
     const bk = head.querySelector('.ph-back'); if (bk) bk.onclick = e => { e.preventDefault(); appBack(); };
+    if (route && !route.startsWith('#/guide') && act && !act.querySelector('.gd-btn')) act.insertAdjacentHTML('afterbegin', `<a class="btn gd-btn" href="#/guide?s=${encodeURIComponent(route)}" title="How this screen works – step by step, every box (user guide)">? Guide</a>`);      // owner 27-11 08:00
     const hasNew = [...m.querySelectorAll('.page-head button, .page-head a.btn, #lNew')].some(b => /^\s*(\+\s*)?(new|add|create)\b/i.test(b.textContent.trim()) && !b.closest('.ap-wrap'));
     const save = [...m.querySelectorAll('button.primary')].find(b => /^\s*save\b/i.test(b.textContent)), id = currentItem(); let it = null; if (id) for (const sx of S.boot.menu) { const f = sx.items.find(i => i.id === id); if (f) { it = f; break; } }
     if (!hasNew && save && !m.querySelector('#lNew')) act.insertAdjacentHTML('afterbegin', `<button class="btn" type="button" id="pfFresh" title="Empty the form for the next one">+ New entry</button>`);
@@ -297,6 +299,35 @@
       bar.classList.toggle('done', !left.length); bar.querySelectorAll('[data-pn]').forEach(a => a.onclick = e => { e.preventDefault(); const l = req[+a.dataset.pn], el = l.querySelector('input,select,textarea'); l.closest('.pf-hide') && l.closest('.pf-hide').classList.remove('pf-hide'); l.scrollIntoView({ block: 'center', behavior: 'smooth' }); const box = l.querySelector('.ap-box'); setTimeout(() => (box || el).focus(), 300); }); };
     m.addEventListener('input', draw); m.addEventListener('change', draw); draw();
   }
+  /* Owner 27-11 06:43: every tracking number on every screen is a blue link to the carrier's own tracking page – from the record's carrier, else
+     recognised from the number (container prefix, "…GB", "1Z…"), else a page that tracks every carrier; "+ carrier" adds a missing one in place. */
+  const TRK_HEAD = /(track|awb|air ?way ?bill|b\/l|bill of lading|container( no| number)?\s*$)/i, TRK_NOT = /(url|link|status|upload|push|date|time|due|event|cut-?off|layout)/i, TRK_CARRIER = /(carrier|courier|service|forwarder|shipping line|sea line|airline)/i;
+  function trackUrl(no, carrier) {
+    const n = String(no || '').replace(/\s+/g, '').toUpperCase(); if (!/^[A-Z0-9-]{6,40}$/.test(n)) return null; const cat = (S.boot && S.boot.tracking) || [], fill = u => u.replace('{n}', encodeURIComponent(n));
+    const c = String(carrier || '').toLowerCase().trim();
+    const word = a => new RegExp('(^|[^a-z0-9])' + a.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&') + '([^a-z0-9]|$)').test(c);
+    if (c) for (const x of cat) if (x.aliases.some(a => a && word(a))) return { url: fill(x.url), name: x.name, sure: true };
+    for (const x of cat) { if (!x.rule) continue; try { if (new RegExp(x.rule).test(n)) return { url: fill(x.url), name: x.name, sure: true }; } catch (e) { } }
+    const any = cat.find(x => !x.rule) || { url: 'https://t.17track.net/en#nums={n}', name: '17TRACK' }; return { url: fill(any.url), name: any.name, sure: false };
+  }
+  function trackLinkHtml(no, carrier) { const t = trackUrl(no, carrier); if (!t) return null;
+    return `<a class="trk" href="${esc(t.url)}" target="_blank" rel="noopener" style="color:var(--link,#1a5fd0);text-decoration:underline" title="Track on ${esc(t.name)} – opens its own page">${esc(no)} ↗</a>${t.sure ? '' : ` <button type="button" class="btn sm ghost trk-add" data-trk="${esc(no)}" title="Carrier not known – add it so this number opens on its own page" style="padding:0 6px;font-size:11px">+ carrier</button>`}`; }
+  function trackDecorate(root) {
+    if (!root || !S.boot || !S.boot.tracking) return;
+    root.querySelectorAll('table.t').forEach(t => { const hr = t.tHead && t.tHead.rows[0]; if (!hr) return; const H = [...hr.cells].map(c => c.textContent.trim());
+      const ti = H.map((h, i) => TRK_HEAD.test(h) && !TRK_NOT.test(h) ? i : -1).filter(i => i >= 0); if (!ti.length) return; const ci = H.findIndex(h => TRK_CARRIER.test(h));
+      [...(t.tBodies[0] || { rows: [] }).rows].forEach(tr => ti.forEach(i => { const td = tr.cells[i]; if (!td || td.dataset.trk || td.querySelector('a,input,select,button,textarea')) return; const v = td.textContent.trim(); if (!v || v === '–' || v === '-') return;
+        const h = trackLinkHtml(v, ci >= 0 && tr.cells[ci] ? tr.cells[ci].textContent : ''); if (h) { td.innerHTML = h; td.dataset.trk = '1'; } })); });
+    root.querySelectorAll('.grid > div, .card-b > div').forEach(el => { if (el.children.length !== 2 || el.dataset.trk) return; const [l, v] = el.children; if (!TRK_HEAD.test(l.textContent.trim()) || TRK_NOT.test(l.textContent) || v.querySelector('a,input,select,button')) return;
+      const txt = v.textContent.trim(); const car = [...root.querySelectorAll('.grid > div')].find(x => x.children.length === 2 && TRK_CARRIER.test(x.children[0].textContent)); const h = trackLinkHtml(txt, car ? car.children[1].textContent : ''); if (h) { v.innerHTML = h; el.dataset.trk = '1'; } });
+    root.querySelectorAll('.trk-add').forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); const no = b.dataset.trk;
+      miniForm('Add a carrier', `So that ${no} (and its other numbers) open on the carrier's own tracking page. Copy the carrier's tracking link from its website and put {n} where the number goes.`,
+        [{ name: 'name', label: 'Carrier', required: true }, { name: 'mode', label: 'Kind', value: 'COURIER', options: [['COURIER', 'Courier / parcel'], ['SEA', 'Sea (container / B/L)'], ['AIR', 'Air cargo (AWB)'], ['ROAD', 'Road / truck'], ['RAIL', 'Rail']] },
+         { name: 'url', label: 'Tracking link with {n}', required: true, value: 'https://' }, { name: 'starts', label: 'Its numbers start with (optional)', value: no.replace(/\s+/g, '').slice(0, 3).toUpperCase() }],
+        async v => { const r = await api('tracking-carriers', { method: 'POST', body: v }); S.boot.tracking = r.tracking; setTimeout(render, 50); return r; }); });
+  }
+  MO.trackUrl = trackUrl;
+  const trkObs = new MutationObserver(() => { clearTimeout(trkObs.t); trkObs.t = setTimeout(() => { try { trackDecorate(document.getElementById('main')); } catch (e) { } }, 200); });
   let navTimer; function afterRender(route) { try { $$('#main .kpi').forEach(k => { if (!k.dataset.go && !k.onclick && k.tagName !== 'A' && !k.closest('a') && !k.hasAttribute('data-click')) k.style.cursor = 'default'; }); } catch (e) {}      /* owner 27-11: a hand only where a press does something */
     try { ensureHead(route); } catch (e) {} try { pageFrame(route); } catch (e) {} try { takeHandoff(); } catch (e) {} taskHead(route); paintFav(); playbookBar(route); stepPager(route); guideNow(route); clearTimeout(navTimer);
     navTimer = setTimeout(async () => { if (S.route !== route || route === '#/home') return; const h = $('#main h1'); if (!h) return; try { NAV = await api('nav', { method: 'POST', body: { title: h.textContent.trim().slice(0, 150), url: route } }); paintFav(); } catch (e) {} }, 1500); }
@@ -487,7 +518,7 @@
 
   // ---------- pages ----------
   const ALL_ROUTES = /^(#\/?$|#\/(home|sales(\?|$)|sales-annual|sales-detailed|stock(\?|$)|stock\/lots|stock\/product\/|buying(\?|$|\/overview)|money(\?|$)|profit|reports|tasks(\?|$|\/dashboard|\/board)|list\/|rec\/))/;      // R-G_CORE-102 pages that add up every company
-  async function render() { await renderPage(); afterRender(S.route); try { layApply(S.route); } catch (e) {} try { recordMessages(S.route); } catch (e) {} }
+  async function render() { await renderPage(); afterRender(S.route); try { trackDecorate($('#main')); if (!trkObs.on && $('#main')) { trkObs.observe($('#main'), { childList: true, subtree: true }); trkObs.on = 1; } } catch (e) {} try { layApply(S.route); } catch (e) {} try { recordMessages(S.route); } catch (e) {} }
   async function renderPage() {
     if (S.boot && S.boot.partner_only && !/^#\/(my-account|my-invoices|my-portal|my-sales|me)\b/.test(S.route || '')) { location.hash = '#/my-account'; return; }      // R-FIN-2 a partner account sees only its own pages
     if (S.boot && S.boot.landing && !S.landed && (!S.route || S.route === '#/home' || S.route === '#/')) { S.landed = true; location.hash = S.boot.landing; return; }      // each finance role lands on its own page
@@ -691,6 +722,7 @@
       if (r === '#/me') return await pageMe();
       if (r === '#/my-menu') return await pageMyMenu();
       if (r === '#/owner-options') return await pageOwnerOptions();
+      if (r === '#/guide' || r.startsWith('#/guide?')) return await pageGuide(new URLSearchParams(r.split('?')[1] || ''));
       if (r === '#/contacts' || r.startsWith('#/contacts')) { const m9 = r.match(/^#\/contacts\/(\w+)\/(\d+)/), q9 = new URLSearchParams(r.split('?')[1] || ''); return await pageContacts(m9 ? { type: m9[1].toUpperCase(), id: +m9[2] } : null, q9); }
       if ((mt = r.match(/^#\/screen\/([\d.]+)/))) return pageScreen(mt[1]);
       if (r && r !== '#/' && !r.startsWith('#/home')) {      /* R-G_CORE-121: an address the app does not know */
@@ -835,6 +867,33 @@
       <div class="card-b">${d.lines.length ? d.lines.map(chatLine).join('') : '<div class="muted small">Nothing said about this record yet. Press Message – what you send and what comes back is kept here, and any line can be pinned as evidence.</div>'}</div>`;
     $('#main').appendChild(box); $$('[data-ev]', box).forEach(b => b.onclick = () => evidenceAsk(b, { lines: d.lines, ctx: { table: d.table, id: c.id } }, () => { box.remove(); recordMessages(route); }));
   }
+  /* Owner 27-11 08:00 – the user guide, a teacher: the company map, every screen with its steps, every form and box; opened at exactly the "?" pressed */
+  async function pageGuide(qs) {
+    const sR = qs.get('s'), fK = qs.get('form'), fF = qs.get('field'), q0 = qs.get('q') || '';
+    busy(true); let d; try { d = await api('guide?' + new URLSearchParams({ s: sR || '', form: fK || '', field: fF || '', q: q0 })); } finally { busy(false); }
+    const box = (f, hl) => `<div class="card" style="margin-top:12px" id="gf-${esc(f.key)}"><div class="card-h"><h3>📝 ${esc(f.title)}</h3><a class="small" href="${esc(f.list)}">open the list</a></div><div class="card-b">
+        <ol style="padding-left:18px;margin:0 0 8px">${f.steps.map(x => `<li style="margin:3px 0">${esc(x)}</li>`).join('')}</ol>
+        ${Object.entries(f.sections).map(([sec, fs]) => `<div class="small muted" style="margin:10px 0 4px"><b>${esc(sec)}</b></div>${fs.map(x => `<div id="gb-${esc(x.name)}" style="padding:6px 8px;border-bottom:1px solid var(--line);${hl === x.name ? 'background:var(--warn-bg,#fff4d6);outline:2px solid var(--warn,#c88a00);border-radius:6px' : ''}">
+          <b>${esc(x.label)}</b>${x.required ? ' <span class="req">*</span> <span class="small muted">needed</span>' : ''}${x.readonly ? ' <span class="chip plain">filled by the tool</span>' : ''}
+          <div class="small">${esc(x.help || 'Type or choose the ' + x.label.toLowerCase() + '.')}</div>${x.choices ? `<div class="small muted">Choices come from ${esc(x.choices)}.</div>` : ''}${x.default ? `<div class="small muted">Filled in for you: ${esc(x.default)}</div>` : ''}</div>`).join('')}`).join('')}</div></div>`;
+    const flow = d.map ? `<div class="card"><div class="card-h"><h3>🗺 How the company runs</h3><span class="small muted">follow the arrows – each stage opens its screens</span></div><div class="card-b" style="display:flex;flex-wrap:wrap;gap:8px;align-items:stretch">${d.map.map((m, i) => `<div style="flex:1 1 150px;min-width:0;border:1px solid var(--line);border-radius:10px;padding:8px"><b>${i + 1}. ${esc(m.stage)}</b> ${i < d.map.length - 1 ? '<span class="muted">→</span>' : ''}<div class="small">${esc(m.what)}</div><div class="small muted">Who: ${esc(m.who)}</div>
+        ${m.screens.map(x => `<div class="small"><a href="${esc(x.guide)}">${esc(x.name)}</a></div>`).join('')}</div>`).join('')}</div></div>` : '';
+    const sc = d.screen ? (d.screen.found ? `<div class="card" style="margin-top:12px"><div class="card-h"><h3>📍 ${esc(d.screen.name)}</h3><a class="btn sm primary" href="${esc(d.screen.route)}">Open the screen</a></div><div class="card-b">
+        <div class="small muted">${esc(d.screen.path.join(' › '))}${d.screen.stage ? ' · stage ' + esc(d.screen.stage) : ''}</div>${d.screen.about ? `<p style="margin:6px 0"><b>${esc(d.screen.about)}</b></p>` : ''}
+        ${d.screen.picture ? `<img src="${esc(d.screen.picture)}" alt="The screen ${esc(d.screen.name)}" style="width:100%;border:1px solid var(--line);border-radius:8px;margin:6px 0">` : ''}
+        ${(d.screen.marks || []).length ? `<div class="small" style="margin-bottom:6px">${d.screen.marks.map(m => `<div><span style="display:inline-flex;width:18px;height:18px;border-radius:50%;background:#e53935;color:#fff;font-weight:700;font-size:11px;align-items:center;justify-content:center">${m.n}</span> <b>${esc(m.label)}</b>${m.title ? ' – ' + esc(m.title) : ''}</div>`).join('')}</div>` : ''}
+        <h4 style="margin:10px 0 4px">How to do it</h4><ol style="padding-left:18px;margin:0">${d.screen.steps.map(x => `<li style="margin:3px 0">${esc(x)}</li>`).join('')}</ol>
+        ${d.screen.related.length ? `<div class="small" style="margin-top:8px">Next to it: ${d.screen.related.map(x => `<a href="${esc(x.guide)}">${esc(x.name)}</a>`).join(' · ')}</div>` : ''}</div></div>${d.screen.forms.map(f => box(f)).join('')}` : `<div class="card" style="margin-top:12px"><div class="card-b">${esc(d.screen.about)}</div></div>`) : '';
+    const fm = d.form ? box(d.form, fF) : '';
+    const idx = !sR && !fK && !q0 ? `<div class="card" style="margin-top:12px"><div class="card-h"><h3>📚 Every screen</h3></div><div class="card-b" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">${d.index.map(g => `<div><b>${esc(g.name)}</b><div class="small muted">${esc(g.about)}</div>${g.sections.map(s2 => `<div class="small" style="margin-top:6px"><i>${esc(s2.name)}</i>${s2.items.map(i => `<div><a href="${esc(i.guide)}">${esc(i.name)}</a></div>`).join('')}</div>`).join('')}</div>`).join('')}</div></div>` : '';
+    const res = d.results ? `<div class="card" style="margin-top:12px"><div class="card-h"><h3>Found ${d.results.length}</h3></div><div class="card-b">${d.results.map(x => `<div style="padding:5px 0;border-bottom:1px solid var(--line)"><span class="chip plain">${esc(x.kind)}</span> <a href="${esc(x.go)}">${esc(x.title)}</a>${x.text ? `<div class="small muted">${esc(x.text)}</div>` : ''}</div>`).join('') || '<span class="muted">Nothing found – try another word.</span>'}</div></div>` : '';
+    $('#main').innerHTML = `<div class="page-head"><div><h1>User guide</h1><div class="sub">Your teacher in the tool: how the company runs, every screen step by step, every form and every box. The "?" beside anything opens it here, at its place.</div></div><div class="actions"><a class="btn" href="#/guide">Start of the guide</a></div></div>
+      <div class="list-bar"><input class="q" id="gQ" placeholder="Ask the guide – a screen, a box, a word (e.g. landing price, FBA, refund)" value="${esc(q0)}" style="flex:1;min-width:0"><button class="btn primary" id="gGo">Find</button></div>
+      ${res}${sc}${fm}${!sR && !fK ? flow : ''}${idx}`;
+    const find = () => go('#/guide?q=' + encodeURIComponent($('#gQ').value.trim())); $('#gGo').onclick = find; $('#gQ').onkeydown = e => { if (e.key === 'Enter') find(); };
+    if (fF) setTimeout(() => { const el = document.getElementById('gb-' + fF); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 150);
+  }
+
   async function pageMyMenu() {
     let P = JSON.parse(JSON.stringify(MENU_P)); const save = async () => { try { await api('prefs/menu', { method: 'POST', body: { menu: P } }); MENU_P = P; drawSide(); toast('Your menu is saved'); } catch (e) { toast(e.message, 'err'); } };
     const draw = () => { const bk = MENU_P; MENU_P = { groups: P.groups, items: {}, hidden: [], pinned: [] }; const G = menuGroups().filter(g => g.name !== 'My pinned'); MENU_P = bk;
@@ -6971,6 +7030,10 @@
       if (d.length === 4) { el.value = d.slice(0, 2) + '/20' + d.slice(2); el.dispatchEvent(new Event('change', { bubbles: true })); } });
     $('#fBody', ov).addEventListener('input', e => { const el = e.target, name = el.dataset.f; if (!name || !(def.live_typing || []).includes(name)) return; clearTimeout(liveTimers[name]); liveTimers[name] = setTimeout(() => liveCheck(el, name, true), 500); });
     /* owner 26-11 20:31: the field coach – the field you are in says what goes in it (its help), and when you leave it, what is wrong and the right value (one click) */
+    /* owner 27-11 08:00: a "?" beside every box of the form – its help at once, and the user guide opened at exactly this box */
+    const qMarks = () => $$('#fBody .fld', ov).forEach(w => { const el = w.querySelector('[data-f]') || w.querySelector('[data-dd]'), name = el ? (el.dataset.f || el.dataset.dd) : null, lab = w.querySelector('label'); if (!name || !lab || lab.querySelector('.fq')) return;
+      const f = flds.find(x => x.name === name); lab.insertAdjacentHTML('beforeend', ` <a href="#/guide?form=${encodeURIComponent(key)}&field=${encodeURIComponent(name)}" class="fq" target="_blank" rel="noopener" title="${esc((f && f.help) || 'What this box is for – opens the guide here')}" style="text-decoration:none;font-weight:600;border:1px solid var(--line);border-radius:50%;padding:0 5px;font-size:11px">?</a>`); });
+    qMarks(); new MutationObserver(() => qMarks()).observe($('#fBody', ov), { childList: true, subtree: true });
     $('#fBody', ov).addEventListener('focusin', e => { const el = e.target, name = el.dataset.f; $$('.coach', ov).forEach(c => c.remove()); if (!name) return; const f = flds.find(x => x.name === name); const w = el.closest('.fld'); if (!f || !w) return;
       const say = f.help || (f.type === 'money' ? 'An amount – numbers only, no currency sign.' : f.type === 'number' ? 'A number – type it or use − / +.' : f.type === 'date' ? 'Pick the date from the calendar.' : f.required ? 'Needed to save.' : '');
       if (say && !$('.helptext', w)) w.insertAdjacentHTML('beforeend', `<div class="small coach" style="color:var(--accent-ink);margin-top:3px">✎ ${esc(say)}</div>`); });

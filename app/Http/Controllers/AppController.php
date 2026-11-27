@@ -40,6 +40,15 @@ class AppController extends Controller
         return view('app');
     }
 
+    /** Owner 27-11 08:00 the user guide: map, index, one screen, one form / box, search. */
+    public function guide(\Illuminate\Http\Request $r)
+    {
+        $role = (string) (Auth::user()->role_code ?? 'OWNER'); $G = \App\Services\UserGuide::class;
+        $s = (string) $r->query('s', ''); $f = (string) $r->query('form', ''); $q = (string) $r->query('q', '');
+        return ['map' => $G::map($role), 'index' => $s === '' && $f === '' && $q === '' ? $G::index($role) : [], 'screen' => $s !== '' ? $G::screen($role, $s) : null,
+            'form' => $f !== '' ? $G::form($f) : null, 'results' => $q !== '' ? $G::search($role, $q) : null];
+    }
+
     public function boot()
     {
         $u = Auth::user();
@@ -50,7 +59,8 @@ class AppController extends Controller
             'to_place' => (int) DB::table('mo_intake')->where('fk_id_ent', (int) ($u->fk_id_ent ?: 1))->where('status', 'NEW')->when(! in_array($role, ['OWNER', 'MANAGER'], true), fn ($q) => $q->where('user_id', $u->id))->count(),      // owner 27-11: shared / filed things still to put in their place
             'user' => ['id' => $u->id, 'name' => $u->display_name ?: $u->login_id, 'role' => $va ? $va[0] : $role, 'role_name' => $va ? $va[1] : ($u->custom_role ?: $role)],
             'view_as' => $va ? $va[1] : null,
-            'ent' => Context::ent(), 'all_companies' => Context::all(), 'can_all' => \App\Services\AllCompanies::may($u), 'companies' => $companies, 'legal_companies' => DB::table('cat_company_house')->where('f_active', 1)->whereIn('fk_id_ent', [0, (int) Context::ent()])->orderBy('company_name')->limit(300)->get(['id', 'company_name as name']),      // owner 27-11: the companies of the old tool, in the top list too
+            'ent' => Context::ent(), 'all_companies' => Context::all(), 'can_all' => \App\Services\AllCompanies::may($u), 'companies' => $companies, 'tracking' => \App\Services\TrackingLinks::catalogue((int) Context::ent()),      // owner 27-11: every tracking number a link
+            'legal_companies' => DB::table('cat_company_house')->where('f_active', 1)->whereIn('fk_id_ent', [0, (int) Context::ent()])->orderBy('company_name')->limit(300)->get(['id', 'company_name as name']),      // owner 27-11: the companies of the old tool, in the top list too
             'words' => \App\Services\SimpleWords::MAP /* owner 26-11: the one list of easy words */, 'menu' => self::menu($va ? $va[0] : $role), 'menu_groups' => config('menu_help.groups'), 'create' => self::createCatalogue($va ? $va[0] : $role),
             'setup_open' => $role === 'OWNER' && \App\Services\SetupWizard::open((int) Context::ent()),
             'landing' => \App\Services\FinanceRoles::landing($u), 'partner_only' => \App\Services\FinanceRoles::locked($u),      // R-FIN-2 each role's first page; a partner account sees its own pages only

@@ -171,6 +171,11 @@ class AdminController extends Controller
     public function ownerBank(Request $r, int $id) { $this->owner($r);
         try { return ['message' => \App\Services\OwnerOptions::bank((int) Context::ent(), $id, $r->only(['company', 'money', 'apart']))]; } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
 
+    /** Owner 27-11: "+ Add carrier" where a tracking number's carrier is missing – anybody who works with parcels may add one (company-wide). */
+    public function addTrackingCarrier(Request $r) { try { $id = \App\Services\TrackingLinks::add((int) Context::ent(), $r->only(['name', 'mode', 'url', 'starts']), $r->user()->id); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+        return ['id' => $id, 'message' => 'Carrier added – its tracking numbers are links from now on', 'tracking' => \App\Services\TrackingLinks::catalogue((int) Context::ent())]; }
+    public function trackingLink(Request $r) { $l = \App\Services\TrackingLinks::link((int) Context::ent(), (string) $r->query('no', ''), $r->query('carrier')); return $l ? ['url' => $l[0], 'carrier' => $l[1], 'how' => $l[2]] : response()->json(['message' => 'No tracking number.'], 422); }
+
     // ---- settings ----
     public function settings(Request $r)
     {

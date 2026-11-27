@@ -226,6 +226,9 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('contacts/{type}/{id}', [\App\Http\Controllers\ContactsController::class, 'thread'])->whereIn('type', ['supplier', 'forwarder', 'person', 'SUPPLIER', 'FORWARDER', 'PERSON'])->whereNumber('id');
         Route::post('contacts/{type}/{id}', [\App\Http\Controllers\ContactsController::class, 'say'])->whereIn('type', ['supplier', 'forwarder', 'person', 'SUPPLIER', 'FORWARDER', 'PERSON'])->whereNumber('id')->middleware('throttle:120,1');
         Route::post('contacts/{type}/{id}/contact', [\App\Http\Controllers\ContactsController::class, 'addContact'])->whereIn('type', ['supplier', 'forwarder', 'person', 'SUPPLIER', 'FORWARDER', 'PERSON'])->whereNumber('id');
+        Route::post('tracking-carriers', [AdminController::class, 'addTrackingCarrier'])->middleware('throttle:30,1');      // owner 27-11 tracking links
+        Route::get('tracking-link', [AdminController::class, 'trackingLink']);
+        Route::get('guide', [AppController::class, 'guide']);      // owner 27-11 08:00 user guide
         Route::get('owner-options', [AdminController::class, 'ownerOptions']);      // owner 27-11 07:24
         Route::post('owner-options/workspace/{id}', [AdminController::class, 'ownerWorkspace'])->whereNumber('id');
         Route::post('owner-options/bank/{id}', [AdminController::class, 'ownerBank'])->whereNumber('id');
