@@ -67,7 +67,7 @@ Owner: the old tool sent supplier messages straight to WhatsApp. Now, at a high 
 3. Evidence: pin a message / screenshot to a PO, cycle, claim or payment; shown there as proof.
 4. Automatic WhatsApp to VA / investor numbers for low stock, tasks, price changes (on the existing alert rules).
 5b. Forward to the business WhatsApp number → comes into Import anything (when the WhatsApp connection is on).
-6. ✅ 27-11 Personal screens (owner 06:54): ⚙ Arrange on every screen (parts, tiles, columns; fold / hide / order; Reset) and Arrange my menu (groups, screens inside their own section only, pin, hide; Reset) – view only, per person. Still to add: drag with the mouse / finger, tile sizes.
+6. ✅ 27-11 Personal screens (owner 06:54): ⚙ Arrange on every screen (parts, tiles, columns; fold / hide / order; Reset) and Arrange my menu (groups, screens inside their own section only, pin, hide; Reset) – view only, per person. ✅ 27-11 also: drag a part with the mouse / finger (⠿), number tiles Big / Small.
 7. ✅ 27-11 Top company list also shows the 32 companies + Add a company; Refresh reads fresh numbers; WhatsApp set-up in steps (owner 07:09 / 07:24).
 8. ✅ 27-11 (Setup › Workspaces & bank links) Owner 07:24 – options in the owner's hands, no questions: a workspace (e.g. 'test enterprise') can be kept / switched off / deleted by the owner; every bank account of a person / company can be linked by the owner to a company and to a Money bank account, or kept apart.
 5. ✅ 27-11 Tracking links on every screen, 22 carriers + '+ carrier' in place. (was: Tracking: carrier list with tracking-link patterns (sea, road, air, courier), every tracking number a link, "+ Add carrier" in place.
@@ -78,8 +78,8 @@ Visual, with links, for every module, screen, form, field, dropdown, button and 
 2. "?" beside every field, dropdown, button and figure → opens the guide at exactly that part (not the whole guide).
 3. "Show me" tours: step-by-step highlight on the live screen (press this → choose this → save) until the job is right; a mistake says why and how to fix it.
 4. The company map: the whole flow (buy → receive → stock → sell → money → partners), roles and where each thing lives, with links.
-✅ 27-11 part 1 live: User guide page (map, every screen step by step, every form and box, search), '? Guide' on every screen, '?' on every form box → the guide at that box. ✅ part 2: pictures with numbered buttons (168 screens), ▶ Show me tours (screen, Guide me, every form), '?' on every number tile.
-Order: after Contacts & chat deploy and tracking links; nothing left half-done.
+✅ 27-11 part 1 live: User guide page (map, every screen step by step, every form and box, search), '? Guide' on every screen, '?' on every form box → the guide at that box. ✅ part 2: pictures with numbered buttons (168 screens), ▶ Show me tours (screen, Guide me, every form), '?' on every number tile. Pictures are re-made with tools/dev/guide-pictures.js when screens change.
+All four points done (27-11).
 
 ### Remember – owner 27-11 07:56: WhatsApp "way 2" (remind the owner and do it together)
 The owner chose way 1 now (Message button opens each person's own WhatsApp; history in the tool). **Way 2 – the tool's own business WhatsApp number (automatic alerts out, replies in) – is to be done later together with the owner, when he has a new number (not his personal WhatsApp).** Remind him at the start of the next session / when limits reset. Steps: he signs in at https://developers.facebook.com/apps in the shared Chrome → the developer makes the app, adds WhatsApp, webhook (address from https://app.moreorderz.com/#/connections?setup=whatsapp), subscribes "messages" → the owner only enters the SMS code and copy-pastes the permanent token (https://business.facebook.com/settings/system-users) and the app secret into the tool's form → Test → on. One setup for everybody; each person only has his own number on his record.
