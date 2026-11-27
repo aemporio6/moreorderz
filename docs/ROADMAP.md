@@ -53,7 +53,7 @@ Updated: 27 Nov 2026, 05:30 (Pakistan time)
 5. **Guide me: steps for more screens** – ✅ 27-11 (first round): Inventory / FBA check (unlinked FBA SKUs, lines differing from Amazon), Shop quantity check (shows more / less, no quantities yet → load listings), Import anything and Home (files waiting), Each partner / Investor links (director shares not 100 %), Roles and rights (access requests waiting). Every line has its Fix button. More screens follow as they are built.
 6. Register lines still PARTIAL (98) or FORM ONLY (39).
 7. ✅ 27-11 Profit views: every figure clicks down to its records, with the file and row each came from (MR-1285). Found and fixed on live: the finance hourly job failed every hour (an alert key that had to be unique over every rule) – fixed; the ICC had never run on live – run once (18 products: 8 order now, cash needed 6,110 GBP), the nightly job runs it from now on.
-8. Label designer for our own labels: product, carton, FNSKU, pallet (MR-0134).
+8. ✅ 27-11 Label designer (Setup › Label designer): product, carton, FNSKU, pallet, goods-in labels – fields from the record, barcode of any field, size presets, live preview, printed through the print routes; Print label on every product (MR-0134).
 9. ✅ 27-11 ICC: the daily digest has STOCK TO ORDER (order now / this week, qty, order-by, run-out, cash needed, link) (MR-0060); a new product gets its ICC the moment it is saved (MR-1324) – and the ICC of a product without sales no longer fails.
 10. Decision engine: tests for REBALANCE_FBA and CAPITAL_CALL with real-shaped data.
 

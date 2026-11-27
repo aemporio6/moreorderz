@@ -18,8 +18,8 @@ use Picqer\Barcode\BarcodeGeneratorPNG;
  */
 class PrintService
 {
-    public const KINDS = ['PACKING_SLIP' => 'PARCEL', 'PICK_SHEET' => 'PICK_TASK', 'MANIFEST' => 'HANDOVER', 'LOCATION' => 'LOCATION', 'PO' => 'PO', 'CARTON_MARK' => 'CARTON', 'FBA_CARTON' => 'FBA_SHIPMENT', 'FBA_ITEM' => 'FBA_SHIPMENT', 'FBA_PACKLIST' => 'FBA_SHIPMENT', 'GRN' => 'GRN', 'GRN_LABEL' => 'GRN', 'TEST' => 'PRINTER'];
-    public const KIND_NAMES = ['PACKING_SLIP' => 'Packing slip', 'PICK_SHEET' => 'Pick sheet', 'MANIFEST' => 'Handover sheet', 'LOCATION' => 'Bin labels', 'PO' => 'Purchase order', 'CARTON_MARK' => 'Carton marks', 'FBA_CARTON' => 'Inbound carton labels', 'FBA_ITEM' => 'Marketplace item labels', 'FBA_PACKLIST' => 'Inbound picking & packing list', 'GRN' => 'Goods receipt note', 'GRN_LABEL' => 'GRN carton labels', 'TEST' => 'Test page'];
+    public const KINDS = ['PACKING_SLIP' => 'PARCEL', 'PICK_SHEET' => 'PICK_TASK', 'MANIFEST' => 'HANDOVER', 'LOCATION' => 'LOCATION', 'PO' => 'PO', 'CARTON_MARK' => 'CARTON', 'FBA_CARTON' => 'FBA_SHIPMENT', 'FBA_ITEM' => 'FBA_SHIPMENT', 'FBA_PACKLIST' => 'FBA_SHIPMENT', 'GRN' => 'GRN', 'GRN_LABEL' => 'GRN', 'OWN_LABEL' => 'PRODUCT', 'TEST' => 'PRINTER'];
+    public const KIND_NAMES = ['PACKING_SLIP' => 'Packing slip', 'PICK_SHEET' => 'Pick sheet', 'MANIFEST' => 'Handover sheet', 'LOCATION' => 'Bin labels', 'PO' => 'Purchase order', 'CARTON_MARK' => 'Carton marks', 'FBA_CARTON' => 'Inbound carton labels', 'FBA_ITEM' => 'Marketplace item labels', 'FBA_PACKLIST' => 'Inbound picking & packing list', 'GRN' => 'Goods receipt note', 'GRN_LABEL' => 'GRN carton labels', 'OWN_LABEL' => 'Own labels (Label Designer)', 'TEST' => 'Test page'];
     public const REASONS = ['DAMAGED_LABEL' => 'Label damaged', 'PRINTER_JAM' => 'Printer jam', 'WRONG_PRINTER' => 'Wrong printer', 'CARRIER_CHANGED' => 'Carrier changed',
         'ADDRESS_CHANGED' => 'Address changed', 'LOCATION_CHANGED' => 'Location changed', 'VOIDED_REPLACED' => 'Voided and replaced', 'LOST' => 'Lost', 'OTHER' => 'Other'];
     private const SCOPES = ['USER' => 1, 'WORKSTATION' => 2, 'LOCATION' => 3, 'COMPANY' => 4];
@@ -50,6 +50,7 @@ class PrintService
             ['FBA_PACKLIST_A4', 'Inbound picking & packing list A4', 'FBA_PACKLIST', 'A4', 210, 297, null],
             ['GRN_A4', 'Goods receipt note A4 (grn_a4)', 'GRN', 'A4', 210, 297, null],
             ['GRN_LABEL_100X150', 'GRN carton label 100 × 150 (grn_label_100x150)', 'GRN_LABEL', 'FLOW', 96, 136, null],
+            ['OWN_LABEL_FLOW', 'Own label from the Label Designer (product, carton, FNSKU, pallet, goods-in)', 'OWN_LABEL', 'FLOW', 40, 20, null],
         ];
         foreach ($tpl as [$code, $name, $kind, $format, $w, $h, $layout]) {
             if (DB::table('label_templates')->where('code', $code)->exists()) continue;
@@ -66,7 +67,7 @@ class PrintService
             }
         }
         // a kind added later (carton marks) takes the packing-slip route of the setup when it has none
-        foreach (['CARTON_MARK' => 'PACKING_SLIP', 'FBA_CARTON' => 'PACKING_SLIP', 'FBA_ITEM' => 'PACKING_SLIP', 'FBA_PACKLIST' => 'PICK_SHEET', 'GRN' => 'PO', 'GRN_LABEL' => 'PACKING_SLIP'] as $kind => $like) if (! DB::table('print_routes')->where('job_kind', $kind)->exists() && ($r = DB::table('print_routes')->where('job_kind', $like)->where('fk_id_ent', 0)->first())) {
+        foreach (['CARTON_MARK' => 'PACKING_SLIP', 'FBA_CARTON' => 'PACKING_SLIP', 'FBA_ITEM' => 'PACKING_SLIP', 'FBA_PACKLIST' => 'PICK_SHEET', 'GRN' => 'PO', 'GRN_LABEL' => 'PACKING_SLIP', 'OWN_LABEL' => 'PACKING_SLIP'] as $kind => $like) if (! DB::table('print_routes')->where('job_kind', $kind)->exists() && ($r = DB::table('print_routes')->where('job_kind', $like)->where('fk_id_ent', 0)->first())) {
             $row = (array) $r; unset($row['id']); $row['job_kind'] = $kind; DB::table('print_routes')->insert($row); }
     }
 
@@ -145,7 +146,7 @@ class PrintService
         if (! isset(self::KINDS[$kind])) throw new \InvalidArgumentException("Unknown print kind $kind.");
         $ids = array_values(array_unique(array_map('intval', $ids)));
         if (! $ids) throw new \InvalidArgumentException('Nothing was chosen to print.');
-        $copies = max(1, min(20, (int) ($opt['copies'] ?? 0)));
+        $copies = max(1, min($kind === 'OWN_LABEL' ? 500 : 20, (int) ($opt['copies'] ?? 0)));      // own labels: one per carton / unit, up to 500
         $entityType = self::KINDS[$kind]; $user = (int) (Context::userId() ?? 0);
 
         // 1. route → printer (+ backup)
@@ -201,7 +202,7 @@ class PrintService
         }
         try {
             $cal = DB::table('printer_calibrations')->where(['fk_id_printer_profile' => $printer->id, 'fk_id_label_media' => $media->id])->first();
-            $html = self::html($ent, $kind, $ids, $tpl, $w, $h, $copies, $cal, ['printer' => $printer, 'media' => $media, 'start_cell' => (int) ($opt['start_cell'] ?? 1), 'job_code' => $code]);
+            $html = self::html($ent, $kind, $ids, $tpl, $w, $h, $copies, $cal, ['printer' => $printer, 'media' => $media, 'start_cell' => (int) ($opt['start_cell'] ?? 1), 'job_code' => $code, 'design' => $opt['design'] ?? null]);
             $pdf = self::pdf($html, $w, $h, in_array($kind, self::DOC_KINDS, true));      // labels never get the watermark
             $dir = storage_path('app/print'); if (! is_dir($dir)) mkdir($dir, 0775, true);
             file_put_contents("$dir/$code.pdf", $pdf);
@@ -457,9 +458,10 @@ class PrintService
             'FBA_PACKLIST' => array_map(fn ($id) => self::pFbaPackList($ent, $id), $ids),
             'GRN' => array_map(fn ($id) => GrnPrint::page($ent, $id), $ids),
             'GRN_LABEL' => array_merge(...array_map(fn ($id) => GrnPrint::labels($ent, $id), $ids)),
+            'OWN_LABEL' => LabelDesigner::pages($ent, $ids, LabelDesigner::find($ent, (int) ($x['design'] ?? 0)), $copies),      // MR-0134
             'LOCATION' => self::pBins($ent, $ids, $tpl, $w, $h, $copies, $x['start_cell']),
         };
-        if ($kind !== 'LOCATION' && $copies > 1) { $one = $pages; for ($c = 1; $c < $copies; $c++) $pages = array_merge($pages, $one); }
+        if (! in_array($kind, ['LOCATION', 'OWN_LABEL'], true) && $copies > 1) { $one = $pages; for ($c = 1; $c < $copies; $c++) $pages = array_merge($pages, $one); }
         $ox = (float) ($cal->offset_x_mm ?? 0); $oy = (float) ($cal->offset_y_mm ?? 0); $sc = (float) ($cal->scale_pct ?? 100) / 100; $rot = (int) ($cal->rotate_deg ?? 0);
         $tf = []; if (abs($sc - 1) > 0.0001) $tf[] = "scale($sc)"; if ($rot === 180) $tf[] = 'rotate(180deg)';
         $style = "position:absolute; left:{$ox}mm; top:{$oy}mm; width:{$w}mm; height:{$h}mm; overflow:hidden;" . ($tf ? ' transform:' . implode(' ', $tf) . '; transform-origin:' . ($rot === 180 ? 'center' : 'top left') . ';' : '');

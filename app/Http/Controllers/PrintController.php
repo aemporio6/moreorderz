@@ -39,10 +39,35 @@ class PrintController extends Controller
     // ---- print button ----
     public function print(Request $r)
     {
-        $d = $r->validate(['kind' => 'required|string|in:' . implode(',', array_keys(self::KIND_ROLES)), 'ids' => 'required|array|min:1|max:2000', 'ids.*' => 'integer', 'copies' => 'nullable|integer|min:1|max:20',
-            'reason' => 'nullable|string|max:30', 'use_backup' => 'boolean', 'printer' => 'nullable|integer', 'start_cell' => 'nullable|integer|min:1|max:200', 'workstation' => 'nullable|string|max:80']);
+        $d = $r->validate(['kind' => 'required|string|in:' . implode(',', array_keys(self::KIND_ROLES)), 'ids' => 'required|array|min:1|max:2000', 'ids.*' => 'integer', 'copies' => 'nullable|integer|min:1|max:500',
+            'reason' => 'nullable|string|max:30', 'use_backup' => 'boolean', 'printer' => 'nullable|integer', 'start_cell' => 'nullable|integer|min:1|max:200', 'workstation' => 'nullable|string|max:80', 'design' => 'nullable|integer']);
         $this->can($r, 'print.kind_' . $d['kind']);
         return $this->run(fn () => $this->answer(Prints::print((int) Context::ent(), $d['kind'], $d['ids'], array_filter($d, fn ($v) => $v !== null))));
+    }
+
+    // ---- MR-0134 Label Designer ----
+    public function designs(Request $r)
+    {
+        $this->can($r, 'print.kind_OWN_LABEL'); $L = \App\Services\LabelDesigner::class;
+        return ['designs' => $L::list((int) Context::ent()), 'kinds' => $L::KINDS, 'sizes' => $L::SIZES, 'barcodes' => $L::BARCODES, 'fields' => $L::FIELDS,
+            'blank' => $L::blank((string) $r->query('kind', 'PRODUCT')), 'can_edit' => \App\Services\Perm::has($r->user(), 'print.SETUP')];
+    }
+    public function designProducts(Request $r)
+    {
+        $this->can($r, 'print.kind_OWN_LABEL'); $q = trim((string) $r->query('q', ''));
+        return ['rows' => \Illuminate\Support\Facades\DB::table('t_product_vendors')->where('fk_id_ent', Context::ent())->where('f_active', 1)
+            ->when($q !== '', fn ($w) => $w->where(fn ($x) => $x->where('SKU_VENDOR', 'like', '%' . addcslashes($q, '%_\\') . '%')->orWhere('product_name_vendor', 'like', '%' . addcslashes($q, '%_\\') . '%')))
+            ->orderBy('SKU_VENDOR')->limit(20)->get(['id', 'SKU_VENDOR as sku', 'product_name_vendor as name'])];
+    }
+    public function designSave(Request $r) { $this->can($r, 'print.SETUP'); return $this->run(fn () => ['id' => \App\Services\LabelDesigner::save((int) Context::ent(), $r->all(), $r->user()->id), 'message' => 'Label design saved']); }
+    public function designRemove(Request $r, int $id) { $this->can($r, 'print.SETUP'); \App\Services\LabelDesigner::remove((int) Context::ent(), $id); return ['message' => 'Label design removed']; }
+    public function designPreview(Request $r)
+    {
+        $this->can($r, 'print.kind_OWN_LABEL');
+        $d = json_decode((string) $r->input('design', '{}'), true) ?: []; $L = \App\Services\LabelDesigner::class;
+        $d += $L::blank((string) ($d['kind'] ?? 'PRODUCT')); $d['w'] = max(20, min(216, (float) $d['w'])); $d['h'] = max(10, min(300, (float) $d['h']));
+        try { $pdf = $L::preview((int) Context::ent(), $d, $r->integer('product') ?: null); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
+        return response($pdf, 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="label-preview.pdf"']);
     }
 
     // ---- R-G_CORE-114 labels loaded (Work screen) ----

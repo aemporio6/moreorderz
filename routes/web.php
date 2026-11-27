@@ -530,6 +530,11 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('settlements/post-all', [MoneyController::class, 'settlementPostAll']);
         Route::post('settlements/{id}/{step}', [MoneyController::class, 'settlementStep'])->whereNumber('id')->whereIn('step', ['post', 'unpost']);
         Route::post('print', [PrintController::class, 'print']);
+        Route::get('label-designs', [PrintController::class, 'designs']);      // MR-0134
+        Route::get('label-designs/products', [PrintController::class, 'designProducts']);
+        Route::post('label-designs', [PrintController::class, 'designSave']);
+        Route::post('label-designs/{id}/remove', [PrintController::class, 'designRemove'])->whereNumber('id');
+        Route::match(['get', 'post'], 'label-designs/preview', [PrintController::class, 'designPreview']);
         Route::get('print-jobs', [PrintController::class, 'queue']);
         Route::get('print-jobs/{id}/pdf', [PrintController::class, 'pdf'])->whereNumber('id');
         Route::post('print-jobs/{id}/reprint', [PrintController::class, 'reprint'])->whereNumber('id');
