@@ -68,7 +68,7 @@ Owner: the old tool sent supplier messages straight to WhatsApp. Now, at a high 
 5b. Forward to the business WhatsApp number → comes into Import anything (when the WhatsApp connection is on).
 6. ✅ 27-11 Personal screens (owner 06:54): ⚙ Arrange on every screen (parts, tiles, columns; fold / hide / order; Reset) and Arrange my menu (groups, screens inside their own section only, pin, hide; Reset) – view only, per person. Still to add: drag with the mouse / finger, tile sizes.
 7. ✅ 27-11 Top company list also shows the 32 companies + Add a company; Refresh reads fresh numbers; WhatsApp set-up in steps (owner 07:09 / 07:24).
-8. Owner 07:24 – options in the owner's hands, no questions: a workspace (e.g. 'test enterprise') can be kept / switched off / deleted by the owner; every bank account of a person / company can be linked by the owner to a company and to a Money bank account, or kept apart.
+8. ✅ 27-11 (Setup › Workspaces & bank links) Owner 07:24 – options in the owner's hands, no questions: a workspace (e.g. 'test enterprise') can be kept / switched off / deleted by the owner; every bank account of a person / company can be linked by the owner to a company and to a Money bank account, or kept apart.
 5. Tracking: carrier list with tracking-link patterns (sea, road, air, courier), every tracking number a link, "+ Add carrier" in place.
 
 ## Old tool – still open (owner 27-11 01:30: "look inside my old MoreOrderz, put what is left in the checklist, finish it")

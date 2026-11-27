@@ -164,6 +164,13 @@ class AdminController extends Controller
         return ['message' => '2-step sign-in is off'];
     }
 
+    // ---- owner 27-11 07:24: workspaces and bank links – the Owner's own options ----
+    public function ownerOptions(Request $r) { $this->owner($r); return \App\Services\OwnerOptions::page((int) Context::ent()); }
+    public function ownerWorkspace(Request $r, int $id) { $this->owner($r); $d = $r->validate(['action' => 'required|in:on,off,delete']);
+        try { return ['message' => \App\Services\OwnerOptions::workspace((int) Context::ent(), $id, $d['action'])]; } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
+    public function ownerBank(Request $r, int $id) { $this->owner($r);
+        try { return ['message' => \App\Services\OwnerOptions::bank((int) Context::ent(), $id, $r->only(['company', 'money', 'apart']))]; } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
+
     // ---- settings ----
     public function settings(Request $r)
     {

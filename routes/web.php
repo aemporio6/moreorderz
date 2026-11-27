@@ -219,6 +219,9 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('settings', [AdminController::class, 'saveSetting']);
         Route::get('audit', [AdminController::class, 'audit']);
         Route::get('setup', [AdminController::class, 'setup']);
+        Route::get('owner-options', [AdminController::class, 'ownerOptions']);      // owner 27-11 07:24
+        Route::post('owner-options/workspace/{id}', [AdminController::class, 'ownerWorkspace'])->whereNumber('id');
+        Route::post('owner-options/bank/{id}', [AdminController::class, 'ownerBank'])->whereNumber('id');
         Route::post('setup/tick', [AdminController::class, 'setupTick']);
         Route::get('sessions', [AdminController::class, 'sessions']);
         Route::get('accounts-dash', [AdminController::class, 'accounts']);

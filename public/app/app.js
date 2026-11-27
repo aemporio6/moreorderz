@@ -690,6 +690,7 @@
       if (r === '#/ledger') return await pageLedger();
       if (r === '#/me') return await pageMe();
       if (r === '#/my-menu') return await pageMyMenu();
+      if (r === '#/owner-options') return await pageOwnerOptions();
       if ((mt = r.match(/^#\/screen\/([\d.]+)/))) return pageScreen(mt[1]);
       if (r && r !== '#/' && !r.startsWith('#/home')) {      /* R-G_CORE-121: an address the app does not know */
         m.innerHTML = `<div class="card"><div class="empty">${ic('alert')}<div style="font-size:16px">Page not found – search or go Home.</div><div style="display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap"><input class="q" id="nfQ" placeholder="Search" style="max-width:260px"><button class="btn" id="nfGo">Search</button><a class="btn primary" href="#/home">Home</a></div></div></div>`;
@@ -745,6 +746,31 @@
   }
   const HOME_OF = { OWNER: ['Owner Home', 'Every number of the business on one page'], MANAGER: ['Manager Home', 'The team\'s work and what needs a decision'], VA: ['VA / TL Home', 'Today\'s tasks for a VA or team lead'], TL: ['VA / TL Home', 'Today\'s tasks for a VA or team lead'],
     WAREHOUSE: ['Warehouse Home', 'What to receive, pick and pack today'], FINANCE: ['Finance Home', 'Payments due, bank and approvals'], ACCOUNTANT: ['Accountant Home', 'Ledger, month close and filings'], PARTNER: ['Partner Home', 'Your share, sales and statements'] };
+  // owner 27-11 07:24: "the option is ours" – workspaces (keep / off / delete) and where each bank account belongs
+  async function pageOwnerOptions(f = 'OPEN') {
+    busy(true); let d; try { d = await api('owner-options'); } finally { busy(false); }
+    const again = () => pageOwnerOptions(f), post = async (u, body) => { try { const r = await api(u, { method: 'POST', body }); toast(r.message); if (u.includes('workspace')) { S.boot = await api('boot'); drawTop(); } again(); } catch (e) { toast(e.message, 'err'); } };
+    const ST = { OPEN: ['Not decided', 'warn'], COMPANY: ['With a company', 'done'], MONEY: ['Money bank account', 'done'], APART: ['Kept apart', 'lock'] };
+    const rows = d.banks.filter(b => f === 'ALL' || b.state === f);
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Workspaces &amp; bank links</h1><div class="sub">Your own options – nothing here is decided for you, and every choice can be changed again.</div></div></div>
+      <div class="card"><div class="card-h"><h3>Workspaces</h3><span class="small muted">the list at the top of the screen</span></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Workspace</th><th>State</th><th>What is in it</th><th></th></tr></thead><tbody>${d.workspaces.map(w => `<tr><td><b>${esc(w.name)}</b>${w.current ? ' <span class="chip plain">you are here</span>' : ''}</td><td><span class="chip ${w.active ? 'done' : 'lock'}">${w.active ? 'On' : 'Switched off'}</span></td><td class="small">${w.empty ? 'Empty' : esc(w.holds.join(' · '))}</td>
+        <td style="white-space:nowrap">${w.active ? `<button class="btn sm" data-ws="${w.id}|off" ${w.current ? 'disabled title="You are working in it"' : ''}>Switch off</button>` : `<button class="btn sm primary" data-ws="${w.id}|on">Switch on</button>`} <button class="btn sm" data-ws="${w.id}|delete" ${w.empty && !w.current ? '' : 'disabled title="Only an empty workspace can be deleted – switch it off instead; nothing is lost"'}>Delete</button></td></tr>`).join('')}</tbody></table></div></div>
+      <div class="card" style="margin-top:12px"><div class="card-h"><h3>Bank accounts of people and companies</h3><span class="small muted">${d.banks.length} · ${d.open} not decided</span></div>
+        <div class="list-bar">${[['OPEN', 'Not decided'], ['COMPANY', 'With a company'], ['MONEY', 'Money bank accounts'], ['APART', 'Kept apart'], ['ALL', 'All']].map(([k, l]) => `<button class="btn sm ${f === k ? 'primary' : ''}" data-f="${k}">${l} · ${k === 'ALL' ? d.banks.length : d.banks.filter(b => b.state === k).length}</button>`).join(' ')}<input class="q" id="ooQ" placeholder="Find – holder or bank" style="min-width:0"></div>
+        <div class="tbl-wrap"><table class="t"><thead><tr><th>Holder</th><th>Bank</th><th>Number</th><th>Belongs to our company</th><th>Money bank account</th><th>State</th><th></th></tr></thead><tbody id="ooB">${rows.map(b => `<tr data-s="${esc((b.holder + ' ' + b.bank).toLowerCase())}"><td>${esc(b.holder)}${b.active ? '' : ' <span class="chip lock">off</span>'}</td><td>${esc(b.bank)}${b.currency ? ' · ' + esc(b.currency) : ''}</td><td class="small">${esc(b.number)}</td>
+          <td><select class="q" data-co="${b.id}" style="min-width:0;max-width:200px"><option value="">— none —</option>${d.companies.map(c => `<option value="${c.id}" ${c.id === b.company ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></td>
+          <td><select class="q" data-mo="${b.id}" style="min-width:0;max-width:210px"><option value="">— not in Money —</option>${d.money.map(m => `<option value="${m.id}" ${m.id === b.money ? 'selected' : ''}>${esc(m.bank_name + ' · ' + m.account_label)}</option>`).join('')}<option value="new">＋ Make a Money bank account from it</option></select></td>
+          <td><span class="chip ${ST[b.state][1]}">${ST[b.state][0]}</span></td><td><button class="btn sm" data-ap="${b.id}" ${b.apart ? 'disabled' : ''} title="Not a business account: keep it apart from companies and Money">Keep apart</button></td></tr>`).join('') || '<tr><td colspan="7" class="muted">Nothing here.</td></tr>'}</tbody></table></div></div>`;
+    $$('#main [data-ws]').forEach(b => b.onclick = () => { const [id, a] = b.dataset.ws.split('|'); const w = d.workspaces.find(x => x.id == id);
+      if (a === 'on') return post('owner-options/workspace/' + id, { action: a });
+      const m = modal(a === 'delete' ? 'Delete ' + w.name + '?' : 'Switch off ' + w.name + '?', '', a === 'delete' ? '<p>The workspace is empty. It is removed from the list for good.</p>' : `<p>Nothing is deleted. It leaves the list at the top and can be switched on again here.</p>${w.holds.length ? `<p class="small muted">In it: ${esc(w.holds.join(' · '))}</p>` : ''}`, `<button class="btn" id="ooNo">Cancel</button><button class="btn primary" id="ooYes">${a === 'delete' ? 'Delete' : 'Switch off'}</button>`);
+      $('#ooNo', m.ov).onclick = m.close; $('#ooYes', m.ov).onclick = () => { m.close(); post('owner-options/workspace/' + id, { action: a }); }; });
+    $$('#main [data-f]').forEach(b => b.onclick = () => pageOwnerOptions(b.dataset.f));
+    $$('#main [data-co]').forEach(x => x.onchange = () => post('owner-options/bank/' + x.dataset.co, { company: x.value }));
+    $$('#main [data-mo]').forEach(x => x.onchange = () => post('owner-options/bank/' + x.dataset.mo, { money: x.value }));
+    $$('#main [data-ap]').forEach(x => x.onclick = () => post('owner-options/bank/' + x.dataset.ap, { apart: true }));
+    $('#ooQ').oninput = () => { const q = $('#ooQ').value.trim().toLowerCase(); $$('#ooB tr[data-s]').forEach(tr => { tr.style.display = !q || tr.dataset.s.includes(q) ? '' : 'none'; }); };
+  }
   async function pageMyMenu() {
     let P = JSON.parse(JSON.stringify(MENU_P)); const save = async () => { try { await api('prefs/menu', { method: 'POST', body: { menu: P } }); MENU_P = P; drawSide(); toast('Your menu is saved'); } catch (e) { toast(e.message, 'err'); } };
     const draw = () => { const bk = MENU_P; MENU_P = { groups: P.groups, items: {}, hidden: [], pinned: [] }; const G = menuGroups().filter(g => g.name !== 'My pinned'); MENU_P = bk;
