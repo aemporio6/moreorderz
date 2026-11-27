@@ -54,7 +54,7 @@ Updated: 27 Nov 2026, 05:30 (Pakistan time)
 6. Register lines still PARTIAL (98) or FORM ONLY (39).
 7. Reports: "every figure can be clicked down to its record, file and row" (MR-1285).
 8. Label designer for our own labels: product, carton, FNSKU, pallet (MR-0134).
-9. ICC: WhatsApp digest (MR-0060); an ICC step inside Create of a product (MR-1324).
+9. ✅ 27-11 ICC: the daily digest has STOCK TO ORDER (order now / this week, qty, order-by, run-out, cash needed, link) (MR-0060); a new product gets its ICC the moment it is saved (MR-1324) – and the ICC of a product without sales no longer fails.
 10. Decision engine: tests for REBALANCE_FBA and CAPITAL_CALL with real-shaped data.
 
 ## Old tool – still open (owner 27-11 01:30: "look inside my old MoreOrderz, put what is left in the checklist, finish it")

@@ -65,6 +65,17 @@ class ReportsDigestTest extends TestCase
         $this->assertStringContainsString('best Vera (84)', (string) DB::table('tm_messages')->where('user_id', $p->id)->where('event_key', 'like', 'N15:2026-10|%')->where('channel', 'INAPP')->value('text'));
     }
 
+    /** MR-0060 the stock to order (ICC board) is in the Owner's daily digest. */
+    public function test_icc_stock_lines_in_the_exceptions_digest(): void
+    {
+        $sku = 'ICC-' . uniqid();
+        DB::table('t_product_vendors')->insert(RecordService::fillNotNull('t_product_vendors', ['fk_id_ent' => 1, 'SKU_VENDOR' => $sku, 'product_name_vendor' => 'Dog lead', 'f_active' => 1, 'icc_status' => 'RED', 'icc_order_by' => '2026-11-25', 'icc_stock_out' => '2026-12-10', 'icc_order_qty' => 120, 'icc_run_at' => now()]));
+        $lines = TaskDigest::stock($this->owner->id);
+        $this->assertStringStartsWith('STOCK TO ORDER (', $lines[0]);
+        $this->assertTrue(collect($lines)->contains(fn ($l) => str_contains($l, "NOW $sku") && str_contains($l, 'order 120') && str_contains($l, 'by 25 Nov') && str_contains($l, 'runs out 10 Dec')));
+        $this->assertStringContainsString("NOW $sku", (string) TaskDigest::exceptions($this->owner->id, '2026-11-27'));
+    }
+
     public function test_r45_owner_exceptions_digest_default_owner_and_choice(): void
     {
         $o = $this->person('OWNER', 'Omar'); $pt = $this->person('PARTNER', 'Pam');

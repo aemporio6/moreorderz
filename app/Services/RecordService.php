@@ -319,6 +319,8 @@ class RecordService
             if ($table === 't_src_payment_terms' && $id) PaymentTerms::sync((int) $id);
             if ($table === 'tax_periods') AccHubAdmin::periodSaved((int) $id);      // R-ACC-21 / R-TAX-4 a tax period status ticks the matching filing
             if ($table === 't_product_vendors' && $created) ProductFamily::created((int) $id, (int) ($data['fk_id_ent'] ?? $ent ?? 0));      // R-D-1: a 0.00 price row per marketplace
+            if ($table === 't_product_vendors' && $created) { try { Icc::run((int) $id); } catch (\Throwable $e) { \Illuminate\Support\Facades\Log::info("ICC on create: " . $e->getMessage()); }      // MR-1324 a new product gets its ICC at once (missing inputs filled by the rules; it never blocks the save)
+            }
             if ($table === 'fin_partner_users') PartnerOnboarding::refresh((int) DB::table('fin_partner_users')->where($pk, $id)->value('investor_id'), 'Partner login linked');      // R-FIN-3 login_created
             if ($table === 't_account_employment') PersonRules::employmentSaved((int) $id);      // R-C-52 one active employment row
             if ($table === 't_src_suppliers') SupplierParty::ensure((int) $id);      // D2 the supplier's party (made once, the name kept in step)

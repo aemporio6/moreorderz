@@ -91,10 +91,26 @@ class TaskDigest
             'EVENTS FAILED' => DB::table('sys_events')->where('status', 'FAILED')->count(),
         ];
         foreach ($simple as $h => $c) if ($c) { $n += $c; $out[] = "$h ($c)"; }
+        foreach (self::stock($userId) as $l) { if (str_starts_with($l, 'STOCK TO ORDER')) $n += (int) preg_replace('/\D+/', '', strtok(substr($l, 15), ')')); $out[] = $l; }      // MR-0060 ICC in the digest
         $warn = array_merge((array) TaskWeekly::missed(), TaskTemplates::health(), JobLog::late());      // + R-G_CORE-110 late jobs
         if ($warn) { $n += count($warn); $out[] = 'HEALTH (' . count($warn) . ')'; foreach (array_slice($warn, 0, self::MAX_LINES) as $w) $out[] = '- ' . (is_array($w) ? ($w['text'] ?? $w['message'] ?? json_encode($w)) : $w); }
         if (! $n && ! (int) AlertRules::threshold('digest_send_empty')) return null;
         return "Exceptions today, $first – " . date('D d M', strtotime($date)) . ":\n" . ($n ? implode("\n", $out) : 'No exceptions. All clear.') . "\nOpen Home: " . rtrim((string) config('app.url'), '/') . '/#/home';
+    }
+
+    /** MR-0060 the stock lines of the digest (ICC board): ORDER NOW / THIS WEEK with order-by date, quantity, stock-out day and the cash it needs. */
+    public static function stock(int $userId): array
+    {
+        $ent = (int) (DB::table('t_users')->where('id', $userId)->value('fk_id_ent') ?: Context::ent() ?: 1);
+        $rows = DB::table('t_product_vendors')->where('fk_id_ent', $ent)->where('f_active', 1)->whereIn('icc_status', ['RED', 'YELLOW'])->orderByRaw("FIELD(icc_status,'RED','YELLOW')")->orderBy('icc_order_by')
+            ->get(['id', 'SKU_VENDOR as sku', 'product_name_vendor as name', 'icc_status as st', 'icc_order_by as by', 'icc_stock_out as out', 'icc_order_qty as qty']);
+        if (! $rows->count()) return [];
+        $red = $rows->where('st', 'RED')->count(); $cash = Icc::board($ent)['cash_needed'] ?? 0;
+        $out = ['STOCK TO ORDER (' . $rows->count() . ') – order now ' . $red . ', this week ' . ($rows->count() - $red) . ($cash ? ', cash needed ' . number_format((float) $cash, 0) . ' ' . Fx::base($ent) : '')];
+        foreach ($rows->take(self::MAX_LINES) as $r) $out[] = '- ' . ($r->st === 'RED' ? 'NOW ' : 'WEEK ') . $r->sku . ' ' . mb_substr((string) $r->name, 0, 40) . ($r->qty ? ' · order ' . (int) $r->qty : '') . ($r->by ? ' by ' . date('d M', strtotime((string) $r->by)) : '') . ($r->out ? ' · runs out ' . date('d M', strtotime((string) $r->out)) : '');
+        if ($rows->count() > self::MAX_LINES) $out[] = '- ... and ' . ($rows->count() - self::MAX_LINES) . ' more';
+        $out[] = 'Open the order board: ' . rtrim((string) config('app.url'), '/') . '/#/icc';
+        return $out;
     }
 
     private static function getsExceptions(object $u): bool { return Choices::has('EXCEPTIONS_DIGEST_ROLES', (int) ($u->fk_id_ent ?? 0) ?: ((int) Context::ent() ?: 1), (string) $u->role_code); }

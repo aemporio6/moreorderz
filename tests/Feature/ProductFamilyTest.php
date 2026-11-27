@@ -21,6 +21,7 @@ class ProductFamilyTest extends TestCase
         // Add with f_family = Alone and no condition → condition 1, alert 1, OOS 0, purchase date empty, today, 0.00 price rows
         $a = $this->postJson('/api/record/t_product_vendor', ['values' => ['sku_vendor' => 'PF-ALONE', 'product_name_vendor' => 'Single', 'min_level' => 0, 'f_family' => 0, 'f_group_name' => 'X']])->assertOk()->json('id');
         $r = DB::table('t_product_vendors')->find($a);
+        $this->assertNotNull($r->icc_run_at, 'MR-1324 a new product gets its ICC at once');
         $this->assertSame([1, 0, null, 1, 1, 0, null], [(int) $r->f_parent, (int) $r->fk_id_product_vendor_self, $r->f_group_name, (int) $r->fk_id_product_condition, (int) $r->f_alert_min_level, (int) $r->f_out_of_stock, $r->d_purchase_date]);
         $this->assertSame(date('Y-m-d'), substr((string) $r->d_created, 0, 10));
         $this->assertSame(0.0, (float) DB::table('t_product_marketplace_prices')->where('fk_id_product', $a)->where('fk_id_marketplace', $mp)->value('sale_price'));
