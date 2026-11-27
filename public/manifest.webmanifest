@@ -9,12 +9,63 @@
   "background_color": "#ffffff",
   "theme_color": "#125e52",
   "icons": [
-    { "src": "/app/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/app/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    {
+      "src": "/app/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/app/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
   ],
   "shortcuts": [
-    { "name": "Work (pick, pack, scan)", "url": "/#/work" },
-    { "name": "Tasks", "url": "/#/tasks" },
-    { "name": "Orders", "url": "/#/orders" }
-  ]
+    {
+      "name": "Work (pick, pack, scan)",
+      "url": "/#/work"
+    },
+    {
+      "name": "Tasks",
+      "url": "/#/tasks"
+    },
+    {
+      "name": "Orders",
+      "url": "/#/orders"
+    },
+    {
+      "name": "Import / share in",
+      "url": "/#/import"
+    }
+  ],
+  "share_target": {
+    "action": "/share-in",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "files",
+          "accept": [
+            "image/*",
+            "video/*",
+            "application/pdf",
+            "text/*",
+            ".csv",
+            ".xlsx",
+            ".xls",
+            ".docx",
+            ".doc",
+            ".zip",
+            "*/*"
+          ]
+        }
+      ]
+    }
+  }
 }

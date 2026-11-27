@@ -54,7 +54,12 @@ class JobLog
     /** Run $fn (returns a count or null) under the job's lock; returns the run row. */
     public static function run(string $code, ?int $ent, callable $fn): array
     {
-        $busy = DB::table('sys_job_runs')->where('job_code', $code)->where('run_status', 'RUNNING')->where('started_at', '>', now()->subMinutes(self::STALE_MIN))->when($ent, fn ($q) => $q->where('fk_id_ent', $ent))->exists();
+        // found on live 27-11: a 15-minute job that was stopped from outside (no error, no end) kept its lock for 2 hours. A run is taken as stopped after
+        // 2 × its interval (at least 10, at most STALE_MIN minutes); the stopped line is marked FAILED, so Health names it and the job runs again.
+        $stale = min(self::STALE_MIN, max(10, 2 * (int) (self::PLAN[$code][1] ?? self::STALE_MIN)));
+        DB::table('sys_job_runs')->where('job_code', $code)->where('run_status', 'RUNNING')->where('started_at', '<=', now()->subMinutes($stale))->when($ent, fn ($q) => $q->where('fk_id_ent', $ent))
+            ->update(['run_status' => 'FAILED', 'finished_at' => now(), 'error_text' => "Stopped without finishing (no end after $stale minutes – the server ended the process); the next run went ahead."]);
+        $busy = DB::table('sys_job_runs')->where('job_code', $code)->where('run_status', 'RUNNING')->where('started_at', '>', now()->subMinutes($stale))->when($ent, fn ($q) => $q->where('fk_id_ent', $ent))->exists();
         if ($busy) { $id = DB::table('sys_job_runs')->insertGetId(['job_code' => $code, 'fk_id_ent' => $ent, 'started_at' => now(), 'finished_at' => now(), 'run_status' => 'LOCKED', 'items_done' => 0]); return ['id' => $id, 'status' => 'LOCKED']; }
         $id = DB::table('sys_job_runs')->insertGetId(['job_code' => $code, 'fk_id_ent' => $ent, 'started_at' => now(), 'run_status' => 'RUNNING']);
         try {

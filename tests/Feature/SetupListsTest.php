@@ -75,6 +75,16 @@ class SetupListsTest extends TestCase
     }
 
     /** MR-0089: a short link of a record – not signed in → the sign-in, then the record; signed in → the record at once. */
+    /** Owner 27-11: Share to MoreOrderz from WhatsApp / gallery / e-mail – the app is a share target; without the phone app nothing is kept. */
+    public function test_share_target_in_the_manifest_and_a_safe_fallback(): void
+    {
+        $m = json_decode((string) file_get_contents(public_path('manifest.webmanifest')), true);
+        $this->assertSame(['/share-in', 'POST', 'multipart/form-data'], [$m['share_target']['action'], $m['share_target']['method'], $m['share_target']['enctype']]);
+        $this->assertStringContainsString("'/share-in'", (string) file_get_contents(public_path('sw.js')));
+        $this->post('/share-in', ['text' => 'hello'])->assertRedirect('/#/import?share=missed');
+        $this->assertSame(0, \Illuminate\Support\Facades\DB::table('mo_intake')->where('source', 'SHARE')->count());
+    }
+
     public function test_short_link_opens_the_record_after_sign_in(): void
     {
         $this->actingAs($this->owner); Context::set(1, $this->owner->id);

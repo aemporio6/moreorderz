@@ -53,6 +53,11 @@ class TaskDigest
             foreach (collect($rows)->take(self::MAX_LINES) as $t) $out[] = self::line($t);
             if (count($rows) > self::MAX_LINES) $out[] = '- ... and ' . (count($rows) - self::MAX_LINES) . ' more';
         }
+        // owner 27-11: what he shared / filed and has not put in its place yet – nothing is forgotten
+        $place = DB::table('mo_intake')->where('user_id', $userId)->where('status', 'NEW')->orderBy('id')->get(['name', 'source', 'created_at']);
+        if ($place->count()) { $n += $place->count(); $out[] = 'TO PUT IN PLACE (' . $place->count() . ')';
+            foreach ($place->take(self::MAX_LINES) as $p) $out[] = '- ' . mb_substr((string) $p->name, 0, 60) . ($p->source === 'SHARE' ? ' (shared ' : ' (') . date('d M', strtotime((string) $p->created_at)) . ')';
+            if ($place->count() > self::MAX_LINES) $out[] = '- ... and ' . ($place->count() - self::MAX_LINES) . ' more'; }
         if (! $n && ! $evenEmpty && ! (int) AlertRules::threshold('digest_send_empty')) return null;
         return "Good morning $first – your tasks for " . date('D d M', strtotime($date)) . ":\n" . ($n ? implode("\n", $out) : 'Nothing due. Well done.') . "\nOpen My Tasks: " . self::link();
     }

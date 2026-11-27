@@ -47,6 +47,7 @@ class AppController extends Controller
         $companies = DB::table('t_enterprise')->where('f_active', 1)->orderBy('id')->get(\Illuminate\Support\Facades\Schema::hasColumn('t_enterprise', 'f_sandbox') ? ['id', 'ent_name as name', 'ent_short as short', 'f_sandbox as practice'] : ['id', 'ent_name as name', 'ent_short as short']);
         if ($role !== 'OWNER') $companies = $companies->where('id', $u->fk_id_ent)->values();
         return [
+            'to_place' => (int) DB::table('mo_intake')->where('fk_id_ent', (int) ($u->fk_id_ent ?: 1))->where('status', 'NEW')->when(! in_array($role, ['OWNER', 'MANAGER'], true), fn ($q) => $q->where('user_id', $u->id))->count(),      // owner 27-11: shared / filed things still to put in their place
             'user' => ['id' => $u->id, 'name' => $u->display_name ?: $u->login_id, 'role' => $va ? $va[0] : $role, 'role_name' => $va ? $va[1] : ($u->custom_role ?: $role)],
             'view_as' => $va ? $va[1] : null,
             'ent' => Context::ent(), 'all_companies' => Context::all(), 'can_all' => \App\Services\AllCompanies::may($u), 'companies' => $companies, 'words' => \App\Services\SimpleWords::MAP /* owner 26-11: the one list of easy words */, 'menu' => self::menu($va ? $va[0] : $role), 'menu_groups' => config('menu_help.groups'), 'create' => self::createCatalogue($va ? $va[0] : $role),

@@ -27,6 +27,8 @@ Route::get('/reset/{token}', [AuthController::class, 'resetForm'])->where('token
 Route::post('/reset/{token}', [AuthController::class, 'reset'])->where('token', '[0-9a-f]{48}')->middleware('throttle:10,10');
 // print helper on the packing PC: no sign-in, its own token (connection PRINT_AGENT)
 Route::get('/print-agent/next', [\App\Http\Controllers\PrintController::class, 'agentNext'])->middleware('throttle:240,1');
+// Share to MoreOrderz (owner 27-11): the phone app's service worker takes the shared files; this answers only when it is not installed yet – nothing is kept without sign-in
+Route::post('/share-in', fn () => redirect('/#/import?share=missed'))->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class])->middleware('throttle:30,1');
 Route::post('/print-agent/{id}/done', [\App\Http\Controllers\PrintController::class, 'agentDone'])->whereNumber('id')->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class])->middleware('throttle:240,1');
 // WhatsApp webhook: no sign-in, no CSRF; only bodies signed with the app secret of a WhatsApp connection are read
 // R-B_SOURCING-64 supplier link without login: one record, one purpose; unknown / expired / revoked links answer 410

@@ -27,7 +27,7 @@ class IntakeController extends Controller
             try { $out[] = Intake::take($ent, $u, (string) file_get_contents($f->getRealPath()), (string) $f->getClientOriginalName(), (string) ($r->input("sources.$i") ?: 'UPLOAD'), null, $r->input("texts.$i"), $r->input("readers.$i"), $ctx); }
             catch (\InvalidArgumentException $e) { $err[] = $e->getMessage(); }
         }
-        if (trim((string) $r->input('text', '')) !== '') { $t = (string) $r->input('text'); try { $out[] = Intake::take($ent, $u, $t, 'pasted ' . date('Y-m-d H.i') . (preg_match('/\t/', $t) ? '.tsv' : '.txt'), 'PASTE', null, $t, 'pasted', $ctx); } catch (\InvalidArgumentException $e) { $err[] = $e->getMessage(); } }
+        if (trim((string) $r->input('text', '')) !== '') { $t = (string) $r->input('text'); try { $out[] = Intake::take($ent, $u, $t, 'pasted ' . date('Y-m-d H.i') . (preg_match('/\t/', $t) ? '.tsv' : '.txt'), $r->input('source') === 'SHARE' ? 'SHARE' : 'PASTE', null, $t, 'pasted', $ctx); } catch (\InvalidArgumentException $e) { $err[] = $e->getMessage(); } }
         if (trim((string) $r->input('link', '')) !== '') { try { foreach (Intake::fromLink($ent, $u, (string) $r->input('link')) as $x) { if (isset($x['error'])) $err[] = $x['error']; else $out[] = $x; } } catch (\InvalidArgumentException $e) { $err[] = $e->getMessage(); } }
         if (! $out && $err) return response()->json(['message' => implode(' ', $err)], 422);
         return ['items' => $out, 'errors' => $err];

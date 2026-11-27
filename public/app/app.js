@@ -106,9 +106,16 @@
   MO.toast = toast;
 
   // ---------- router: every in-app link goes through here (no dependence on browser hash events) ----------
-  function go(h, push = true) { if (push && S.route !== h) { S.hist.push(S.route); S.fwd = []; } S.route = h; try { history.replaceState(null, '', h); } catch (e) {}
+  function go(h, push = true) { if (push && S.route !== h) { S.hist.push(S.route); S.fwd = []; } S.route = h; try { history.replaceState({ mo: 'top' }, '', h); } catch (e) {}
     document.body.classList.remove('side-open'); render(); }
   MO.go = go;
+  /** Owner 27-11 06:54: Back goes to the previous page / menu / form of the app – never out of the app (the browser's back left the tab). Nothing before → the screen above it (its menu crumb), else Home. */
+  function appBack() {
+    if (S.hist.length) { S.fwd.push(S.route); return go(S.hist.pop(), false); }
+    const up = document.querySelector('#main .page-head a[href^="#/"]:not(.ph-back):not(.btn)'); if (up && up.getAttribute('href') !== S.route) return go(up.getAttribute('href'));
+    if (S.route !== '#/home') go('#/home');
+  }
+  MO.back = appBack;
   document.addEventListener('click', e => { if (e.defaultPrevented || e.button !== 0) return; const a = e.target.closest && e.target.closest('a[href^="#/"]'); if (!a) return; e.preventDefault(); go(a.getAttribute('href')); });
   document.addEventListener('click', e => { if (!document.body.classList.contains('side-open')) return; if (e.target.closest('#side') || e.target.closest('#btnSide')) return; document.body.classList.remove('side-open'); }, true);
 
@@ -258,8 +265,8 @@
   function pageFrame(route) {
     const m = $('#main'), head = m && m.querySelector('.page-head'); if (!head || head.dataset.pf) return; head.dataset.pf = '1';
     const left = head.firstElementChild; let act = head.querySelector('.actions') || (head.children.length > 1 ? head.lastElementChild : null); if (!act) { act = document.createElement('div'); act.className = 'actions'; head.appendChild(act); } act.classList.add('pf-act');
-    if (route && route !== '#/home' && !/^#\/?$/.test(route) && history.length > 1 && left) left.insertAdjacentHTML('afterbegin', `<a href="#" class="ph-back" title="Back to where you were (Alt + ←)">← Back</a>`);
-    const bk = head.querySelector('.ph-back'); if (bk) bk.onclick = e => { e.preventDefault(); history.back(); };
+    if (route && route !== '#/home' && !/^#\/?$/.test(route) && left) left.insertAdjacentHTML('afterbegin', `<a href="#" class="ph-back" title="Back to where you were (Alt + ←)">← Back</a>`);
+    const bk = head.querySelector('.ph-back'); if (bk) bk.onclick = e => { e.preventDefault(); appBack(); };
     const hasNew = [...m.querySelectorAll('.page-head button, .page-head a.btn, #lNew')].some(b => /^\s*(\+\s*)?(new|add|create)\b/i.test(b.textContent.trim()) && !b.closest('.ap-wrap'));
     const save = [...m.querySelectorAll('button.primary')].find(b => /^\s*save\b/i.test(b.textContent)), id = currentItem(); let it = null; if (id) for (const sx of S.boot.menu) { const f = sx.items.find(i => i.id === id); if (f) { it = f; break; } }
     if (!hasNew && save && !m.querySelector('#lNew')) act.insertAdjacentHTML('afterbegin', `<button class="btn" type="button" id="pfFresh" title="Empty the form for the next one">+ New entry</button>`);
@@ -361,6 +368,7 @@
       ${b.whats_new ? `<a class="tb-btn" id="btnNews" href="#/whats-new" title="See what changed in release ${esc(b.whats_new)}" style="font-size:12px;padding:0 8px">New</a>` : ''}
       <button class="tb-btn icon hide-m" id="btnNewTab" title="Open this page in a new tab (Ctrl + click on any menu item does the same)">⧉</button>
       <button class="tb-btn icon hide-m" id="btnFull" title="Full screen">⛶</button>
+      <a class="tb-btn" id="btnPlace" href="#/import" title="Shared and filed things waiting to be put in their place" style="display:${b.to_place ? 'inline-flex' : 'none'};background:var(--err,#c0392b);color:#fff;border-color:transparent"><b id="placeN">${b.to_place || 0}</b><span class="hide-m">&nbsp;to place</span></a>
       <button class="tb-btn icon bell" id="btnBell" title="My tasks">${ic('bell')}<span class="dot" id="bellDot" style="display:${b.tasks_open ? 'flex' : 'none'}">${b.tasks_open}</span></button>
       <div class="user" id="btnUser" title="My account: password, 2-step sign-in, sign out"><div class="avatar">${esc(ini)}</div><div class="hide-m"><div style="font-weight:600;font-size:13px">${esc(b.user.name)}</div><div class="small muted">${esc(b.user.role)}</div></div></div>`;
     $('#btnBack svg') && ($('#btnBack svg').style.transform = 'rotate(180deg)');
@@ -375,7 +383,7 @@
     $('#btnCreate').onclick = () => openCreate();
     $('#btnRefresh').onclick = () => render();
     if ($('#btnNewTab')) $('#btnNewTab').onclick = () => { try { window.open(location.href, '_blank', 'noopener'); } catch (e) {} };      // MR-1274 Seller-Central style: Home, Refresh, open in a new tab
-    $('#btnBack').onclick = () => { if (S.hist.length) { S.fwd.push(S.route); go(S.hist.pop(), false); } };
+    $('#btnBack').onclick = () => appBack();
     $('#btnFwd').onclick = () => { if (S.fwd.length) { S.hist.push(S.route); go(S.fwd.pop(), false); } };
     $('#btnHelp').onclick = () => { HELP = !HELP; drawTop(); render(); toast(HELP ? 'Help is on: every screen shows its guidance. Press ? for the shortcuts.' : 'Help is off'); };
     $('#btnRecent').onclick = () => openNav();
@@ -576,7 +584,7 @@
       if (r === '#/wh-csv') return pageWhCsv();
       if (r === '#/product-imports') return await pageProductImports();
       if (r === '#/person-sections') return await pagePersonSections();
-      if (r === '#/import') return pageImportHub();
+      if (r === '#/import' || r.startsWith('#/import?')) { pageImportHub(); if (r.includes('share=')) shareIn(); return; }
       if (r === '#/import-history') return await pageImportHistory();
       if (r.startsWith('#/legacy-compare')) return await pageLegacyCompare();
       if (r.startsWith('#/tracking-upload')) return await pageTrackingUpload();
@@ -5272,7 +5280,9 @@
     rows.forEach(r => r.remove()); IX.busy--; IX.status = 'NEW'; ixDraw();
   }
   async function ixSendText(body) { try { busy(true); if (IX.ctx) body = { ...body, ctx_entity: IX.ctx.entity, ctx_id: IX.ctx.id }; const r = await api('intake', { method: 'POST', body }); (r.errors || []).forEach(e => toast(e, 'warn')); IX.status = 'NEW'; ixDraw(); } catch (e) { toast(e.message, 'err'); } finally { busy(false); } }
+  async function placeBadge() { try { const d = await api('intake?status=NEW'); const n = (d.counts && d.counts.NEW) ?? (d.rows || d.items || []).length; S.boot.to_place = n; const b = $('#btnPlace'); if (b) { b.style.display = n ? 'inline-flex' : 'none'; $('#placeN').textContent = n; } } catch (e) { } }
   async function ixDraw() {
+    placeBadge();
     const host = $('#ixList'); if (!host) return; let d; try { d = await api('intake?status=' + IX.status + (IX.ctx ? `&ctx_entity=${encodeURIComponent(IX.ctx.entity)}&ctx_id=${IX.ctx.id}` : '')); } catch (e) { host.innerHTML = `<div class="muted">${esc(e.message)}</div>`; return; }
     const c = d.counts || {}; $('#ixTabs').innerHTML = [['NEW', 'To place'], ['DONE', 'Placed'], ['SKIPPED', 'Set aside'], ['ALL', 'All']].map(([k, l]) => `<button type="button" class="${IX.status === k ? 'on' : ''}" data-ixs="${k}">${l}${k !== 'ALL' && c[k] ? ' · ' + c[k] : ''}</button>`).join('');
     $$('[data-ixs]').forEach(b => b.onclick = () => { IX.status = b.dataset.ixs; ixDraw(); });
@@ -5328,6 +5338,20 @@
   function takeHandoff() { if (!S.handoff) return; const inp = $('#main input[type=file]'); if (!inp) return; const f = S.handoff; S.handoff = null;
     try { const dt = new DataTransfer(); dt.items.add(f); inp.files = dt.files; inp.dispatchEvent(new Event('change', { bubbles: true })); toast(`“${f.name}” is brought here from Import anything – check and load it`); } catch (e) { toast('Choose the file again here: ' + f.name, 'warn'); } }
 
+  /** Owner 27-11: what was shared to MoreOrderz from the phone / laptop (WhatsApp, gallery, e-mail…) comes in here and is offered to its place. */
+  async function shareIn() {
+    if (!('caches' in window)) return; let c; try { c = await caches.open('mo-share'); } catch (e) { return; }
+    const metas = (await c.keys()).filter(k => new URL(k.url).pathname.startsWith('/share-meta/'));
+    if (!metas.length) { if (location.hash.includes('share=missed')) toast('Sharing works once MoreOrderz is opened on this device – open it once, then share again.', 'warn'); return; }
+    for (const m of metas) { let meta = {}; try { meta = await (await c.match(m)).json(); } catch (e) { }
+      const files = []; for (const k of meta.files || []) { const r = await c.match(k); if (!r) continue; const b = await r.blob(); files.push(new File([b], decodeURIComponent(r.headers.get('x-name') || 'shared'), { type: b.type })); await c.delete(k); }
+      await c.delete(m); for (let i = 0; i < 40 && !$('#ixLive'); i++) await new Promise(x => setTimeout(x, 100));
+      const text = [meta.title, meta.text].filter(Boolean).join('\n').trim(), link = (meta.url || (text.match(/https:\/\/\S+/) || [])[0] || '').trim();
+      if (files.length) await ixSend(files, { source: 'SHARE' });
+      if (text) await ixSendText({ text: 'Shared ' + new Date().toLocaleString('en-GB') + ':\n' + text, source: 'SHARE' });
+      else if (link) await ixSendText({ link });
+      toast(`${files.length + (text || link ? 1 : 0)} shared item(s) came in – choose where each one goes.`); }
+  }
   function pageImportHub() {
     const tiles = [['#/orders', 'Orders', 'eBay orders report, Temu order list, any order table – Orders › Load order file.'], ['#/settlements', 'Marketplace money files', 'TikTok workbook, Amazon settlement (date range and flat file V2), eBay transaction report, OnBuy / Temu tables.'],
       ['#/bank', 'Bank statements', 'CSV or Excel from the bank, in the layout of that bank.'], ['#/labels', 'Carrier label PDFs', 'Labels downloaded from the carrier, linked to their orders.'], ['#/supplier-orders', 'Supplier order history', 'Amazon Business order report of a buying supplier (file named by shop no., e.g. 1.csv) – kept with its VAT evidence.'], ['#/product-imports', 'Products: families, parent + child file, bulk upload', 'Report type PRODUCT_FAMILY (parent SKU, child SKU), the parent + child staged import and report type Products with the built-in mapping "Old bulk products" (34 columns): check or preview first, then save; undo.'], ['#/wh-csv', 'Warehouse locations and SKU homes (CSV)', 'Report types WH_LOCATIONS and WH_SKU_HOMES: export, change in Excel, check first (changes nothing), then load; look-alike codes are held back; undo by batch.'], ['#/tasks?scope=all&import=1', 'Tasks (CSV)', 'New tasks from a CSV file: check first (changes nothing), then all or nothing; undo by batch. Partner / Manager.'], ['#/import-history', 'Everything loaded so far', 'Every file, when, by whom, new / already there / problems; and the old-tool import, table by table.']];
@@ -6840,6 +6864,13 @@
     try { const h = location.hash; if (h && h.startsWith('#/')) S.route = h; } catch (e) {}
     drawTop(); render();
     try { const fq = new URLSearchParams(location.search).get('find'); if (fq && $('#q')) { history.replaceState(null, '', '/' + location.hash); $('#q').value = fq; $('#q').focus(); $('#q').dispatchEvent(new Event('input', { bubbles: true })); } } catch (e) {}      /* the search of the 404 page (R-G_CORE-121) */
-    window.addEventListener('popstate', () => { let h = ''; try { h = location.hash; } catch (e) {} if (h && h !== S.route) go(h, false); });
+    // the phone's / browser's own back: one guard entry on top, so pressing it goes back inside the app (appBack) instead of leaving the tab;
+    // a link that changed the address itself (location.hash) is taken as a normal step forward in the app.
+    try { history.replaceState({ mo: 'base' }, '', S.route); history.pushState({ mo: 'top' }, '', S.route); } catch (e) {}
+    window.addEventListener('popstate', ev => { let h = ''; try { h = location.hash; } catch (e) {}
+      if (ev.state && ev.state.mo === 'base') { if (S.hist.length || S.route !== '#/home') { appBack(); try { history.replaceState({ mo: 'base' }, '', S.route); history.pushState({ mo: 'top' }, '', S.route); } catch (e) {} } return; }
+      if (ev.state && ev.state.mo === 'top' && h === S.route) { appBack(); return; }      // an extra entry left by a link: still one step back in the app
+      if (h && h !== S.route) { if (ev.state && ev.state.mo === 'top' && S.hist[S.hist.length - 1] === h) { S.fwd.push(S.route); S.hist.pop(); return go(h, false); } go(h, !(ev.state && ev.state.mo === 'top')); } });
+    window.addEventListener('hashchange', () => { let h = ''; try { h = location.hash; } catch (e) {} if (h && h.startsWith('#/') && h !== S.route) go(h); });
   })();
 })();

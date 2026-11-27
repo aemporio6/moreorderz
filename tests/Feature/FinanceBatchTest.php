@@ -99,6 +99,10 @@ class FinanceBatchTest extends TestCase
         $second = JobLog::run('FB_TEST', 1, fn () => 1); $this->assertSame('LOCKED', $second['status'], 'a second run while the first runs exits locked');
         $this->assertSame('LOCKED', DB::table('sys_job_runs')->where('id', $second['id'])->value('run_status'), 'and is logged');
         $bad = JobLog::run('FB_FAIL', 1, function () { throw new \RuntimeException('boom'); }); $this->assertSame(['FAILED', 'boom'], [$bad['status'], DB::table('sys_job_runs')->where('id', $bad['id'])->value('error_text')]);
+        // a 15-minute job stopped from outside 40 minutes ago does not block the next run; its line is marked FAILED
+        $dead = DB::table('sys_job_runs')->insertGetId(['job_code' => 'SRC_ALERTS', 'fk_id_ent' => 1, 'started_at' => now()->subMinutes(40), 'run_status' => 'RUNNING']);
+        $this->assertSame('OK', JobLog::run('SRC_ALERTS', 1, fn () => 0)['status']);
+        $this->assertSame('FAILED', DB::table('sys_job_runs')->where('id', $dead)->value('run_status'));
         Artisan::call('mo:finance-hourly');
         $this->assertTrue(DB::table('sys_job_runs')->where('job_code', 'FIN_HOURLY')->where('fk_id_ent', 1)->whereIn('run_status', ['OK'])->exists(), 'the hourly finance plan runs and logs');
         // live 27-11: one step that cannot finish (a missing exchange rate) no longer stops the others – the run names it

@@ -76,6 +76,15 @@ class ReportsDigestTest extends TestCase
         $this->assertStringContainsString("NOW $sku", (string) TaskDigest::exceptions($this->owner->id, '2026-11-27'));
     }
 
+    /** Owner 27-11: things shared to the tool and not put in their place yet are in the morning digest (nothing forgotten). */
+    public function test_shared_things_to_place_in_the_digest(): void
+    {
+        DB::table('mo_intake')->insert(['fk_id_ent' => 1, 'user_id' => $this->owner->id, 'name' => 'correct-invoice.pdf', 'ext' => 'pdf', 'size_bytes' => 10, 'sha256' => str_repeat('a', 64), 'path' => 'x', 'source' => 'SHARE', 'status' => 'NEW', 'created_at' => '2026-11-26 10:00:00', 'updated_at' => now()]);
+        $t = (string) TaskDigest::text($this->owner->id, '2026-11-27', true);
+        $this->assertStringContainsString("TO PUT IN PLACE (1)\n- correct-invoice.pdf (shared 26 Nov)", $t);
+        $this->assertSame(1, $this->actingAs($this->owner)->getJson('/api/boot')->json('to_place'));
+    }
+
     public function test_r45_owner_exceptions_digest_default_owner_and_choice(): void
     {
         $o = $this->person('OWNER', 'Omar'); $pt = $this->person('PARTNER', 'Pam');
