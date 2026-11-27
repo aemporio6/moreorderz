@@ -288,7 +288,9 @@ class SalesImport
         if (! $nosku) { $p = DB::table('t_product_vendors')->where('fk_id_ent', $ent)->whereRaw('LOWER(TRIM(SKU_VENDOR)) = ?', [mb_strtolower(trim($sku))])->first(); if ($p) return $p; }
         $a = DB::table('mo_sku_aliases')->where('fk_id_ent', $ent)->whereIn('fk_id_marketplace', [0, $marketplaceId])->where(fn ($w) => $w->where(fn ($x) => $x->where('kind', 'SKU')->where('alias_key', mb_substr(mb_strtolower(trim($sku)), 0, 190)))
             ->orWhere(fn ($x) => $x->where('kind', 'TITLE')->where('alias_key', mb_substr(mb_strtolower(trim($info)), 0, 190))))->orderByDesc('fk_id_marketplace')->first();
-        return $a && ($nosku ? true : true) ? DB::table('t_product_vendors')->where('id', $a->fk_id_product)->where('fk_id_ent', $ent)->first() : null;
+        if ($a) return DB::table('t_product_vendors')->where('id', $a->fk_id_product)->where('fk_id_ent', $ent)->first();
+        $r = $nosku ? null : SkuResolver::find($ent, $marketplaceId, $sku);      // marketplace SKUs with a shop prefix, an ASIN or an item id inside
+        return $r ? DB::table('t_product_vendors')->where('id', $r[0])->first() : null;
     }
 
     // ---------- the import: check (nothing is kept) or apply ----------

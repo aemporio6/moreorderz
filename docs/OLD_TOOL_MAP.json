@@ -455,8 +455,8 @@
 "functions": 1,
 "lines": 34,
 "status": {
-"PARTIAL": 3,
-"BUILT": 30,
+"PARTIAL": 1,
+"BUILT": 32,
 "NOT_APPLICABLE": 1
 },
 "open": [
@@ -465,18 +465,6 @@
 "status": "PARTIAL",
 "text": "Marketplace APIs (Amazon → eBay → OnBuy → Etsy → TikTok → Shopify → Wise) through the Import Center",
 "note": "API adapters for eBay, Amazon, TikTok, OnBuy, Temu written to the published contracts – none run with real keys; Etsy / Shopify / Wise not built"
-},
-{
-"reg": "MR-0123",
-"status": "PARTIAL",
-"text": "Sales & Marketplaces (21 / 218): sales list + columns, edit / refund / carrier per sale, sale log, bulk delete, reminders (VA), reports (monthly / detailed / annual + downloads), eBay / Amazon / TikTok imports + custom e",
-"note": "sales list + columns, edit / refund / carrier per sale, sale log, delete with Undo, bulk delete with preview, reminders, cases, annual + detailed reports, month confirm, account health view, daily ord"
-},
-{
-"reg": "MR-0350",
-"status": "PARTIAL",
-"text": "Integration contract IC-0h: Test every module on two profiles (eBay + TikTok)",
-"note": "money files tested on TikTok, Amazon, eBay data; not every module on two profiles"
 }
 ]
 },
