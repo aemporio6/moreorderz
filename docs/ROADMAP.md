@@ -61,11 +61,14 @@ Updated: 27 Nov 2026, 05:30 (Pakistan time)
 Owner: the old tool sent supplier messages straight to WhatsApp. Now, at a high level: (1) share anything from WhatsApp / phone / laptop straight into the tool and choose where it goes, with history of what came, from whom, where it was used; (2) chat with every person (supplier, forwarder, investor, VA…) from their record – WhatsApp, SMS, WeChat, e-mail – with a timeline per person; (3) chat parts / screenshots pinned as evidence on sourcing records (PO, cycle, claim); (4) automatic WhatsApp to VA / investor on their own number for low stock, tasks, price changes; (5) every tracking number a blue link to the carrier's own tracking page – sea, road, courier companies listed, "+ Add" where one is missing.
 1. ✅ 27-11 Back always stays in the app (owner 06:54). Red '<n> to place' on the top bar + TO PUT IN PLACE in the morning digest for shared things not yet placed (owner 06:58).
 1b. ✅ 27-11 Share to MoreOrderz: the phone / laptop app is a share target – Share from WhatsApp, the gallery or e-mail → MoreOrderz → Import anything takes the files and the text (source SHARE) and offers each its place (supplier, PO, cycle, product, payment…); kept with who and when.
+2a. Owner 07:28: a contact list for WhatsApp / WeChat (numbers added per person), chat built inside the tool both ways, and voice messages – kept, played in the tool.
 2. Per-person conversation timeline (all channels) + "Message" on every person, supplier, forwarder, investor record.
 3. Evidence: pin a message / screenshot to a PO, cycle, claim or payment; shown there as proof.
 4. Automatic WhatsApp to VA / investor numbers for low stock, tasks, price changes (on the existing alert rules).
 5b. Forward to the business WhatsApp number → comes into Import anything (when the WhatsApp connection is on).
-6. Personal screens (owner 06:54): each person orders / pins / hides menu items inside their own module (never into another), dashboard cards (order, size, hide), list columns (order, hide) – view only, never touching data, triggers, automation or rights; warning before anything that would; Reset to default.
+6. ✅ 27-11 Personal screens (owner 06:54): ⚙ Arrange on every screen (parts, tiles, columns; fold / hide / order; Reset) and Arrange my menu (groups, screens inside their own section only, pin, hide; Reset) – view only, per person. Still to add: drag with the mouse / finger, tile sizes.
+7. ✅ 27-11 Top company list also shows the 32 companies + Add a company; Refresh reads fresh numbers; WhatsApp set-up in steps (owner 07:09 / 07:24).
+8. Owner 07:24 – options in the owner's hands, no questions: a workspace (e.g. 'test enterprise') can be kept / switched off / deleted by the owner; every bank account of a person / company can be linked by the owner to a company and to a Money bank account, or kept apart.
 5. Tracking: carrier list with tracking-link patterns (sea, road, air, courier), every tracking number a link, "+ Add carrier" in place.
 
 ## Old tool – still open (owner 27-11 01:30: "look inside my old MoreOrderz, put what is left in the checklist, finish it")

@@ -37,7 +37,7 @@
   }
   async function api(path, opt = {}) {
     const res = await fetch('/api/' + path, { method: opt.method || 'GET', credentials: 'same-origin',
-      headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf, ...coHdr(opt), ...(opt.body && !(opt.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}) },
+      headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf, ...coHdr(opt), ...(S.fresh ? { 'X-Fresh': '1' } : {}), ...(opt.body && !(opt.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}) },
       body: opt.body ? (opt.body instanceof FormData ? opt.body : JSON.stringify(opt.body)) : undefined });      // files (FormData) go as they are – before, they were sent as empty JSON
     if (res.status === 401 || res.status === 419) { location.href = '/login'; throw new Error('Signed out'); }
     const data = await res.json().catch(() => ({}));
@@ -297,7 +297,8 @@
       bar.classList.toggle('done', !left.length); bar.querySelectorAll('[data-pn]').forEach(a => a.onclick = e => { e.preventDefault(); const l = req[+a.dataset.pn], el = l.querySelector('input,select,textarea'); l.closest('.pf-hide') && l.closest('.pf-hide').classList.remove('pf-hide'); l.scrollIntoView({ block: 'center', behavior: 'smooth' }); const box = l.querySelector('.ap-box'); setTimeout(() => (box || el).focus(), 300); }); };
     m.addEventListener('input', draw); m.addEventListener('change', draw); draw();
   }
-  let navTimer; function afterRender(route) { try { ensureHead(route); } catch (e) {} try { pageFrame(route); } catch (e) {} try { takeHandoff(); } catch (e) {} taskHead(route); paintFav(); playbookBar(route); stepPager(route); guideNow(route); clearTimeout(navTimer);
+  let navTimer; function afterRender(route) { try { $$('#main .kpi').forEach(k => { if (!k.dataset.go && !k.onclick && k.tagName !== 'A' && !k.closest('a') && !k.hasAttribute('data-click')) k.style.cursor = 'default'; }); } catch (e) {}      /* owner 27-11: a hand only where a press does something */
+    try { ensureHead(route); } catch (e) {} try { pageFrame(route); } catch (e) {} try { takeHandoff(); } catch (e) {} taskHead(route); paintFav(); playbookBar(route); stepPager(route); guideNow(route); clearTimeout(navTimer);
     navTimer = setTimeout(async () => { if (S.route !== route || route === '#/home') return; const h = $('#main h1'); if (!h) return; try { NAV = await api('nav', { method: 'POST', body: { title: h.textContent.trim().slice(0, 150), url: route } }); paintFav(); } catch (e) {} }, 1500); }
   // R-B_SOURCING-20: floating Previous / Next on every step place of a cycle record (cycle page sections, Samples · QC · Customs, the step lists of the cycle); skipped steps are jumped
   async function stepPager(route) {
@@ -355,7 +356,7 @@
     $('#top').innerHTML = `
       <button class="tb-btn icon" id="btnSide" title="Menu">${ic('menu')}</button>
       <div class="brand" id="brand" title="Home">${MO.logo ? MO.logo(30) : ''}<div><div class="wm-text">More<b>Orderz</b></div><div class="by" id="brandCo"><i></i>${esc(b.all_companies ? 'All companies' : ((b.companies.find(c => c.id == b.ent) || {}).name || ''))}<i></i></div></div></div>
-      <select class="tb-sel hide-m" id="selEnt" title="Company">${b.companies.map(c => `<option value="${c.id}" ${c.id == b.ent && !b.all_companies ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}${b.can_all && b.companies.length > 1 ? `<option value="all" ${b.all_companies ? 'selected' : ''}>All companies (added up)</option>` : ''}</select>
+      <select class="tb-sel hide-m" id="selEnt" title="Company">${b.companies.map(c => `<option value="${c.id}" ${c.id == b.ent && !b.all_companies ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}${b.can_all && b.companies.length > 1 ? `<option value="all" ${b.all_companies ? 'selected' : ''}>All companies (added up)</option>` : ''}${(b.legal_companies || []).length ? `<optgroup label="Our companies (${b.legal_companies.length}) – open one">${b.legal_companies.map(c => `<option value="co:${c.id}">${esc(c.name)}</option>`).join('')}</optgroup>` : ''}<option value="co:list">All our companies – list…</option><option value="co:new">＋ Add a company…</option></select>
       <div class="searchbox" id="sbox">${ic('search')}<input id="q" placeholder="Search everything – SKU, order, PO, person, task…" autocomplete="off"><span class="kbd">/</span></div>
       <button class="tb-btn primary" id="btnCreate" title="Create (N)">${ic('plus')}<span class="hide-m">Create</span></button>
       <a class="tb-btn icon" id="btnHome" href="#/" title="Home">${ic('home')}</a>
@@ -381,7 +382,7 @@
     wireSearch();
     $('#brand').onclick = () => go('#/home');
     $('#btnCreate').onclick = () => openCreate();
-    $('#btnRefresh').onclick = () => render();
+    $('#btnRefresh').onclick = async () => { S.fresh = true; const b = $('#btnRefresh'); b.classList.add('spin'); try { await render(); toast('Refreshed – the newest numbers', 'ok'); } finally { S.fresh = false; b.classList.remove('spin'); } };      // owner 27-11: Refresh reads past the 5-minute card memory
     if ($('#btnNewTab')) $('#btnNewTab').onclick = () => { try { window.open(location.href, '_blank', 'noopener'); } catch (e) {} };      // MR-1274 Seller-Central style: Home, Refresh, open in a new tab
     $('#btnBack').onclick = () => appBack();
     $('#btnFwd').onclick = () => { if (S.fwd.length) { S.hist.push(S.route); go(S.fwd.pop(), false); } };
@@ -392,7 +393,8 @@
     paintFav();
     $('#btnBell').onclick = () => openBell(); $('#btnBell').title = 'Notifications and my tasks'; loadBell();
     $('#btnUser').onclick = () => go('#/me');
-    $('#selEnt').onchange = async e => { busy(true); try { await api('company', { method: 'POST', body: { ent: e.target.value === 'all' ? 'all' : +e.target.value } }); S.reqEnt = null; S.pageEnt = null; S.boot = await api('boot'); drawTop(); drawSide(); render(); toast('Now working in ' + e.target.selectedOptions[0].text); } catch (x) { toast(x.message, 'err'); } busy(false); };
+    $('#selEnt').onchange = async e => { const v = e.target.value; if (v.startsWith('co:')) { e.target.value = b.all_companies ? 'all' : String(b.ent); if (v === 'co:new') return openForm('company'); return go(v === 'co:list' ? '#/list/company' : '#/rec/company/' + v.slice(3)); }      // owner 27-11: the 32 companies are here too, + Add a company
+      busy(true); try { await api('company', { method: 'POST', body: { ent: e.target.value === 'all' ? 'all' : +e.target.value } }); S.reqEnt = null; S.pageEnt = null; S.boot = await api('boot'); drawTop(); drawSide(); render(); toast('Now working in ' + e.target.selectedOptions[0].text); } catch (x) { toast(x.message, 'err'); } busy(false); };
   }
   const ICONS = { Home: 'home', Research: 'search', Buying: 'buy', Selling: 'sell', Money: 'money', Dispatch: 'truck', Documents: 'docs', Reports: 'reports', Setup: 'setup', Work: 'work' };
   const secIcon = n => ICONS[n] || (/Warehouse/.test(n) ? 'stock' : /Products/.test(n) ? 'file' : /Returns/.test(n) ? 'undo' : /Month/.test(n) ? 'audit' : /Partners/.test(n) ? 'partners' : /People/.test(n) ? 'people' : /Import/.test(n) ? 'import' : 'file');
@@ -405,12 +407,21 @@
      Every group, section and screen says in one line what it is. The windows close when the mouse leaves them; every screen is a real link, so right-click → Open in new tab works.
      Phones keep the folding list (no hover on a phone). */
   let FLY = null, FLYT = 0;
+  /* Owner 27-11 06:54: each person arranges his own menu – groups in his order, screens in his order INSIDE their own section (never into another
+     module), hidden ones out of the way (still found by Search and Create), pinned ones on top. Only how the menu looks for him; nothing else changes. */
+  let MENU_P = { groups: [], items: {}, hidden: [], pinned: [] };
+  const byOrder = (arr, order, key) => { const at = new Map((order || []).map((k, i) => [String(k), i])); return arr.map((x, i) => [x, at.has(String(key(x))) ? at.get(String(key(x))) : 1000 + i]).sort((a, b) => a[1] - b[1]).map(a => a[0]); };
+  function mySecs(secs) { const hid = new Set((MENU_P.hidden || []).map(String));
+    return secs.map(s => ({ ...s, items: byOrder(s.items, (MENU_P.items || {})[s.name], i => i.id).filter(i => !hid.has(String(i.id))) })); }
   function menuGroups() {
-    const secs = S.boot.menu || [], used = new Set();
+    const secs = mySecs(S.boot.menu || []), used = new Set();
     const G = (S.boot.menu_groups || []).map(g => ({ ...g, secs: g.sections.map(n => secs.find(s => s.name === n)).filter(Boolean) }));
     G.forEach(g => g.secs.forEach(s => used.add(s.id)));
     const rest = secs.filter(s => !used.has(s.id)); if (rest.length) G.push({ name: 'More', about: 'Other screens', icon: 'file', secs: rest });
-    return G.filter(g => g.secs.some(s => s.items.length));
+    const all = (S.boot.menu || []).flatMap(s => s.items), pins = (MENU_P.pinned || []).map(id => all.find(i => String(i.id) === String(id))).filter(Boolean);
+    const out = byOrder(G.filter(g => g.secs.some(s => s.items.length)), MENU_P.groups, g => g.name);
+    if (pins.length) out.unshift({ name: 'My pinned', about: 'Screens you pinned · Arrange my menu', icon: 'star', secs: [{ id: -1, name: 'Pinned', items: pins }] });
+    return out;
   }
   function flyClose() { clearTimeout(FLYT); if (FLY) { FLY.remove(); FLY = null; } $$('#side .mn-g.on').forEach(x => x.classList.remove('on')); }
   function flyLater() { clearTimeout(FLYT); FLYT = setTimeout(flyClose, 260); }
@@ -456,7 +467,7 @@
     if (!S.boot.menu_groups || innerWidth < 900) return drawSideFold();
     const cur = currentItem(), G = menuGroups();
     $('#side').classList.add('mn'); flyClose();
-    $('#side').innerHTML = `<div class="mn-label">Menu</div>` + G.map((g, k) => `<div class="mn-g ${g.secs.some(s => s.items.some(i => i.id === cur)) ? 'cur' : ''}" data-g="${k}" tabindex="0" role="button" aria-haspopup="true">
+    $('#side').innerHTML = `<div class="mn-label">Menu <a href="#/my-menu" class="small" style="float:right;text-transform:none;letter-spacing:0" title="Put the menu in your own order, pin, hide">Arrange</a></div>` + G.map((g, k) => `<div class="mn-g ${g.secs.some(s => s.items.some(i => i.id === cur)) ? 'cur' : ''}" data-g="${k}" tabindex="0" role="button" aria-haspopup="true">
         <span class="mn-ic">${ic(g.icon || 'file')}</span><span class="mn-t"><b>${esc(g.name)}</b><small>${esc(g.about || '')}</small></span><span class="mn-tri">▸</span></div>`).join('') +
       `<div class="mn-foot small faint">Click a group to open it · ▸ shows more · right-click a screen to open it in a new tab</div>`;
     $$('#side .mn-g').forEach(row => { const g = G[+row.dataset.g];
@@ -469,14 +480,14 @@
     $('#side').classList.remove('mn');
     const open = S.openSec, cur = currentItem();
     $('#side').innerHTML = `<div class="nav-label">Menu <span class="faint" style="text-transform:none;letter-spacing:0">· in the order of the work</span></div>` +
-      S.boot.menu.map(s => `<div class="nav-sec ${open === s.id ? 'open' : ''}" data-sec="${s.id}"><div class="nav-head has">${ic(secIcon(s.name))}${esc(s.name)}<span class="faint small" style="margin-left:6px">${s.items.length}</span>${ic('chev', 'ico chev')}</div>
+      mySecs(S.boot.menu).map(s => `<div class="nav-sec ${open === s.id ? 'open' : ''}" data-sec="${s.id}"><div class="nav-head has">${ic(secIcon(s.name))}${esc(s.name)}<span class="faint small" style="margin-left:6px">${s.items.length}</span>${ic('chev', 'ico chev')}</div>
         <div class="nav-items">${s.items.map(i => i.soon ? `<div class="nav-item lv1" title="Planned – not built yet"><span class="lbl" style="opacity:.55;cursor:default">${esc(i.name)} <span class="chip plain" style="font-size:10px">Soon</span></span></div>` : `<div class="nav-item lv1 ${i.id === cur ? 'active' : ''}"><a class="lbl" href="${esc(i.route)}">${esc(i.name)}${i.about ? `<small>${esc(i.about)}</small>` : ''}</a></div>`).join('')}</div></div>`).join('');
     $$('#side .nav-head').forEach(h => h.onclick = () => { const id = +h.parentNode.dataset.sec; S.openSec = S.openSec === id ? null : id; drawSideFold(); });
   }
 
   // ---------- pages ----------
   const ALL_ROUTES = /^(#\/?$|#\/(home|sales(\?|$)|sales-annual|sales-detailed|stock(\?|$)|stock\/lots|stock\/product\/|buying(\?|$|\/overview)|money(\?|$)|profit|reports|tasks(\?|$|\/dashboard|\/board)|list\/|rec\/))/;      // R-G_CORE-102 pages that add up every company
-  async function render() { await renderPage(); afterRender(S.route); }
+  async function render() { await renderPage(); afterRender(S.route); try { layApply(S.route); } catch (e) {} }
   async function renderPage() {
     if (S.boot && S.boot.partner_only && !/^#\/(my-account|my-invoices|my-portal|my-sales|me)\b/.test(S.route || '')) { location.hash = '#/my-account'; return; }      // R-FIN-2 a partner account sees only its own pages
     if (S.boot && S.boot.landing && !S.landed && (!S.route || S.route === '#/home' || S.route === '#/')) { S.landed = true; location.hash = S.boot.landing; return; }      // each finance role lands on its own page
@@ -592,7 +603,7 @@
       if (r === '#/registry') return await pageRegistry();
       if (r.startsWith('#/merges')) return await pageMerges();
       if (r === '#/accounts') return await pageAccounts();
-      if (r === '#/connections') return await pageConnections();
+      if (r === '#/connections' || r.startsWith('#/connections?')) return await pageConnections(new URLSearchParams(r.split('?')[1] || '').get('setup'));
       if (r === '#/hubs') return await pageHubs();
       if (r === '#/messages') return await pageMessages();
       if (r.startsWith('#/drive')) return await pageDrive(new URLSearchParams(r.split('?')[1] || ''));
@@ -678,6 +689,7 @@
       if (r === '#/health') return await pageHealth();
       if (r === '#/ledger') return await pageLedger();
       if (r === '#/me') return await pageMe();
+      if (r === '#/my-menu') return await pageMyMenu();
       if ((mt = r.match(/^#\/screen\/([\d.]+)/))) return pageScreen(mt[1]);
       if (r && r !== '#/' && !r.startsWith('#/home')) {      /* R-G_CORE-121: an address the app does not know */
         m.innerHTML = `<div class="card"><div class="empty">${ic('alert')}<div style="font-size:16px">Page not found – search or go Home.</div><div style="display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap"><input class="q" id="nfQ" placeholder="Search" style="max-width:260px"><button class="btn" id="nfGo">Search</button><a class="btn primary" href="#/home">Home</a></div></div></div>`;
@@ -733,6 +745,90 @@
   }
   const HOME_OF = { OWNER: ['Owner Home', 'Every number of the business on one page'], MANAGER: ['Manager Home', 'The team\'s work and what needs a decision'], VA: ['VA / TL Home', 'Today\'s tasks for a VA or team lead'], TL: ['VA / TL Home', 'Today\'s tasks for a VA or team lead'],
     WAREHOUSE: ['Warehouse Home', 'What to receive, pick and pack today'], FINANCE: ['Finance Home', 'Payments due, bank and approvals'], ACCOUNTANT: ['Accountant Home', 'Ledger, month close and filings'], PARTNER: ['Partner Home', 'Your share, sales and statements'] };
+  async function pageMyMenu() {
+    let P = JSON.parse(JSON.stringify(MENU_P)); const save = async () => { try { await api('prefs/menu', { method: 'POST', body: { menu: P } }); MENU_P = P; drawSide(); toast('Your menu is saved'); } catch (e) { toast(e.message, 'err'); } };
+    const draw = () => { const bk = MENU_P; MENU_P = { groups: P.groups, items: {}, hidden: [], pinned: [] }; const G = menuGroups().filter(g => g.name !== 'My pinned'); MENU_P = bk;
+      const hid = new Set((P.hidden || []).map(String)), pin = new Set((P.pinned || []).map(String));
+      const items = s => byOrder(s.items, (P.items || {})[s.name], i => i.id);
+      $('#main').innerHTML = `<div class="page-head"><div><h1>Arrange my menu</h1><div class="sub">Your own order – only for you. Groups move up and down; a screen moves only inside its own section (it never leaves its module). Hidden screens are still found by Search and Create. 📌 pinned screens come first in the menu.</div></div>
+        <div class="actions"><button class="btn" id="mmReset">Reset to the standard menu</button><button class="btn primary" id="mmSave">Save</button></div></div>
+        ${G.map((g, gi) => `<div class="card" style="margin-bottom:10px"><div class="card-h"><h3>${esc(g.name)}</h3><span style="display:flex;gap:4px"><button class="btn sm" data-gu="${gi}" ${gi ? '' : 'disabled'} title="Group up">↑</button><button class="btn sm" data-gd="${gi}" ${gi < G.length - 1 ? '' : 'disabled'} title="Group down">↓</button></span></div><div class="card-b">
+          ${g.secs.map(sc => `<div class="small muted" style="margin:6px 0 2px"><b>${esc(sc.name)}</b></div>${items(sc).map((i, k, A) => `<div style="display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid var(--line);${hid.has(String(i.id)) ? 'opacity:.45' : ''}"><span style="flex:1;min-width:0">${esc(i.name)}</span>
+            <button class="btn sm" data-iu="${esc(sc.name)}|${k}" ${k ? '' : 'disabled'}>↑</button><button class="btn sm" data-id2="${esc(sc.name)}|${k}" ${k < A.length - 1 ? '' : 'disabled'}>↓</button>
+            <button class="btn sm ${pin.has(String(i.id)) ? 'primary' : ''}" data-pin="${i.id}" title="Pin on top">📌</button><button class="btn sm" data-hide="${i.id}" title="${hid.has(String(i.id)) ? 'Show' : 'Hide'}">${hid.has(String(i.id)) ? 'Show' : 'Hide'}</button></div>`).join('')}`).join('')}</div></div>`).join('')}`;
+      const secOf = n => G.flatMap(g => g.secs).find(x => x.name === n), mv = (n, k, d) => { const list = items(secOf(n)).map(i => i.id); [list[k], list[k + d]] = [list[k + d], list[k]]; P.items = { ...(P.items || {}), [n]: list }; draw(); };
+      const gm = (gi, d) => { const list = G.map(g => g.name); [list[gi], list[gi + d]] = [list[gi + d], list[gi]]; P.groups = list; draw(); };
+      $$('#main [data-gu]').forEach(b => b.onclick = () => gm(+b.dataset.gu, -1)); $$('#main [data-gd]').forEach(b => b.onclick = () => gm(+b.dataset.gd, 1));
+      $$('#main [data-iu]').forEach(b => b.onclick = () => { const [n, k] = b.dataset.iu.split('|'); mv(n, +k, -1); }); $$('#main [data-id2]').forEach(b => b.onclick = () => { const [n, k] = b.dataset.id2.split('|'); mv(n, +k, 1); });
+      $$('#main [data-pin]').forEach(b => b.onclick = () => { const id = b.dataset.pin, l = (P.pinned || []).map(String); P.pinned = l.includes(id) ? l.filter(x => x !== id) : [...l, id]; draw(); });
+      $$('#main [data-hide]').forEach(b => b.onclick = () => { const id = b.dataset.hide, l = (P.hidden || []).map(String); P.hidden = l.includes(id) ? l.filter(x => x !== id) : [...l, id]; draw(); });
+      $('#mmSave').onclick = save; $('#mmReset').onclick = () => { P = { groups: [], items: {}, hidden: [], pinned: [] }; save().then(draw); }; };
+    draw();
+  }
+
+  /* Owner 27-11 06:54: every screen can be arranged by each person – its parts (cards) up / down, folded or hidden, the number tiles in his order,
+     and the columns of its tables in his order or hidden. Only how the screen looks for him: the data, the triggers, the automation and the rights stay
+     exactly as they are; a hidden part is never lost (Arrange shows it again) and Reset puts the screen back. */
+  const LAY = {};
+  const layKey = r => 'scr:' + (r || '').split('?')[0].replace(/^#\//, '').replace(/\/\d+(?=\/|$)/g, '/n').slice(0, 44);
+  async function layGet(k) { if (LAY[k] !== undefined) return LAY[k]; try { LAY[k] = (((await api('prefs/' + k)).list) || {}).layout || {}; } catch (e) { LAY[k] = {}; } return LAY[k]; }
+  function laySave(k, L) { LAY[k] = L; return api('prefs/' + k, { method: 'POST', body: { layout: L } }).catch(() => {}); }
+  const layBlocks = () => [...($('#main') || document.createElement('div')).children].filter(x => !x.classList.contains('page-head') && !['SCRIPT', 'STYLE', 'IFRAME'].includes(x.tagName) && x.id !== 'stepPager' && !x.classList.contains('lay-bar'));
+  const layName = (el, i) => { const h = el.querySelector(':scope > .card-h h3, :scope > h3, :scope > .card-h b'); return ((h && h.textContent.trim()) || (el.classList.contains('kpis') ? 'Numbers' : (el.className.split(' ')[0] || 'part') + ' ' + (i + 1))).slice(0, 60); };
+  const tileName = t => ((t.querySelector('.lbl') || t).textContent || '').trim().slice(0, 60);
+  const tblKey = (t, i) => { const c = t.closest('.card'); const h = c && c.querySelector('.card-h h3'); return ((h ? h.textContent.trim() : 'table') + ' #' + i).slice(0, 60); };
+  const heads = t => { const tr = t.tHead && t.tHead.rows.length === 1 ? t.tHead.rows[0] : null; if (!tr || [...tr.cells].some(c => c.colSpan > 1 || c.rowSpan > 1)) return null; return [...tr.cells].map((c, i) => (c.textContent.trim() || 'col ' + (i + 1)).slice(0, 60)); };
+  function layTable(t, conf) {
+    const h = heads(t); if (!h || !conf) return; const order = byOrder(h.map((x, i) => i), (conf.order || []).map(n => h.indexOf(n)).filter(i => i >= 0), i => i); const hid = new Set(conf.hidden || []);
+    [...t.rows].forEach(tr => { const cells = [...tr.cells]; if (cells.length !== h.length) return; order.forEach(i => tr.appendChild(cells[i])); cells.forEach((c, i) => { c.style.display = hid.has(h[i]) ? 'none' : ''; }); });
+  }
+  async function layApply(route) {
+    if (!S.boot || /^#\/(list|rec|my-menu)\//.test(route) || route === '#/my-menu') return;      // lists and records have their own column chooser
+    const k = layKey(route), L = await layGet(k); if (S.route !== route) return; const m = $('#main'); if (!m) return;
+    const B = layBlocks(), names = B.map(layName);
+    if ((L.order || []).length) byOrder(B.map((b, i) => i), (L.order || []).map(n => names.indexOf(n)).filter(i => i >= 0), i => i).forEach(i => m.appendChild(B[i]));
+    B.forEach((b, i) => { const n = names[i]; b.dataset.lay = n; b.style.display = (L.hidden || []).includes(n) ? 'none' : '';
+      const fold = (L.folded || []).includes(n), body = [...b.children].filter(c => !c.classList.contains('card-h')); if (b.querySelector(':scope > .card-h')) body.forEach(c => { c.style.display = fold ? 'none' : ''; }); });
+    $$('#main .kpis').forEach(row => { const T = [...row.children]; const nm = T.map(tileName); byOrder(T.map((x, i) => i), (L.tiles || []).map(n => nm.indexOf(n)).filter(i => i >= 0), i => i).forEach(i => row.appendChild(T[i])); T.forEach((t, i) => { t.style.display = (L.tilesHidden || []).includes(nm[i]) ? 'none' : ''; }); });
+    $$('#main table.t').forEach((t, i) => { const c = (L.tables || {})[tblKey(t, i)]; if (!c) return; layTable(t, c);
+      if (t.tBodies[0] && !t._layObs) { t._layObs = new MutationObserver(() => { t._layObs.disconnect(); layTable(t, ((LAY[k] || {}).tables || {})[tblKey(t, i)]); t._layObs.observe(t.tBodies[0], { childList: true }); }); t._layObs.observe(t.tBodies[0], { childList: true }); } });
+    const act = m.querySelector('.page-head .actions'); if (act && !act.querySelector('.lay-btn')) { const b = document.createElement('button'); b.className = 'btn lay-btn'; b.title = 'Arrange this screen for yourself: parts, number tiles, columns'; b.textContent = '⚙ Arrange'; b.onclick = () => layMode(route); act.appendChild(b); }
+  }
+  async function layMode(route) {
+    const k = layKey(route); let L = JSON.parse(JSON.stringify(await layGet(k))); const m = $('#main'); if (!m || m.querySelector('.lay-bar')) return;
+    const bar = document.createElement('div'); bar.className = 'card lay-bar'; bar.style.cssText = 'margin-bottom:10px;border-color:var(--accent);position:sticky;top:calc(var(--top,56px) + 4px);z-index:20';
+    bar.innerHTML = `<div class="card-b" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>Arranging this screen – only for you.</b><span class="small muted">↑ ↓ move a part · Fold shows only its title · Hide puts it away (shown here dimmed) · tiles ◀ ▶ · Columns for tables. Data, triggers and automation are not touched.</span><span style="margin-left:auto;display:flex;gap:6px"><button class="btn" id="layReset">Reset this screen</button><button class="btn primary" id="layDone">Done</button></span></div>`;
+    m.querySelector('.page-head').after(bar);
+    const paint = () => { $$('#main .lay-tools').forEach(x => x.remove()); const B = layBlocks(), names = B.map(b => b.dataset.lay || layName(b, 0));
+      B.forEach((b, i) => { const n = names[i], hid = (L.hidden || []).includes(n), fold = (L.folded || []).includes(n); b.style.display = ''; b.style.opacity = hid ? '.4' : '';
+        const t = document.createElement('div'); t.className = 'lay-tools'; t.style.cssText = 'display:flex;gap:4px;justify-content:flex-end;padding:4px;background:var(--surface-2,#f3f6f5);border-bottom:1px dashed var(--accent)';
+        t.innerHTML = `<span class="small" style="margin-right:auto"><b>${esc(n)}</b></span><button class="btn sm" data-lu ${i ? '' : 'disabled'}>↑</button><button class="btn sm" data-ld ${i < B.length - 1 ? '' : 'disabled'}>↓</button>${b.querySelector(':scope > .card-h') ? `<button class="btn sm" data-lf>${fold ? 'Unfold' : 'Fold'}</button>` : ''}<button class="btn sm" data-lh>${hid ? 'Show' : 'Hide'}</button>${b.querySelector('table.t') ? '<button class="btn sm" data-lc>Columns</button>' : ''}`;
+        b.prepend(t);
+        $('[data-lu]', t).onclick = () => { const o = names.slice(); [o[i - 1], o[i]] = [o[i], o[i - 1]]; L.order = o; m.insertBefore(B[i], B[i - 1]); paint(); };
+        $('[data-ld]', t).onclick = () => { const o = names.slice(); [o[i], o[i + 1]] = [o[i + 1], o[i]]; L.order = o; m.insertBefore(B[i + 1], B[i]); paint(); };
+        $('[data-lh]', t).onclick = () => { L.hidden = hid ? (L.hidden || []).filter(x => x !== n) : [...(L.hidden || []), n]; paint(); };
+        if ($('[data-lf]', t)) $('[data-lf]', t).onclick = () => { L.folded = fold ? (L.folded || []).filter(x => x !== n) : [...(L.folded || []), n]; [...b.children].filter(c => !c.classList.contains('card-h') && !c.classList.contains('lay-tools')).forEach(c => { c.style.display = fold ? '' : 'none'; }); paint(); };
+        if ($('[data-lc]', t)) $('[data-lc]', t).onclick = () => { const tables = $$('#main table.t'), tb = b.querySelector('table.t'), ti = tables.indexOf(tb), key = tblKey(tb, ti), h0 = heads(tb); if (!h0) return toast('This table has merged headings – its columns stay as they are.', 'warn');
+          const c = (L.tables || {})[key] || {}; let order = byOrder(h0.slice(), c.order, x => x), hidden = new Set(c.hidden || []);
+          const md = modal('Columns', 'Move a column up to show it earlier; untick to hide it. Only for you.', '<div id="layCols"></div>', '<button class="btn" id="lcAll">Show all</button><button class="btn primary" id="lcOk">Use</button>');
+          const dc = () => { $('#layCols', md.ov).innerHTML = order.map((n2, j) => `<div style="display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid var(--line)"><label style="flex:1"><input type="checkbox" data-cv="${j}" ${hidden.has(n2) ? '' : 'checked'}> ${esc(n2)}</label><button class="btn sm" data-cu="${j}" ${j ? '' : 'disabled'}>↑</button><button class="btn sm" data-cd="${j}" ${j < order.length - 1 ? '' : 'disabled'}>↓</button></div>`).join('');
+            $$('[data-cv]', md.ov).forEach(x => x.onchange = () => { const n2 = order[+x.dataset.cv]; x.checked ? hidden.delete(n2) : hidden.add(n2); });
+            $$('[data-cu]', md.ov).forEach(x => x.onclick = () => { const j = +x.dataset.cu; [order[j - 1], order[j]] = [order[j], order[j - 1]]; dc(); }); $$('[data-cd]', md.ov).forEach(x => x.onclick = () => { const j = +x.dataset.cd; [order[j], order[j + 1]] = [order[j + 1], order[j]]; dc(); }); };
+          dc(); $('#lcAll', md.ov).onclick = () => { hidden = new Set(); dc(); };
+          $('#lcOk', md.ov).onclick = () => { if (hidden.size >= order.length) return toast('Keep at least one column.', 'warn'); L.tables = { ...(L.tables || {}), [key]: { order, hidden: [...hidden] } }; layTable(tb, L.tables[key]); md.close(); }; };
+      });
+      $$('#main .kpis').forEach(row => [...row.children].forEach((tl, j, T) => { const n = tileName(tl), hid = (L.tilesHidden || []).includes(n); tl.style.display = ''; tl.style.opacity = hid ? '.4' : '';
+        const x = document.createElement('div'); x.className = 'lay-tools'; x.style.cssText = 'display:flex;gap:2px;justify-content:flex-end'; x.innerHTML = `<button class="btn sm" data-tl ${j ? '' : 'disabled'}>◀</button><button class="btn sm" data-tr2 ${j < T.length - 1 ? '' : 'disabled'}>▶</button><button class="btn sm" data-th>${hid ? 'Show' : '✕'}</button>`;
+        tl.prepend(x); const names2 = () => [...row.children].map(tileName);
+        $('[data-tl]', x).onclick = e => { e.stopPropagation(); row.insertBefore(tl, T[j - 1]); L.tiles = names2(); paint(); };
+        $('[data-tr2]', x).onclick = e => { e.stopPropagation(); row.insertBefore(T[j + 1], tl); L.tiles = names2(); paint(); };
+        $('[data-th]', x).onclick = e => { e.stopPropagation(); L.tilesHidden = hid ? (L.tilesHidden || []).filter(y => y !== n) : [...(L.tilesHidden || []), n]; paint(); }; })); };
+    paint();
+    const end = async () => { $$('#main .lay-tools').forEach(x => x.remove()); bar.remove(); await laySave(k, L); render(); };
+    $('#layDone').onclick = async () => { await end(); toast('This screen is arranged for you'); };
+    $('#layReset').onclick = async () => { L = {}; await end(); toast('Back to the standard screen'); };
+  }
+
   async function pageHome() {
     const b = S.boot; let d = { cards: [], recent: [] }; const asR = (new URLSearchParams((S.route || location.hash).split('?')[1] || '').get('role') || '').toUpperCase();
     try { d = await api('home' + (asR ? '?role=' + encodeURIComponent(asR) : '')); } catch (e) {}
@@ -5507,7 +5603,7 @@
   const cxChip = st => ({ CONNECTED: '<span class="chip done">Working</span>', NEW: '<span class="chip pend">Not tested</span>', ERROR: '<span class="chip err">Error</span>', EXPIRED: '<span class="chip err">Keys refused</span>', OFF: '<span class="chip plain">Off</span>',
     SENT: '<span class="chip done">Sent</span>', DELIVERED: '<span class="chip done">Delivered</span>', READ: '<span class="chip done">Read</span>', QUEUED: '<span class="chip pend">Queued</span>', HELD: '<span class="chip warn">Waiting for a channel</span>', FAILED: '<span class="chip err">Failed</span>',
     HANDLED: '<span class="chip done">Handled</span>', IGNORED: '<span class="chip plain">Ignored</span>' })[st] || `<span class="chip">${esc(st || '')}</span>`;
-  async function pageConnections() {
+  async function pageConnections(setup) {
     busy(true); let d; try { d = await api('connections'); } finally { busy(false); }
     const again = () => pageConnections(), A = Object.fromEntries(d.adapters.map(a => [a.code, a]));
     const kinds = { MARKETPLACE: 'Marketplaces (orders and money)', CARRIER: 'Carriers (labels and tracking)', MESSAGING: 'WhatsApp', STORAGE: 'Google Drive', PRINT: 'One-click printing' };
@@ -5526,12 +5622,30 @@
         if (a.kind === 'CARRIER') f.push({ name: 'carrier', label: 'Carrier', required: true, value: c ? c.carrier_id : '', options: opt(d.carriers, x => [x.id, x.name]) });
         Object.entries(a.settings).forEach(([k, v]) => f.push({ name: 's_' + k, label: k.replace(/_/g, ' '), value: c ? (c.settings[k] ?? v) : v }));
         Object.entries(a.secrets).forEach(([k, l]) => f.push({ name: 'k_' + k, label: l, type: 'password', help: c && c.filled[k] ? 'Kept in the vault. Leave empty to keep it.' : 'Kept encrypted; never shown again.' }));
-        miniForm((c ? 'Edit · ' : 'New · ') + a.name, a.state + '. ' + a.does + '.', f, async v => { const body = { adapter: code, label: v.label, shop: v.shop, carrier: v.carrier, settings: {}, secrets: {} };
+        miniForm((c && !c._new ? 'Edit · ' : 'New · ') + a.name, a.state + '. ' + a.does + '.', f, async v => { const body = { adapter: code, label: v.label, shop: v.shop, carrier: v.carrier, settings: {}, secrets: {} };
           Object.keys(v).forEach(k => { if (k.startsWith('s_')) body.settings[k.slice(2)] = v[k]; if (k.startsWith('k_')) body.secrets[k.slice(2)] = v[k]; });
-          const r = await api('connections' + (c ? '/' + c.id : ''), { method: 'POST', body }); setTimeout(again, 50); return r; }); };
+          const r = await api('connections' + (c && !c._new ? '/' + c.id : ''), { method: 'POST', body }); setTimeout(again, 50); return r; }); };
       if (c) return step2(c.adapter);
       miniForm('Add connection', 'Choose what to connect. A connection marked "built to contract" is complete code that has not yet talked to the real service: test it once the keys are in.', [{ name: 'adapter', label: 'Connection', required: true, options: opt(d.adapters, a => [a.code, `${a.name} – ${a.state}`]) }], async v => { if (!v.adapter) throw Object.assign(new Error('Choose one.'), { errors: { adapter: ['Choose one.'] } }); setTimeout(() => step2(v.adapter), 50); return { message: 'Now fill in its details' }; }, 'Next'); };
     if ($('#cnAdd')) $('#cnAdd').onclick = () => form(null);
+    // owner 27-11 07:24: WhatsApp set-up in steps – what to choose, what to paste (the owner pastes the keys himself; they go to the vault), the address for Meta, Test
+    const waSetup = () => { const have = d.rows.find(c => c.kind === 'MESSAGING' && c.adapter !== 'WHATSAPP_LOG'); const hook = d.webhook || '';
+      const m = modal('Set up WhatsApp', 'Messages go from the tool to WhatsApp (task alerts, digests, statements, supplier and partner messages) and replies come back into the tool.',
+        `<ol style="padding-left:18px;line-height:1.6"><li><b>Choose how WhatsApp is connected</b> – with Meta's own <i>WhatsApp Cloud API</i> (free to connect, you need a Meta Business account and a number that is not in the phone app) or through <i>360dialog</i> (a provider; one API key).</li>
+          <li><b>Paste the keys yourself</b> in the form that opens – they are kept encrypted in the vault and never shown again.</li>
+          <li><b>Give Meta / the provider this address</b> for incoming messages (webhook): <code id="waHook">${esc(hook)}</code> <button class="btn sm" id="waCopy">Copy</button><br><span class="small muted">The "verify token" is any word you choose – type the same word here and at Meta.</span></li>
+          <li><b>Press Test</b> on the connection – then switch it on. Each person's own WhatsApp number is on his record (People › Alerts &amp; messages).</li></ol>
+          <div class="small muted">Without the API, the "WhatsApp" buttons on suppliers, forwarders and partners still open a chat on your own WhatsApp (phone or WhatsApp Web) with the text ready.</div>
+          ${have ? `<div class="chip done" style="margin-top:8px">Already there: ${esc(have.label)} · ${esc(have.status)}</div>` : ''}`,
+        `${have ? '<button class="btn primary" id="waEdit">Open my WhatsApp connection</button><button class="btn" id="waTest">Test it</button>' : (A.WHATSAPP_CLOUD ? '<button class="btn primary" id="waCloud">WhatsApp Cloud API (Meta)</button>' : '') + (A.WHATSAPP_360 ? '<button class="btn" id="wa360">360dialog</button>' : '')}<button class="btn" id="waX">Close</button>`);
+      const on = (id, fn) => { const b = $(id, m.ov); if (b) b.onclick = fn; };
+      on('#waX', m.close); on('#waCopy', async () => { try { await navigator.clipboard.writeText(hook); toast('Address copied'); } catch (e) { toast('Select the address and copy it', 'warn'); } });
+      on('#waCloud', () => { m.close(); if (!d.manage) return toast('Only who manages connections can add one.', 'warn'); const a = A.WHATSAPP_CLOUD; formOf('WHATSAPP_CLOUD'); });
+      on('#wa360', () => { m.close(); if (!d.manage) return toast('Only who manages connections can add one.', 'warn'); formOf('WHATSAPP_360'); });
+      on('#waEdit', () => { m.close(); form(have); }); on('#waTest', () => { m.close(); const b = $(`#main [data-test="${have.id}"]`); if (b) b.click(); }); };
+    const formOf = code => form({ adapter: code, label: A[code].name, settings: {}, filled: {}, _new: true });
+    if (!$('#cnWa') && $('#main .page-head .actions')) { const b = document.createElement('button'); b.className = 'btn'; b.id = 'cnWa'; b.textContent = 'Set up WhatsApp'; b.onclick = waSetup; $('#main .page-head .actions').prepend(b); }
+    if (setup === 'whatsapp') waSetup();
     $$('#main [data-edit]').forEach(b => b.onclick = () => form(d.rows.find(c => c.id === +b.dataset.edit)));
     $$('#main [data-test]').forEach(b => b.onclick = async () => { busy(true); try { const r = await api(`connections/${b.dataset.test}/test`, { method: 'POST' }); toast(r.text, r.ok ? 'ok' : 'err'); } catch (e) { toast(e.message, 'err'); } busy(false); again(); });
     $$('#main [data-sw]').forEach(b => b.onclick = () => act(`connections/${b.dataset.sw}/switch`, { on: b.dataset.on === '1' }, again));
@@ -5552,13 +5666,14 @@
     busy(true); let d; try { d = await api('messages'); } finally { busy(false); }
     const again = () => pageMessages();
     $('#main').innerHTML = `<div class="page-head"><div><h1>Messages &amp; WhatsApp</h1><div class="sub">Everything the tool sends (statements, approvals, task alerts) and the WhatsApp replies. Nothing goes out without a channel: it waits and leaves as soon as one is set up.</div></div><div class="actions"><button class="btn" id="msSend">Send now</button></div></div>
-      <div class="kpis"><div class="card kpi ${d.whatsapp && d.whatsapp.status !== 'OFF' ? 'done' : 'warn'}"><div class="bar"></div><div class="lbl">WhatsApp</div><div class="val" style="font-size:16px">${d.whatsapp ? esc(d.whatsapp.label) : 'Not set up'}</div><div class="foot">${d.whatsapp ? esc(d.whatsapp.status) : 'System › API connections'}</div></div>
+      <div class="kpis"><div class="card kpi ${d.whatsapp && d.whatsapp.status !== 'OFF' ? 'done' : 'warn'}" data-go="#/connections?setup=whatsapp" title="Open the WhatsApp set-up"><div class="bar"></div><div class="lbl">WhatsApp</div><div class="val" style="font-size:16px">${d.whatsapp ? esc(d.whatsapp.label) : 'Not set up'}</div><div class="foot">${d.whatsapp ? esc(d.whatsapp.status) + ' · open set-up' : 'Press to set up WhatsApp'}</div></div>
         <div class="card kpi ${d.email ? 'done' : 'warn'}"><div class="bar"></div><div class="lbl">E-mail</div><div class="val" style="font-size:16px">${d.email ? 'Ready' : 'No mail server'}</div><div class="foot">${d.email ? '' : 'MAIL_… lines in the .env file'}</div></div>
         <div class="card kpi"><div class="bar"></div><div class="lbl">Waiting</div><div class="val">${d.wa.filter(m => ['QUEUED', 'HELD'].includes(m.status)).length + d.mail.filter(m => ['QUEUED', 'HELD'].includes(m.status)).length}</div></div></div>
       <div class="card" style="margin-top:12px"><div class="card-h"><h3>WhatsApp sent</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>When</th><th>To</th><th>Message</th><th>State</th><th></th></tr></thead><tbody>${d.wa.map(m => `<tr><td class="small">${esc(m.sent_at || m.queued_at)}</td><td class="small">${esc(m.who || '')} ${esc(m.phone)}</td><td class="small">${esc(m.body)}</td><td>${cxChip(m.status)}${m.error ? `<div class="small muted">${esc(m.error)}</div>` : ''}</td><td>${['FAILED', 'HELD'].includes(m.status) ? `<button class="btn sm" data-rt="wa/${m.id}">Try again</button>` : ''}</td></tr>`).join('')}</tbody></table>${d.wa.length ? '' : '<div class="empty">Nothing sent yet.</div>'}</div></div>
       <div class="card" style="margin-top:12px"><div class="card-h"><h3>E-mails sent</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>When</th><th>To</th><th>Subject</th><th>State</th><th></th></tr></thead><tbody>${d.mail.map(m => `<tr><td class="small">${esc(m.sent_at || m.queued_at)}</td><td class="small">${esc(m.to_address)}</td><td class="small">${esc(m.subject)}</td><td>${cxChip(m.status)}${m.error ? `<div class="small muted">${esc(m.error)}</div>` : ''}</td><td>${['FAILED', 'HELD'].includes(m.status) ? `<button class="btn sm" data-rt="mail/${m.id}">Try again</button>` : ''}</td></tr>`).join('')}</tbody></table>${d.mail.length ? '' : '<div class="empty">Nothing sent yet.</div>'}</div></div>
       <div class="card" style="margin-top:12px"><div class="card-h"><h3>WhatsApp replies</h3></div><div class="tbl-wrap"><table class="t"><thead><tr><th>When</th><th>From</th><th>Text</th><th>State</th></tr></thead><tbody>${d.inbox.map(m => `<tr><td class="small">${esc(m.received_at)}</td><td class="small">${esc(m.who || 'Unknown number')}</td><td class="small">${esc(m.body || '')}${m.media_id ? ' 📎' : ''}</td><td>${cxChip(m.status)}${m.note ? `<div class="small muted">${esc(m.note)}</div>` : ''}</td></tr>`).join('')}</tbody></table>${d.inbox.length ? '' : '<div class="empty">No reply yet.</div>'}</div></div>
       <div class="card" style="margin-top:12px"><div class="card-h"><h3>Templates</h3><a class="btn sm" href="#/list/wa_template">Edit</a></div><div class="tbl-wrap"><table class="t"><tbody>${d.templates.map(t => `<tr><td><code>${esc(t.code)}</code></td><td class="small">${esc(t.body)}</td><td>${+t.f_active ? '' : '<span class="chip plain">Off</span>'}</td></tr>`).join('')}</tbody></table></div><div class="small muted" style="margin-top:6px">WhatsApp only sends templates Meta has approved: each code here must exist with the same name (lower case) in the WhatsApp Business account.</div></div>`;
+    $$('#main .kpi[data-go]').forEach(k => k.onclick = () => go(k.dataset.go));      // owner 27-11 07:24: the WhatsApp tile showed a hand but did nothing
     $('#msSend').onclick = () => act('messages/send', {}, again, 'Send run done');
     $$('#main [data-rt]').forEach(b => b.onclick = () => act(`messages/${b.dataset.rt}/retry`, {}, again, 'Tried again'));
   }
@@ -6862,6 +6977,7 @@
     try { S.boot = await api('boot'); } catch (e) { return; }
     easyWords();      /* owner 26-11: easy words on every screen */
     try { const h = location.hash; if (h && h.startsWith('#/')) S.route = h; } catch (e) {}
+    try { MENU_P = { ...MENU_P, ...(((await api('prefs/menu')).list || {}).menu || {}) }; } catch (e) {}
     drawTop(); render();
     try { const fq = new URLSearchParams(location.search).get('find'); if (fq && $('#q')) { history.replaceState(null, '', '/' + location.hash); $('#q').value = fq; $('#q').focus(); $('#q').dispatchEvent(new Event('input', { bubbles: true })); } } catch (e) {}      /* the search of the 404 page (R-G_CORE-121) */
     // the phone's / browser's own back: one guard entry on top, so pressing it goes back inside the app (appBack) instead of leaving the tab;

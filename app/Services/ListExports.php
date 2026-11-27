@@ -170,6 +170,15 @@ class ListExports
         if (isset($d['scope']) && is_array($d['scope'])) { $sc = []; foreach ($d['scope'] as $k => $v) if (preg_match('/^[a-z_]{1,20}$/', (string) $k) && is_scalar($v) && preg_match('/^(\d{1,10}|\d{4}-\d{2}-\d{2})$/', (string) $v)) $sc[$k] = (string) $v; $clean['scope'] = $sc; }
         // owner 26-11 22:28: the person's default of a dropdown on a screen ("screen:box" => value), up to 400 of them
         if (isset($d['defaults']) && is_array($d['defaults'])) { $df = []; foreach (array_slice($d['defaults'], 0, 400, true) as $k => $v) if (preg_match('/^[A-Za-z0-9_:.-]{1,80}$/', (string) $k) && is_scalar($v) && mb_strlen((string) $v) <= 120) $df[$k] = (string) $v; $clean['defaults'] = $df; }
+        // owner 27-11 06:54: the person's own arrangement of a screen ('layout') and of the menu ('menu') – names / ids only, bounded, never code
+        $tidy = function ($v, int $depth = 0) use (&$tidy) {
+            if (is_scalar($v)) return is_bool($v) ? $v : mb_substr(strip_tags((string) $v), 0, 80);
+            if (! is_array($v) || $depth > 3) return null; $o = [];
+            foreach (array_slice($v, 0, 400, true) as $k => $x) { if (! is_int($k) && ! preg_match('/^[\pL\pN _:#&().,\/+\'-]{1,80}$/u', (string) $k)) continue; $t = $tidy($x, $depth + 1); if ($t !== null) $o[is_int($k) ? $k : mb_substr((string) $k, 0, 80)] = $t; }
+            return array_is_list($v) ? array_values($o) : $o; };
+        if (isset($d['layout']) && is_array($d['layout'])) $clean['layout'] = array_intersect_key((array) $tidy($d['layout']), array_flip(['order', 'hidden', 'folded', 'tiles', 'tilesHidden', 'tables']));
+        if (isset($d['menu']) && is_array($d['menu'])) $clean['menu'] = array_intersect_key((array) $tidy($d['menu']), array_flip(['groups', 'items', 'hidden', 'pinned']));
+        if (array_key_exists('layout', $d) && $d['layout'] === []) $clean['layout'] = [];
         $w = ['fk_id_user' => $u->id, 'page_key' => mb_substr($page, 0, 50)];
         $old = json_decode((string) DB::table('t_user_column_prefs')->where($w)->value('prefs_json'), true) ?: [];
         DB::table('t_user_column_prefs')->updateOrInsert($w, ['prefs_json' => json_encode(array_merge($old, $clean)), 'hidden_columns' => '', 'updated_at' => now()]);

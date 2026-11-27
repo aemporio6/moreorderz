@@ -76,6 +76,30 @@ class SetupListsTest extends TestCase
 
     /** MR-0089: a short link of a record – not signed in → the sign-in, then the record; signed in → the record at once. */
     /** Owner 27-11: Share to MoreOrderz from WhatsApp / gallery / e-mail – the app is a share target; without the phone app nothing is kept. */
+    /** Owner 27-11 07:09: the companies (old tool's 32) are in the top company list too, with + Add a company. */
+    /** Owner 27-11 06:54: each person arranges screens and the menu – kept per person, names only, bounded; Reset empties it. */
+    public function test_personal_screen_and_menu_arrangement(): void
+    {
+        $this->actingAs($this->owner);
+        $this->postJson('/api/prefs/scr:money', ['layout' => ['order' => ['To do', 'Bank accounts'], 'hidden' => ['Supplier payments to make'], 'tables' => ['Bank accounts #1' => ['order' => ['Account', 'By the books (GBP)'], 'hidden' => ['<script>x</script>']]], 'evil' => ['x']]])->assertOk();
+        $l = $this->getJson('/api/prefs/scr:money')->assertOk()->json('list.layout');
+        $this->assertSame(['To do', 'Bank accounts'], $l['order']); $this->assertSame(['Supplier payments to make'], $l['hidden']); $this->assertArrayNotHasKey('evil', $l);
+        $this->assertSame(['x'], $l['tables']['Bank accounts #1']['hidden']);      // tags stripped, never code
+        $this->postJson('/api/prefs/menu', ['menu' => ['groups' => ['Money', 'Buying'], 'pinned' => [12], 'hidden' => [7], 'items' => ['Suppliers' => [5, 3]]]])->assertOk();
+        $this->assertSame(['Money', 'Buying'], $this->getJson('/api/prefs/menu')->json('list.menu.groups'));
+        $this->postJson('/api/prefs/scr:money', ['layout' => []])->assertOk();
+        $this->assertSame([], $this->getJson('/api/prefs/scr:money')->json('list.layout'));
+        $other = $this->makeUser('VA'); $this->assertSame([], $this->actingAs($other)->getJson('/api/prefs/scr:money')->json('list'));      // only for the person
+    }
+
+    public function test_boot_carries_the_legal_companies(): void
+    {
+        $id = (int) \Illuminate\Support\Facades\DB::table('cat_company_house')->insertGetId(\App\Services\RecordService::fillNotNull('cat_company_house', ['fk_id_ent' => 1, 'company_name' => 'Zeta Trading Ltd', 'f_active' => 1]));
+        $b = $this->actingAs($this->owner)->getJson('/api/boot')->assertOk()->json();
+        $this->assertContains('Zeta Trading Ltd', array_column($b['legal_companies'], 'name'));
+        $this->assertContains($id, array_column($b['legal_companies'], 'id'));
+    }
+
     public function test_share_target_in_the_manifest_and_a_safe_fallback(): void
     {
         $m = json_decode((string) file_get_contents(public_path('manifest.webmanifest')), true);

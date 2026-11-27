@@ -26,7 +26,7 @@ class ReadCache
 
     public static function remember(string $key, int $seconds, callable $fn): mixed
     {
-        if (! self::on() || request()->boolean('fresh')) return $fn();
+        if (! self::on() || request()->boolean('fresh') || request()->header('X-Fresh') === '1') return $fn();      // the Refresh button
         $k = 'rc:' . sha1(self::version() . '|' . Context::ent() . '|' . Context::userId() . '|' . $key . '|' . json_encode(request()->query()));
         try { $hit = Cache::store('file')->get($k); } catch (\Throwable $e) { $hit = null; }
         if (is_array($hit) && array_key_exists('v', $hit)) return $hit['v'];
