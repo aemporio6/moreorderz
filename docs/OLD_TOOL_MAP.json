@@ -455,8 +455,8 @@
 "functions": 1,
 "lines": 34,
 "status": {
-"PARTIAL": 6,
-"BUILT": 27,
+"PARTIAL": 3,
+"BUILT": 30,
 "NOT_APPLICABLE": 1
 },
 "open": [
@@ -477,24 +477,6 @@
 "status": "PARTIAL",
 "text": "Integration contract IC-0h: Test every module on two profiles (eBay + TikTok)",
 "note": "money files tested on TikTok, Amazon, eBay data; not every module on two profiles"
-},
-{
-"reg": "MR-1258",
-"status": "PARTIAL",
-"text": "One main importer with a breakdown: which folder, which marketplace, where it goes, what to match with, which module, which function (dropshipping, payment, everywhere). Example: an eBay file has 30 columns; 8–10 are nee",
-"note": "formats found from the file itself; one importer with a breakdown per folder / module not built"
-},
-{
-"reg": "MR-1413",
-"status": "PARTIAL",
-"text": "One master for Sales: t_sales (+ t_sale_charges) (old ones: Moved with a compare report; old ones become views)",
-"note": "one sales list; charges from money files in their own tables"
-},
-{
-"reg": "MR-1414",
-"status": "PARTIAL",
-"text": "One master for Imports: imp_batches, imp_mappings, imp_report_types (old ones: Old importers become report types)",
-"note": "import batches recorded; mappings / report types not as one engine"
 }
 ]
 },
@@ -682,17 +664,9 @@
 "functions": 0,
 "lines": 4,
 "status": {
-"BUILT": 3,
-"PARTIAL": 1
+"BUILT": 4
 },
-"open": [
-{
-"reg": "MR-1413",
-"status": "PARTIAL",
-"text": "One master for Sales: t_sales (+ t_sale_charges) (old ones: Moved with a compare report; old ones become views)",
-"note": "one sales list; charges from money files in their own tables"
-}
-]
+"open": []
 },
 {
 "controller": "T_audit_main",
@@ -875,17 +849,10 @@
 "functions": 0,
 "lines": 2,
 "status": {
-"FORM_ONLY": 1,
-"BUILT": 1
+"BUILT": 1,
+"NOT_APPLICABLE": 1
 },
-"open": [
-{
-"reg": "MR-0223",
-"status": "FORM_ONLY",
-"text": "T_products_main (4 functions) comes back as: CRUD legacy abstract product. Fix: Legacy; fk_id_product_main never set by forms; no rights. Improved: Retire; single master t_product_vendors",
-"note": "legacy form"
-}
-]
+"open": []
 },
 {
 "controller": "T_products_shop_not_listed",
@@ -912,17 +879,9 @@
 "functions": 0,
 "lines": 6,
 "status": {
-"BUILT": 5,
-"PARTIAL": 1
+"BUILT": 6
 },
-"open": [
-{
-"reg": "MR-1413",
-"status": "PARTIAL",
-"text": "One master for Sales: t_sales (+ t_sale_charges) (old ones: Moved with a compare report; old ones become views)",
-"note": "one sales list; charges from money files in their own tables"
-}
-]
+"open": []
 },
 {
 "controller": "T_sale_buy_main",
@@ -966,24 +925,10 @@
 "functions": 20,
 "lines": 30,
 "status": {
-"PARTIAL": 2,
-"BUILT": 26,
+"BUILT": 28,
 "NOT_APPLICABLE": 2
 },
-"open": [
-{
-"reg": "MR-0068",
-"status": "PARTIAL",
-"text": "Six sales tables → one (t_sales + charges) with compare report",
-"note": "six old sales tables -> one list as history lines; charges table / compare per rule partly"
-},
-{
-"reg": "MR-1413",
-"status": "PARTIAL",
-"text": "One master for Sales: t_sales (+ t_sale_charges) (old ones: Moved with a compare report; old ones become views)",
-"note": "one sales list; charges from money files in their own tables"
-}
-]
+"open": []
 },
 {
 "controller": "T_shop_feedback",
@@ -1299,17 +1244,9 @@
 "functions": 12,
 "lines": 6,
 "status": {
-"BUILT": 5,
-"PARTIAL": 1
+"BUILT": 6
 },
-"open": [
-{
-"reg": "MR-1413",
-"status": "PARTIAL",
-"text": "One master for Sales: t_sales (+ t_sale_charges) (old ones: Moved with a compare report; old ones become views)",
-"note": "one sales list; charges from money files in their own tables"
-}
-]
+"open": []
 },
 {
 "controller": "T_user",

@@ -350,7 +350,8 @@ class AdminController extends Controller
     {
         \App\Services\Perm::need($r->user(), 'admin.importHistory');
         $ent = (int) Context::ent();
-        return ['rows' => DB::table('fin_import_batches as b')->leftJoin('t_branches as s', 's.id', '=', 'b.branch_id')->leftJoin('t_users as u', 'u.id', '=', 'b.imported_by')->where('b.company_id', $ent)->orderByDesc('b.id')->limit(300)
+        return ['book' => \App\Services\ImportBook::page($ent),      // MR-1414 every file of every importer, with the breakdown
+            'rows' => DB::table('fin_import_batches as b')->leftJoin('t_branches as s', 's.id', '=', 'b.branch_id')->leftJoin('t_users as u', 'u.id', '=', 'b.imported_by')->where('b.company_id', $ent)->orderByDesc('b.id')->limit(300)
             ->get(['b.id', 'b.report_type', 'b.file_name', 's.shop_name as shop', 'b.period_from', 'b.period_to', 'b.rows_total', 'b.rows_new', 'b.rows_duplicate', 'b.rows_error', 'b.imported_at', 'u.login_id as by'])
             ->map(function ($b) { $b->undone = str_starts_with((string) DB::table('fin_import_batches')->where('id', $b->id)->value('file_hash'), 'UNDONE-'); return $b; }),
             'old' => DB::table('mo_import_report')->orderBy('id')->limit(400)->get(),
