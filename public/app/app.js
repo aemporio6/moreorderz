@@ -225,6 +225,7 @@
           : `<div class="ap-h">${t ? 'Nothing called “' + esc(t) + '”' : 'Nothing in this list yet'}</div>`;
         const curV = isText ? el.value : el.value, curL = isText ? el.value : ((el.options[el.selectedIndex] || {}).text || '');
         foot.innerHTML = `${mp && mp.add ? `<a href="#" class="ap-new">+ Add ${t && !opts.some(x => String(x[1]).toLowerCase() === t) ? '“' + esc(q.value.trim()) + '”' : 'a new one'}</a>` : ''}${curV ? `<a href="#" class="ap-mkdef" title="Filled in by itself next time this box is empty">★ Make “${esc(String(curL).slice(0, 30))}” my default here</a>` : ''}${mp && mp.help ? `<div class="ap-help">${esc(mp.help)}</div>` : ''}`;
+        if (LOGO_KEY.test(key)) $$('.ap-o', list).forEach(d => { const l = logoFor(d.textContent, 1); if (l) d.insertAdjacentHTML('afterbegin', logoImg(l)); });      // owner 27-11 09:26 logo beside the name
         $$('.ap-o', list).forEach(d => d.onmousedown = ev => { ev.preventDefault(); const x = opts[+d.dataset.i]; apClose(); setVal(x[0], x[1]); });
         const nw = $('.ap-new', foot); if (nw) nw.onmousedown = ev => { ev.preventDefault(); addNew(q.value.trim()); };
         const md = $('.ap-mkdef', foot); if (md) md.onmousedown = async ev => { ev.preventDefault(); AP.defs[key] = curV; apClose(); paint(); try { await api('prefs/pick', { method: 'POST', body: { defaults: AP.defs } }); toast('Saved – it is filled in by itself next time'); } catch (e) { toast(e.message, 'err'); } };
@@ -264,6 +265,39 @@
   /* Owner 26-11 22:57: the frame of every screen – ← Back, "+ New …" for the screen's own record (or a fresh entry on an entry screen),
      a "Still needed" line that names the required boxes and jumps to them, and Quick / Full on a long hand-built form (Quick = only the
      parts with something required; nothing is lost, Full shows it all again). No screen has to add these itself. */
+  /* Owner 27-11 11:55: "Inventory has no Add inventory, Partners no Add partner, Tasks no Add task". Every screen gets "+ Add …" for its own
+     thing, worked out by itself: the screen's own forms (menu), then forms whose name matches the screen, then its department – only forms
+     this role may add (the Create list). ▾ shows the other things of the same department, and "Everything…" opens Create. */
+  const ADD_LABEL = { '#/partners': 'partner', '#/inventory': 'product', '#/contacts': 'person or company' };
+  const ADD_PREF = { '#/partners': ['party', 'fin_investor_agreement', 't_src_investments'], '#/inventory': ['product', 'stock_adjust', 'stock_transfer', 'stock_count'], '#/tasks': ['task', 'task_template', 'task_absence'],
+    '#/products': ['product', 'listing', 'brand'], '#/my-brands': ['brand', 'product'], '#/contacts': ['party'], '#/money': ['fin_bank_account'], '#/sales': ['listing'], '#/people': ['party'] };
+  const addable = c => !/(\bListing$|^T |Params|^List of |\bquick view\b|Entity$)/i.test(c.title);      // read-only lists of the old tool are not things to add
+  function addChoices(route, it, h1) {
+    const cl = crList().filter(addable), byKey = k => cl.find(c => c.key === k), base = route.split('?')[0], out = [], put = c => { if (c && !out.includes(c)) out.push(c); };
+    (ADD_PREF[base] || []).forEach(k => put(byKey(k)));
+    if (it) (it.forms || []).forEach(k => put(byKey(k)));
+    const stem = w => w.toLowerCase().replace(/(ies)$/, 'y').replace(/(ses|xes)$/, s => s.slice(0, -2)).replace(/s$/, '');
+    const words = new Set(((it ? it.name : '') + ' ' + h1).split(/[^A-Za-z]+/).filter(w => w.length > 3 && !/^(your|with|from|this|that|list|lists|screen|view|views|page|book|board|setup|settings|report|reports|check|all)$/i.test(w)).map(stem));
+    if (words.size) cl.filter(c => c.title.split(/[^A-Za-z]+/).some(w => w.length > 3 && words.has(stem(w)))).slice(0, 6).forEach(put);
+    const sec = it ? (S.boot.menu.find(sx => sx.items.includes(it)) || {}).name || '' : '';
+    if (out.length < 2 && sec) { const sw = sec.toLowerCase().split(/[^a-z]+/).filter(w => w.length > 3).map(stem); cl.filter(c => sw.some(w => stem(c.dept.split(/[^A-Za-z]+/)[0] || '') === w || c.dept.toLowerCase().includes(w))).slice(0, 8).forEach(put); }
+    return out;
+  }
+  function addButton(act, route, it, h1) {
+    if (!S.boot || !(S.boot.create || []).length || act.querySelector('#pfAdd')) return;
+    const ch = addChoices(route, it, h1), first = ch[0], own = ADD_LABEL[route.split('?')[0]], label = c => c === first && own ? own : String(c.title).replace(/\s*[—–(].*$/, '');
+    if (first && [...act.querySelectorAll('button, a.btn')].some(b => b.textContent.toLowerCase().includes(label(first).toLowerCase()))) return;      // the screen already has this very button
+    act.insertAdjacentHTML('afterbegin', `<span class="pf-add" style="display:inline-flex"><button class="btn primary" type="button" id="pfAdd" title="${first ? 'Add a new ' + esc(label(first).toLowerCase()) : 'Create anything'}">${ic('plus')} ${first ? 'Add ' + esc(label(first).toLowerCase()) : 'Add'}</button><button class="btn primary" type="button" id="pfAddMore" title="Other things to add here" style="padding:0 8px;margin-left:1px">▾</button></span>`);
+    const open = c => c ? crOpen(c) : openCreate();
+    $('#pfAdd').onclick = () => { if (first) crUse(first); first ? (first.screen ? go(first.screen) : openForm(first.key, null, { onSaved: () => render() })) : openCreate(); };
+    $('#pfAddMore').onclick = e => { e.stopPropagation(); const old = $('#pfAddMenu'); if (old) return old.remove(); const rc = e.currentTarget.getBoundingClientRect(), mn = document.createElement('div'); mn.id = 'pfAddMenu';
+      mn.style.cssText = `position:fixed;z-index:60;top:${rc.bottom + 4}px;left:${Math.max(8, Math.min(rc.right - 260, innerWidth - 268))}px;width:260px;background:var(--surface,#fff);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:6px;max-height:60vh;overflow:auto`;
+      const more = ch.slice(1), dept = first ? crList().filter(addable).filter(c => c.dept === first.dept && !ch.includes(c)).slice(0, 10) : [];
+      mn.innerHTML = [...more, ...dept].map((c, i) => `<a href="#" class="mn-add" data-i="${i}" style="display:block;padding:7px 9px;border-radius:7px;color:inherit;text-decoration:none">${ic('plus')} ${esc(c.title)}</a>`).join('') + `<a href="#" class="mn-add" data-all="1" style="display:block;padding:7px 9px;border-top:1px solid var(--line);margin-top:4px;color:var(--accent)">Everything you can create…</a>`;
+      document.body.appendChild(mn); const all = [...more, ...dept];
+      $$('.mn-add', mn).forEach(a => { a.onmouseenter = () => a.style.background = 'var(--surface-2,#f3f6f5)'; a.onmouseleave = () => a.style.background = ''; a.onclick = ev => { ev.preventDefault(); mn.remove(); a.dataset.all ? openCreate() : open(all[+a.dataset.i]); }; });
+      setTimeout(() => document.addEventListener('click', () => mn.remove(), { once: true }), 0); };
+  }
   function pageFrame(route) {
     const m = $('#main'), head = m && m.querySelector('.page-head'); if (!head || head.dataset.pf) return; head.dataset.pf = '1';
     const left = head.firstElementChild; let act = head.querySelector('.actions') || (head.children.length > 1 ? head.lastElementChild : null); if (!act) { act = document.createElement('div'); act.className = 'actions'; head.appendChild(act); } act.classList.add('pf-act');
@@ -274,6 +308,7 @@
     const save = [...m.querySelectorAll('button.primary')].find(b => /^\s*save\b/i.test(b.textContent)), id = currentItem(); let it = null; if (id) for (const sx of S.boot.menu) { const f = sx.items.find(i => i.id === id); if (f) { it = f; break; } }
     if (!hasNew && save && !m.querySelector('#lNew')) act.insertAdjacentHTML('afterbegin', `<button class="btn" type="button" id="pfFresh" title="Empty the form for the next one">+ New entry</button>`);
     else if (!hasNew && it && it.new_form) act.insertAdjacentHTML('afterbegin', `<button class="btn primary" type="button" id="pfNew">${ic('plus')} New ${esc(String(it.new_form[1]).replace(/\s*[—–(].*$/, '').toLowerCase())}</button>`);
+    if (!(hasNew && !ADD_PREF[(route || '').split('?')[0]]) && !(!hasNew && (save || (it && it.new_form))) && route && !/^#\/(home|guide|me|my-menu|search|logos)\b/.test(route) && !/^#\/?$/.test(route)) addButton(act, route, it, (m.querySelector('.page-head h1') || {}).textContent || '');      // owner 27-11 11:55: every screen has its Add
     const fr = $('#pfFresh'); if (fr) fr.onclick = () => { render(); toast('A fresh, empty form'); };
     const nw = $('#pfNew'); if (nw) nw.onclick = () => openForm(it.new_form[0], null, { onSaved: () => render() });
     const cx = ctxOfRoute(route); if (cx && !act.querySelector('#pfFile')) { act.insertAdjacentHTML('beforeend', `<button class="btn" type="button" id="pfFile" title="Drop a file or screenshot – it is read, its kind guessed and put on this record">${ic('paperclip')} File a document</button>`); $('#pfFile').onclick = () => fileDoc(cx, () => render()); }
@@ -313,6 +348,21 @@
   }
   function trackLinkHtml(no, carrier) { const t = trackUrl(no, carrier); if (!t) return null;
     return `<a class="trk" href="${esc(t.url)}" target="_blank" rel="noopener" style="color:var(--link,#1a5fd0);text-decoration:underline" title="Track on ${esc(t.name)} – opens its own page">${esc(no)} ↗</a>${t.sure ? '' : ` <button type="button" class="btn sm ghost trk-add" data-trk="${esc(no)}" title="Carrier not known – add it so this number opens on its own page" style="padding:0 6px;font-size:11px">+ carrier</button>`}`; }
+  // owner 27-11 09:26: a small current logo beside every marketplace, bank, carrier, app and own brand – wherever its name shows
+  const LOGO_HEAD = /^(brand|marketplace|market|shop|store|channel|platform|sold on|sells on|bank|carrier|courier|forwarder|shipping|service|connection|app|printer|payment|paid (by|with|via)|method|source|via|wallet|account)\b/i;
+  const LOGO_KEY = /brand|marketplace|shop|branch|bank|carrier|courier|forwarder|printer|channel|platform|wallet|payment|connector/i;
+  const lgNorm = t => ' ' + String(t || '').toLowerCase().replace(/[^\p{L}\p{N}&]+/gu, ' ').trim() + ' ';
+  function logoIdx() { const L = (S.boot && S.boot.logos) || []; if (S._lgx && S._lgx.src === L) return S._lgx.list; const list = [];
+    L.forEach(l => [l.n, ...(l.a || [])].forEach(w => { const n = lgNorm(w); if (n.trim().length > 1) list.push([n, l]); })); list.sort((a, b) => b[0].length - a[0].length); S._lgx = { src: L, list }; return list; }
+  function logoFor(text, loose) { const t = lgNorm(text); if (t.trim().length < 2 || t.length > (loose ? 200 : 90)) return null; for (const [w, l] of logoIdx()) if (t.includes(w)) return l; return null; }
+  function logoImg(l, cls) { return `<img class="lgo${l.k === 'BRAND' ? ' lgo-b' : ''}${cls ? ' ' + cls : ''}" src="/api/logo/${l.id}?v=${l.v}" alt="" loading="lazy" onerror="this.remove()">`; }
+  function logoDecorate(root) {
+    if (!root || !S.boot || !(S.boot.logos || []).length) return;
+    root.querySelectorAll('table.t').forEach(t => { const hr = t.tHead && t.tHead.rows[0]; if (!hr) return; const ix = [...hr.cells].map((c, i) => LOGO_HEAD.test(c.textContent.trim()) ? i : -1).filter(i => i >= 0); if (!ix.length) return;
+      [...(t.tBodies[0] || { rows: [] }).rows].forEach(tr => ix.forEach(i => { const td = tr.cells[i]; if (!td || td.dataset.lgo || td.querySelector('input,select,textarea,img.lgo')) return; td.dataset.lgo = '1'; const l = logoFor(td.textContent); if (l) td.insertAdjacentHTML('afterbegin', logoImg(l)); })); });
+    root.querySelectorAll('.grid > div, .card-b > div').forEach(el => { if (el.children.length !== 2 || el.dataset.lgo) return; const [k, v] = el.children; if (!LOGO_HEAD.test(k.textContent.trim()) || v.querySelector('input,select,textarea,img.lgo')) return; el.dataset.lgo = '1'; const l = logoFor(v.textContent); if (l) v.insertAdjacentHTML('afterbegin', logoImg(l)); });
+    root.querySelectorAll('[data-logo]').forEach(el => { if (el.dataset.lgo) return; el.dataset.lgo = '1'; const l = logoFor(el.dataset.logo || el.textContent, 1); if (l) el.insertAdjacentHTML('afterbegin', logoImg(l)); });
+  }
   function trackDecorate(root) {
     if (!root || !S.boot || !S.boot.tracking) return;
     root.querySelectorAll('table.t').forEach(t => { const hr = t.tHead && t.tHead.rows[0]; if (!hr) return; const H = [...hr.cells].map(c => c.textContent.trim());
@@ -328,7 +378,7 @@
         async v => { const r = await api('tracking-carriers', { method: 'POST', body: v }); S.boot.tracking = r.tracking; setTimeout(render, 50); return r; }); });
   }
   MO.trackUrl = trackUrl;
-  const trkObs = new MutationObserver(() => { clearTimeout(trkObs.t); trkObs.t = setTimeout(() => { try { trackDecorate(document.getElementById('main')); } catch (e) { } }, 200); });
+  const trkObs = new MutationObserver(() => { clearTimeout(trkObs.t); trkObs.t = setTimeout(() => { try { trackDecorate(document.getElementById('main')); } catch (e) { } try { logoDecorate(document.getElementById('main')); } catch (e) { } }, 200); });
   let navTimer; function afterRender(route) { try { $$('#main .kpi').forEach(k => { if (!k.dataset.go && !k.onclick && k.tagName !== 'A' && !k.closest('a') && !k.hasAttribute('data-click')) k.style.cursor = 'default'; }); } catch (e) {}      /* owner 27-11: a hand only where a press does something */
     try { ensureHead(route); } catch (e) {} try { pageFrame(route); } catch (e) {} try { takeHandoff(); } catch (e) {} taskHead(route); paintFav(); playbookBar(route); stepPager(route); guideNow(route); clearTimeout(navTimer);
     navTimer = setTimeout(async () => { if (S.route !== route || route === '#/home') return; const h = $('#main h1'); if (!h) return; try { NAV = await api('nav', { method: 'POST', body: { title: h.textContent.trim().slice(0, 150), url: route } }); paintFav(); } catch (e) {} }, 1500); }
@@ -520,7 +570,7 @@
 
   // ---------- pages ----------
   const ALL_ROUTES = /^(#\/?$|#\/(home|sales(\?|$)|sales-annual|sales-detailed|stock(\?|$)|stock\/lots|stock\/product\/|buying(\?|$|\/overview)|money(\?|$)|profit|reports|tasks(\?|$|\/dashboard|\/board)|list\/|rec\/))/;      // R-G_CORE-102 pages that add up every company
-  async function render() { await renderPage(); afterRender(S.route); try { figureHelp(); if (S.tourAfter) { S.tourAfter = 0; setTimeout(screenTour, 900); } } catch (e) {} try { trackDecorate($('#main')); if (!trkObs.on && $('#main')) { trkObs.observe($('#main'), { childList: true, subtree: true }); trkObs.on = 1; } } catch (e) {} try { layApply(S.route); } catch (e) {} try { recordMessages(S.route); } catch (e) {} }
+  async function render() { await renderPage(); afterRender(S.route); try { figureHelp(); if (S.tourAfter) { S.tourAfter = 0; setTimeout(screenTour, 900); } } catch (e) {} try { logoDecorate($('#main')); } catch (e) {} try { trackDecorate($('#main')); if (!trkObs.on && $('#main')) { trkObs.observe($('#main'), { childList: true, subtree: true }); trkObs.on = 1; } } catch (e) {} try { layApply(S.route); } catch (e) {} try { recordMessages(S.route); } catch (e) {} }
   async function renderPage() {
     if (S.boot && S.boot.partner_only && !/^#\/(my-account|my-invoices|my-portal|my-sales|me)\b/.test(S.route || '')) { location.hash = '#/my-account'; return; }      // R-FIN-2 a partner account sees only its own pages
     if (S.boot && S.boot.landing && !S.landed && (!S.route || S.route === '#/home' || S.route === '#/')) { S.landed = true; location.hash = S.boot.landing; return; }      // each finance role lands on its own page
@@ -724,6 +774,8 @@
       if (r === '#/me') return await pageMe();
       if (r === '#/my-menu') return await pageMyMenu();
       if (r === '#/owner-options') return await pageOwnerOptions();
+      if (r === '#/logos' || r.startsWith('#/logos?')) return await pageLogos(new URLSearchParams(r.split('?')[1] || '').get('k') || '');
+      if (r === '#/my-brands' || r.startsWith('#/my-brands?')) return await pageMyBrands(+(new URLSearchParams(r.split('?')[1] || '').get('b') || 0));
       if (r === '#/guide' || r.startsWith('#/guide?')) return await pageGuide(new URLSearchParams(r.split('?')[1] || ''));
       if (r === '#/contacts' || r.startsWith('#/contacts')) { const m9 = r.match(/^#\/contacts\/(\w+)\/(\d+)/), q9 = new URLSearchParams(r.split('?')[1] || ''); return await pageContacts(m9 ? { type: m9[1].toUpperCase(), id: +m9[2] } : null, q9); }
       if ((mt = r.match(/^#\/screen\/([\d.]+)/))) return pageScreen(mt[1]);
@@ -781,6 +833,105 @@
   }
   const HOME_OF = { OWNER: ['Owner Home', 'Every number of the business on one page'], MANAGER: ['Manager Home', 'The team\'s work and what needs a decision'], VA: ['VA / TL Home', 'Today\'s tasks for a VA or team lead'], TL: ['VA / TL Home', 'Today\'s tasks for a VA or team lead'],
     WAREHOUSE: ['Warehouse Home', 'What to receive, pick and pack today'], FINANCE: ['Finance Home', 'Payments due, bank and approvals'], ACCOUNTANT: ['Accountant Home', 'Ledger, month close and filings'], PARTNER: ['Partner Home', 'Your share, sales and statements'] };
+  // owner 27-11 09:30: a logo picture made clean – the plain background around the letters taken away (from the edges inwards, so letters keep
+  // their own colour), trimmed to the letters, kept small. Runs in the browser; the owner sees it before it is saved.
+  function logoClean(file, opt = {}) {
+    return new Promise((ok, no) => { const fr = new FileReader(); fr.onerror = () => no(new Error('The file could not be read.'));
+      fr.onload = () => { const im = new Image(); im.onerror = () => no(new Error('This is not a picture.')); im.onload = () => {
+        const sc = Math.min(1, 1400 / im.width), W = Math.max(1, Math.round(im.width * sc)), H = Math.max(1, Math.round(im.height * sc));
+        const c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(im, 0, 0, W, H);
+        if (opt.remove !== false) { const d = x.getImageData(0, 0, W, H), p = d.data, at = (i, j) => (j * W + i) * 4;
+          const cs = [[2, 2], [W - 3, 2], [2, H - 3], [W - 3, H - 3]].map(([i, j]) => at(Math.max(0, i), Math.max(0, j)));
+          if (cs.some(k => p[k + 3] > 200)) { const bg = [0, 1, 2].map(ch => cs.reduce((a, k) => a + p[k + ch], 0) / 4), tol = opt.tol || 46;
+            const dist = k => Math.hypot(p[k] - bg[0], p[k + 1] - bg[1], p[k + 2] - bg[2]), seen = new Uint8Array(W * H), st = [];
+            for (let i = 0; i < W; i++) st.push(i, (H - 1) * W + i); for (let j = 0; j < H; j++) st.push(j * W, j * W + W - 1);
+            while (st.length) { const n = st.pop(); if (seen[n]) continue; seen[n] = 1; const k = n * 4, dd = dist(k); if (dd > tol * 1.7) continue;
+              p[k + 3] = dd <= tol ? 0 : Math.round(p[k + 3] * (dd - tol) / (tol * 0.7)); const i = n % W, j = (n - i) / W;
+              if (i > 0) st.push(n - 1); if (i < W - 1) st.push(n + 1); if (j > 0) st.push(n - W); if (j < H - 1) st.push(n + W); }
+            x.putImageData(d, 0, 0); } }
+        if (opt.remove !== false) { const d3 = x.getImageData(0, 0, W, H), q = d3.data, lab = new Uint8Array(W * H), min = W * H * 0.0015;      // loose specks (shadow edges, marks) go
+          for (let n0 = 0; n0 < W * H; n0++) { if (lab[n0] || q[n0 * 4 + 3] <= 24) continue; const comp = [n0], st2 = [n0]; lab[n0] = 1;
+            while (st2.length) { const n = st2.pop(), i = n % W; for (const m of [i > 0 ? n - 1 : -1, i < W - 1 ? n + 1 : -1, n - W, n + W]) if (m >= 0 && m < W * H && !lab[m] && q[m * 4 + 3] > 24) { lab[m] = 1; st2.push(m); comp.push(m); } }
+            if (comp.length < min) comp.forEach(n => { q[n * 4 + 3] = 0; }); }
+          x.putImageData(d3, 0, 0); }
+        const d2 = x.getImageData(0, 0, W, H).data; let l = W, t = H, r = 0, b = 0;
+        for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) if (d2[(j * W + i) * 4 + 3] > 24) { if (i < l) l = i; if (i > r) r = i; if (j < t) t = j; if (j > b) b = j; }
+        if (r < l) { l = 0; t = 0; r = W - 1; b = H - 1; } const pad = 4; l = Math.max(0, l - pad); t = Math.max(0, t - pad); r = Math.min(W - 1, r + pad); b = Math.min(H - 1, b + pad);
+        const cw = r - l + 1, ch = b - t + 1, s2 = Math.min(1, 200 / ch, 900 / cw), o = document.createElement('canvas'); o.width = Math.round(cw * s2); o.height = Math.round(ch * s2);
+        o.getContext('2d').drawImage(c, l, t, cw, ch, 0, 0, o.width, o.height); ok(o.toDataURL('image/png')); }; im.src = fr.result; }; fr.readAsDataURL(file); });
+  }
+  // choose a picture → see it cleaned (on light and dark) → Save. onSave gets the data: URL of the light and (optional) dark picture.
+  function logoUpload(title, onSave) {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/png,image/jpeg,image/webp,image/svg+xml'; inp.multiple = true;
+    inp.onchange = async () => { const files = [...inp.files].slice(0, 2); if (!files.length) return; let light = null, dark = null, remove = true;
+      const make = async () => { busy(true); try { light = /svg/.test(files[0].type) ? await new Promise(ok => { const f = new FileReader(); f.onload = () => ok(f.result); f.readAsDataURL(files[0]); }) : await logoClean(files[0], { remove });
+        dark = files[1] ? await logoClean(files[1], { remove }) : null; } finally { busy(false); } };
+      try { await make(); } catch (e) { return toast(e.message, 'err'); }
+      const m = modal(title, files[1] ? 'First picture for light screens, second for dark screens.' : 'Tip: choose two pictures at once – the second is used on dark screens.', '<div id="luPrev"></div>',
+        '<label class="chk left"><input type="checkbox" id="luBg" checked> Take the background away – letters only</label><button class="btn" id="luNo">Cancel</button><button class="btn primary" id="luOk">Save</button>');
+      const show = () => { $('#luPrev', m.ov).innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${[['#ffffff', 'On a light screen', light], ['#1d2327', 'On a dark screen', dark || light]].map(([bg, t, src]) => `<div><div class="small muted">${t}</div><div style="background:${bg};border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;align-items:center;justify-content:center;min-height:90px"><img src="${src}" style="max-height:70px;max-width:100%"></div></div>`).join('')}</div>`; };
+      show(); $('#luBg', m.ov).onchange = async e => { remove = e.target.checked; try { await make(); show(); } catch (er) { toast(er.message, 'err'); } };
+      $('#luNo', m.ov).onclick = m.close; $('#luOk', m.ov).onclick = async () => { try { busy(true); await onSave(light, dark); m.close(); } catch (e) { toast(e.message, 'err'); } finally { busy(false); } }; };
+    inp.click();
+  }
+  const logoSrc = (id, v, dark) => `/api/logo/${id}?v=${esc(v || '')}${dark ? '&dark=1' : ''}`;
+  async function bootLogos(list) { if (list) { S.boot.logos = list; S._lgx = null; } }
+
+  async function pageLogos(k = '') {
+    busy(true); let d; try { d = await api('logos'); } finally { busy(false); }
+    const again = () => pageLogos(k), rows = d.rows.filter(r => !k || r.kind === k);
+    const ini = n => `<span class="lgo-ini">${esc(String(n).replace(/[^\p{L}\p{N}]/gu, '').slice(0, 2).toUpperCase())}</span>`;
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Logos</h1><div class="sub">The small picture beside each name everywhere in the tool – marketplaces, banks, carriers, apps, printers and your own brands. A service's logo is its own current website icon, brought by itself and refreshed every month; your own picture always wins.</div></div>
+      <div class="actions"><button class="btn" id="lgFetch" title="Bring the logos that are still missing from their websites">⟳ Bring missing logos</button><button class="btn primary" id="lgAdd">${ic('plus')} Add</button></div></div>
+      <div class="list-bar"><button class="btn sm ${k ? '' : 'primary'}" data-k="">All · ${d.rows.length}</button>${Object.entries(d.kinds).map(([c, l]) => `<button class="btn sm ${k === c ? 'primary' : ''}" data-k="${c}">${esc(l)} · ${d.rows.filter(r => r.kind === c).length}</button>`).join('')}<span class="small muted" style="margin-left:auto">${d.missing ? d.missing + ' without a picture yet' : 'every one has its picture'}</span></div>
+      <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th style="width:90px">Logo</th><th>Name</th><th>Kind</th><th>Web address</th><th>Also found by</th><th>Picture from</th><th></th></tr></thead><tbody>${rows.map(r => `<tr style="${r.f_active ? '' : 'opacity:.45'}">
+        <td><span class="lgo-cell">${r.has_image ? `<img src="${logoSrc(r.id, r.v)}" alt="">` : ini(r.name)}</span></td><td><b>${esc(r.name)}</b></td><td class="small">${esc(d.kinds[r.kind] || r.kind)}</td>
+        <td class="small">${r.domain ? `<a href="https://${esc(r.domain)}" target="_blank" rel="noopener">${esc(r.domain)}</a>` : '<span class="muted">–</span>'}</td><td class="small muted">${esc(r.aliases || '')}</td>
+        <td class="small">${r.f_own ? '<span class="chip done">your picture</span>' : r.has_image ? 'its website' : `<span class="muted">${esc(r.fetch_note || 'not brought yet')}</span>`}</td>
+        <td style="white-space:nowrap"><button class="btn sm" data-up="${r.id}">Upload own</button> ${r.domain && !r.f_own ? `<button class="btn sm" data-fe="${r.id}">From website</button> ` : ''}${r.f_own && r.domain ? `<button class="btn sm" data-si="${r.id}" title="Use the website's own logo again instead of your picture">Website logo</button> ` : ''}<button class="btn sm" data-ed="${r.id}">Edit</button> <button class="btn sm" data-on="${r.id}">${r.f_active ? 'Switch off' : 'Switch on'}</button></td></tr>`).join('') || '<tr><td colspan="7" class="muted">Nothing here.</td></tr>'}</tbody></table></div></div>`;
+    $$('#main [data-k]').forEach(b => b.onclick = () => pageLogos(b.dataset.k));
+    const save = async (id, body) => { const r = await api('logos' + (id ? '/' + id : ''), { method: 'POST', body }); bootLogos(r.logos); return r; };
+    const edit = r => miniForm(r ? 'Change ' + r.name : 'Add a logo', 'Its logo is brought from its website by itself. The words help it to be found inside longer names (e.g. "amz, amazon uk").',
+      [{ name: 'name', label: 'Name', required: true, value: r ? r.name : '' }, { name: 'kind', label: 'Kind', value: r ? r.kind : (k || 'OTHER'), options: Object.entries(d.kinds) },
+       { name: 'domain', label: 'Web address (example.com)', value: r ? r.domain || '' : '' }, { name: 'aliases', label: 'Also found by (words, with commas)', value: r ? r.aliases || '' : '' }],
+      async v => { const x = await save(r && r.id, v); setTimeout(again, 50); return { message: 'Saved' + (x.logos.some(l => l.id === x.id) ? ' – the logo is in' : '') }; });
+    $('#lgAdd').onclick = () => edit(null);
+    $$('#main [data-ed]').forEach(b => b.onclick = () => edit(d.rows.find(r => r.id == b.dataset.ed)));
+    $$('#main [data-on]').forEach(b => b.onclick = async () => { const r = d.rows.find(x => x.id == b.dataset.on); try { await save(r.id, { f_active: r.f_active ? 0 : 1 }); again(); } catch (e) { toast(e.message, 'err'); } });
+    $$('#main [data-si]').forEach(b => b.onclick = async () => { try { await save(+b.dataset.si, { site_icon: 1 }); toast('The website logo is used again'); again(); } catch (e) { toast(e.message, 'err'); } });
+    $$('#main [data-fe]').forEach(b => b.onclick = async () => { try { busy(true); const r = await api(`logos/${b.dataset.fe}/fetch`, { method: 'POST', body: {} }); bootLogos(r.logos); toast(r.message, r.ok ? '' : 'warn'); again(); } catch (e) { toast(e.message, 'err'); } finally { busy(false); } });
+    $$('#main [data-up]').forEach(b => b.onclick = () => logoUpload('Logo of ' + d.rows.find(r => r.id == b.dataset.up).name, async (light, dark) => { await save(+b.dataset.up, { image: light, ...(dark ? { image_dark: dark } : {}) }); toast('Your picture is saved – it shows everywhere'); again(); }));
+    $('#lgFetch').onclick = async () => { const miss = d.rows.filter(r => !r.has_image && r.domain && r.f_active && !r.f_own).slice(0, 40); if (!miss.length) return toast('Nothing is missing that has a web address');
+      let ok = 0; for (const [i, r] of miss.entries()) { $('#lgFetch').textContent = `⟳ ${i + 1} / ${miss.length}…`; try { const x = await api(`logos/${r.id}/fetch`, { method: 'POST', body: {} }); if (x.ok) ok++; bootLogos(x.logos); } catch (e) { } }
+      toast(`${ok} of ${miss.length} logos brought`); again(); };
+  }
+
+  async function pageMyBrands(sel = 0) {
+    busy(true); let d; try { d = await api('my-brands'); } finally { busy(false); }
+    const own = d.brands.filter(b => b.own), other = d.brands.filter(b => !b.own); if (!sel && own.length) sel = own[0].id;
+    const pic = (b, h) => b.logo ? `<img src="${logoSrc(b.logo.id, b.logo.v)}" alt="${esc(b.name)}" style="max-height:${h}px;max-width:${h * 5}px;display:block">` : `<b style="font-size:${Math.round(h / 2.2)}px;letter-spacing:.02em">${esc(b.name)}</b>`;
+    $('#main').innerHTML = `<div class="page-head"><div><h1>My brands</h1><div class="sub">Your own brands – each with its products, stock, sales and the shops it sells on. Which brands are yours is your choice (Our brand / Not ours).</div></div>
+      <div class="actions">${d.can_change ? '<a class="btn" href="#/logos?k=BRAND">Logos</a>' : ''}</div></div>
+      <div class="mb-row">${own.map(b => `<a class="mb-btn ${b.id === sel ? 'on' : ''}" href="#/my-brands?b=${b.id}" title="${esc(b.name)}">${pic(b, 40)}<span class="small muted">${b.products} products</span></a>`).join('') || '<div class="card"><div class="card-b">No brand is marked as yours yet. Open <b>Other brands</b> below and press <b>Our brand</b> on each of yours.</div></div>'}</div>
+      <div id="mbOne"></div>
+      ${other.length ? `<details class="card" style="margin-top:14px" ${own.length ? '' : 'open'}><summary class="card-h" style="cursor:pointer"><h3>Other brands · ${other.length}</h3><span class="small muted">brands in the lists that are not marked as yours</span></summary><div class="tbl-wrap"><table class="t"><thead><tr><th>Brand</th><th>Company</th><th class="num">Products</th><th></th></tr></thead><tbody>${other.map(b => `<tr><td>${esc(b.name)}</td><td>${esc(b.company || '–')}</td><td class="num">${b.products}</td><td>${d.can_change ? `<button class="btn sm" data-own="${b.id}|1">Our brand</button>` : ''}</td></tr>`).join('')}</tbody></table></div></details>` : ''}`;
+    $$('#main [data-own]').forEach(x => x.onclick = async () => { const [id, v] = x.dataset.own.split('|'); try { await api(`my-brands/${id}/own`, { method: 'POST', body: { own: v === '1' } }); S.boot = await api('boot'); S._lgx = null; toast(v === '1' ? 'Marked as your brand' : 'Not marked as yours any more'); pageMyBrands(v === '1' ? +id : 0); } catch (e) { toast(e.message, 'err'); } });
+    if (!sel || !own.some(b => b.id === sel)) return;
+    let o; try { o = await api('my-brands/' + sel); } catch (e) { $('#mbOne').innerHTML = `<div class="card"><div class="card-b">${esc(e.message)}</div></div>`; return; }
+    const b = o.brand, cur = o.currency, P = o.products;
+    $('#mbOne').innerHTML = `<div class="card" style="margin-top:12px"><div class="card-b" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap">
+        <div class="mb-logo">${pic(b, 70)}</div>
+        <div style="flex:1;min-width:220px"><h2 style="margin:0 0 4px">${esc(b.name)}</h2><div class="small muted">${b.company ? 'Company: <b>' + esc(b.company) + '</b> · ' : ''}${b.tm ? 'Trade mark: <b>' + esc(b.tm) + '</b>' + (b.tm_expiry ? ' until ' + esc(b.tm_expiry) : '') + ' · ' : ''}${b.website ? `<a href="${esc(/^https?:/.test(b.website) ? b.website : 'https://' + b.website)}" target="_blank" rel="noopener">${esc(b.website)}</a>` : ''}</div></div>
+        ${d.can_change ? `<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" id="mbUp">${b.logo ? 'Change logo' : 'Upload logo'}</button><button class="btn" data-own="${b.id}|0">Not ours</button></div>` : ''}</div></div>
+      <div class="kpis" style="margin-top:12px">${[['Products', P.length, 'active products of this brand'], ['Units in stock', b.units, 'all places'], ['Stock value', cur + ' ' + money(o.stock_value), 'units × landing price'], ['Sold · 30 days', b.sold_30, 'units, refunds left out'], ['Sales · 30 days', cur + ' ' + money(b.sales_30), 'in ' + cur], ['Profit · 30 days', cur + ' ' + money(o.profit_30), 'as worked out on each sale']].map(([l, v, f]) => `<div class="card kpi"><div class="bar"></div><div class="lbl">${l}</div><div class="val">${esc(String(v))}</div><div class="foot">${esc(f)}</div></div>`).join('')}</div>
+      <div class="card" style="margin-top:12px"><div class="card-h"><h3>Products of ${esc(b.name)}</h3><input class="q" id="mbQ" placeholder="Search SKU or name…" style="max-width:260px"></div><div class="tbl-wrap"><table class="t"><thead><tr><th></th><th>SKU</th><th>Product</th><th class="num">Stock</th><th class="num">Price</th><th class="num">Landing price</th><th class="num">Sold 30 d</th><th class="num">Sales 30 d</th><th class="num">Profit 30 d</th><th>Reorder</th></tr></thead><tbody id="mbP">${P.map(p => `<tr data-s="${esc((p.sku + ' ' + p.name).toLowerCase())}" data-go="#/inventory/${p.id}" style="cursor:pointer"><td style="width:44px">${p.image ? `<img src="${esc(p.image)}" alt="" loading="lazy" style="width:36px;height:36px;object-fit:cover;border-radius:6px" onerror="this.remove()">` : ''}</td><td><a href="#/inventory/${p.id}">${esc(p.sku)}</a></td><td>${esc(p.name || '')}</td><td class="num">${p.stock}</td><td class="num">${p.price !== null ? money(p.price) : '–'}</td><td class="num">${p.cost ? money(p.cost) : '–'}</td><td class="num">${p.sold_30 || ''}</td><td class="num">${p.sales_30 ? money(p.sales_30) : ''}</td><td class="num">${p.profit_30 ? money(p.profit_30) : ''}</td><td class="small">${esc(p.reorder || '')}</td></tr>`).join('') || '<tr><td colspan="10" class="muted">No product has this brand yet – choose the brand on a product (Details › Brand).</td></tr>'}</tbody></table></div></div>
+      <div class="card" style="margin-top:12px"><div class="card-h"><h3>Where it sells</h3><span class="small muted">last 90 days</span></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Shop</th><th class="num">Units</th><th class="num">Sales (${esc(cur)})</th></tr></thead><tbody>${o.shops.map(s => `<tr><td>${esc(s.shop)}</td><td class="num">${s.qty}</td><td class="num">${money(s.amount)}</td></tr>`).join('') || '<tr><td colspan="3" class="muted">No sales in the last 90 days.</td></tr>'}</tbody></table></div></div>`;
+    $('#mbQ').oninput = e => { const t = e.target.value.trim().toLowerCase(); $$('#mbP tr[data-s]').forEach(tr => tr.style.display = !t || tr.dataset.s.includes(t) ? '' : 'none'); };
+    $$('#mbP tr[data-go]').forEach(tr => tr.onclick = e => { if (!e.target.closest('a')) go(tr.dataset.go); });
+    $$('#mbOne [data-own]').forEach(x => x.onclick = async () => { try { await api(`my-brands/${b.id}/own`, { method: 'POST', body: { own: false } }); S.boot = await api('boot'); S._lgx = null; toast('Not marked as yours any more'); pageMyBrands(0); } catch (e) { toast(e.message, 'err'); } });
+    if ($('#mbUp')) $('#mbUp').onclick = () => logoUpload('Logo of ' + b.name, async (light, dark) => { const r = await api('logos/' + b.logo_row, { method: 'POST', body: { image: light, ...(dark ? { image_dark: dark } : {}) } }); bootLogos(r.logos); toast('The logo of ' + b.name + ' is saved – it shows wherever the brand shows'); pageMyBrands(b.id); });
+  }
+
   // owner 27-11 07:24: "the option is ours" – workspaces (keep / off / delete) and where each bank account belongs
   async function pageOwnerOptions(f = 'OPEN') {
     busy(true); let d; try { d = await api('owner-options'); } finally { busy(false); }

@@ -228,6 +228,14 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('contacts/{type}/{id}/contact', [\App\Http\Controllers\ContactsController::class, 'addContact'])->whereIn('type', ['supplier', 'forwarder', 'person', 'SUPPLIER', 'FORWARDER', 'PERSON'])->whereNumber('id');
         Route::post('tracking-carriers', [AdminController::class, 'addTrackingCarrier'])->middleware('throttle:30,1');      // owner 27-11 tracking links
         Route::get('tracking-link', [AdminController::class, 'trackingLink']);
+        Route::get('logos', [AdminController::class, 'logos']);      // owner 27-11 09:26 logos everywhere
+        Route::post('logos', [AdminController::class, 'logoSave'])->middleware('throttle:60,1');
+        Route::post('logos/{id}', [AdminController::class, 'logoSave'])->whereNumber('id')->middleware('throttle:60,1');
+        Route::post('logos/{id}/fetch', [AdminController::class, 'logoFetch'])->whereNumber('id')->middleware('throttle:30,1');
+        Route::get('logo/{id}', [AdminController::class, 'logoPicture'])->whereNumber('id');
+        Route::get('my-brands', [AdminController::class, 'myBrands']);      // owner 27-11 09:30
+        Route::get('my-brands/{id}', [AdminController::class, 'myBrand'])->whereNumber('id');
+        Route::post('my-brands/{id}/own', [AdminController::class, 'myBrandOwn'])->whereNumber('id');
         Route::get('guide', [AppController::class, 'guide']);      // owner 27-11 08:00 user guide
         Route::get('owner-options', [AdminController::class, 'ownerOptions']);      // owner 27-11 07:24
         Route::post('owner-options/workspace/{id}', [AdminController::class, 'ownerWorkspace'])->whereNumber('id');

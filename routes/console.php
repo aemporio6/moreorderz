@@ -18,3 +18,4 @@ Schedule::command('mo:dispatch-watch')->everyFifteenMinutes()->withoutOverlappin
 Schedule::command('mo:backup')->dailyAt('03:15')->withoutOverlapping(720);      // MR-0095 daily backup, 14 daily + 12 monthly kept
 Schedule::command('mo:backup --drill')->monthlyOn(2, '04:00')->withoutOverlapping(720);      // MR-0095 monthly restore drill
 Schedule::command('mo:fx-live')->cron('20 6,15,17 * * 1-5')->withoutOverlapping(30);      // owner 27-11 09:33: live exchange rates (ECB publishes about 16:00 CET)
+Schedule::command('mo:logos')->dailyAt('05:40')->withoutOverlapping(120);      // owner 27-11 09:26: logos – missing ones daily, each refreshed monthly

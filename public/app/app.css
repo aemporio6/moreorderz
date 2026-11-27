@@ -41,3 +41,17 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 
 /* side + main grids stack on a phone (Buying overview was 728px wide on a 390px screen) */
 @media (max-width: 760px) { .grid-side { grid-template-columns: minmax(0, 1fr) !important; } }
+
+/* owner 27-11 09:26 / 09:30: logos beside names, My brands */
+img.lgo{height:16px;width:auto;max-width:28px;vertical-align:-3px;margin-right:6px;border-radius:3px;object-fit:contain;display:inline-block}
+img.lgo.lgo-b{max-width:70px;height:16px;border-radius:3px;background:#fff;padding:1px 3px}
+.ap-o img.lgo{height:15px}
+.lgo-cell{display:inline-flex;align-items:center;justify-content:center;width:72px;height:34px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:3px}
+.lgo-cell img{max-width:100%;max-height:100%;object-fit:contain}
+.lgo-ini{font:600 12px/1 var(--font,inherit);color:#555;letter-spacing:.04em}
+.mb-row{display:flex;gap:10px;flex-wrap:wrap}
+.mb-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-width:150px;min-height:84px;padding:12px 18px;background:#fff;color:#111;border:1px solid var(--line);border-radius:14px;text-decoration:none;box-shadow:0 1px 2px rgba(0,0,0,.04);transition:border-color .15s,box-shadow .15s}
+.mb-btn:hover{border-color:var(--accent)}
+.mb-btn.on{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+.mb-btn .muted{color:#666}
+.mb-logo{background:#fff;color:#111;border:1px solid var(--line);border-radius:14px;padding:12px 18px;display:flex;align-items:center;justify-content:center;min-height:90px;min-width:180px}

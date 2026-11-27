@@ -171,6 +171,20 @@ class AdminController extends Controller
     public function ownerBank(Request $r, int $id) { $this->owner($r);
         try { return ['message' => \App\Services\OwnerOptions::bank((int) Context::ent(), $id, $r->only(['company', 'money', 'apart']))]; } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
 
+    /** Owner 27-11 09:26 / 09:30: logos everywhere and My brands. Seeing is for everybody signed in; changing is for the owner. */
+    public function logos(Request $r) { $this->owner($r); \App\Services\Logos::sync((int) Context::ent()); return \App\Services\Logos::page((int) Context::ent()); }
+    public function logoSave(Request $r, ?int $id = null) { $this->owner($r);
+        try { return \App\Services\Logos::save((int) Context::ent(), $id, $r->only(['name', 'domain', 'aliases', 'kind', 'f_active', 'image', 'image_dark', 'remove_dark', 'site_icon']), $r->user()->id); }
+        catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
+    public function logoFetch(Request $r, int $id) { $this->owner($r); $ok = \App\Services\Logos::fetch($id);
+        return ['ok' => $ok, 'message' => $ok ? 'The current logo was brought from its website.' : 'No logo was found at that web address – check it, or upload your own picture.', 'logos' => \App\Services\Logos::boot((int) Context::ent())]; }
+    public function logoPicture(Request $r, int $id) { $p = \App\Services\Logos::picture($id, $r->boolean('dark')); if (! $p) abort(404);
+        return response($p[0], 200, ['Content-Type' => $p[1], 'Cache-Control' => 'private, max-age=604800', 'X-Content-Type-Options' => 'nosniff', 'Content-Security-Policy' => "default-src 'none'; style-src 'unsafe-inline'"]); }
+    public function myBrands(Request $r) { \App\Services\Logos::sync((int) Context::ent()); return ['brands' => \App\Services\MyBrands::list((int) Context::ent()), 'can_change' => \App\Services\Perm::has($r->user(), 'admin.owner')]; }
+    public function myBrand(Request $r, int $id) { try { return \App\Services\MyBrands::one((int) Context::ent(), $id); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 404); } }
+    public function myBrandOwn(Request $r, int $id) { $this->owner($r); $d = $r->validate(['own' => 'required|boolean']);
+        try { \App\Services\MyBrands::setOwn((int) Context::ent(), $id, (bool) $d['own']); return ['ok' => true, 'brands' => \App\Services\MyBrands::list((int) Context::ent())]; } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
+
     /** Owner 27-11: "+ Add carrier" where a tracking number's carrier is missing – anybody who works with parcels may add one (company-wide). */
     public function addTrackingCarrier(Request $r) { try { $id = \App\Services\TrackingLinks::add((int) Context::ent(), $r->only(['name', 'mode', 'url', 'starts']), $r->user()->id); } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
         return ['id' => $id, 'message' => 'Carrier added – its tracking numbers are links from now on', 'tracking' => \App\Services\TrackingLinks::catalogue((int) Context::ent())]; }

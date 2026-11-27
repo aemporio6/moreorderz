@@ -57,6 +57,7 @@ class AppController extends Controller
         if ($role !== 'OWNER') $companies = $companies->where('id', $u->fk_id_ent)->values();
         return [
             'fx' => (function () { try { return \App\Services\FxLive::strip(); } catch (\Throwable $e) { return null; } })(),      // owner 27-11 09:33: today's rates, thin strip on the top bar
+            'logos' => (function () use ($u) { try { return \App\Services\Logos::boot((int) ($u->fk_id_ent ?: 1)); } catch (\Throwable $e) { return []; } })(),      // owner 27-11 09:26 logo beside every name
             'to_place' => (int) DB::table('mo_intake')->where('fk_id_ent', (int) ($u->fk_id_ent ?: 1))->where('status', 'NEW')->when(! in_array($role, ['OWNER', 'MANAGER'], true), fn ($q) => $q->where('user_id', $u->id))->count(),      // owner 27-11: shared / filed things still to put in their place
             'user' => ['id' => $u->id, 'name' => $u->display_name ?: $u->login_id, 'role' => $va ? $va[0] : $role, 'role_name' => $va ? $va[1] : ($u->custom_role ?: $role)],
             'view_as' => $va ? $va[1] : null,
