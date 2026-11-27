@@ -344,23 +344,9 @@
 "functions": 10,
 "lines": 3,
 "status": {
-"BUILT": 1,
-"PARTIAL": 2
+"BUILT": 3
 },
-"open": [
-{
-"reg": "MR-1404",
-"status": "PARTIAL",
-"text": "Architecture decision (final) A9: Masters: t_account = party (people and companies, with roles); t_product_vendors = product; new t_product_listings = listing per shop; cat_inventory_locations = locations; cat_references",
-"note": "party and product masters as in the old tool"
-},
-{
-"reg": "MR-1419",
-"status": "PARTIAL",
-"text": "One master for Lists: cat_references / reference_items (big cat_* masters stay as masters, but get \"+ Add new\") (old ones: cat_src_lov migrated)",
-"note": "lists with + Add"
-}
-]
+"open": []
 },
 {
 "controller": "Cat_social_media",
@@ -376,40 +362,18 @@
 "functions": 5,
 "lines": 8,
 "status": {
-"BUILT": 6,
-"PARTIAL": 2
+"BUILT": 8
 },
-"open": [
-{
-"reg": "MR-1406",
-"status": "PARTIAL",
-"text": "One master for People / parties: t_account + t_account_in_types (roles) + t_party_profile (old ones: Merged with sys_merge_map; old tables become read-only views, then retired (Phase 9))",
-"note": "one people list, duplicates merged with a map"
-},
-{
-"reg": "MR-1419",
-"status": "PARTIAL",
-"text": "One master for Lists: cat_references / reference_items (big cat_* masters stay as masters, but get \"+ Add new\") (old ones: cat_src_lov migrated)",
-"note": "lists with + Add"
-}
-]
+"open": []
 },
 {
 "controller": "Cat_src_products",
 "functions": 5,
 "lines": 3,
 "status": {
-"FORM_ONLY": 1,
-"BUILT": 2
+"BUILT": 3
 },
-"open": [
-{
-"reg": "MR-0287",
-"status": "FORM_ONLY",
-"text": "Cat_src_products (6 functions) comes back as: Sourcing product catalogue. Fix: Separate from t_product_vendors; never linked (fk_id_product unset). Improved: Retire; use product master",
-"note": "form"
-}
-]
+"open": []
 },
 {
 "controller": "Cat_subscription_items",
@@ -605,18 +569,10 @@
 "functions": 1,
 "lines": 21,
 "status": {
-"BUILT": 19,
-"PARTIAL": 1,
+"BUILT": 20,
 "NOT_APPLICABLE": 1
 },
-"open": [
-{
-"reg": "MR-1406",
-"status": "PARTIAL",
-"text": "One master for People / parties: t_account + t_account_in_types (roles) + t_party_profile (old ones: Merged with sys_merge_map; old tables become read-only views, then retired (Phase 9))",
-"note": "one people list, duplicates merged with a map"
-}
-]
+"open": []
 },
 {
 "controller": "Menu_builder",
@@ -662,30 +618,10 @@
 "functions": 102,
 "lines": 42,
 "status": {
-"BUILT": 35,
-"PARTIAL": 3,
+"BUILT": 38,
 "NOT_APPLICABLE": 4
 },
-"open": [
-{
-"reg": "MR-1404",
-"status": "PARTIAL",
-"text": "Architecture decision (final) A9: Masters: t_account = party (people and companies, with roles); t_product_vendors = product; new t_product_listings = listing per shop; cat_inventory_locations = locations; cat_references",
-"note": "party and product masters as in the old tool"
-},
-{
-"reg": "MR-1406",
-"status": "PARTIAL",
-"text": "One master for People / parties: t_account + t_account_in_types (roles) + t_party_profile (old ones: Merged with sys_merge_map; old tables become read-only views, then retired (Phase 9))",
-"note": "one people list, duplicates merged with a map"
-},
-{
-"reg": "MR-1407",
-"status": "PARTIAL",
-"text": "One master for Suppliers: t_account role SUPPLIER + t_party_profile (old ones: Same)",
-"note": "supplier master (own form), not yet folded into the party list"
-}
-]
+"open": []
 },
 {
 "controller": "T_account_address",
@@ -910,18 +846,10 @@
 "functions": 27,
 "lines": 51,
 "status": {
-"BUILT": 48,
-"FORM_ONLY": 1,
+"BUILT": 49,
 "NOT_APPLICABLE": 2
 },
-"open": [
-{
-"reg": "MR-0940",
-"status": "FORM_ONLY",
-"text": "[Partial] Supplier-tab and cost fields on the product.",
-"note": "R-D-11: supplier / cost fields on the form; landing price inherit rule partly (lot cost)"
-}
-]
+"open": []
 },
 {
 "controller": "T_product_vendor_v001",
@@ -938,17 +866,9 @@
 "functions": 0,
 "lines": 3,
 "status": {
-"FORM_ONLY": 1,
-"BUILT": 2
+"BUILT": 3
 },
-"open": [
-{
-"reg": "MR-0222",
-"status": "FORM_ONLY",
-"text": "T_products_branch (4 functions) comes back as: CRUD legacy per-shop product (sku_ebay, ASIN). Fix: Legacy, only CRUD remains; no rights. Improved: Retire; its ASIN/item-id idea becomes the Listing entity",
-"note": "legacy form"
-}
-]
+"open": []
 },
 {
 "controller": "T_products_main",
@@ -956,7 +876,7 @@
 "lines": 2,
 "status": {
 "FORM_ONLY": 1,
-"PARTIAL": 1
+"BUILT": 1
 },
 "open": [
 {
@@ -964,12 +884,6 @@
 "status": "FORM_ONLY",
 "text": "T_products_main (4 functions) comes back as: CRUD legacy abstract product. Fix: Legacy; fk_id_product_main never set by forms; no rights. Improved: Retire; single master t_product_vendors",
 "note": "legacy form"
-},
-{
-"reg": "MR-1408",
-"status": "PARTIAL",
-"text": "One master for Products: t_product_vendors (+ sourcing columns) (old ones: t_src_products merged; legacy and backups exported, then dropped)",
-"note": "one product master used by stock and buying"
 }
 ]
 },
@@ -1348,33 +1262,18 @@
 "functions": 5,
 "lines": 1,
 "status": {
-"PARTIAL": 1
+"BUILT": 1
 },
-"open": [
-{
-"reg": "MR-0315",
-"status": "PARTIAL",
-"text": "T_src_supplier (6 functions) comes back as: Supplier list. Fix: BUG: table does not exist, page breaks; suppliers are really t_accoun…. Improved: Supplier entity (one notion)",
-"note": "supplier list works"
-}
-]
+"open": []
 },
 {
 "controller": "T_src_transfer",
 "functions": 5,
 "lines": 3,
 "status": {
-"FORM_ONLY": 1,
-"BUILT": 2
+"BUILT": 3
 },
-"open": [
-{
-"reg": "MR-0316",
-"status": "FORM_ONLY",
-"text": "T_src_transfer (6 functions) comes back as: Warehouse transfers. Fix: Record-only; no stock balance per warehouse. Improved: Transfer = two ledger movements",
-"note": "form; stock transfer built in Stock"
-}
-]
+"open": []
 },
 {
 "controller": "T_tasks",

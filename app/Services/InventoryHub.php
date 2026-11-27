@@ -72,7 +72,7 @@ class InventoryHub
         $fba = $skuMap ? DB::table('fin_fba_stock_snapshots as s')->join('t_branches as b', 'b.id', '=', 's.branch_id')->whereIn('s.id', DB::table('fin_fba_stock_snapshots')->whereIn('sku', array_keys($skuMap))->selectRaw('MAX(id)')->groupBy('branch_id', 'sku'))
             ->when($shops, fn ($q) => $q->whereIn('s.branch_id', $shops))->get(['s.sku', 's.fulfillable', 's.reserved', 's.inbound_working', 's.inbound_shipped', 's.inbound_receiving', 's.unfulfillable', 'b.shop_name', 's.snapshot_date']) : collect();
         $fbaBy = []; foreach ($fba as $x) { $pid = $skuMap[mb_strtoupper($x->sku)] ?? null; if ($pid) $fbaBy[$pid][] = $x; }
-        $owners = [];
+        $owners = []; $costs = ProductCost::many(array_map(fn ($r) => (int) $r->id, $rows));      // MR-0940 one cost rule
         $out = [];
         foreach ($rows as $r) {
             $b = $bal[$r->id] ?? collect(); $fbaL = 0; $sell = 0; $tr = 0; $dmg = 0; $val = 0.0; $own = []; $oldest = null;
@@ -94,7 +94,7 @@ class InventoryHub
                 'value' => round($val, 2), 'pool' => $vs->where('mode', 'pool')->pluck('mp')->filter()->unique()->values()->all(), 'private' => $vs->where('mode', 'private')->pluck('shop_name')->filter()->unique()->values()->all(),
                 'listings' => ['count' => $ls->count(), 'shops' => $ls->pluck('shop_name')->unique()->values()->take(8)->all(), 'min' => $ls->min('price'), 'max' => $ls->max('price')],
                 'sold30' => $s ? (int) $s->n : 0, 'sales30' => $s ? round((float) $s->v, 2) : 0, 'cover_days' => $daily > 0 ? (int) floor(($avail + $fbaUnits) / $daily) : null,
-                'age_days' => $oldest ? (int) floor((time() - strtotime((string) $oldest)) / 86400) : null, 'icc' => $r->icc_status, 'cost' => (float) ($r->landing_price ?: $r->raw_price), 'price' => (float) $r->sale_price];
+                'age_days' => $oldest ? (int) floor((time() - strtotime((string) $oldest)) / 86400) : null, 'icc' => $r->icc_status, 'cost' => (float) ($costs[(int) $r->id]['value'] ?? 0), 'cost_from' => $costs[(int) $r->id]['from'] ?? 'none', 'price' => (float) $r->sale_price];
         }
         return $out;
     }

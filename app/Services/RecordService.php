@@ -311,6 +311,8 @@ class RecordService
             if ($table === 't_account_banks') SupplierBanks::afterSave((int) $id);
             if ($table === 'cat_company_house') self::tenantMirror((int) $id);      // R-F_SETUP-50 the company marked "main" is the tenant row's name, code, address, phone
             if ($table === 't_src_investments') SourcingCapital::sync((int) $id);      // MR-0301 capital into a cycle = the partner's CAPITAL_IN
+            if ($table === 't_src_products') SourcingProducts::sync((int) $id);      // MR-1408 one product master: linked by SKU, empty fields shared both ways
+            if ($table === 't_product_vendors') SourcingProducts::forProduct((int) $id);
             if ($table === 't_src_investors') foreach (DB::table('t_src_investments')->where('fk_id_investor', $id)->pluck('id') as $iv) SourcingCapital::sync((int) $iv);
             if ($table === 'cat_inventory_locations' && ! $created) WarehouseSites::afterSave((int) $id, (array) $old);      // R-H-6 rename → one shelf label
             if ($table === 't_src_payments') { PaymentTerms::sync((int) DB::table($table)->where($pk, $id)->value('fk_id_term')); if (! empty($old['fk_id_term']) && (int) $old['fk_id_term'] !== (int) ($data['fk_id_term'] ?? $old['fk_id_term'])) PaymentTerms::sync((int) $old['fk_id_term']); }      /* R-B_SOURCING-30 both terms of a moved payment */

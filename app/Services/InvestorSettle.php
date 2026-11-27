@@ -31,10 +31,8 @@ class InvestorSettle
 
     private static function landing(int $product): float
     {
-        $p = DB::table('t_product_vendors')->where('id', $product)->first(['landing_price', 'f_id_parent']);
-        $l = (float) ($p->landing_price ?? 0);
-        if ($l == 0.0 && ! empty($p->f_id_parent)) $l = (float) DB::table('t_product_vendors')->where('id', $p->f_id_parent)->value('landing_price');
-        return $l;
+        $c = ProductCost::of($product);      // MR-0940 the one cost rule (own → latest lot → parent); the raw price is the investor's capital, never the landing cost
+        return $c['from'] === 'raw' ? 0.0 : (float) $c['value'];
     }
 
     /** Unit cost of the lots a sale line was sold from (FIFO consumption); null when nothing was consumed yet. */
