@@ -58,6 +58,17 @@ class FinanceAlertsTest extends TestCase
         $this->assertSame(3, DB::table('tm_messages')->where('event_key', 'like', 'FA1:company|%')->count(), 'messages log (one queue): task + 2 WhatsApp');
     }
 
+    /** Found on live 27-11: two rules about the same subject, and an alert raised again after it was resolved, both fit (the hourly job failed on a unique key). */
+    public function test_same_subject_key_in_two_rules_and_again_after_resolve(): void
+    {
+        $base = ['company_id' => 1, 'message' => 'x', 'status' => 'RESOLVED', 'first_at' => now()];
+        DB::table('fin_alerts')->insert($base + ['code' => 'FA1', 'ref_key' => 'company']);
+        DB::table('fin_alerts')->insert($base + ['code' => 'FA1', 'ref_key' => 'company', 'status' => 'OPEN']);
+        DB::table('fin_alerts')->insert($base + ['code' => 'FA9', 'ref_key' => 'company', 'status' => 'OPEN']);
+        $this->assertSame(3, DB::table('fin_alerts')->where('ref_key', 'company')->count());
+        $this->assertIsArray(FinanceAlerts::run(1));
+    }
+
     public function test_r66_other_alerts_find_their_subjects(): void
     {
         $today = date('Y-m-d');

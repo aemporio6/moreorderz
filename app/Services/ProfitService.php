@@ -24,6 +24,9 @@ class ProfitService
         return $out;
     }
 
+    /** MR-1285 when set, view() writes down what made each figure: [row key][part] => items */
+    private static ?array $T = null;
+
     public static function view(int $ent, string $by, string $from, string $to, ?int $shop = null): array
     {
         if (! isset(self::VIEWS[$by])) $by = 'shop';
@@ -63,6 +66,7 @@ class ProfitService
             foreach ($parts as [[$k, $n], $f, $c, $u]) {
                 $rows[$k] ??= $blank($k, $n);
                 $rows[$k]['units'] += $u; $rows[$k]['sales'] += (float) $s->total_amount_gbp * $f; $rows[$k]['cost'] += $c;
+                if (self::$T !== null) { self::$T[$k]['sale'][(int) $s->id] = (self::$T[$k]['sale'][(int) $s->id] ?? 0) + $f; if ($rf > 0) self::$T[$k]['refund'][(int) $s->id] = $rf * $f; }
                 if ($rf > 0) $rows[$k]['mp_costs'] += $rf * $f;
                 $alloc[$s->fk_id_branch . '|' . $s->order_no][$k] = ($alloc[$s->fk_id_branch . '|' . $s->order_no][$k] ?? 0) + max(0.0001, (float) $s->total_amount_gbp * $f);
             }
@@ -73,7 +77,7 @@ class ProfitService
             foreach (\App\Services\Perm::mine(DB::table('fin_cogs_corrections as c'), 'c.fk_id_branch')->leftJoin('t_product_vendors as p', 'p.id', '=', 'c.fk_id_product')->where('c.fk_id_ent', $ent)
                 ->whereBetween('c.target_month', [substr($from, 0, 7), substr($to, 0, 7)])->when($shop, fn ($q) => $q->where('c.fk_id_branch', $shop))->get(['c.*', 'p.SKU_VENDOR as sku', 'p.product_name_vendor as name']) as $c) {
                 [$k, $n] = $lotView ? $lotKey((int) $c->lot_id, null) : $keyOf($c->fk_id_branch, $c->fk_id_product, $c->sku, $c->name, $c->target_month . '-01');
-                $rows[$k] ??= $blank($k, $n); $rows[$k]['cost'] += (float) $c->amount;
+                $rows[$k] ??= $blank($k, $n); $rows[$k]['cost'] += (float) $c->amount; if (self::$T !== null) self::$T[$k]['corr'][] = (int) $c->id;
             }
         // 2. marketplace costs from booked statements (everything in the money file except net sales; a cost is a positive number here)
         $lines = DB::table('fin_settlement_lines as l')->join('mo_settlements as m', fn ($j) => $j->on('m.fk_id_branch', '=', 'l.branch_id')->on('m.statement_id', '=', 'l.settlement_id'))->where('l.company_id', $ent)->whereIn('m.status', ['POSTED', 'PAID'])
@@ -83,16 +87,16 @@ class ProfitService
             if ($shop && (int) $l->branch_id !== $shop) continue;
             $o = $orderKey[$l->branch_id . '|' . $l->order_id] ?? null; $mpTotal += -1 * (float) $l->v;
             if (in_array($by, ['product', 'lot', 'batch', 'investor'], true) && ($a = $alloc[$l->branch_id . '|' . $l->order_id] ?? null)) {      // the order's costs follow its sales over the rows
-                $sum = array_sum($a); foreach ($a as $k => $w) { $rows[$k]['mp_costs'] += -1 * (float) $l->v * $w / $sum; $rows[$k]['mp_in'] = true; } continue;
+                $sum = array_sum($a); foreach ($a as $k => $w) { $rows[$k]['mp_costs'] += -1 * (float) $l->v * $w / $sum; $rows[$k]['mp_in'] = true; if (self::$T !== null) self::$T[$k]['mp'][] = [(int) $l->branch_id, (string) $l->order_id, (string) $l->d, $w / $sum]; } continue;
             }
             [$k, $n] = $lotView ? ['LX', 'Marketplace costs not matched to a sale line'] : ($by === 'product' ? $keyOf($l->branch_id, $o[0] ?? null, $o[1] ?? null, $o[2] ?? null, $l->d) : $keyOf($l->branch_id, null, null, null, $l->d));
-            $rows[$k] ??= $blank($k, $n); $rows[$k]['mp_costs'] += -1 * (float) $l->v; $rows[$k]['mp_in'] = true;
+            $rows[$k] ??= $blank($k, $n); $rows[$k]['mp_costs'] += -1 * (float) $l->v; $rows[$k]['mp_in'] = true; if (self::$T !== null) self::$T[$k]['mp'][] = [(int) $l->branch_id, (string) $l->order_id, (string) $l->d, 1.0];
         }
         // 3. other costs (expenses); those of one shop go to that shop, the rest is overhead
-        $exp = DB::table('fin_expenses')->where('fk_id_ent', $ent)->where('f_active', 1)->whereBetween('d_expense', [$from, $to])->when($shop, fn ($q) => $q->where('fk_id_branch', $shop))->get(['fk_id_branch', 'd_expense', 'amount_gbp']);
+        $exp = DB::table('fin_expenses')->where('fk_id_ent', $ent)->where('f_active', 1)->whereBetween('d_expense', [$from, $to])->when($shop, fn ($q) => $q->where('fk_id_branch', $shop))->get(['id', 'fk_id_branch', 'd_expense', 'amount_gbp']);
         foreach ($exp as $e) {
             [$k, $n] = $by === 'month' ? $keyOf(null, null, null, null, $e->d_expense) : ($by === 'shop' && $e->fk_id_branch ? $keyOf($e->fk_id_branch, null, null, null, null) : ['ZZ', 'Overheads (not for one ' . (['shop' => 'shop', 'product' => 'SKU', 'lot' => 'lot', 'batch' => 'batch', 'investor' => 'investor'][$by] ?? 'row') . ')']);
-            $rows[$k] ??= $blank($k, $n); $rows[$k]['expenses'] += (float) $e->amount_gbp;
+            $rows[$k] ??= $blank($k, $n); $rows[$k]['expenses'] += (float) $e->amount_gbp; if (self::$T !== null) self::$T[$k]['exp'][] = (int) $e->id;
         }
         ksort($rows); $tot = $blank('TOTAL', 'Total');
         foreach ($rows as &$r) {
@@ -131,5 +135,39 @@ class ProfitService
         foreach ($rows as &$r) { $r += ['units' => 0, 'sales' => 0.0, 'cost' => 0.0, 'mp_costs' => 0.0, 'expenses' => 0.0, 'gross' => 0.0, 'estimate' => false, 'mp_in' => true]; $r['margin_pct'] = $T['sales'] > 0 ? round($r['profit'] / $T['sales'] * 100, 1) : null; }
         unset($r);
         return ['by' => 'share', 'head' => self::HEADS['share'], 'rows' => $rows, 'note' => 'Partner shares come from locked months only; the company row is the rest, so the total equals the other views.'] + $base;
+    }
+
+    /**
+     * MR-1285 system rule 6 – traceable: the records behind one figure of a profit view (row key + column), each with its file and row.
+     * sales / units / cost / gross → the sale lines (file + row of the sales file, lots used); mp_costs → the money-file lines of those orders
+     * (file + line) and refund losses; expenses → the expense records; profit → all of them. The parts add up to the figure shown.
+     */
+    public static function trace(int $ent, string $by, string $from, string $to, ?int $shop, string $key, string $col): array
+    {
+        self::$T = []; try { $v = self::view($ent, $by, $from, $to, $shop); $t = self::$T[$key] ?? []; } finally { self::$T = null; }
+        $row = collect($v['rows'])->firstWhere('key', $key) ?? throw new \InvalidArgumentException('This row is not in the view any more – reload.');
+        $want = fn (string ...$c) => in_array($col, $c, true) || $col === 'profit';
+        $out = ['row' => $row['name'], 'column' => $col, 'figure' => $row[$col] ?? null, 'base' => $v['base'], 'groups' => []];
+        if ($want('sales', 'units', 'cost', 'gross') && ! empty($t['sale'])) {
+            $ids = array_keys($t['sale']);
+            $lines = DB::table('t_sales as s')->leftJoin('t_sale_imports as i', 'i.id', '=', 's.fk_id_import')->leftJoin('t_branches as b', 'b.id', '=', 's.fk_id_branch')->leftJoin('t_product_vendors as p', 'p.id', '=', 's.fk_product_id')
+                ->whereIn('s.id', $ids)->orderBy('s.d_order')->orderBy('s.id')->limit(2000)->get(['s.id', 's.order_no', 's.d_order', 's.sku', 'p.SKU_VENDOR as product', 's.qty', 's.total_amount_gbp', 'i.file_name', 's.batch_row_no', 'b.shop_name']);
+            $cost = DB::table('fin_lot_consumption as c')->leftJoin('fin_lots as l', 'l.id', '=', 'c.lot_id')->whereIn('c.fk_id_sale', $ids)->get(['c.fk_id_sale', 'c.qty', 'c.unit_cost_gbp', 'l.lot_code'])->groupBy('fk_id_sale');
+            $out['groups'][] = ['title' => 'Sale lines', 'cols' => ['Order', 'Date', 'Shop', 'SKU', 'Qty', 'Sales', 'Cost of goods', 'Lots', 'File · row'], 'rows' => $lines->map(function ($l) use ($t, $cost) { $f = (float) $t['sale'][$l->id]; $c = $cost[$l->id] ?? collect();
+                return ['open' => '#/rec/sale_line/' . $l->id, 'cells' => [$l->order_no, $l->d_order, $l->shop_name, $l->product ?: $l->sku, round((float) $l->qty * $f, 2), round((float) $l->total_amount_gbp * $f, 2), round($c->sum(fn ($x) => $x->qty * $x->unit_cost_gbp) * $f, 2),
+                    $c->pluck('lot_code')->filter()->unique()->implode(', '), trim(($l->file_name ?: '') . ($l->batch_row_no ? ' · row ' . $l->batch_row_no : ''), ' ·')]]; })->all()];
+        }
+        if ($want('cost', 'gross') && ! empty($t['corr'])) $out['groups'][] = ['title' => 'Cost corrections from a locked month', 'cols' => ['Month', 'Amount'], 'rows' => DB::table('fin_cogs_corrections')->whereIn('id', $t['corr'])->get()->map(fn ($c) => ['open' => null, 'cells' => [$c->target_month, round((float) $c->amount, 2)]])->all()];
+        if ($want('mp_costs')) {
+            $rows = [];
+            foreach ($t['mp'] ?? [] as [$b, $o, $d, $w]) foreach (DB::table('fin_settlement_lines as l')->join('mo_settlements as m', fn ($j) => $j->on('m.fk_id_branch', '=', 'l.branch_id')->on('m.statement_id', '=', 'l.settlement_id'))->leftJoin('fin_import_batches as f', 'f.id', '=', 'l.batch_id')
+                ->where('l.company_id', $ent)->where('l.branch_id', $b)->where('l.order_id', $o)->where('m.statement_date', $d)->where('l.amount_type', '<>', 'NET_SALES')->whereIn('m.status', ['POSTED', 'PAID'])->get(['l.id', 'l.order_id', 'l.amount_type', 'l.amount_description', 'l.amount', 'm.statement_id', 'm.statement_date', 'f.file_name']) as $x)
+                $rows[] = ['open' => null, 'cells' => [$x->order_id ?: '—', $x->statement_date, trim($x->amount_type . ' · ' . $x->amount_description, ' ·'), round(-1 * (float) $x->amount * $w, 2), $w < 1 ? round($w * 100) . '% of the order' : '', trim(($x->file_name ?: 'statement ' . $x->statement_id) . ' · line ' . $x->id)]];
+            foreach ($t['refund'] ?? [] as $sid => $a) $rows[] = ['open' => '#/rec/sale_line/' . $sid, 'cells' => [DB::table('t_sales')->where('id', $sid)->value('order_no'), '', 'Refund loss', round($a, 2), '', 'sale line #' . $sid]];
+            if ($rows) $out['groups'][] = ['title' => 'Marketplace costs', 'cols' => ['Order', 'Statement date', 'What', 'Amount', 'Share', 'File · line'], 'rows' => $rows];
+        }
+        if ($want('expenses') && ! empty($t['exp'])) $out['groups'][] = ['title' => 'Expenses', 'cols' => ['Date', 'Category', 'Note', 'Amount'], 'rows' => DB::table('fin_expenses')->whereIn('id', $t['exp'])->orderBy('d_expense')->get()
+            ->map(fn ($e) => ['open' => '#/rec/fin_expenses/' . $e->id, 'cells' => [$e->d_expense, $e->category_code, mb_substr((string) $e->note, 0, 80), round((float) $e->amount_gbp, 2)]])->all()];
+        return $out;
     }
 }

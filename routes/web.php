@@ -492,6 +492,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('close/waive', [CloseController::class, 'waive']);
         Route::post('close/lock', [CloseController::class, 'lock']);
         Route::get('money', [MoneyController::class, 'dashboard'])->middleware(\App\Http\Middleware\AllCompaniesView::class);
+        Route::get('profit/trace', [MoneyController::class, 'profitTrace'])->middleware(\App\Http\Middleware\AllCompaniesView::class);      // MR-1285
         Route::get('profit', [MoneyController::class, 'profit'])->middleware(\App\Http\Middleware\AllCompaniesView::class);
         Route::get('refunds', [MoneyController::class, 'refunds']);
         Route::post('refunds/manual', [MoneyController::class, 'refundManual']);

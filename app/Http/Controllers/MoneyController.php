@@ -55,6 +55,14 @@ class MoneyController extends Controller
             'stock' => \App\Services\Ledger::balance($ent, '1200'), 'supplier_advances' => \App\Services\Ledger::balance($ent, '1300'), 'supplier_payables' => -1 * \App\Services\Ledger::balance($ent, '2000')];
     }
 
+    /** MR-1285 the records behind one figure of a profit view. */
+    public function profitTrace(Request $r)
+    {
+        $this->can($r, 'money.SEE');
+        $d = $r->validate(['by' => 'required|in:' . implode(',', array_keys(\App\Services\ProfitService::VIEWS)), 'from' => 'required|date', 'to' => 'required|date', 'shop' => 'nullable|integer', 'key' => 'required|string|max:60', 'col' => 'required|in:units,sales,cost,gross,mp_costs,expenses,profit']);
+        return $this->run(fn () => \App\Services\ProfitService::trace((int) Context::ent(), $d['by'], $d['from'], $d['to'], ! empty($d['shop']) ? (int) $d['shop'] : null, $d['key'], $d['col']));
+    }
+
     public function profit(Request $r)
     {
         $this->can($r, 'money.SEE');

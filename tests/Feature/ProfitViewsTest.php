@@ -41,6 +41,13 @@ class ProfitViewsTest extends TestCase
         $inv = collect(ProfitService::view(1, 'investor', '2026-08-01', '2026-08-31', $shop)['rows'])->keyBy('key');
         $this->assertEquals([150.0, 227.5], [$inv["I$investor"]['profit'], $inv['I0']['profit']]); $this->assertSame('Company (pool)', $inv['I0']['name']);
         $this->assertSame([4, 4], [collect(ProfitService::view(1, 'lot', '2026-08-01', '2026-08-31', $shop)['rows'])->sum('units'), ProfitService::view(1, 'shop', '2026-08-01', '2026-08-31', $shop)['total']['units']]);
+        // MR-1285 every figure traceable: the parts behind a figure add up to it, with file and row
+        $tr = fn ($by, $key, $col) => $this->getJson("/api/profit/trace?by=$by&shop=$shop&from=2026-08-01&to=2026-08-31&key=$key&col=$col")->assertOk()->json();
+        $t = $tr('lot', "L$lotA", 'sales'); $this->assertEquals(200.0, collect($t['groups'][0]['rows'])->sum(fn ($r) => $r['cells'][5]));
+        $t = $tr('shop', "S$shop", 'mp_costs'); $this->assertEquals(22.5, collect($t['groups'][0]['rows'])->sum(fn ($r) => $r['cells'][3]));
+        $t = $tr('lot', "L$lotB", 'mp_costs'); $this->assertEquals(12.5, round(collect($t['groups'][0]['rows'])->sum(fn ($r) => $r['cells'][3]), 2));
+        $t = $tr('shop', "S$shop", 'profit'); $this->assertSame(['Sale lines', 'Marketplace costs'], array_column($t['groups'], 'title')); $this->assertEquals(100.0, collect($t['groups'][0]['rows'])->sum(fn ($r) => $r['cells'][6]));
+        $this->getJson("/api/profit/trace?by=shop&shop=$shop&from=2026-08-01&to=2026-08-31&key=S999999&col=sales")->assertStatus(422);
         $this->assertEquals($before, [DB::table('aud_runs')->count(), DB::table('fin_investor_ledger')->count(), DB::table('t_sales')->where('fk_id_branch', $shop)->sum('total_amount_gbp')], 'switching the view changes no saved figure');
 
         // paid one way: a second route on the same shop-month → ONE_PROFIT_ROUTE red
