@@ -169,15 +169,7 @@ class AdminController extends Controller
     {
         $this->owner($r);
         $ent = (int) Context::ent();
-        $rows = DB::table('sys_settings')->whereIn('fk_id_ent', [0, $ent])->orderBy('setting_key')->get();
-        $out = [];
-        foreach ($rows as $s) {
-            $k = $s->setting_key;
-            $out[$k] ??= ['key' => $k, 'global' => null, 'company' => null];
-            $secret = (bool) preg_match('/SECRET|TOKEN|PASSWORD|API_KEY/i', $k);
-            $out[$k][$s->fk_id_ent ? 'company' : 'global'] = $secret && $s->setting_value !== '' ? '••••' : $s->setting_value;
-        }
-        return ['settings' => array_values($out)];
+        return \App\Services\SettingsMap::page($ent);      // MR-1129 every parameter of every module, its levels and where it is changed
     }
 
     public function saveSetting(Request $r)

@@ -76,6 +76,19 @@ class DsUploadTest extends TestCase
         $this->assertSame('guess', $s['source']); $this->assertStringContainsString('Columns used last time are missing: ', $s['note']); $this->assertContains('Item ID', $s['missing']);
     }
 
+    /** MR-0987: a column matched by hand once is found by itself in the next file – of any platform. */
+    public function test_columns_matched_by_hand_are_learned(): void
+    {
+        $this->world();
+        $head = ['Order ID', 'Order date', 'Product title', 'Total paid', 'Kaufer'];
+        $this->assertNull(DsUpload::guess($head)['ship_name']);
+        $p = $this->file([['L-1', '13/07/2026', 'Dog lead', '5.00', 'Jo Bloggs']], $head); $s = DsUpload::stage($p, 'l.csv', filesize($p), $this->d(), $this->owner);
+        DsUpload::run($s['token'], ['mapping' => ['ship_name' => 'Kaufer'] + $s['mapping']], $this->owner, true);
+        $this->assertSame(['kaufer'], DsUpload::learned(1)['ship_name'] ?? null);
+        $this->assertSame('Kaufer', DsUpload::guess(['Order ID', 'Kaufer', 'Store'])['ship_name']);
+        $this->assertSame([], DsUpload::learn(1, ['ship_name' => 'Kaufer', 'order_no' => 'Order ID']));      // known names are not learned twice
+    }
+
     public function test_row_checks(): void
     {
         $this->world();

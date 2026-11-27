@@ -83,6 +83,26 @@ class AdminTest extends TestCase
         $this->assertSame('err', $card['tone']);
     }
 
+    /** MR-1129 the module / parameter map: every module's settings by themselves, levels, shop values, secrets hidden. */
+    public function test_settings_map_lists_every_module_parameter_with_its_levels(): void
+    {
+        \App\Services\Settings::set('API_KEY_TEST', 'abc123', 0);
+        $shop = (int) DB::table('t_branches')->where('fk_id_ent', 1)->value('id');
+        $key = \App\Services\Choices::PER_SHOP[0];
+        $opt = (string) array_key_last(\App\Services\Choices::LIST[$key][3]);
+        if ($shop) \App\Services\Settings::set($key . '@' . $shop, $opt, 1);
+        $d = $this->actingAs($this->owner)->getJson('/api/settings')->assertOk()->json();
+        $s = collect($d['settings']);
+        foreach (['How the company works', 'Sourcing', 'Warehouse', 'Finance'] as $m) $this->assertGreaterThan(0, $d['modules'][$m] ?? 0, $m);
+        $v = $s->firstWhere('key', 'VOLUMETRIC_DIVISOR');
+        $this->assertSame('Sourcing', $v['module']); $this->assertSame('#/settings/sourcing', $v['href']); $this->assertSame('5000', $v['now']); $this->assertContains($v['from'], ['global', 'default']);
+        $x = $s->firstWhere('key', 'API_KEY_TEST');
+        $this->assertSame('Other', $x['module']); $this->assertSame('••••', $x['global']); $this->assertTrue($x['secret']);
+        $this->assertStringNotContainsString('abc123', json_encode($d));
+        if ($shop) { $c = $s->firstWhere('key', $key); $this->assertCount(1, $c['shops']); $this->assertNull($s->firstWhere('key', $key . '@' . $shop)); }
+        $this->assertCount(1, $s->where('key', $key));
+    }
+
     public function test_settings_audit_health_and_ledger_are_kept_to_their_roles(): void
     {
         $va = $this->makeUser('VA');

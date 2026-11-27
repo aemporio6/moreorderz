@@ -227,17 +227,9 @@
 "functions": 0,
 "lines": 2,
 "status": {
-"BUILT": 1,
-"PARTIAL": 1
+"BUILT": 2
 },
-"open": [
-{
-"reg": "MR-1129",
-"status": "PARTIAL",
-"text": "[Partial] Module / parameter framework",
-"note": "R-F_SETUP-44: settings global / company + choices per shop with history; module / parameter framework as forms only"
-}
-]
+"open": []
 },
 {
 "controller": "Cat_module_entity",
@@ -253,34 +245,18 @@
 "functions": 0,
 "lines": 2,
 "status": {
-"BUILT": 1,
-"PARTIAL": 1
+"BUILT": 2
 },
-"open": [
-{
-"reg": "MR-1129",
-"status": "PARTIAL",
-"text": "[Partial] Module / parameter framework",
-"note": "R-F_SETUP-44: settings global / company + choices per shop with history; module / parameter framework as forms only"
-}
-]
+"open": []
 },
 {
 "controller": "Cat_module_params_lov",
 "functions": 0,
 "lines": 2,
 "status": {
-"BUILT": 1,
-"PARTIAL": 1
+"BUILT": 2
 },
-"open": [
-{
-"reg": "MR-1129",
-"status": "PARTIAL",
-"text": "[Partial] Module / parameter framework",
-"note": "R-F_SETUP-44: settings global / company + choices per shop with history; module / parameter framework as forms only"
-}
-]
+"open": []
 },
 {
 "controller": "Cat_module_type",
@@ -506,17 +482,9 @@
 "lines": 11,
 "status": {
 "NOT_APPLICABLE": 1,
-"BUILT": 9,
-"PARTIAL": 1
+"BUILT": 10
 },
-"open": [
-{
-"reg": "MR-0987",
-"status": "PARTIAL",
-"text": "[Partial] Dropship CSV upload – mapping checks",
-"note": "R-D-75: 22 fields in 5 groups, guess score as written, money never from address-type headers, buyer name never from store / seller / product columns, each column once, saved mapping per company + plat"
-}
-]
+"open": []
 },
 {
 "controller": "Ebay",
@@ -915,17 +883,9 @@
 "functions": 0,
 "lines": 14,
 "status": {
-"BUILT": 13,
-"FORM_ONLY": 1
+"BUILT": 14
 },
-"open": [
-{
-"reg": "MR-0339",
-"status": "FORM_ONLY",
-"text": "T_invoices (33 functions) comes back as: Old invoicing: calc, settle, generate, payments, credit notes. Fix: inv_is_admin() matches substring ADMN; parallel to Finance (double fi…. Improved: Freeze read-only; invoices ge",
-"note": "old invoicing not built"
-}
-]
+"open": []
 },
 {
 "controller": "T_mobile_device",
@@ -1152,18 +1112,10 @@
 "functions": 25,
 "lines": 25,
 "status": {
-"PARTIAL": 1,
 "NOT_APPLICABLE": 1,
-"BUILT": 23
+"BUILT": 24
 },
-"open": [
-{
-"reg": "MR-0291",
-"status": "PARTIAL",
-"text": "T_src_cycle (28 functions) comes back as: Sourcing cycle workspace (21 tabs), cycle products, PO docs, shipment↔PO links,…. Fix: No rights, no fk_id_ent on reads; code SC-ddmmyy-NNN from COUNT; dele…. Improved: Cycle = a",
-"note": "cycle workspace with steps; 21 tabs, PO docs, shipment links partly"
-}
-]
+"open": []
 },
 {
 "controller": "T_src_cycle_01",

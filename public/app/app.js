@@ -4538,14 +4538,25 @@
     $$('#main [data-chm]').forEach(g => { const all = $('input[value="ALL"]', g); if (all) all.onchange = () => $$('input', g).forEach(x => { if (x !== all) { x.disabled = all.checked || !d.can_edit; } }); if (all && all.checked) all.onchange(); });
     $$('#main [data-chms]').forEach(b => b.onclick = () => { const g = $(`[data-chm="${b.dataset.chms}"]`); const v = $$('input:checked', g).map(x => x.value); act('choices', { key: b.dataset.chms, value: v.includes('ALL') ? 'ALL' : v.join(',') }, () => pageChoices()); });
   }
-  async function pageSettings() {
+  async function pageSettings() {      // MR-1129 the module / parameter map: every setting of every module, its levels and where it is changed
     busy(true); let d; try { d = await api('settings'); } finally { busy(false); }
     const ent = (S.boot.companies.find(c => c.id == S.boot.ent) || {}).name || 'this company';
-    $('#main').innerHTML = `<div class="page-head"><div><h1>Settings</h1><div class="sub">A value for ${esc(ent)} wins over the value for all companies. ${d.settings.length} settings.</div></div><div class="actions">${S.boot.user.role === 'OWNER' ? '<a class="btn" href="#/menu-builder">Menu builder</a>' : ''}<a class="btn primary" href="#/choices">Choices – how the company works</a></div></div>
-      <div class="card"><div class="list-bar"><input class="q" id="sQ" placeholder="Find a setting…"></div><div class="tbl-wrap"><table class="t"><thead><tr><th>Setting</th><th>All companies</th><th>${esc(ent)}</th></tr></thead><tbody id="sBody"></tbody></table></div></div>`;
-    const draw = () => { const q = $('#sQ').value.trim().toLowerCase(); $('#sBody').innerHTML = d.settings.filter(s => !q || s.key.toLowerCase().includes(q)).map(s => `<tr><td><code>${esc(s.key)}</code></td><td class="click" data-k="${esc(s.key)}" data-s="global" style="cursor:pointer">${s.global === null ? '<span class="faint">—</span>' : esc(s.global)}</td><td class="click" data-k="${esc(s.key)}" data-s="company" style="cursor:pointer">${s.company === null ? '<span class="faint">same</span>' : esc(s.company)}</td></tr>`).join('');
+    const FROM = { company: ent, global: 'all companies', default: 'built-in default' };
+    let mod = '';
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Settings</h1><div class="sub">Every setting of every module in one place – the value for all companies, the value for ${esc(ent)} (it wins), each shop's own value, what is in force now and who changed it last. A new setting of any module shows up here by itself. ${d.settings.length} settings.</div></div><div class="actions">${S.boot.user.role === 'OWNER' ? '<a class="btn" href="#/menu-builder">Menu builder</a>' : ''}<a class="btn primary" href="#/choices">Choices – how the company works</a></div></div>
+      <div class="card"><div class="list-bar"><input class="q" id="sQ" placeholder="Find a setting – name, code or help…"><span id="sMods">${['', ...Object.keys(d.modules)].map(m => `<button class="btn sm${m === '' ? ' primary' : ''}" data-mod="${esc(m)}">${esc(m || 'All')}${m ? ' · ' + d.modules[m] : ''}</button>`).join(' ')}</span></div>
+      <div class="tbl-wrap"><table class="t"><thead><tr><th>Setting</th><th>In force now</th><th>All companies</th><th>${esc(ent)}</th><th>Shops</th><th>Last change</th><th></th></tr></thead><tbody id="sBody"></tbody></table></div></div>`;
+    const cell = (s, sc) => s.href ? (s[sc] === null ? '<span class="faint">—</span>' : esc(s[sc])) : `<span class="click" data-k="${esc(s.key)}" data-s="${sc}" style="cursor:pointer">${s[sc] === null ? '<span class="faint">— set</span>' : esc(s[sc])}</span>`;
+    const draw = () => { const q = $('#sQ').value.trim().toLowerCase();
+      const rows = d.settings.filter(s => (!mod || s.module === mod) && (!q || (s.key + ' ' + s.label + ' ' + s.help + ' ' + s.module).toLowerCase().includes(q)));
+      $('#sBody').innerHTML = rows.map(s => `<tr><td><b>${esc(s.label)}</b> <span class="pill">${esc(s.module)}</span><div class="small muted"><code>${esc(s.key)}</code>${s.help ? ' · ' + esc(s.help) : ''}${s.allowed.length ? '<br>Allowed: ' + s.allowed.map(esc).join(' · ') : ''}</div></td>
+        <td><b>${esc(s.now_label ?? s.now ?? '')}</b><div class="small muted">from ${esc(FROM[s.from])}</div></td><td>${cell(s, 'global')}</td><td>${cell(s, 'company')}</td>
+        <td class="small">${s.shops.length ? s.shops.map(x => esc(x.shop) + ': <b>' + esc(x.value) + '</b>').join('<br>') : '<span class="faint">same as company</span>'}</td>
+        <td class="small">${s.changed_at ? esc(s.changed_at.slice(0, 16)) + (s.changed_by ? '<br>' + esc(s.changed_by) : '') : '<span class="faint">never</span>'}</td>
+        <td>${s.href ? `<a class="btn sm" href="${esc(s.href)}">Change</a>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">Nothing matches.</td></tr>';
       $$('#sBody [data-k]').forEach(td => td.onclick = () => { const s = d.settings.find(x => x.key === td.dataset.k);
-        miniForm(s.key, td.dataset.s === 'global' ? 'Value for all companies' : 'Value for ' + ent + ' only', [{ name: 'value', label: 'Value', value: (s[td.dataset.s] === '••••' ? '' : s[td.dataset.s]) ?? '' }], async v => { const r = await api('settings', { method: 'POST', body: { key: s.key, value: v.value, scope: td.dataset.s } }); pageSettings(); return r; }); }); };
+        miniForm(s.label, td.dataset.s === 'global' ? 'Value for all companies' : 'Value for ' + ent + ' only', [{ name: 'value', label: 'Value', value: (s[td.dataset.s] === '••••' ? '' : s[td.dataset.s]) ?? '' }], async v => { const r = await api('settings', { method: 'POST', body: { key: s.key, value: v.value, scope: td.dataset.s } }); pageSettings(); return r; }); }); };
+    $$('#sMods [data-mod]').forEach(b => b.onclick = () => { mod = b.dataset.mod; $$('#sMods [data-mod]').forEach(x => x.classList.toggle('primary', x === b)); draw(); });
     $('#sQ').oninput = draw; draw();
   }
 

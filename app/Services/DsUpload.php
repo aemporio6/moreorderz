@@ -82,11 +82,29 @@ class DsUpload
     private static function norm(string $h): string { return trim(preg_replace('/\s+/', ' ', preg_replace('/[^a-z0-9#]+/', ' ', mb_strtolower($h)))); }
 
     /** field => header (or null). Each column is used once; the best score wins. */
+    /** MR-0987: column names this company has matched by hand before (any platform) – learned on every saved upload, used by the next guess. */
+    public static function learned(?int $ent = null): array
+    {
+        $j = json_decode((string) Settings::get('DS_LEARNED_ALIASES', $ent ?? Context::ent(), '{}'), true); return is_array($j) ? $j : [];
+    }
+
+    /** Remember the headers of a saved mapping that the built-in names would not have found (one name per field, at most 30 per field). */
+    public static function learn(int $ent, array $map): array
+    {
+        $have = self::learned($ent); $new = [];
+        foreach ($map as $f => $h) { if (! $h || ! isset(self::FIELDS[$f])) continue; $n = self::norm((string) $h); if ($n === '') continue;
+            if ($n === self::norm(self::FIELDS[$f][0]) || in_array($n, self::FIELDS[$f][2], true) || in_array($n, $have[$f] ?? [], true)) continue;
+            $have[$f] = array_slice(array_merge($have[$f] ?? [], [$n]), -30); $new[$f] = $n; }
+        if ($new) Settings::set('DS_LEARNED_ALIASES', json_encode($have), $ent, Context::userId());
+        return $new;
+    }
+
     public static function guess(array $headers): array
     {
-        $cand = [];
+        $cand = []; $learned = self::learned();
         foreach ($headers as $h) { $n = self::norm($h); $words = $n === '' ? [] : explode(' ', $n);
             foreach (self::FIELDS as $f => [$label, , $aliases]) {
+                if ($n !== '' && in_array($n, $learned[$f] ?? [], true)) { $cand[] = [2000 + strlen($n), $f, $h]; continue; }      // matched by hand before: wins over a name guess
                 if (in_array($f, self::MONEY, true) && array_intersect($words, self::ADDRESSY)) continue;                         // a money field never takes an address-type header
                 if ($f === 'ship_name' && array_intersect($words, self::NOT_BUYER)) continue;                                      // the buyer name never comes from a store / seller / product column
                 $score = 0; if ($n === self::norm($label)) $score = 1000 + strlen($n);
@@ -229,6 +247,7 @@ class DsUpload
             }
             foreach ($errors as $e) DB::table('drp_import_errors')->insert(['fk_import' => $imp, 'row_no' => $e['row'], 'reason' => mb_substr($e['reason'], 0, 255), 'raw_json' => json_encode($e['raw'], JSON_UNESCAPED_UNICODE)]);
             DB::table('drp_platform_mappings')->updateOrInsert(['fk_id_ent' => $ent, 'fk_platform' => $platform], ['mapping_json' => json_encode($map), 'date_order' => strtoupper($order), 'updated_by' => $u->id, 'updated_at' => now()]);      // the mapping and the date order are remembered
+            self::learn($ent, $map);      // MR-0987 the next file of any platform finds these columns by itself
             if ($errors) TaskEngine::open('IMP_PROBLEM', ['drp', $imp], count($errors) . ' row(s) of the drop shipping upload ' . mb_substr((string) $meta['name'], 0, 80) . ' were not saved', ['ent' => $ent, 'module' => 'drp_imports', 'record_id' => $imp, 'fix_url' => '#/ds-upload']);
             Audit::log('drp_imports', $imp, 'INSERT', ['file' => $meta['name'], 'new' => $st['new'], 'replaced' => $st['replaced'], 'errors' => $st['errors']], null, $ent);
             EventBus::fire('DS_BATCH_APPLIED', 'drp_imports', $imp, ['shop' => (int) $shop->id, 'month' => $m, 'year' => $y, 'new' => $st['new'], 'replaced' => $st['replaced']], $ent);
