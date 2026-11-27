@@ -282,6 +282,19 @@ class AdminController extends Controller
             'locked_up_to' => Settings::get('GL_LOCKED_UPTO', $ent, '')];
     }
 
+    /** Deep audit 27-11: an account of the balances opens its lines; a journal opens its lines and the record it came from. */
+    public function ledgerLines(Request $r)
+    {
+        \App\Services\Perm::need($r->user(), 'admin.ledger');
+        $ent = (int) Context::ent(); $jid = (int) $r->query('journal'); $code = (string) $r->query('account');
+        $q = DB::table('gl_lines as l')->join('gl_journals as j', 'j.id', '=', 'l.journal_id')->join('gl_accounts as a', 'a.id', '=', 'l.account_id')->where('j.fk_id_ent', $ent)
+            ->when($jid, fn ($x) => $x->where('j.id', $jid))->when(! $jid && $code !== '', fn ($x) => $x->where('a.code', $code))->orderByDesc('j.journal_date')->orderByDesc('l.id')->limit(300)
+            ->get(['l.id', 'j.id as journal_id', 'j.journal_no', 'j.journal_date', 'j.source_type', 'j.source_id', 'j.memo as jmemo', 'a.code', 'a.name', 'l.debit', 'l.credit', 'l.memo']);
+        $src = function ($t, $id) { $tbl = \App\Services\Lineage::JOURNAL_SOURCE[$t] ?? null; if (! $tbl || ! $id) return null; if ($tbl === 't_sale_imports') return '#/sales-import?fix=' . $id;
+            $f = \App\Services\RecordService::formOfTable($tbl); return $f ? "#/rec/$f/$id" : null; };
+        return ['rows' => $q->map(fn ($x) => (array) $x + ['source_url' => $src($x->source_type, (int) $x->source_id)])->all()];
+    }
+
     // ───────────── sign-ins: sessions, tries, allowed addresses ─────────────
     private function guard(callable $fn)
     {

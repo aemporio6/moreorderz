@@ -34,4 +34,14 @@ class RecordLinkTest extends TestCase
         $this->assertSame('READY', $c['amazon']['state']); $this->assertSame(['AMAZON_SPAPI'], $c['amazon']['adapters']);
         $this->assertSame('CONNECTED', $c['ecb']['state']); $this->assertSame('BY_FILE', $c['wise']['state']); $this->assertSame('TO_BUILD', $c['gcal']['state']);
     }
+
+    public function test_audit_record_and_ledger_lines_open_where_they_came_from(): void
+    {
+        $this->actingAs($this->owner);
+        $sup = (int) DB::table('t_src_suppliers')->insertGetId(RecordService::fillNotNull('t_src_suppliers', ['fk_id_ent' => 1, 'supplier_name' => 'Audit Link Co', 'supplier_code' => 'ALC']));
+        $this->assertStringContainsString("/$sup", $this->getJson('/api/record-link?k=rec&v=' . urlencode("t_src_suppliers #$sup"))->assertOk()->json('url'));
+        $this->getJson('/api/record-link?k=rec&v=' . urlencode('drop table #1'))->assertStatus(404);
+        $this->getJson('/api/ledger/lines?account=1000')->assertOk()->assertJsonStructure(['rows']);
+        $this->actingAs($this->makeUser('VA'))->getJson('/api/ledger/lines?account=1000')->assertStatus(403);
+    }
 }

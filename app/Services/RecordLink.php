@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 class RecordLink
 {
     /** column heading (screen) → kind */
-    public const KINDS = ['sku' => 'Product', 'po' => 'Purchase order', 'order' => 'Order', 'supplier' => 'Supplier', 'partner' => 'Partner', 'lot' => 'Stock lot', 'shop' => 'Shop', 'cycle' => 'Sourcing cycle', 'task' => 'Task'];
+    public const KINDS = ['sku' => 'Product', 'po' => 'Purchase order', 'order' => 'Order', 'supplier' => 'Supplier', 'partner' => 'Partner', 'lot' => 'Stock lot', 'shop' => 'Shop', 'cycle' => 'Sourcing cycle', 'task' => 'Task', 'rec' => 'Record'];
 
     public static function resolve(string $kind, string $v, object $u): ?array
     {
@@ -49,6 +49,9 @@ class RecordLink
             case 'cycle':
                 $c = DB::table('t_src_cycles')->where('fk_id_ent', $ent)->where(fn ($w) => $w->where('cycle_code', $plain)->when($num, fn ($x) => $x->orWhere('id', $num)))->first(['id']);
                 return $c ? ['url' => '#/cycle/' . $c->id] : null;
+            case 'rec':      // "table #id" as the audit log writes it
+                if (! preg_match('/^([a-z][a-z0-9_]{1,63})\s*#(\d+)$/', $v, $m)) return null;
+                return ($r = $rec($m[1], (int) $m[2])) ? ['url' => $r] : null;
             case 'task':
                 $t = DB::table('tasks')->where('fk_id_ent', $ent)->where(fn ($w) => $w->where('title', $v)->when($num, fn ($x) => $x->orWhere('id', $num)))->orderByDesc('id')->first(['id']);
                 return $t ? ['url' => '#/task/' . $t->id] : null;

@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
  */
 class Lineage
 {
-    private const JOURNAL_SOURCE = ['GRN' => 't_src_grn', 'PAYMENT' => 't_src_payments', 'SALE_CONFIRM' => 't_sale_imports', 'RETURN' => 't_sales', 'EXPENSE' => 'fin_expenses', 'STOCK_ADJUST' => 'fin_lots'];
+    public const JOURNAL_SOURCE = ['GRN' => 't_src_grn', 'PAYMENT' => 't_src_payments', 'SALE_CONFIRM' => 't_sale_imports', 'RETURN' => 't_sales', 'EXPENSE' => 'fin_expenses', 'STOCK_ADJUST' => 'fin_lots'];
 
     private static function step(string $what, string $text, ?string $url = null, array $more = []): array { return ['what' => $what, 'text' => $text, 'url' => $url] + $more; }
 

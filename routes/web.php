@@ -293,6 +293,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::get('health', [AdminController::class, 'health']);
         Route::post('health/retry', [AdminController::class, 'retryEvents']);
         Route::get('ledger', [AdminController::class, 'ledger']);
+        Route::get('ledger/lines', [AdminController::class, 'ledgerLines']);      // deep audit 27-11: account → its lines, journal → its lines and source
         Route::get('stock/on-hand', [StockController::class, 'onHand'])->middleware(\App\Http\Middleware\AllCompaniesView::class);
         Route::get('products', [StockController::class, 'products']);
         Route::get('products/bin', [StockController::class, 'productBin']);
