@@ -52,7 +52,9 @@ class DueEngine
             try { $rows = self::rows($src, $ent); } catch (\Throwable $e) { report($e); continue; }
             $live = [];
             foreach ($rows as $row) {
-                $date = substr((string) $row->{$src->date_column}, 0, 10); $live[(int) $row->id] = $date;
+                $date = substr((string) $row->{$src->date_column}, 0, 10);
+                if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || $date < '1900-01-01') { $n['skipped']++; continue; }      // live 27-11: an old record with an empty / zero date stopped the whole nightly job
+                $live[(int) $row->id] = $date;
                 if ($date > date('Y-m-d', strtotime("$today +{$src->remind_days} days"))) continue;
                 if ($src->source_table === 'cat_company_house' && DB::table('acc_obligations')->where('entity_id', $row->id)->whereIn('entity_type', ['COMPANY', 'company', 'cat_company_house'])->where('due_date', $date)->exists()) { $n['skipped']++; continue; }      // tracked in the Hub: no double task
                 $item = DB::table('sys_due_items')->where('fk_id_source', $src->id)->where('record_id', $row->id)->where('due_date', $date)->first();

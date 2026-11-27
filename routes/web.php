@@ -219,6 +219,13 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('settings', [AdminController::class, 'saveSetting']);
         Route::get('audit', [AdminController::class, 'audit']);
         Route::get('setup', [AdminController::class, 'setup']);
+        Route::get('contacts', [\App\Http\Controllers\ContactsController::class, 'index']);      // owner 27-11 communication hub
+        Route::get('contacts/file/{line}', [\App\Http\Controllers\ContactsController::class, 'file'])->whereNumber('line');
+        Route::get('contacts/record/{table}/{id}', [\App\Http\Controllers\ContactsController::class, 'forRecord'])->where('table', '[\w-]+')->whereNumber('id');
+        Route::post('contacts/evidence/{line}', [\App\Http\Controllers\ContactsController::class, 'evidence'])->whereNumber('line');
+        Route::get('contacts/{type}/{id}', [\App\Http\Controllers\ContactsController::class, 'thread'])->whereIn('type', ['supplier', 'forwarder', 'person', 'SUPPLIER', 'FORWARDER', 'PERSON'])->whereNumber('id');
+        Route::post('contacts/{type}/{id}', [\App\Http\Controllers\ContactsController::class, 'say'])->whereIn('type', ['supplier', 'forwarder', 'person', 'SUPPLIER', 'FORWARDER', 'PERSON'])->whereNumber('id')->middleware('throttle:120,1');
+        Route::post('contacts/{type}/{id}/contact', [\App\Http\Controllers\ContactsController::class, 'addContact'])->whereIn('type', ['supplier', 'forwarder', 'person', 'SUPPLIER', 'FORWARDER', 'PERSON'])->whereNumber('id');
         Route::get('owner-options', [AdminController::class, 'ownerOptions']);      // owner 27-11 07:24
         Route::post('owner-options/workspace/{id}', [AdminController::class, 'ownerWorkspace'])->whereNumber('id');
         Route::post('owner-options/bank/{id}', [AdminController::class, 'ownerBank'])->whereNumber('id');

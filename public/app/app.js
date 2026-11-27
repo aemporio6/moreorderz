@@ -487,7 +487,7 @@
 
   // ---------- pages ----------
   const ALL_ROUTES = /^(#\/?$|#\/(home|sales(\?|$)|sales-annual|sales-detailed|stock(\?|$)|stock\/lots|stock\/product\/|buying(\?|$|\/overview)|money(\?|$)|profit|reports|tasks(\?|$|\/dashboard|\/board)|list\/|rec\/))/;      // R-G_CORE-102 pages that add up every company
-  async function render() { await renderPage(); afterRender(S.route); try { layApply(S.route); } catch (e) {} }
+  async function render() { await renderPage(); afterRender(S.route); try { layApply(S.route); } catch (e) {} try { recordMessages(S.route); } catch (e) {} }
   async function renderPage() {
     if (S.boot && S.boot.partner_only && !/^#\/(my-account|my-invoices|my-portal|my-sales|me)\b/.test(S.route || '')) { location.hash = '#/my-account'; return; }      // R-FIN-2 a partner account sees only its own pages
     if (S.boot && S.boot.landing && !S.landed && (!S.route || S.route === '#/home' || S.route === '#/')) { S.landed = true; location.hash = S.boot.landing; return; }      // each finance role lands on its own page
@@ -691,6 +691,7 @@
       if (r === '#/me') return await pageMe();
       if (r === '#/my-menu') return await pageMyMenu();
       if (r === '#/owner-options') return await pageOwnerOptions();
+      if (r === '#/contacts' || r.startsWith('#/contacts')) { const m9 = r.match(/^#\/contacts\/(\w+)\/(\d+)/), q9 = new URLSearchParams(r.split('?')[1] || ''); return await pageContacts(m9 ? { type: m9[1].toUpperCase(), id: +m9[2] } : null, q9); }
       if ((mt = r.match(/^#\/screen\/([\d.]+)/))) return pageScreen(mt[1]);
       if (r && r !== '#/' && !r.startsWith('#/home')) {      /* R-G_CORE-121: an address the app does not know */
         m.innerHTML = `<div class="card"><div class="empty">${ic('alert')}<div style="font-size:16px">Page not found – search or go Home.</div><div style="display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap"><input class="q" id="nfQ" placeholder="Search" style="max-width:260px"><button class="btn" id="nfGo">Search</button><a class="btn primary" href="#/home">Home</a></div></div></div>`;
@@ -770,6 +771,69 @@
     $$('#main [data-mo]').forEach(x => x.onchange = () => post('owner-options/bank/' + x.dataset.mo, { money: x.value }));
     $$('#main [data-ap]').forEach(x => x.onclick = () => post('owner-options/bank/' + x.dataset.ap, { apart: true }));
     $('#ooQ').oninput = () => { const q = $('#ooQ').value.trim().toLowerCase(); $$('#ooB tr[data-s]').forEach(tr => { tr.style.display = !q || tr.dataset.s.includes(q) ? '' : 'none'; }); };
+  }
+  /* Owner 27-11 06:43 / 07:28 – Contacts & chat: everyone the business talks to, each with a conversation over every channel. "Send" opens the app of
+     whoever presses (his own WhatsApp, SMS, mail; a WeChat id is copied) with the text ready and writes the line to the history. Replies, screenshots,
+     files and voice notes are added to the same conversation; any line can be pinned to a record as evidence. */
+  const CH_IC = { WHATSAPP: '🟢', WECHAT: '💬', SMS: '✉', CALL: '📞', EMAIL: '@', NOTE: '📝' };
+  function chatLine(l) { const f = l.file;
+    const media = !f ? '' : f.kind === 'voice' ? `<audio controls preload="none" src="${esc(f.url)}" style="width:100%;max-width:300px;display:block;margin-top:4px"></audio>` : f.kind === 'image' ? `<a href="${esc(f.url)}" target="_blank" rel="noopener"><img src="${esc(f.url)}" alt="${esc(f.name)}" loading="lazy" style="max-width:240px;max-height:240px;border-radius:8px;display:block;margin-top:4px"></a>` : f.kind === 'video' ? `<video controls preload="none" src="${esc(f.url)}" style="max-width:260px;display:block;margin-top:4px"></video>` : `<a class="btn sm" href="${esc(f.url)}?download=1" style="margin-top:4px">${esc(f.name)} · ${f.kb} KB</a>`;
+    return `<div style="display:flex;justify-content:${l.in ? 'flex-start' : 'flex-end'};margin:6px 0"><div style="max-width:82%;min-width:0;padding:8px 10px;border-radius:12px;background:${l.in ? 'var(--surface-2,#f1f4f3)' : 'var(--accent-soft,#e3f3ef)'};border:1px solid ${l.evidence ? 'var(--warn,#c98a00)' : 'var(--line)'}">
+      <div class="small muted">${CH_IC[l.channel] || ''} ${esc(l.channel_name)} · ${esc(String(l.at).slice(0, 16))}${l.by ? ' · ' + esc(l.by) : ''}${l.with ? ' · with ' + esc(l.with) : ''}${l.status ? ' · ' + esc(l.status) : ''}</div>
+      ${l.text ? `<div style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(l.text)}</div>` : ''}${media}
+      ${l.link ? `<div class="small" style="margin-top:4px">${l.evidence ? '📌 <b>Evidence</b> on ' : 'About '}${esc(l.link.label)}${l.evidence_note ? ' – ' + esc(l.evidence_note) : ''}</div>` : ''}
+      ${l.auto ? '' : `<div style="margin-top:4px"><button class="btn sm" data-ev="${l.id}" data-on="${l.evidence ? 0 : 1}">${l.evidence ? 'Remove from evidence' : '📌 Use as evidence'}</button></div>`}</div></div>`; }
+  async function evidenceAsk(line, T, after) {
+    if (String(line.dataset.on) === '0') { try { const r = await api('contacts/evidence/' + line.dataset.ev, { method: 'POST', body: { on: false } }); toast(r.message); after(); } catch (e) { toast(e.message, 'err'); } return; }
+    const l = (T.lines || []).find(x => String(x.id) === line.dataset.ev) || {}, ctx = T.ctx;
+    if (ctx || l.link) { try { const r = await api('contacts/evidence/' + line.dataset.ev, { method: 'POST', body: { on: true, link_table: ctx ? ctx.table : l.link.table, link_id: ctx ? ctx.id : l.link.id } }); toast(r.message); after(); } catch (e) { toast(e.message, 'err'); } return; }
+    miniForm('Use as evidence', 'Which record does this message prove something about? Open that record and press "Messages & evidence" there, or give its kind and number here.', [{ name: 'link_table', label: 'Kind of record', required: true, options: Object.entries(T.evidence_on || {}) }, { name: 'link_id', label: 'Its number in the tool (the id in its address)', required: true, type: 'number' }, { name: 'note', label: 'What it proves (optional)' }],
+      async v => { const r = await api('contacts/evidence/' + line.dataset.ev, { method: 'POST', body: { on: true, ...v } }); after(); return r; });
+  }
+  function chatBox(host, T, ctx, after) {      // the conversation + the writing box of one contact; ctx = the record it is opened from
+    const P = T.party, reach = P.channels.filter(c => c.channel !== 'CALL'); T.ctx = ctx || null;
+    host.innerHTML = `<div class="card-h"><h3>${esc(P.name)}</h3><span class="small muted">${esc(P.role)} · <a href="${esc(P.open)}">open record</a></span></div>
+      <div class="card-b"><div class="small" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">${P.channels.map(c => `<span class="pill">${CH_IC[c.channel] || ''} ${esc(c.name)}: ${esc(c.address)}${c.label ? ' (' + esc(c.label) + ')' : ''}</span>`).join('') || '<span class="muted">No number or address yet.</span>'} <button class="btn sm" id="cbAdd">+ Add a number / id</button></div>
+        <div id="cbLines" style="max-height:52vh;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:6px 10px;background:var(--surface,#fff)">${T.lines.length ? T.lines.map(chatLine).join('') : '<div class="muted small" style="padding:14px">No messages yet. Write the first one below – it opens in your own app and is kept here.</div>'}</div>
+        <div style="display:grid;gap:6px;margin-top:8px"><textarea class="q" id="cbText" rows="3" placeholder="Write the message…" style="width:100%"></textarea>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><select class="q" id="cbVia" style="min-width:0;max-width:100%">${reach.map((c, i) => `<option value="${i}">${esc(c.name)} · ${esc(c.address)}</option>`).join('')}<option value="NOTE">Only a note here (nothing opens)</option></select>
+            <button class="btn primary" id="cbSend">Send</button><label class="btn" title="Add what they answered: a screenshot, a file or a voice note">+ Their reply / file / voice<input type="file" id="cbFile" hidden accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip,.ogg,.opus,.m4a,.amr"></label>
+            <label class="small"><input type="checkbox" id="cbEv" ${ctx ? '' : 'disabled'}> 📌 evidence${ctx ? '' : ' (from a record)'}</label></div>
+          <div class="small muted">Send opens <b>your own</b> WhatsApp / SMS / mail with the text ready – you press send there. WeChat: the id and the text are copied. Everything is kept here with who and when.</div></div></div>`;
+    const lines = $('#cbLines', host); lines.scrollTop = lines.scrollHeight;
+    const base = () => ctx ? { link_table: ctx.table, link_id: ctx.id, evidence: $('#cbEv', host).checked ? 1 : 0 } : {};
+    $('#cbSend', host).onclick = async () => { const text = $('#cbText', host).value.trim(), v = $('#cbVia', host).value, c = v === 'NOTE' ? null : reach[+v]; if (!text) return toast('Write the message first.', 'warn');
+      const w = c && c.channel !== 'WECHAT' ? window.open('about:blank', '_blank') : null;      // opened at the press, so the browser lets it through
+      try { const r = await api(`contacts/${P.type}/${P.id}`, { method: 'POST', body: { channel: c ? c.channel : 'NOTE', direction: 'OUT', text, address: c ? c.address : '', ...base() } });
+        if (r.url && w) w.location.href = r.url; else if (w) w.close(); if (r.copy) { try { await navigator.clipboard.writeText(text); } catch (e) {} toast('WeChat id: ' + r.copy + ' – the text is copied, paste it in WeChat.'); } else toast(r.message); after(); } catch (e) { if (w) w.close(); toast(e.message, 'err'); } };
+    $('#cbFile', host).onchange = e => { const f = e.target.files[0]; if (!f) return; miniForm('Their reply', f.name + ' – added to the conversation as received.', [{ name: 'channel', label: 'It came by', value: 'WHATSAPP', options: Object.entries(T.channels) }, { name: 'text', label: 'What it says (optional)' }],
+      async v => { const fd = new FormData(); fd.append('file', f, f.name); fd.append('direction', 'IN'); fd.append('channel', v.channel || 'WHATSAPP'); if (v.text) fd.append('text', v.text); Object.entries(base()).forEach(([k, x]) => fd.append(k, x)); const r = await api(`contacts/${P.type}/${P.id}`, { method: 'POST', body: fd }); after(); return r; }); e.target.value = ''; };
+    $('#cbText', host).addEventListener('paste', e => { const f = [...(e.clipboardData.files || [])][0]; if (!f) return; e.preventDefault(); const dt = new DataTransfer(); dt.items.add(new File([f], f.name || 'screenshot.png', { type: f.type })); $('#cbFile', host).files = dt.files; $('#cbFile', host).dispatchEvent(new Event('change')); });
+    $('#cbAdd', host).onclick = () => miniForm('Add a number / id', 'Another way to reach ' + P.name + '. Phone numbers with the country code.', [{ name: 'channel', label: 'Kind', required: true, options: [['WHATSAPP', 'WhatsApp'], ['WECHAT', 'WeChat id'], ['SMS', 'SMS / mobile'], ['EMAIL', 'E-mail']] }, { name: 'address', label: 'Number, id or address', required: true }, { name: 'label', label: 'Whose (optional) – e.g. boss, sales' }],
+      async v => { const r = await api(`contacts/${P.type}/${P.id}/contact`, { method: 'POST', body: v }); after(); return r; });
+    $$('[data-ev]', host).forEach(b => b.onclick = () => evidenceAsk(b, T, after));
+  }
+  async function pageContacts(sel, qs) {
+    const ctx = qs && qs.get('about') ? { table: qs.get('about'), id: +qs.get('rid') } : null; let kind = (qs && qs.get('kind')) || '', q = '';
+    $('#main').innerHTML = `<div class="page-head"><div><h1>Contacts &amp; chat</h1><div class="sub">Everyone you talk to – suppliers, forwarders, partners, VAs – with every way to reach them and the whole conversation in one place.${ctx ? ' <b>Messages are linked to the record you came from.</b>' : ''}</div></div></div>
+      <div class="cc-grid" style="display:grid;grid-template-columns:${innerWidth < 800 ? 'minmax(0,1fr)' : 'minmax(240px,340px) minmax(0,1fr)'};gap:12px"><div class="card" style="min-width:0"><div class="list-bar"><input class="q" id="ccQ" placeholder="Find – name, number, WeChat id" style="min-width:0;flex:1"><select class="q" id="ccK" style="min-width:0"><option value="">Everyone</option></select></div><div id="ccList" style="max-height:70vh;overflow:auto"></div></div>
+        <div class="card" id="ccChat" style="min-width:0"><div class="card-b muted">Choose a contact.</div></div></div>`;
+    const openChat = async (type, id) => { let T; try { T = await api(`contacts/${type}/${id}`); } catch (e) { return toast(e.message, 'err'); } chatBox($('#ccChat'), T, ctx, () => { openChat(type, id); load(); }); if (innerWidth < 800) $('#ccChat').scrollIntoView({ behavior: 'smooth' }); };
+    let tm; const load = async () => { let d; try { d = await api('contacts?' + new URLSearchParams({ q, kind })); } catch (e) { return toast(e.message, 'err'); }
+      const K = $('#ccK'); if (K.options.length === 1) Object.entries(d.kinds).forEach(([k, v]) => K.add(new Option(v + 's', k))); K.value = kind;
+      $('#ccList').innerHTML = d.rows.map(r => `<a href="#" data-c="${r.type}|${r.id}" style="display:block;padding:8px 12px;border-bottom:1px solid var(--line);text-decoration:none;color:inherit${sel && sel.type === r.type && sel.id === r.id ? ';background:var(--accent-soft,#e3f3ef)' : ''}"><b>${esc(r.name)}</b> <span class="small muted">${esc(r.role)}</span> <span class="small">${r.has.map(h => CH_IC[h] || '').join(' ')}</span>${r.last ? `<div class="small muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.last.in ? '← ' : '→ '}${esc(r.last.text)} · ${esc(String(r.last.at).slice(5, 16))}</div>` : ''}</a>`).join('') || '<div class="muted small" style="padding:12px">Nobody found.</div>';
+      $$('#ccList [data-c]').forEach(a => a.onclick = e => { e.preventDefault(); const [t, i] = a.dataset.c.split('|'); sel = { type: t, id: +i }; openChat(t, +i); $$('#ccList [data-c]').forEach(x => x.style.background = x === a ? 'var(--accent-soft,#e3f3ef)' : ''); }); };
+    $('#ccQ').oninput = () => { clearTimeout(tm); tm = setTimeout(() => { q = $('#ccQ').value; load(); }, 250); }; $('#ccK').onchange = () => { kind = $('#ccK').value; load(); };
+    await load(); if (sel) openChat(sel.type, sel.id);
+  }
+  /** On every record that can carry messages (PO, cycle, payment, shipment, supplier, person, product…): a "Messages & evidence" card – what was said about it, evidence first, and Message → the right contact. */
+  async function recordMessages(route) {
+    const c = ctxOfRoute(route); if (!c || $('#recMsgs')) return; let d; try { d = await api(`contacts/record/${encodeURIComponent(c.entity)}/${c.id}`); } catch (e) { return; }
+    if (S.route !== route || $('#recMsgs') || (!d.party && !d.lines.length)) return;
+    const box = document.createElement('div'); box.className = 'card'; box.id = 'recMsgs'; box.style.marginTop = '12px';
+    box.innerHTML = `<div class="card-h"><h3>💬 Messages &amp; evidence</h3><span class="small muted">${d.lines.length} message(s)${d.evidence ? ' · ' + d.evidence + ' as evidence' : ''}</span>${d.party ? `<a class="btn sm primary" style="margin-left:auto" href="#/contacts/${d.party.type}/${d.party.id}?about=${encodeURIComponent(d.table)}&rid=${c.id}">Message…</a>` : ''}</div>
+      <div class="card-b">${d.lines.length ? d.lines.map(chatLine).join('') : '<div class="muted small">Nothing said about this record yet. Press Message – what you send and what comes back is kept here, and any line can be pinned as evidence.</div>'}</div>`;
+    $('#main').appendChild(box); $$('[data-ev]', box).forEach(b => b.onclick = () => evidenceAsk(b, { lines: d.lines, ctx: { table: d.table, id: c.id } }, () => { box.remove(); recordMessages(route); }));
   }
   async function pageMyMenu() {
     let P = JSON.parse(JSON.stringify(MENU_P)); const save = async () => { try { await api('prefs/menu', { method: 'POST', body: { menu: P } }); MENU_P = P; drawSide(); toast('Your menu is saved'); } catch (e) { toast(e.message, 'err'); } };
