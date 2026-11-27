@@ -72,13 +72,26 @@ Owner: the old tool sent supplier messages straight to WhatsApp. Now, at a high 
 8. ✅ 27-11 (Setup › Workspaces & bank links) Owner 07:24 – options in the owner's hands, no questions: a workspace (e.g. 'test enterprise') can be kept / switched off / deleted by the owner; every bank account of a person / company can be linked by the owner to a company and to a Money bank account, or kept apart.
 5. ✅ 27-11 Tracking links on every screen, 22 carriers + '+ carrier' in place. (was: Tracking: carrier list with tracking-link patterns (sea, road, air, courier), every tracking number a link, "+ Add carrier" in place.
 
+## NEXT – owner 27-11 09:26 (saved here so nothing is lost when the session / limit ends)
+**A. Connectors hub (one place, fully dynamic)** – Setup › Connections becomes a catalogue of connectors, each with logo, what it does in this tool, status (connected / not / error), Connect · Test · Disconnect, and who connected it when.
+1. Google: Drive (watched folders already exist – move under the hub), Sheets (read/write a sheet as an import source or export target), Gmail (inbound attachments → Import anything / "to place"), Calendar (due dates, task reminders), Docs.
+2. Microsoft: OneDrive / Excel / Word / Outlook (same jobs as Google).
+3. Marketplaces: eBay, Amazon (SP-API), TikTok Shop, Etsy, OnBuy, Temu, Vinted, Shopify (adapters for eBay/Amazon/TikTok/OnBuy/Temu already written – MR-0074 – wait for keys).
+4. Money: Wise, banks (statement files today), PayPal, Stripe. Messaging: WhatsApp (way 2), WeChat, email/SMTP. Printers. Carriers (tracking).
+5. Connect with permission: OAuth "Sign in with …" where the service offers it (owner presses Allow – no key pasted in chat); key/secret forms only where no OAuth, owner types it himself, stored sealed (never shown).
+6. Built from one table (cat_connectors: code, group, name, domain, auth kind, scopes, jobs, help link) so a new connector is one row, not new screens; each connector says which modules use it.
+**B. Logos everywhere** – every marketplace, bank, carrier, connector, messaging app, printer, payment service shows its small current logo beside its name (dropdowns, lists, records, shop chips, Connections).
+- Way: one logo helper keyed by the service's own web domain (cat_* rows get a `domain` column: amazon.co.uk, ebay.co.uk, tiktok.com, etsy.com, onbuy.com, vinted.co.uk, temu.com, wise.com, hsbc.co.uk …); the picture is the service's own current site icon fetched at run time and cached, so it stays the latest; a coloured initial badge when none. Owner can upload his own picture for any row. Not drawn by hand.
+**C. Still-to-do from this ROADMAP** – finish what can be built without the owner (each line above marked open); the rest stays under "Waiting for the owner".
+Order when work resumes: finish guide pictures batch (in progress 27-11 09:30) → B logos (quick, visible) → A connectors hub (catalogue + Google Drive/Sheets/Gmail OAuth first, then marketplaces as keys come) → C.
+
 ## User guide – a teacher inside the tool (owner 27-11 08:00, must)
 Visual, with links, for every module, screen, form, field, dropdown, button and figure; how the company runs and how each module works; who is where, what is where.
 1. Built by itself from the registry + menu + rules (a new module / field appears in the guide by itself), one page per screen with its real screenshot (made by the browser check) and the buttons marked.
 2. "?" beside every field, dropdown, button and figure → opens the guide at exactly that part (not the whole guide).
 3. "Show me" tours: step-by-step highlight on the live screen (press this → choose this → save) until the job is right; a mistake says why and how to fix it.
 4. The company map: the whole flow (buy → receive → stock → sell → money → partners), roles and where each thing lives, with links.
-✅ 27-11 part 1 live: User guide page (map, every screen step by step, every form and box, search), '? Guide' on every screen, '?' on every form box → the guide at that box. ✅ part 2: pictures with numbered buttons (168 screens), ▶ Show me tours (screen, Guide me, every form), '?' on every number tile. Pictures are re-made with tools/dev/guide-pictures.js when screens change.
+✅ 27-11 part 1 live: User guide page (map, every screen step by step, every form and box, search), '? Guide' on every screen, '?' on every form box → the guide at that box. ✅ part 2: pictures with numbered buttons (168 screens), ▶ Show me tours (screen, Guide me, every form), '?' on every number tile. Pictures are re-made with tools/dev/guide-pictures.cjs when screens change.
 All four points done (27-11).
 
 ### Remember – owner 27-11 07:56: WhatsApp "way 2" (remind the owner and do it together)

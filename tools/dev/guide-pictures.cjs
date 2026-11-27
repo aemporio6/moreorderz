@@ -1,4 +1,4 @@
-// usage: php artisan serve --port=8123 (demo data only), a demo OWNER login uicheck@demo.test with its password in <dir>/pw → node tools/dev/guide-pictures.js <dir> public/guide
+// usage: php artisan serve --port=8123 (demo data only), a demo OWNER login uicheck@demo.test with its password in <dir>/pw → node tools/dev/guide-pictures.cjs <dir> public/guide
 // Owner 27-11 08:00: a real picture of every screen for the user guide, the buttons marked 1, 2, 3 … (demo data only – never real data)
 const { chromium } = require('playwright'); const fs = require('fs'); const S = process.argv[2], OUT = process.argv[3];
 (async () => { const b = await chromium.launch(); const p = await (await b.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
