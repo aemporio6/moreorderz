@@ -171,6 +171,11 @@ class AdminController extends Controller
     public function ownerBank(Request $r, int $id) { $this->owner($r);
         try { return ['message' => \App\Services\OwnerOptions::bank((int) Context::ent(), $id, $r->only(['company', 'money', 'apart']))]; } catch (\InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); } }
 
+    /** Owner 27-11 11:55: a SKU / PO / order / supplier / partner / lot / shop / cycle / task written on any screen opens its record. */
+    public function recordLink(Request $r) { $d = $r->validate(['k' => 'required|in:' . implode(',', array_keys(\App\Services\RecordLink::KINDS)), 'v' => 'required|string|max:120']);
+        $x = \App\Services\RecordLink::resolve($d['k'], $d['v'], $r->user());
+        return $x ?: response()->json(['message' => 'No ' . strtolower(\App\Services\RecordLink::KINDS[$d['k']]) . ' called “' . $d['v'] . '” that you may open.'], 404); }
+
     /** Owner 27-11 09:26 / 09:30: logos everywhere and My brands. Seeing is for everybody signed in; changing is for the owner. */
     public function logos(Request $r) { $this->owner($r); \App\Services\Logos::sync((int) Context::ent()); return \App\Services\Logos::page((int) Context::ent()); }
     public function logoSave(Request $r, ?int $id = null) { $this->owner($r);

@@ -44,14 +44,29 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 
 /* owner 27-11 09:26 / 09:30: logos beside names, My brands */
 img.lgo{height:16px;width:auto;max-width:28px;vertical-align:-3px;margin-right:6px;border-radius:3px;object-fit:contain;display:inline-block}
-img.lgo.lgo-b{max-width:70px;height:16px;border-radius:3px;background:#fff;padding:1px 3px}
+img.lgo.lgo-b{max-width:80px;height:18px;border-radius:0}
+:root[data-theme="dark"] img.lgo.lgo-b,:root[data-theme="dark"] h2 .mb-img{filter:drop-shadow(0 0 1px rgba(255,255,255,.9)) drop-shadow(0 0 3px rgba(255,255,255,.35))}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) img.lgo.lgo-b{filter:drop-shadow(0 0 1px rgba(255,255,255,.9)) drop-shadow(0 0 3px rgba(255,255,255,.35))}}
 .ap-o img.lgo{height:15px}
 .lgo-cell{display:inline-flex;align-items:center;justify-content:center;width:72px;height:34px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:3px}
 .lgo-cell img{max-width:100%;max-height:100%;object-fit:contain}
 .lgo-ini{font:600 12px/1 var(--font,inherit);color:#555;letter-spacing:.04em}
 .mb-row{display:flex;gap:10px;flex-wrap:wrap}
-.mb-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-width:150px;min-height:84px;padding:12px 18px;background:#fff;color:#111;border:1px solid var(--line);border-radius:14px;text-decoration:none;box-shadow:0 1px 2px rgba(0,0,0,.04);transition:border-color .15s,box-shadow .15s}
-.mb-btn:hover{border-color:var(--accent)}
-.mb-btn.on{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+.mb-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-width:170px;min-height:100px;padding:14px 20px;background:linear-gradient(180deg,#ffffff,#f3f4f2);color:#111;border:1px solid transparent;border-radius:16px;text-decoration:none;box-shadow:0 1px 3px rgba(0,0,0,.06);transition:box-shadow .15s,transform .15s}
+.mb-btn:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,.08)}
+.mb-btn.on{box-shadow:0 0 0 2px var(--accent),0 6px 16px rgba(0,0,0,.08)}
 .mb-btn .muted{color:#666}
-.mb-logo{background:#fff;color:#111;border:1px solid var(--line);border-radius:14px;padding:12px 18px;display:flex;align-items:center;justify-content:center;min-height:90px;min-width:180px}
+.mb-img{display:block;width:auto;height:auto;object-fit:contain}
+.mb-word{letter-spacing:.03em;color:#111}
+.mb-hero{margin-top:14px;border-radius:20px;padding:34px 20px;display:flex;align-items:center;justify-content:center;min-height:200px;background:radial-gradient(ellipse at center,#ffffff 0%,#f2f3f1 70%,#e9ebe8 100%);box-shadow:inset 0 0 0 1px rgba(0,0,0,.04)}
+.mb-hero .mb-img{filter:drop-shadow(0 8px 14px rgba(0,0,0,.12))}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+/* owner 27-11 11:55: a name of a record opens it */
+.rl[data-rk]{color:var(--link,#1f6feb);cursor:pointer}
+.rl[data-rk]:hover{text-decoration:underline}
+.cn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.cn-tile{border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:4px;background:var(--surface,#fff)}
+.cn-top{display:flex;align-items:center;gap:8px}
+.cn-logo{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;background:#fff;border:1px solid var(--line)}
+.cn-logo img.lgo{height:20px;max-width:26px;margin:0}
+.lgo-sel img.lgo{margin-right:3px}

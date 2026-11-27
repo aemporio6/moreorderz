@@ -228,6 +228,7 @@ Route::middleware(['auth', SetContext::class])->group(function () {
         Route::post('contacts/{type}/{id}/contact', [\App\Http\Controllers\ContactsController::class, 'addContact'])->whereIn('type', ['supplier', 'forwarder', 'person', 'SUPPLIER', 'FORWARDER', 'PERSON'])->whereNumber('id');
         Route::post('tracking-carriers', [AdminController::class, 'addTrackingCarrier'])->middleware('throttle:30,1');      // owner 27-11 tracking links
         Route::get('tracking-link', [AdminController::class, 'trackingLink']);
+        Route::get('record-link', [AdminController::class, 'recordLink'])->middleware('throttle:120,1');      // owner 27-11 11:55 everything connected
         Route::get('logos', [AdminController::class, 'logos']);      // owner 27-11 09:26 logos everywhere
         Route::post('logos', [AdminController::class, 'logoSave'])->middleware('throttle:60,1');
         Route::post('logos/{id}', [AdminController::class, 'logoSave'])->whereNumber('id')->middleware('throttle:60,1');

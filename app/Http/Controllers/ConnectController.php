@@ -40,7 +40,7 @@ class ConnectController extends Controller
             'carriers' => DB::table('t_carriers')->where(fn ($q) => $q->where('fk_id_ent', $ent)->orWhere('fk_id_ent', 0)->orWhereNull('fk_id_ent'))->where('f_active', 1)->orderBy('carrier_name')->get(['id', 'carrier_name as name']),
             'log' => DB::table('sys_api_log')->whereIn('fk_id_ent', [$ent, 0])->orderByDesc('id')->limit(40)->get(['created_at', 'adapter', 'method', 'url', 'status_code', 'ms', 'error']),
             'jobs' => DB::table('sys_job_runs')->where(fn ($q) => $q->where('job_code', 'like', 'API_%')->orWhere('job_code', 'MSG_SEND'))->orderByDesc('id')->limit(20)->get(['job_code', 'started_at', 'run_status', 'items_done', 'error_text']),
-            'webhook' => rtrim((string) config('app.url'), '/') . '/wa/inbound'];
+            'webhook' => rtrim((string) config('app.url'), '/') . '/wa/inbound', 'connectors' => \App\Services\Connect\ConnectorsHub::list($ent)];      // owner 27-11 09:26 every connector in one place
     }
 
     public function saveConnection(Request $r, ?int $id = null) { return $this->run(fn () => ['id' => Connections::save((array) $r->input(), $id), 'message' => 'Connection saved. Keys typed here are kept encrypted and are not shown again.']); }
