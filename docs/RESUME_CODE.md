@@ -12,7 +12,7 @@ Nothing important lives only in the work container. Code, tests, migrations, gui
 2. Also in ROADMAP: "Remember – WhatsApp way 2" (do together with the owner) and "Waiting for the owner" (CNY/USD rates, 31 FBA ASINs, listings reports, MY TOOL key, eBay shop for 25 Nov labels, 106 bank accounts).
 
 ## Last state (27-11 13:01 – owner stopped the session, limit ending)
-- Live = bb600ab. 997 tests green. Working tree clean, everything pushed to GitHub.
+- Live = 64ea38e (brand page designed 13:10). 997 tests green. Working tree clean, everything pushed to GitHub. Session stopped by the owner; next session Wednesday.
 - Done today after 09:30: live ECB rates + top-bar strip; logos everywhere (Setup › Logos, 97/102 fetched); My brands + brand record = brand page (big logo, products, numbers); owner's brand logos in his Drive folder 'MoreOrderz – My brand logos' and in the live DB; + Add on every screen; record links (SKU/PO/order/supplier/partner/lot/shop/cycle/task open their record); Connectors gallery (28); ledger lines + audit record links.
 - NEXT session, in this order: (1) F currency: deal rate vs today's rate, gain/loss on lots, POs, investments + Money total; (2) 'Add partner' opens Person or company with role Partner chosen; (3) A connectors: Google sign-in (Sheets/Gmail/Calendar – make the Google Cloud OAuth client with the owner), Microsoft, Wise, WorldFirst, Etsy, Shopify; (4) E deep audit (owner paused it 12:56 – do it next session, module by module, fix on the spot; known: Buying has 4 numbers without '?').
 - Keep: WhatsApp way 2 reminder (scheduled task, 28-11); owner rule 12:32 – if something he asks already exists, tell him where instead of rebuilding.
