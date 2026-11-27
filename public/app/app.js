@@ -161,8 +161,9 @@
     const tone = { err: ['Wrong – fix now', 'err'], warn: ['Do soon', 'warn'], todo: ['Next step', 'done'], info: ['Good to know', 'plain'] };
     p.innerHTML = `<div class="gn-h"><div><div class="small muted">${esc(d.where ? d.where.section : 'MoreOrderz')}</div><b>${esc(d.where ? d.where.title : ($('#main h1') || {}).textContent || 'This screen')}</b>${d.where && d.where.about ? `<div class="small muted">${esc(d.where.about)}</div>` : ''}</div><button class="btn sm ghost" id="gnX" title="Close">×</button></div>
       <div class="gn-b">${d.items.length ? d.items.map((x, i) => `<div class="gn-i gn-${x.tone}"><div class="gn-n">${i + 1}</div><div style="flex:1;min-width:0"><span class="chip ${tone[x.tone][1]}" style="font-size:10px">${tone[x.tone][0]}</span><div class="gn-t">${esc(x.text)}</div>${x.why ? `<div class="small muted">${esc(x.why)}</div>` : ''}${x.go ? `<button class="btn sm ${x.tone === 'err' ? 'primary' : ''}" data-gngo="${esc(x.go)}" style="margin-top:6px">${esc(x.label || 'Open')} →</button>` : ''}</div></div>`).join('') : '<div class="empty">All good here – nothing to do on this screen.</div>'}</div>
-      <div class="gn-f small muted">The guide follows every screen. Press <span class="kbd">?</span> for help on each field.</div>`;
+      <div class="gn-f small muted" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn sm primary" id="gnTour">▶ Show me</button><a class="btn sm" href="#/guide?s=${encodeURIComponent(S.route)}">📖 Guide of this screen</a><span>Press <span class="kbd">?</span> for help on each field.</span></div>`;
     $('#gnX').onclick = () => { GN.open = false; drawGn(); };
+    if ($('#gnTour')) $('#gnTour').onclick = () => { GN.open = false; drawGn(); screenTour(); };
     $$('[data-gngo]', p).forEach(b => b.onclick = () => { const g = b.dataset.gngo; if (g === 'action:new') { const n = $('#lNew'); if (n) n.click(); return; } go(g); });
   }
 
@@ -518,7 +519,7 @@
 
   // ---------- pages ----------
   const ALL_ROUTES = /^(#\/?$|#\/(home|sales(\?|$)|sales-annual|sales-detailed|stock(\?|$)|stock\/lots|stock\/product\/|buying(\?|$|\/overview)|money(\?|$)|profit|reports|tasks(\?|$|\/dashboard|\/board)|list\/|rec\/))/;      // R-G_CORE-102 pages that add up every company
-  async function render() { await renderPage(); afterRender(S.route); try { trackDecorate($('#main')); if (!trkObs.on && $('#main')) { trkObs.observe($('#main'), { childList: true, subtree: true }); trkObs.on = 1; } } catch (e) {} try { layApply(S.route); } catch (e) {} try { recordMessages(S.route); } catch (e) {} }
+  async function render() { await renderPage(); afterRender(S.route); try { figureHelp(); if (S.tourAfter) { S.tourAfter = 0; setTimeout(screenTour, 900); } } catch (e) {} try { trackDecorate($('#main')); if (!trkObs.on && $('#main')) { trkObs.observe($('#main'), { childList: true, subtree: true }); trkObs.on = 1; } } catch (e) {} try { layApply(S.route); } catch (e) {} try { recordMessages(S.route); } catch (e) {} }
   async function renderPage() {
     if (S.boot && S.boot.partner_only && !/^#\/(my-account|my-invoices|my-portal|my-sales|me)\b/.test(S.route || '')) { location.hash = '#/my-account'; return; }      // R-FIN-2 a partner account sees only its own pages
     if (S.boot && S.boot.landing && !S.landed && (!S.route || S.route === '#/home' || S.route === '#/')) { S.landed = true; location.hash = S.boot.landing; return; }      // each finance role lands on its own page
@@ -867,6 +868,66 @@
       <div class="card-b">${d.lines.length ? d.lines.map(chatLine).join('') : '<div class="muted small">Nothing said about this record yet. Press Message – what you send and what comes back is kept here, and any line can be pinned as evidence.</div>'}</div>`;
     $('#main').appendChild(box); $$('[data-ev]', box).forEach(b => b.onclick = () => evidenceAsk(b, { lines: d.lines, ctx: { table: d.table, id: c.id } }, () => { box.remove(); recordMessages(route); }));
   }
+  /* Owner 27-11 08:00 – "take him by the finger": Show me. A tour on the live screen, built by itself: the screen's own buttons (numbered in its
+     guide picture), its search, its numbers and its first row – or, in a form, the boxes that are needed, in order. One step at a time: the part is
+     lit, a bubble says what it does, Next / Back / Stop; in a form the next box comes as soon as this one is filled, and a save that fails points
+     at the box that is wrong and why. Nothing is pressed or saved for the person. */
+  let TOUR = null;
+  function tourStop() { if (!TOUR) return; TOUR.cleanup.forEach(f => { try { f(); } catch (e) { } }); $$('.tour-hl,.tour-bub,.tour-dim').forEach(x => x.remove()); TOUR = null; }
+  function tourShow(i) {
+    if (!TOUR) return; const steps = TOUR.steps; if (i < 0) i = 0; if (i >= steps.length) { tourStop(); return toast('That is the whole screen – press ▶ Show me again any time.'); }
+    TOUR.i = i; const st = steps[i]; const el = typeof st.el === 'function' ? st.el() : st.el; $$('.tour-hl,.tour-bub').forEach(x => x.remove());
+    if (!el || !document.body.contains(el)) return tourShow(i + (TOUR.dir || 1));
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    setTimeout(() => { if (!TOUR || TOUR.i !== i) return; const rc = el.getBoundingClientRect();
+      const hl = document.createElement('div'); hl.className = 'tour-hl'; hl.style.cssText = `position:fixed;left:${rc.left - 6}px;top:${rc.top - 6}px;width:${rc.width + 12}px;height:${rc.height + 12}px;border:3px solid #e53935;border-radius:10px;box-shadow:0 0 0 9999px rgba(0,0,0,.35);z-index:9998;pointer-events:none;transition:all .2s`;
+      const b = document.createElement('div'); b.className = 'tour-bub'; const W = Math.min(340, innerWidth - 24); let left = Math.min(Math.max(12, rc.left), innerWidth - W - 12), top = rc.bottom + 14; if (top + 170 > innerHeight) top = Math.max(12, rc.top - 180);
+      b.style.cssText = `position:fixed;left:${left}px;top:${top}px;width:${W}px;z-index:9999;background:var(--surface,#fff);color:var(--ink,#111);border:2px solid #e53935;border-radius:12px;padding:12px;box-shadow:0 10px 30px rgba(0,0,0,.25)`;
+      b.innerHTML = `<div class="small muted">Step ${i + 1} of ${steps.length}</div><div style="font-weight:700;margin:2px 0 4px">${esc(st.title)}</div><div class="small">${esc(st.text)}</div>${st.wait ? '<div class="small muted" style="margin-top:4px">Do it now – the next step comes by itself.</div>' : ''}
+        <div style="display:flex;gap:6px;margin-top:10px;justify-content:flex-end"><button class="btn sm" data-t="stop">Stop</button><button class="btn sm" data-t="back" ${i ? '' : 'disabled'}>Back</button><button class="btn sm primary" data-t="next">${i === steps.length - 1 ? 'Done' : 'Next'}</button></div>`;
+      document.body.append(hl, b);
+      b.querySelector('[data-t=stop]').onclick = tourStop; b.querySelector('[data-t=back]').onclick = () => { TOUR.dir = -1; tourShow(i - 1); }; b.querySelector('[data-t=next]').onclick = () => { TOUR.dir = 1; tourShow(i + 1); };
+      if (st.wait) { const done = () => st.wait(el); const t = setInterval(() => { if (!TOUR || TOUR.i !== i) return clearInterval(t); if (done()) { clearInterval(t); TOUR.dir = 1; tourShow(i + 1); } }, 500); TOUR.cleanup.push(() => clearInterval(t)); }
+    }, 260);
+  }
+  function tourStart(steps) { tourStop(); if (!steps.length) return toast('Nothing to show on this screen yet.', 'warn'); TOUR = { steps, i: 0, dir: 1, cleanup: [] };
+    const k = e => { if (e.key === 'Escape') tourStop(); }; document.addEventListener('keydown', k); TOUR.cleanup.push(() => document.removeEventListener('keydown', k));
+    const onR = () => tourStop(); addEventListener('hashchange', onR); TOUR.cleanup.push(() => removeEventListener('hashchange', onR)); tourShow(0); }
+  async function screenTour() {
+    const m = $('#main'); if (!m) return; const steps = []; let marks = [];
+    try { const slug = (S.route.split('?')[0].replace(/^#\//, '') || 'home').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); const r = await fetch('/guide/' + slug + '.json'); if (r.ok) marks = (await r.json()).marks || []; } catch (e) { }
+    const h1 = m.querySelector('.page-head h1'); if (h1) steps.push({ el: h1.parentElement, title: h1.textContent.trim(), text: ((m.querySelector('.page-head .sub') || {}).textContent || 'This screen.').trim().slice(0, 260) });
+    m.querySelectorAll('.page-head .actions > a.btn, .page-head .actions > button.btn').forEach(b => { if (!b.offsetParent || b.classList.contains('gd-btn') || b.classList.contains('lay-btn')) return; const lab = b.textContent.trim().replace(/\s+/g, ' ');
+      const mk = marks.find(x => x.label === lab); steps.push({ el: b, title: (mk ? mk.n + '. ' : '') + lab, text: b.title || (mk && mk.title) || ((() => { const h = b.getAttribute && b.getAttribute('href'); const it = h && (S.boot.menu || []).flatMap(x => x.items).find(x => x.route === h || x.route.split('?')[0] === h.split('?')[0]); return it && it.about ? 'Opens ' + it.name + ' – ' + it.about.charAt(0).toLowerCase() + it.about.slice(1) + '.' : null; })()) || (/^\+|new|add|create/i.test(lab) ? 'Makes a new one – a form opens; the boxes with * are needed.' : 'Opens ' + lab + '.') }); });
+    const q = m.querySelector('.list-bar input.q, input.q[placeholder]'); if (q && q.offsetParent) steps.push({ el: q, title: 'Find', text: (q.placeholder || 'Type to find') + ' – any word, with or without # or -.' });
+    const k = m.querySelector('.kpis'); if (k && k.offsetParent) steps.push({ el: k, title: 'The numbers', text: 'Each tile is one number of this screen. Press a tile to open what is behind it; the ? on a tile says how the number is made.' });
+    const t = m.querySelector('table.t tbody tr'); if (t && t.offsetParent) steps.push({ el: t, title: 'One row', text: 'Each row is one record. Open it (click the row or its link) to see everything about it, its history, documents and messages.' });
+    const lay = m.querySelector('.lay-btn'); if (lay) steps.push({ el: lay, title: '⚙ Arrange', text: 'Put this screen in your own order – parts, number tiles, columns. Only for you.' });
+    steps.push({ el: $('#gnBtn') || m, title: 'Stuck?', text: '"Guide me" always says what to do now on this screen and what is wrong – with the button that fixes it. "? Guide" opens the full guide of the screen.' });
+    tourStart(steps);
+  }
+  /** Show me inside a form: the needed boxes in order; each step waits until the box is filled; a failed save points at the wrong box. */
+  function formTour(ov) {
+    const flds = [...ov.querySelectorAll('#fBody .fld')].filter(w => w.offsetParent && (w.classList.contains('is-req') || w.querySelector('.req')));
+    const steps = flds.map(w => { const lab = (w.querySelector('label') || {}).textContent || 'Box'; const inp = w.querySelector('input,select,textarea,[data-dd]');
+      return { el: w, title: lab.replace(/\*|\?/g, '').trim() + ' (needed)', text: ((w.querySelector('.helptext') || {}).textContent || (w.querySelector('.fq') || {}).title || 'Type or choose it.').trim().slice(0, 240),
+        wait: () => { const v = inp ? (inp.value ?? inp.textContent ?? '') : ''; return String(v).trim() !== '' && !(inp && inp.matches('[data-dd]') && !inp.querySelector('.ap-val, .chip')); } }; });
+    const save = ov.querySelector('#fSave, [data-a="save"], .ovf .btn.primary, button.primary'); if (save) steps.push({ el: save, title: 'Save', text: 'Saves it. If something is still wrong, the box turns red and its message says why – Show me again takes you there.' });
+    tourStart(steps);
+    const obs = new MutationObserver(() => { if (!TOUR) return obs.disconnect(); const bad = ov.querySelector('.fld .err, .fld.err, .fld .need, .field-error'); if (bad) { const w = bad.closest('.fld'); const i = TOUR.steps.findIndex(x => x.el === w); if (i >= 0 && i !== TOUR.i) { tourShow(i); toast('This box is not right yet: ' + bad.textContent.trim().slice(0, 120), 'warn'); } } });
+    obs.observe(ov, { childList: true, subtree: true }); TOUR.cleanup.push(() => obs.disconnect());
+  }
+  /* "?" on every number tile: how the number is made, where it comes from, how to see what is behind it */
+  function figureHelp(root) {
+    (root || document).querySelectorAll('#main .kpi').forEach(k => { const l = k.querySelector('.lbl'); if (!l || l.querySelector('.kq')) return;
+      const a = document.createElement('a'); a.href = '#'; a.className = 'kq'; a.textContent = '?'; a.title = 'What this number is'; a.style.cssText = 'margin-left:6px;text-decoration:none;font-weight:700;border:1px solid var(--line);border-radius:50%;padding:0 5px;font-size:10px';
+      a.onclick = e => { e.preventDefault(); e.stopPropagation(); const name = l.childNodes[0] ? l.textContent.replace('?', '').trim() : 'This number', val = (k.querySelector('.val') || {}).textContent || '', foot = (k.querySelector('.foot') || {}).textContent || '';
+        const m2 = modal(name, '', `<p style="font-size:20px;margin:0 0 6px"><b>${esc(val)}</b></p>${foot ? `<p>${esc(foot)}</p>` : ''}<ul class="small" style="padding-left:18px"><li>It is worked out live from the records of this company – nothing is typed in by hand.</li>
+          <li>${k.dataset.go || k.closest('a') ? 'Press the tile to open the records behind it.' : 'Open the screen of these records from the menu to see each one.'}</li><li>In <a href="#/profit">Profit views</a> every number opens the sale lines, money-file lines and expenses behind it, with the file and row.</li></ul>`,
+          `<a class="btn" href="#/guide?s=${encodeURIComponent(S.route)}">📖 Guide of this screen</a><button class="btn primary" id="kqX">OK</button>`); $('#kqX', m2.ov).onclick = m2.close; };
+      l.appendChild(a); });
+  }
+
   /* Owner 27-11 08:00 – the user guide, a teacher: the company map, every screen with its steps, every form and box; opened at exactly the "?" pressed */
   async function pageGuide(qs) {
     const sR = qs.get('s'), fK = qs.get('form'), fF = qs.get('field'), q0 = qs.get('q') || '';
@@ -878,7 +939,7 @@
           <div class="small">${esc(x.help || 'Type or choose the ' + x.label.toLowerCase() + '.')}</div>${x.choices ? `<div class="small muted">Choices come from ${esc(x.choices)}.</div>` : ''}${x.default ? `<div class="small muted">Filled in for you: ${esc(x.default)}</div>` : ''}</div>`).join('')}`).join('')}</div></div>`;
     const flow = d.map ? `<div class="card"><div class="card-h"><h3>🗺 How the company runs</h3><span class="small muted">follow the arrows – each stage opens its screens</span></div><div class="card-b" style="display:flex;flex-wrap:wrap;gap:8px;align-items:stretch">${d.map.map((m, i) => `<div style="flex:1 1 150px;min-width:0;border:1px solid var(--line);border-radius:10px;padding:8px"><b>${i + 1}. ${esc(m.stage)}</b> ${i < d.map.length - 1 ? '<span class="muted">→</span>' : ''}<div class="small">${esc(m.what)}</div><div class="small muted">Who: ${esc(m.who)}</div>
         ${m.screens.map(x => `<div class="small"><a href="${esc(x.guide)}">${esc(x.name)}</a></div>`).join('')}</div>`).join('')}</div></div>` : '';
-    const sc = d.screen ? (d.screen.found ? `<div class="card" style="margin-top:12px"><div class="card-h"><h3>📍 ${esc(d.screen.name)}</h3><a class="btn sm primary" href="${esc(d.screen.route)}">Open the screen</a></div><div class="card-b">
+    const sc = d.screen ? (d.screen.found ? `<div class="card" style="margin-top:12px"><div class="card-h"><h3>📍 ${esc(d.screen.name)}</h3><a class="btn sm" href="${esc(d.screen.route)}">Open the screen</a><button class="btn sm primary" id="gTour" data-r="${esc(d.screen.route)}">▶ Show me on the screen</button></div><div class="card-b">
         <div class="small muted">${esc(d.screen.path.join(' › '))}${d.screen.stage ? ' · stage ' + esc(d.screen.stage) : ''}</div>${d.screen.about ? `<p style="margin:6px 0"><b>${esc(d.screen.about)}</b></p>` : ''}
         ${d.screen.picture ? `<img src="${esc(d.screen.picture)}" alt="The screen ${esc(d.screen.name)}" style="width:100%;border:1px solid var(--line);border-radius:8px;margin:6px 0">` : ''}
         ${(d.screen.marks || []).length ? `<div class="small" style="margin-bottom:6px">${d.screen.marks.map(m => `<div><span style="display:inline-flex;width:18px;height:18px;border-radius:50%;background:#e53935;color:#fff;font-weight:700;font-size:11px;align-items:center;justify-content:center">${m.n}</span> <b>${esc(m.label)}</b>${m.title ? ' – ' + esc(m.title) : ''}</div>`).join('')}</div>` : ''}
@@ -890,6 +951,7 @@
     $('#main').innerHTML = `<div class="page-head"><div><h1>User guide</h1><div class="sub">Your teacher in the tool: how the company runs, every screen step by step, every form and every box. The "?" beside anything opens it here, at its place.</div></div><div class="actions"><a class="btn" href="#/guide">Start of the guide</a></div></div>
       <div class="list-bar"><input class="q" id="gQ" placeholder="Ask the guide – a screen, a box, a word (e.g. landing price, FBA, refund)" value="${esc(q0)}" style="flex:1;min-width:0"><button class="btn primary" id="gGo">Find</button></div>
       ${res}${sc}${fm}${!sR && !fK ? flow : ''}${idx}`;
+    if ($('#gTour')) $('#gTour').onclick = () => { S.tourAfter = 1; go($('#gTour').dataset.r); };
     const find = () => go('#/guide?q=' + encodeURIComponent($('#gQ').value.trim())); $('#gGo').onclick = find; $('#gQ').onkeydown = e => { if (e.key === 'Enter') find(); };
     if (fF) setTimeout(() => { const el = document.getElementById('gb-' + fF); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 150);
   }
@@ -924,7 +986,7 @@
   function laySave(k, L) { LAY[k] = L; return api('prefs/' + k, { method: 'POST', body: { layout: L } }).catch(() => {}); }
   const layBlocks = () => [...($('#main') || document.createElement('div')).children].filter(x => !x.classList.contains('page-head') && !['SCRIPT', 'STYLE', 'IFRAME'].includes(x.tagName) && x.id !== 'stepPager' && !x.classList.contains('lay-bar'));
   const layName = (el, i) => { const h = el.querySelector(':scope > .card-h h3, :scope > h3, :scope > .card-h b'); return ((h && h.textContent.trim()) || (el.classList.contains('kpis') ? 'Numbers' : (el.className.split(' ')[0] || 'part') + ' ' + (i + 1))).slice(0, 60); };
-  const tileName = t => ((t.querySelector('.lbl') || t).textContent || '').trim().slice(0, 60);
+  const tileName = t => ((t.querySelector('.lbl') || t).textContent || '').replace(/\?\s*$/, '').trim().slice(0, 60);      // without the "?" of the figure help
   const tblKey = (t, i) => { const c = t.closest('.card'); const h = c && c.querySelector('.card-h h3'); return ((h ? h.textContent.trim() : 'table') + ' #' + i).slice(0, 60); };
   const heads = t => { const tr = t.tHead && t.tHead.rows.length === 1 ? t.tHead.rows[0] : null; if (!tr || [...tr.cells].some(c => c.colSpan > 1 || c.rowSpan > 1)) return null; return [...tr.cells].map((c, i) => (c.textContent.trim() || 'col ' + (i + 1)).slice(0, 60)); };
   function layTable(t, conf) {
@@ -938,7 +1000,7 @@
     if ((L.order || []).length) byOrder(B.map((b, i) => i), (L.order || []).map(n => names.indexOf(n)).filter(i => i >= 0), i => i).forEach(i => m.appendChild(B[i]));
     B.forEach((b, i) => { const n = names[i]; b.dataset.lay = n; b.style.display = (L.hidden || []).includes(n) ? 'none' : '';
       const fold = (L.folded || []).includes(n), body = [...b.children].filter(c => !c.classList.contains('card-h')); if (b.querySelector(':scope > .card-h')) body.forEach(c => { c.style.display = fold ? 'none' : ''; }); });
-    $$('#main .kpis').forEach(row => { const T = [...row.children]; const nm = T.map(tileName); byOrder(T.map((x, i) => i), (L.tiles || []).map(n => nm.indexOf(n)).filter(i => i >= 0), i => i).forEach(i => row.appendChild(T[i])); T.forEach((t, i) => { t.style.display = (L.tilesHidden || []).includes(nm[i]) ? 'none' : ''; }); });
+    $$('#main .kpis').forEach(row => { const T = [...row.children].filter(c => !c.classList.contains('lay-tools')); const nm = T.map(tileName); byOrder(T.map((x, i) => i), (L.tiles || []).map(n => nm.indexOf(n)).filter(i => i >= 0), i => i).forEach(i => row.appendChild(T[i])); T.forEach((t, i) => { t.style.display = (L.tilesHidden || []).includes(nm[i]) ? 'none' : ''; t.style.gridColumn = ((L.tileSize || {})[nm[i]] === 'L' && innerWidth > 560) ? 'span 2' : ''; }); });
     $$('#main table.t').forEach((t, i) => { const c = (L.tables || {})[tblKey(t, i)]; if (!c) return; layTable(t, c);
       if (t.tBodies[0] && !t._layObs) { t._layObs = new MutationObserver(() => { t._layObs.disconnect(); layTable(t, ((LAY[k] || {}).tables || {})[tblKey(t, i)]); t._layObs.observe(t.tBodies[0], { childList: true }); }); t._layObs.observe(t.tBodies[0], { childList: true }); } });
     const act = m.querySelector('.page-head .actions'); if (act && !act.querySelector('.lay-btn')) { const b = document.createElement('button'); b.className = 'btn lay-btn'; b.title = 'Arrange this screen for yourself: parts, number tiles, columns'; b.textContent = '⚙ Arrange'; b.onclick = () => layMode(route); act.appendChild(b); }
@@ -951,8 +1013,12 @@
     const paint = () => { $$('#main .lay-tools').forEach(x => x.remove()); const B = layBlocks(), names = B.map(b => b.dataset.lay || layName(b, 0));
       B.forEach((b, i) => { const n = names[i], hid = (L.hidden || []).includes(n), fold = (L.folded || []).includes(n); b.style.display = ''; b.style.opacity = hid ? '.4' : '';
         const t = document.createElement('div'); t.className = 'lay-tools'; t.style.cssText = 'display:flex;gap:4px;justify-content:flex-end;padding:4px;background:var(--surface-2,#f3f6f5);border-bottom:1px dashed var(--accent)';
-        t.innerHTML = `<span class="small" style="margin-right:auto"><b>${esc(n)}</b></span><button class="btn sm" data-lu ${i ? '' : 'disabled'}>↑</button><button class="btn sm" data-ld ${i < B.length - 1 ? '' : 'disabled'}>↓</button>${b.querySelector(':scope > .card-h') ? `<button class="btn sm" data-lf>${fold ? 'Unfold' : 'Fold'}</button>` : ''}<button class="btn sm" data-lh>${hid ? 'Show' : 'Hide'}</button>${b.querySelector('table.t') ? '<button class="btn sm" data-lc>Columns</button>' : ''}`;
-        b.prepend(t);
+        t.innerHTML = `<span class="lay-drag" title="Hold and drag to move – mouse or finger" style="cursor:grab;touch-action:none;padding:0 8px;font-size:18px;line-height:1">⠿</span><span class="small" style="margin-right:auto"><b>${esc(n)}</b></span><button class="btn sm" data-lu ${i ? '' : 'disabled'}>↑</button><button class="btn sm" data-ld ${i < B.length - 1 ? '' : 'disabled'}>↓</button>${b.querySelector(':scope > .card-h') ? `<button class="btn sm" data-lf>${fold ? 'Unfold' : 'Fold'}</button>` : ''}<button class="btn sm" data-lh>${hid ? 'Show' : 'Hide'}</button>${b.querySelector('table.t') ? '<button class="btn sm" data-lc>Columns</button>' : ''}`;
+        b.prepend(t); if (b.classList.contains('kpis')) t.style.gridColumn = '1 / -1';
+        // owner 27-11: drag with the mouse or a finger (pointer events), as well as ↑ ↓
+        const hd = t.querySelector('.lay-drag'); hd.onpointerdown = ev => { ev.preventDefault(); hd.setPointerCapture(ev.pointerId); b.style.opacity = '.6'; const ph = document.createElement('div'); ph.style.cssText = 'height:6px;background:var(--accent,#125e52);border-radius:3px;margin:4px 0'; let target = null;
+          hd.onpointermove = e2 => { const others = layBlocks().filter(x => x !== b); target = others.find(x => { const r2 = x.getBoundingClientRect(); return e2.clientY < r2.top + r2.height / 2; }) || null; target ? m.insertBefore(ph, target) : m.appendChild(ph); };
+          hd.onpointerup = () => { hd.onpointermove = hd.onpointerup = null; b.style.opacity = ''; if (ph.parentNode) { m.insertBefore(b, ph); ph.remove(); L.order = layBlocks().map(x => x.dataset.lay || layName(x, 0)); } paint(); }; };
         $('[data-lu]', t).onclick = () => { const o = names.slice(); [o[i - 1], o[i]] = [o[i], o[i - 1]]; L.order = o; m.insertBefore(B[i], B[i - 1]); paint(); };
         $('[data-ld]', t).onclick = () => { const o = names.slice(); [o[i], o[i + 1]] = [o[i + 1], o[i]]; L.order = o; m.insertBefore(B[i + 1], B[i]); paint(); };
         $('[data-lh]', t).onclick = () => { L.hidden = hid ? (L.hidden || []).filter(x => x !== n) : [...(L.hidden || []), n]; paint(); };
@@ -966,12 +1032,14 @@
           dc(); $('#lcAll', md.ov).onclick = () => { hidden = new Set(); dc(); };
           $('#lcOk', md.ov).onclick = () => { if (hidden.size >= order.length) return toast('Keep at least one column.', 'warn'); L.tables = { ...(L.tables || {}), [key]: { order, hidden: [...hidden] } }; layTable(tb, L.tables[key]); md.close(); }; };
       });
-      $$('#main .kpis').forEach(row => [...row.children].forEach((tl, j, T) => { const n = tileName(tl), hid = (L.tilesHidden || []).includes(n); tl.style.display = ''; tl.style.opacity = hid ? '.4' : '';
-        const x = document.createElement('div'); x.className = 'lay-tools'; x.style.cssText = 'display:flex;gap:2px;justify-content:flex-end'; x.innerHTML = `<button class="btn sm" data-tl ${j ? '' : 'disabled'}>◀</button><button class="btn sm" data-tr2 ${j < T.length - 1 ? '' : 'disabled'}>▶</button><button class="btn sm" data-th>${hid ? 'Show' : '✕'}</button>`;
-        tl.prepend(x); const names2 = () => [...row.children].map(tileName);
-        $('[data-tl]', x).onclick = e => { e.stopPropagation(); row.insertBefore(tl, T[j - 1]); L.tiles = names2(); paint(); };
-        $('[data-tr2]', x).onclick = e => { e.stopPropagation(); row.insertBefore(T[j + 1], tl); L.tiles = names2(); paint(); };
-        $('[data-th]', x).onclick = e => { e.stopPropagation(); L.tilesHidden = hid ? (L.tilesHidden || []).filter(y => y !== n) : [...(L.tilesHidden || []), n]; paint(); }; })); };
+      $$('#main .kpis').forEach(row => [...row.children].filter(c => !c.classList.contains('lay-tools')).forEach((tl, j, T) => { const n = tileName(tl), hid = (L.tilesHidden || []).includes(n); tl.style.display = ''; tl.style.opacity = hid ? '.4' : '';
+        const x = document.createElement('div'); x.className = 'lay-tools'; x.style.cssText = 'display:flex;gap:2px;justify-content:flex-end'; const big = (L.tileSize || {})[n] === 'L'; x.innerHTML = `<button class="btn sm" data-tl ${j ? '' : 'disabled'}>◀</button><button class="btn sm" data-tr2 ${j < T.length - 1 ? '' : 'disabled'}>▶</button><button class="btn sm" data-ts title="Size of this tile">${big ? 'Small' : 'Big'}</button><button class="btn sm" data-th>${hid ? 'Show' : '✕'}</button>`;
+        x.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); }); // a tile that is a link must not open while it is arranged
+        tl.prepend(x); const names2 = () => [...row.children].filter(c => !c.classList.contains('lay-tools')).map(tileName);
+        $('[data-tl]', x).onclick = e => { e.preventDefault(); e.stopPropagation(); row.insertBefore(tl, T[j - 1]); L.tiles = names2(); paint(); };
+        $('[data-tr2]', x).onclick = e => { e.preventDefault(); e.stopPropagation(); row.insertBefore(T[j + 1], tl); L.tiles = names2(); paint(); };
+        $('[data-ts]', x).onclick = e => { e.preventDefault(); e.stopPropagation(); L.tileSize = { ...(L.tileSize || {}) }; if (big) delete L.tileSize[n]; else L.tileSize[n] = 'L'; tl.style.gridColumn = big ? '' : 'span 2'; paint(); };
+        $('[data-th]', x).onclick = e => { e.preventDefault(); e.stopPropagation(); L.tilesHidden = hid ? (L.tilesHidden || []).filter(y => y !== n) : [...(L.tilesHidden || []), n]; paint(); }; })); };
     paint();
     const end = async () => { $$('#main .lay-tools').forEach(x => x.remove()); bar.remove(); await laySave(k, L); render(); };
     $('#layDone').onclick = async () => { await end(); toast('This screen is arranged for you'); };
@@ -7034,6 +7102,7 @@
     const qMarks = () => $$('#fBody .fld', ov).forEach(w => { const el = w.querySelector('[data-f]') || w.querySelector('[data-dd]'), name = el ? (el.dataset.f || el.dataset.dd) : null, lab = w.querySelector('label'); if (!name || !lab || lab.querySelector('.fq')) return;
       const f = flds.find(x => x.name === name); lab.insertAdjacentHTML('beforeend', ` <a href="#/guide?form=${encodeURIComponent(key)}&field=${encodeURIComponent(name)}" class="fq" target="_blank" rel="noopener" title="${esc((f && f.help) || 'What this box is for – opens the guide here')}" style="text-decoration:none;font-weight:600;border:1px solid var(--line);border-radius:50%;padding:0 5px;font-size:11px">?</a>`); });
     qMarks(); new MutationObserver(() => qMarks()).observe($('#fBody', ov), { childList: true, subtree: true });
+    { const fi = $('#fInfo', ov); if (fi && !ov.querySelector('.ftour')) fi.insertAdjacentHTML('afterend', '<button type="button" class="btn sm ftour" title="Takes you box by box through what is needed">▶ Show me</button>'); const ft = ov.querySelector('.ftour'); if (ft) ft.onclick = () => formTour(ov); }
     $('#fBody', ov).addEventListener('focusin', e => { const el = e.target, name = el.dataset.f; $$('.coach', ov).forEach(c => c.remove()); if (!name) return; const f = flds.find(x => x.name === name); const w = el.closest('.fld'); if (!f || !w) return;
       const say = f.help || (f.type === 'money' ? 'An amount – numbers only, no currency sign.' : f.type === 'number' ? 'A number – type it or use − / +.' : f.type === 'date' ? 'Pick the date from the calendar.' : f.required ? 'Needed to save.' : '');
       if (say && !$('.helptext', w)) w.insertAdjacentHTML('beforeend', `<div class="small coach" style="color:var(--accent-ink);margin-top:3px">✎ ${esc(say)}</div>`); });

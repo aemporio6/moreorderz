@@ -174,9 +174,9 @@ class ListExports
         $tidy = function ($v, int $depth = 0) use (&$tidy) {
             if (is_scalar($v)) return is_bool($v) ? $v : mb_substr(strip_tags((string) $v), 0, 80);
             if (! is_array($v) || $depth > 3) return null; $o = [];
-            foreach (array_slice($v, 0, 400, true) as $k => $x) { if (! is_int($k) && ! preg_match('/^[\pL\pN _:#&().,\/+\'-]{1,80}$/u', (string) $k)) continue; $t = $tidy($x, $depth + 1); if ($t !== null) $o[is_int($k) ? $k : mb_substr((string) $k, 0, 80)] = $t; }
+            foreach (array_slice($v, 0, 400, true) as $k => $x) { if (! is_int($k) && ! preg_match('/^[\pL\pN\s_:#&().,\/+\'?%-]{1,80}$/u', (string) $k)) continue; $t = $tidy($x, $depth + 1); if ($t !== null) $o[is_int($k) ? $k : mb_substr((string) $k, 0, 80)] = $t; }
             return array_is_list($v) ? array_values($o) : $o; };
-        if (isset($d['layout']) && is_array($d['layout'])) $clean['layout'] = array_intersect_key((array) $tidy($d['layout']), array_flip(['order', 'hidden', 'folded', 'tiles', 'tilesHidden', 'tables']));
+        if (isset($d['layout']) && is_array($d['layout'])) $clean['layout'] = array_intersect_key((array) $tidy($d['layout']), array_flip(['order', 'hidden', 'folded', 'tiles', 'tilesHidden', 'tileSize', 'tables']));
         if (isset($d['menu']) && is_array($d['menu'])) $clean['menu'] = array_intersect_key((array) $tidy($d['menu']), array_flip(['groups', 'items', 'hidden', 'pinned']));
         if (array_key_exists('layout', $d) && $d['layout'] === []) $clean['layout'] = [];
         $w = ['fk_id_user' => $u->id, 'page_key' => mb_substr($page, 0, 50)];

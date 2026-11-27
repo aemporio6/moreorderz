@@ -78,7 +78,7 @@ Visual, with links, for every module, screen, form, field, dropdown, button and 
 2. "?" beside every field, dropdown, button and figure → opens the guide at exactly that part (not the whole guide).
 3. "Show me" tours: step-by-step highlight on the live screen (press this → choose this → save) until the job is right; a mistake says why and how to fix it.
 4. The company map: the whole flow (buy → receive → stock → sell → money → partners), roles and where each thing lives, with links.
-✅ 27-11 part 1 live: User guide page (map, every screen step by step, every form and box, search), '? Guide' on every screen, '?' on every form box → the guide at that box. Next: screenshots with marked buttons, '?' on figures / dropdowns, 'Show me' tours.
+✅ 27-11 part 1 live: User guide page (map, every screen step by step, every form and box, search), '? Guide' on every screen, '?' on every form box → the guide at that box. ✅ part 2: pictures with numbered buttons (168 screens), ▶ Show me tours (screen, Guide me, every form), '?' on every number tile.
 Order: after Contacts & chat deploy and tracking links; nothing left half-done.
 
 ### Remember – owner 27-11 07:56: WhatsApp "way 2" (remind the owner and do it together)

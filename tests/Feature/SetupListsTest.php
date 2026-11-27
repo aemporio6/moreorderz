@@ -85,6 +85,8 @@ class SetupListsTest extends TestCase
         $l = $this->getJson('/api/prefs/scr:money')->assertOk()->json('list.layout');
         $this->assertSame(['To do', 'Bank accounts'], $l['order']); $this->assertSame(['Supplier payments to make'], $l['hidden']); $this->assertArrayNotHasKey('evil', $l);
         $this->assertSame(['x'], $l['tables']['Bank accounts #1']['hidden']);      // tags stripped, never code
+        $this->postJson('/api/prefs/scr:home', ['layout' => ['tileSize' => ['Cash in bank accounts' => 'L']]])->assertOk();
+        $this->assertSame(['Cash in bank accounts' => 'L'], $this->getJson('/api/prefs/scr:home')->json('list.layout.tileSize'));
         $this->postJson('/api/prefs/menu', ['menu' => ['groups' => ['Money', 'Buying'], 'pinned' => [12], 'hidden' => [7], 'items' => ['Suppliers' => [5, 3]]]])->assertOk();
         $this->assertSame(['Money', 'Buying'], $this->getJson('/api/prefs/menu')->json('list.menu.groups'));
         $this->postJson('/api/prefs/scr:money', ['layout' => []])->assertOk();
