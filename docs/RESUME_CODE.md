@@ -13,7 +13,8 @@ Nothing important lives only in the work container. Code, tests, migrations, gui
 
 ## Last state (27-11 09:30)
 - Live = commit 7ddeaef+ (user guide part 1+2, Show me tours, ? on figures and every form box, Arrange drag + tile sizes, contacts & chat, tracking links, owner options). 989 tests green.
-- In progress when the session ended: re-making the guide pictures (`node tools/dev/guide-pictures.cjs <dir-with-pw> public/guide`, demo data only) – just run it again, commit public/guide, deploy.
+- Live = 6230e1c: live exchange rates (ECB, mo:fx-live, top-bar strip), guide pictures re-made 168/168 (`node tools/dev/guide-pictures.cjs <dir-with-pw> public/guide`, demo data only). 992 tests green.
+- Next: ROADMAP order D my brands → B logos → A connectors hub → F rest (Wise/WorldFirst deal rates, gain/loss line) → C → E deep audit.
 
 ## Resume in a new session – paste this to Claude
 > Resume the MoreOrderz build. Clone GitHub aemporio6/moreorderz to /home/claude/moreorderz, composer install, MariaDB databases moreorderz + moreorderz_test, php artisan migrate --seed. Read project docs claude/ROADMAP.md (start at "NEXT – owner 27-11 09:26") and claude/RESUME_CODE.md. Each batch: build with tests, one full suite, commit (git add -A) + push, deploy to app.moreorderz.com through the cPanel terminal (git pull, migrate --force, config/route cache, view:clear), verify live, update ROADMAP + project copy, short Roman Urdu report (table + "Abhi baqi hai"), send_later 1 minute.
